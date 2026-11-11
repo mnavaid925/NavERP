@@ -7,6 +7,317 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.15: Integration & API Hub (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.15.md` (2026-11-11)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.13 (`11.14` unbuilt).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0017_alter_assetcybersecurityprofile_cve_risk_score.py`, so **11.15 claims `0018_...`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.15.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/IntegrationApiHub/<Entity>.py` (`AssetIntegrationConnectors.py`, `AssetTelemetryStreams.py`, `AssetGlSyncBatches.py`, `AssetGisMappings.py`)
+> Template folder name: `templates/assets/integrationapihub/{asset_integration_connector,asset_telemetry_stream,asset_gl_sync_batch,asset_gis_mapping}/{list,detail,form}.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`AICN`** (`AssetIntegrationConnector`), **`ATMS`** (`AssetTelemetryStream`), **`AGLS`** (`AssetGlSyncBatch`), **`AGIS`** (`AssetGisMapping`), all four model class names, and all URL stems verified unique across `apps/`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Zero FK / duplication of 9 sibling integration registers (L55)**: `accounting.IntegrationConfig` (3.12), `scm.IntegrationEndpoint` (4.16), `inventory.IntegrationChannel` (5.16), `procurement.IntegrationEndpoint` (6.19), `hrm.IntegrationConnector` (7.14), `sales.IntegrationConnector` (8.16), `crm.IntegrationWebhook` (9.16), `projects.IntegrationHub` (10.16), and `assets.AssetCyberSecurityProfile` (11.12) remain untouched. `11.15` serves Asset-specific integration connectors, SCADA/IoT telemetry mapping, Asset GL sync/reconciliation batches, and Asset GIS/LRS spatial mapping without cross-FKs into sibling integration config tables.
+- **Zero outbound HTTP / SSRF-safe scheme validation**: All connector test, telemetry ingestion, GL sync execution, and spatial sync verification actions operate deterministically on local ORM records (with honest `"simulated"` status where external middleware applies). `AssetIntegrationConnector.endpoint_url` MUST be `CharField(max_length=500)` with `TextInput` (NOT `URLField`/`URLInput`, which rejects `opc.tcp://`, `mqtts://`, `tcps://`, `sftp://`) and `clean()` validates scheme whitelist (`https`, `http`, `opc.tcp`, `mqtts`, `mqtt`, `tcps`, `sftp`, `wss`) and rejects empty/whitespace or loopback/link-local metadata targets (`169.254.x.x`, `localhost`, `127.0.0.1`) on non-sandbox environments or enforces valid URI host syntax without opening sockets.
+- **Secrets & read-only telemetry/counter hygiene (L20, L22, L25)**:
+  - `AssetIntegrationConnector` stores ONLY `api_key_prefix` (`CharField(max_length=12, blank=True, editable=False)`) + `api_key_hash` (`CharField(max_length=128, blank=True, editable=False)`) using SHA-256 hex digest. Both are excluded from `AssetIntegrationConnectorForm`. On `rotate_secret` (`@tenant_admin_required`, `@require_POST`), store `request.session["_aicn_secret_reveal"] = {"pk": obj.pk, "secret": plaintext_secret}` and pop once in `detail` (`plaintext_once`), NEVER via Django `messages`.
+  - System timestamps (`last_heartbeat_at`, `last_sync_at`, `last_ingested_at`, `synced_at`, `last_spatial_sync_at`), health/ingestion/batch counters (`consecutive_failures`, `last_error_message`, `readings_ingested_count`, `records_processed`, `records_succeeded`, `records_failed`), and system-written links/derived values (`last_ingested_value`, `last_telemetry_reading`, `latest_maintenance_request`, `variance_amount`, `journal_entry`, `executed_by`) MUST have `editable=False` and be excluded from `Meta.fields` in every ModelForm (L22).
+- **Real cross-module writes & accounting reuse (L29, L55)**:
+  - `AssetGlSyncBatch.execute_reconcile_batch`: checks `fiscal_period` (`fiscal_period.is_open`), calculates `variance_amount = source_amount - target_gl_amount`, sets `reconciliation_status` (`reconciled` when `variance_amount == 0` else `variance_flagged`), and inside `transaction.atomic()` posts ONE balanced `accounting.JournalEntry` (`NUMBER_PREFIX="JE"`, `entry_type="recurring"` or `"manual"`, `status="posted"`, `reference=self.number`) with 2 `accounting.JournalLine` rows (Dr `gl_account`, Cr `offset_gl_account`) when `sync_domain in ("depreciation_posting", "capitalization_sync", "work_order_cost_rollup")` with both accounts present, `source_amount > 0`, and `journal_entry is None` (strict idempotency guard against double-posting). Non-posting domains (`asset_subledger_sync`, `po_asset_clearing`) compute variance and record `"simulated"` / `"reconciled"` status without posting a duplicate ledger.
+  - `AssetTelemetryStream.ingest_sample_reading`: inside `transaction.atomic()`, converts/scales sample reading (`scaled = raw_value * scale_factor + offset_value`), persists `assets.AssetTelemetryReading` (11.7) using compatible `AssetTelemetryReading.METRIC_TYPE_CHOICES` / `METRIC_UNIT_CHOICES` (`runtime_hours` / `cycle_count` / `energy_kwh` mapped cleanly or aligned to verified `AssetTelemetryReading` choice sets — see Contract step note below), and reconciles `AssetTelemetryReading.save()`'s automatic `calculate_deviation_and_thresholds()` overwrite so stream-configured `warning_threshold` / `critical_threshold` breach status is accurately preserved (`threshold_status`). When `critical_threshold` is breached and `auto_trigger_maintenance=True`, creates `assets.AssetMaintenanceRequest` (11.5, supplying required `title` and non-blank `symptom_description`, `request_type="breakdown_repair"`, `urgency="critical"`, `is_breakdown=True`), updates stream pointers (`last_telemetry_reading`, `latest_maintenance_request`, `last_ingested_value`, `last_ingested_at`, `readings_ingested_count += 1`), and logs audit.
+- **Global vs Tenant FK scoping in forms (L39, L11)**:
+  - `accounting.Currency` is GLOBAL (no `tenant` FK). Queryset in `AssetIntegrationConnectorForm` (`default_currency`) and `AssetGlSyncBatchForm` (`currency`) MUST filter ONLY `Currency.objects.filter(is_active=True)` and MUST NOT be passed to `reject_foreign(...)`.
+  - All tenant-scoped FKs (`core.Party`, `core.OrgUnit`, `scm.Asset`, `scm.Location`, `scm.PurchaseOrder`, `accounting.FixedAsset`, `accounting.GLAccount`, `accounting.FiscalPeriod`, `assets.AssetCapitalization`, `assets.AssetDepreciationSchedule`, `assets.AssetMaintenanceRequest`, `assets.AssetIntegrationConnector`) are populated in `__init__` with full tenant-scoped querysets (never over-restricted to `"active"` only) and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST verify `.isdigit()` (L11) before filtering.
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value)` + headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters (exact lengths audited below).
+- **L66 Audit log signature**: Every mutating view (`create`, `edit`, `delete`, `test_connection`, `rotate_secret`, `ingest_sample_reading`, `execute_reconcile_batch`, `verify_spatial_sync`) calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)` — NEVER pass `request` or `instance=`/`description=`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate` (NO `badge-purple`, `badge-success`, `badge-danger`, `badge-warning`).
+  - Stat icon colors ONLY from `.stat-icon.{blue,green,orange,purple,slate,red}` (NO `amber`).
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>` (NEVER `.detail-label`/`.detail-value`).
+  - Delete & action forms use `@require_POST`; privileged routes (`rotate_secret`, `execute_reconcile_batch`, connector/batch deletes) use `@tenant_admin_required`; `confirm(...)` uses system `number` with `\'` escaped apostrophes (L42); view KPIs use single-query `.aggregate(Count(...))` (never collide with model `@property`, L57); paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `AssetIntegrationConnector` (`AICN-`)
+*Maps NavERP bullets: `ERP Integration`, `CMMS/EAM Connectivity`, `Financial Systems & General Ledger`, `IoT & SCADA Systems`, `GIS & Mapping Tools` + Enterprise Security (API key rotation, mutual TLS / OAuth2 / HMAC auth modes, rate limiting, circuit-breaker failure tracking)*
+- **File**: `apps/assets/models/IntegrationApiHub/AssetIntegrationConnectors.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AICN"`)
+- **Fields & Choices (L65 verified)**:
+  - `name`: `CharField(max_length=160)`
+  - `connector_category`: `CharField(max_length=24, choices=CONNECTOR_CATEGORY_CHOICES)` — `"erp_procurement"`, `"iot_scada"`, `"cmms_eam"`, `"financial_gl"`, `"gis_spatial"` (longest: 15)
+  - `provider`: `CharField(max_length=32, choices=PROVIDER_CHOICES)` — `"sap_s4hana"`, `"oracle_fusion"`, `"microsoft_d365"`, `"maximo_eam"`, `"osisoft_pi"`, `"kepware_opcua"`, `"esri_arcgis"`, `"qgis_postgis"`, `"custom_webhook"` (longest: 16)
+  - `protocol`: `CharField(max_length=24, choices=PROTOCOL_CHOICES)` — `"rest_json"`, `"odata_v4"`, `"opc_ua"`, `"mqtt_tls"`, `"modbus_tcp"`, `"graphql"`, `"sftp_csv"`, `"arcgis_feature_svc"` (longest: 18)
+  - `sync_direction`: `CharField(max_length=20, choices=SYNC_DIRECTION_CHOICES)` — `"inbound"`, `"outbound"`, `"bidirectional"` (longest: 13)
+  - `environment`: `CharField(max_length=20, choices=ENVIRONMENT_CHOICES, default="sandbox")` — `"production"`, `"staging"`, `"sandbox"` (longest: 10)
+  - `endpoint_url`: `CharField(max_length=500)` (accepts `opc.tcp://`, `mqtts://`, `sftp://`, `https://`)
+  - `auth_method`: `CharField(max_length=20, choices=AUTH_METHOD_CHOICES, default="api_key")` — `"api_key"`, `"oauth2_client"`, `"mtls_cert"`, `"hmac_sha256"`, `"basic_vault"` (longest: 13)
+  - `api_key_prefix`: `CharField(max_length=12, blank=True, editable=False)` (L20)
+  - `api_key_hash`: `CharField(max_length=128, blank=True, editable=False)` (L20)
+  - `rate_limit_rpm`: `PositiveIntegerField(default=120)`
+  - `timeout_seconds`: `PositiveIntegerField(default=30)`
+  - `retry_policy_max`: `PositiveSmallIntegerField(default=3)`
+  - `polling_interval_minutes`: `PositiveIntegerField(default=15)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")` — `"draft"`, `"active"`, `"paused"`, `"error"`, `"decommissioned"` (longest: 14)
+  - `health_status`: `CharField(max_length=20, choices=HEALTH_STATUS_CHOICES, default="unverified")` — `"healthy"`, `"degraded"`, `"unreachable"`, `"unverified"` (longest: 11)
+  - `vendor_partner`: `ForeignKey("core.Party", on_delete=SET_NULL, null=True, blank=True, related_name="asset_integration_connectors")`
+  - `default_org_unit`: `ForeignKey("core.OrgUnit", on_delete=SET_NULL, null=True, blank=True, related_name="asset_integration_connectors")`
+  - `default_currency`: `ForeignKey("accounting.Currency", on_delete=SET_NULL, null=True, blank=True, related_name="asset_integration_connectors")` (global — NO tenant filter)
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="owned_asset_connectors")`
+  - `last_heartbeat_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `last_sync_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `consecutive_failures`: `PositiveIntegerField(default=0, editable=False)` (L22)
+  - `last_error_message`: `TextField(blank=True, editable=False)` (L22)
+  - `webhook_verify_tls`: `BooleanField(default=True)`
+  - `notes`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_aicn_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "connector_category"], name="idx_aicn_ten_cat")` (16)
+  - `Index(fields=["tenant", "status"], name="idx_aicn_ten_stat")` (17)
+  - `Index(fields=["tenant", "health_status"], name="idx_aicn_ten_hlth")` (17)
+- **Form (`AssetIntegrationConnectorForm`)**:
+  - `Meta.fields`: `name`, `connector_category`, `provider`, `protocol`, `sync_direction`, `environment`, `endpoint_url`, `auth_method`, `rate_limit_rpm`, `timeout_seconds`, `retry_policy_max`, `polling_interval_minutes`, `status`, `health_status`, `vendor_partner`, `default_org_unit`, `default_currency`, `owner`, `webhook_verify_tls`, `notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `api_key_prefix`, `api_key_hash`, `last_heartbeat_at`, `last_sync_at`, `consecutive_failures`, `last_error_message`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(self, cleaned, ["vendor_partner", "default_org_unit", "owner"])` (NOT `default_currency`); validate `endpoint_url` scheme + host syntax; validate `rate_limit_rpm >= 1` and `timeout_seconds >= 1`.
+- **View actions & context**:
+  - Custom POST views: `asset_integration_connector_test` (`test_connection`, `@login_required`, `@require_POST` -> deterministic simulated handshake, sets `health_status="healthy"`, `last_heartbeat_at=timezone.now()`, `consecutive_failures=0`, writes audit log) and `asset_integration_connector_rotate_secret` (`rotate_secret`, `@tenant_admin_required`, `@require_POST` -> generates `secrets.token_urlsafe(32)`, stores 6-char `api_key_prefix` + SHA-256 `api_key_hash`, writes `_aicn_secret_reveal` session dict, writes audit log).
+  - Context keys:
+    - List: `connectors` (`page_obj`), `paginator`, `page_obj`, `total_count`, `active_count`, `healthy_count`, `error_count`, `category_choices`, `provider_choices`, `status_choices`, `health_choices`, `search_query`
+    - Detail: `connector`, `plaintext_once` (from `request.session.pop("_aicn_secret_reveal", None)` when `pk == obj.pk`), `streams` (`telemetry_streams` FK list), `gl_batches` (recent batches), `gis_mappings` (linked spatial mappings)
+    - Form: `form`, `connector` (when editing, else `None`), `is_edit`, `title`
+
+### 2. `AssetTelemetryStream` (`ATMS-`)
+*Maps NavERP bullet: `IoT & SCADA Systems` + SCADA tag mapping, deadband filtering, scaling slope/offset, automated CBM trigger to `AssetMaintenanceRequest` (11.5) & `AssetTelemetryReading` (11.7)*
+- **File**: `apps/assets/models/IntegrationApiHub/AssetTelemetryStreams.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "ATMS"`)
+- **Fields & Choices (L65 verified)**:
+  - `connector`: `ForeignKey("assets.AssetIntegrationConnector", on_delete=PROTECT, related_name="telemetry_streams")`
+  - `operational_asset`: `ForeignKey("scm.Asset", on_delete=SET_NULL, null=True, blank=True, related_name="integration_telemetry_streams")`
+  - `fixed_asset`: `ForeignKey("accounting.FixedAsset", on_delete=SET_NULL, null=True, blank=True, related_name="integration_telemetry_streams")`
+  - `tag_address`: `CharField(max_length=160)` (e.g. `ns=2;s=Plant1.Pump04.VibRMS`)
+  - `stream_name`: `CharField(max_length=160)`
+  - `stream_protocol`: `CharField(max_length=24, choices=STREAM_PROTOCOL_CHOICES)` — `"opc_ua_node"`, `"mqtt_topic"`, `"modbus_register"`, `"pi_tag"`, `"bacnet_object"`, `"rest_webhook_key"` (longest: 16)
+  - `metric_type`: `CharField(max_length=32, choices=METRIC_TYPE_CHOICES)` — `"vibration_velocity_rms"`, `"vibration_peak_accel"`, `"bearing_temperature"`, `"acoustic_ultrasound"`, `"operating_pressure"`, `"oil_dielectric_viscosity"`, `"motor_current_amperage"`, `"ambient_temperature"`, `"runtime_hours"`, `"cycle_count"`, `"energy_kwh"` (longest: 24)
+  - `metric_unit`: `CharField(max_length=20, choices=METRIC_UNIT_CHOICES)` — `"mm_per_s"`, `"g_force"`, `"celsius"`, `"fahrenheit"`, `"decibel_uv"`, `"bar"`, `"psi"`, `"amperes"`, `"viscosity_cst"`, `"hours"`, `"cycles"`, `"kwh"` (longest: 13)
+  - `ingestion_mode`: `CharField(max_length=24, choices=INGESTION_MODE_CHOICES, default="polling")` — `"streaming_pubsub"`, `"polling"`, `"edge_batch_store"`, `"manual_sample"` (longest: 16)
+  - `polling_interval_seconds`: `PositiveIntegerField(default=60)`
+  - `deadband_delta`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0000"))`
+  - `scale_factor`: `DecimalField(max_digits=12, decimal_places=6, default=Decimal("1.000000"))`
+  - `offset_value`: `DecimalField(max_digits=12, decimal_places=4, default=Decimal("0.0000"))`
+  - `baseline_value`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)`
+  - `warning_threshold`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)`
+  - `critical_threshold`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)`
+  - `auto_trigger_maintenance`: `BooleanField(default=True)`
+  - `stream_status`: `CharField(max_length=20, choices=STREAM_STATUS_CHOICES, default="active")` — `"active"`, `"paused"`, `"faulted"`, `"decommissioned"` (longest: 14)
+  - `last_ingested_value`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, editable=False)` (L22)
+  - `last_ingested_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `readings_ingested_count`: `PositiveIntegerField(default=0, editable=False)` (L22)
+  - `last_telemetry_reading`: `ForeignKey("assets.AssetTelemetryReading", on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="source_integration_streams")` (L22)
+  - `latest_maintenance_request`: `ForeignKey("assets.AssetMaintenanceRequest", on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="triggered_by_streams")` (L22)
+  - `steward`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="stewarded_telemetry_streams")`
+  - `notes`: `TextField(blank=True)`
+- **Gotcha note for Contract & Build (verified against `AssetTelemetryReadings.py`)**:
+  - `AssetTelemetryReading.METRIC_TYPE_CHOICES` (8 options) & `METRIC_UNIT_CHOICES` (9 options) do NOT include `"runtime_hours"`, `"cycle_count"`, `"energy_kwh"` / `"hours"`, `"cycles"`, `"kwh"`. During `ingest_sample_reading`, either map those 3 counter/energy types safely into a clean `AssetTelemetryReading` mapping (or extend/store compatible choice + note original tag metric in `AssetTelemetryReading.notes`) so `AssetTelemetryReading.full_clean()` never fails.
+  - `AssetTelemetryReading.save()` calls `calculate_deviation_and_thresholds()`, which overwrites `threshold_status` from `% deviation` vs `baseline_value` (`>=50%` critical, `>=20%` warning). In `ingest_sample_reading`, evaluate `scaled_value` against stream `critical_threshold` / `warning_threshold` explicitly, then save `AssetTelemetryReading` and if stream threshold severity exceeds `% deviation`, persist the breached `threshold_status` via `.update(threshold_status=...)` on that newly created reading before checking `auto_trigger_maintenance`.
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_atms_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "operational_asset"], name="idx_atms_ten_asset")` (18)
+  - `Index(fields=["tenant", "connector"], name="idx_atms_ten_conn")` (17)
+  - `Index(fields=["tenant", "stream_status"], name="idx_atms_ten_stat")` (17)
+- **Form (`AssetTelemetryStreamForm`)**:
+  - `Meta.fields`: `connector`, `operational_asset`, `fixed_asset`, `tag_address`, `stream_name`, `stream_protocol`, `metric_type`, `metric_unit`, `ingestion_mode`, `polling_interval_seconds`, `deadband_delta`, `scale_factor`, `offset_value`, `baseline_value`, `warning_threshold`, `critical_threshold`, `auto_trigger_maintenance`, `stream_status`, `steward`, `notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `last_ingested_value`, `last_ingested_at`, `readings_ingested_count`, `last_telemetry_reading`, `latest_maintenance_request`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(self, cleaned, ["connector", "operational_asset", "fixed_asset", "steward"])`; require at least one asset link (`operational_asset` or `fixed_asset`); validate `polling_interval_seconds >= 1`, `scale_factor != 0`, `deadband_delta >= 0`; if both `warning_threshold` and `critical_threshold` set, ensure `critical_threshold >= warning_threshold`.
+- **View actions & context**:
+  - Custom POST view: `asset_telemetry_stream_ingest` (`ingest_sample_reading`, `@login_required`, `@require_POST` -> accepts optional `raw_value` POST param or defaults to `critical_threshold + 1` / `baseline_value * 1.1` when testing, computes scaled value, persists `AssetTelemetryReading`, triggers `AssetMaintenanceRequest` on critical breach when `auto_trigger_maintenance=True`, updates stream counters/FKs, logs audit).
+  - Context keys:
+    - List: `streams` (`page_obj`), `paginator`, `page_obj`, `total_count`, `active_count`, `faulted_count`, `auto_cbm_count`, `connectors`, `assets_list`, `protocol_choices`, `status_choices`, `search_query`
+    - Detail: `stream`, `recent_readings` (last 10 `AssetTelemetryReading` for linked asset/tag)
+    - Form: `form`, `stream` (when editing, else `None`), `is_edit`, `title`
+
+### 3. `AssetGlSyncBatch` (`AGLS-`)
+*Maps NavERP bullets: `Financial Systems & General Ledger`, `ERP Integration`, `CMMS/EAM Connectivity` + batch GL posting to `accounting.JournalEntry`/`JournalLine`, variance reconciliation, cost-center/PO/capitalization/depreciation linkage*
+- **File**: `apps/assets/models/IntegrationApiHub/AssetGlSyncBatches.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AGLS"`)
+- **Fields & Choices (L65 verified)**:
+  - `connector`: `ForeignKey("assets.AssetIntegrationConnector", on_delete=PROTECT, related_name="gl_sync_batches")`
+  - `sync_domain`: `CharField(max_length=32, choices=SYNC_DOMAIN_CHOICES)` — `"depreciation_posting"`, `"capitalization_sync"`, `"work_order_cost_rollup"`, `"asset_subledger_sync"`, `"po_asset_clearing"` (longest: 22)
+  - `sync_direction`: `CharField(max_length=20, choices=SYNC_DIRECTION_CHOICES, default="outbound")` — `"inbound"`, `"outbound"`, `"bidirectional"` (longest: 13)
+  - `external_batch_ref`: `CharField(max_length=100, blank=True)`
+  - `fiscal_period`: `ForeignKey("accounting.FiscalPeriod", on_delete=PROTECT, null=True, blank=True, related_name="asset_gl_sync_batches")`
+  - `gl_account`: `ForeignKey("accounting.GLAccount", on_delete=PROTECT, null=True, blank=True, related_name="asset_gl_sync_debit_batches")`
+  - `offset_gl_account`: `ForeignKey("accounting.GLAccount", on_delete=PROTECT, null=True, blank=True, related_name="asset_gl_sync_credit_batches")`
+  - `fixed_asset`: `ForeignKey("accounting.FixedAsset", on_delete=SET_NULL, null=True, blank=True, related_name="gl_sync_batches")`
+  - `purchase_order`: `ForeignKey("scm.PurchaseOrder", on_delete=SET_NULL, null=True, blank=True, related_name="asset_gl_sync_batches")`
+  - `capitalization`: `ForeignKey("assets.AssetCapitalization", on_delete=SET_NULL, null=True, blank=True, related_name="gl_sync_batches")`
+  - `depreciation_schedule`: `ForeignKey("assets.AssetDepreciationSchedule", on_delete=SET_NULL, null=True, blank=True, related_name="gl_sync_batches")`
+  - `maintenance_request`: `ForeignKey("assets.AssetMaintenanceRequest", on_delete=SET_NULL, null=True, blank=True, related_name="gl_sync_batches")`
+  - `cost_center`: `ForeignKey("core.OrgUnit", on_delete=SET_NULL, null=True, blank=True, related_name="asset_gl_sync_batches")`
+  - `currency`: `ForeignKey("accounting.Currency", on_delete=PROTECT, null=True, blank=True, related_name="asset_gl_sync_batches")` (global — NO tenant filter)
+  - `batch_date`: `DateField()`
+  - `source_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
+  - `target_gl_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
+  - `variance_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"), editable=False)` (L22)
+  - `reconciliation_status`: `CharField(max_length=24, choices=RECONCILIATION_STATUS_CHOICES, default="pending")` — `"pending"`, `"reconciled"`, `"variance_flagged"`, `"resolved"` (longest: 16)
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft")` — `"draft"`, `"ready"`, `"posted"`, `"simulated"`, `"failed"`, `"reconciled"` (longest: 10)
+  - `records_processed`: `PositiveIntegerField(default=0, editable=False)` (L22)
+  - `records_succeeded`: `PositiveIntegerField(default=0, editable=False)` (L22)
+  - `records_failed`: `PositiveIntegerField(default=0, editable=False)` (L22)
+  - `field_mapping_json`: `TextField(blank=True, default="{}")`
+  - `payload_summary`: `TextField(blank=True)`
+  - `synced_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `journal_entry`: `ForeignKey("accounting.JournalEntry", on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="asset_gl_sync_batches")` (L22)
+  - `executed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="executed_asset_gl_batches")` (L22)
+  - `notes`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_agls_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "sync_domain"], name="idx_agls_ten_dom")` (16)
+  - `Index(fields=["tenant", "status"], name="idx_agls_ten_stat")` (17)
+  - `Index(fields=["tenant", "reconciliation_status"], name="idx_agls_ten_rec")` (16)
+- **Form (`AssetGlSyncBatchForm`)**:
+  - `Meta.fields`: `connector`, `sync_domain`, `sync_direction`, `external_batch_ref`, `fiscal_period`, `gl_account`, `offset_gl_account`, `fixed_asset`, `purchase_order`, `capitalization`, `depreciation_schedule`, `maintenance_request`, `cost_center`, `currency`, `batch_date`, `source_amount`, `target_gl_amount`, `reconciliation_status`, `status`, `field_mapping_json`, `payload_summary`, `notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `variance_amount`, `records_processed`, `records_succeeded`, `records_failed`, `synced_at`, `journal_entry`, `executed_by`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(self, cleaned, ["connector", "fiscal_period", "gl_account", "offset_gl_account", "fixed_asset", "purchase_order", "capitalization", "depreciation_schedule", "maintenance_request", "cost_center"])` (NOT `currency`); validate `source_amount >= 0`, `target_gl_amount >= 0`, distinct `gl_account` vs `offset_gl_account` when both set, and valid JSON object on `field_mapping_json`.
+- **View actions & context**:
+  - Custom POST view: `asset_gl_sync_batch_execute` (`execute_reconcile_batch`, `@tenant_admin_required`, `@require_POST` -> blocks posting if `fiscal_period` is present and not `is_open`, recomputes `variance_amount`, posts `accounting.JournalEntry` + 2 `JournalLine`s inside `transaction.atomic()` when posting domain + accounts + `source_amount > 0` + `journal_entry is None`, or sets `simulated`/`reconciled` cleanly; updates `records_processed/succeeded/failed`, `synced_at`, `executed_by`; writes audit log).
+  - Context keys:
+    - List: `batches` (`page_obj`), `paginator`, `page_obj`, `total_count`, `posted_count`, `variance_count`, `draft_count`, `connectors`, `domain_choices`, `status_choices`, `reconciliation_choices`, `search_query`
+    - Detail: `batch`
+    - Form: `form`, `batch` (when editing, else `None`), `is_edit`, `title`
+
+### 4. `AssetGisMapping` (`AGIS-`)
+*Maps NavERP bullet: `GIS & Mapping Tools` + ArcGIS/QGIS/PostGIS/WGS84 layer mapping, linear referencing (LRS chainage), GeoJSON footprint validation, spatial drift detection*
+- **File**: `apps/assets/models/IntegrationApiHub/AssetGisMappings.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AGIS"`)
+- **Fields & Choices (L65 verified)**:
+  - `connector`: `ForeignKey("assets.AssetIntegrationConnector", on_delete=PROTECT, related_name="gis_mappings")`
+  - `operational_asset`: `ForeignKey("scm.Asset", on_delete=SET_NULL, null=True, blank=True, related_name="gis_mappings")`
+  - `location`: `ForeignKey("scm.Location", on_delete=SET_NULL, null=True, blank=True, related_name="asset_gis_mappings")`
+  - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=SET_NULL, null=True, blank=True, related_name="asset_gis_mappings")`
+  - `external_feature_id`: `CharField(max_length=120)`
+  - `layer_name`: `CharField(max_length=120)`
+  - `geometry_type`: `CharField(max_length=20, choices=GEOMETRY_TYPE_CHOICES, default="point")` — `"point"`, `"linestring"`, `"polygon"`, `"multipoint"` (longest: 10)
+  - `coordinate_system_srid`: `PositiveIntegerField(default=4326)`
+  - `latitude`: `DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)`
+  - `longitude`: `DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)`
+  - `elevation_meters`: `DecimalField(max_digits=9, decimal_places=2, null=True, blank=True)`
+  - `is_linear_asset`: `BooleanField(default=False)`
+  - `lrs_route_id`: `CharField(max_length=80, blank=True)`
+  - `lrs_from_measure`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)`
+  - `lrs_to_measure`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)`
+  - `lrs_measure_unit`: `CharField(max_length=16, choices=LRS_UNIT_CHOICES, default="km")` — `"meters"`, `"km"`, `"miles"`, `"feet"` (longest: 6)
+  - `geojson_payload`: `TextField(blank=True)`
+  - `system_of_record`: `CharField(max_length=24, choices=SYSTEM_OF_RECORD_CHOICES, default="erp_authoritative")` — `"gis_authoritative"`, `"erp_authoritative"`, `"shared_field"` (longest: 17)
+  - `sync_direction`: `CharField(max_length=20, choices=SYNC_DIRECTION_CHOICES, default="bidirectional")` — `"inbound"`, `"outbound"`, `"bidirectional"` (longest: 13)
+  - `drift_status`: `CharField(max_length=24, choices=DRIFT_STATUS_CHOICES, default="unverified")` — `"in_sync"`, `"location_drift"`, `"attribute_drift"`, `"unverified"` (longest: 15)
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="active")` — `"active"`, `"paused"`, `"archived"` (longest: 8)
+  - `last_spatial_sync_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `gis_custodian`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="custodian_gis_mappings")`
+  - `notes`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_agis_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "operational_asset"], name="idx_agis_ten_asset")` (18)
+  - `Index(fields=["tenant", "drift_status"], name="idx_agis_ten_drift")` (18)
+  - `Index(fields=["tenant", "status"], name="idx_agis_ten_stat")` (17)
+- **Form (`AssetGisMappingForm`)**:
+  - `Meta.fields`: `connector`, `operational_asset`, `location`, `org_unit`, `external_feature_id`, `layer_name`, `geometry_type`, `coordinate_system_srid`, `latitude`, `longitude`, `elevation_meters`, `is_linear_asset`, `lrs_route_id`, `lrs_from_measure`, `lrs_to_measure`, `lrs_measure_unit`, `geojson_payload`, `system_of_record`, `sync_direction`, `drift_status`, `status`, `gis_custodian`, `notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `last_spatial_sync_at`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(self, cleaned, ["connector", "operational_asset", "location", "org_unit", "gis_custodian"])`; validate `latitude` in `[-90, 90]`, `longitude` in `[-180, 180]`, `coordinate_system_srid >= 1`; if `is_linear_asset=True` and both `lrs_from_measure` and `lrs_to_measure` provided, validate `lrs_to_measure >= lrs_from_measure`; if `geojson_payload` non-empty, validate valid JSON object containing `"type"`/`"coordinates"` or `"features"`.
+- **View actions & context**:
+  - Custom POST view: `asset_gis_mapping_verify_sync` (`verify_spatial_sync`, `@login_required`, `@require_POST` -> validates coordinates/GeoJSON presence, updates `drift_status` (`in_sync` if geometry valid else `location_drift`), stamps `last_spatial_sync_at=timezone.now()`, writes audit log).
+  - Context keys:
+    - List: `mappings` (`page_obj`), `paginator`, `page_obj`, `total_count`, `in_sync_count`, `drift_count`, `linear_count`, `connectors`, `assets_list`, `geometry_choices`, `drift_choices`, `status_choices`, `search_query`
+    - Detail: `mapping`
+    - Form: `form`, `mapping` (when editing, else `None`), `is_edit`, `title`
+
+---
+
+## Phase 1 & Phase 2 (Research & Plan)
+- [x] Research commercial EAM/ERP integration hubs & write `.claude/tasks/research-assets-11.15.md`
+- [x] Author Sub-module 11.15 build plan in `.claude/tasks/todo.md`
+- [ ] Freeze pre-build spec/contract in `.claude/tasks/contract-assets-11.15.md` (every model field, choice, form field/exclusion, URL name, exact view context var, badge mapping, and `AssetTelemetryReading` metric/threshold alignment rule)
+
+## Phase 3 — Build (Serial: Entity by Entity -> Integrate -> Smoke)
+
+### Entity 1: `AssetIntegrationConnector` (`AICN-`)
+- [ ] `apps/assets/models/IntegrationApiHub/AssetIntegrationConnectors.py`
+- [ ] `apps/assets/forms/IntegrationApiHub/AssetIntegrationConnectors.py`
+- [ ] `apps/assets/views/IntegrationApiHub/AssetIntegrationConnectors.py` (list, create, detail, edit, delete + `test_connection` + `rotate_secret` with `_aicn_secret_reveal`)
+- [ ] `apps/assets/urls/IntegrationApiHub/AssetIntegrationConnectors.py`
+- [ ] `templates/assets/integrationapihub/asset_integration_connector/list.html`
+- [ ] `templates/assets/integrationapihub/asset_integration_connector/detail.html` (pop-once `plaintext_once` secret box + `<dl class="detail-grid">`)
+- [ ] `templates/assets/integrationapihub/asset_integration_connector/form.html`
+
+### Entity 2: `AssetTelemetryStream` (`ATMS-`)
+- [ ] `apps/assets/models/IntegrationApiHub/AssetTelemetryStreams.py`
+- [ ] `apps/assets/forms/IntegrationApiHub/AssetTelemetryStreams.py`
+- [ ] `apps/assets/views/IntegrationApiHub/AssetTelemetryStreams.py` (list, create, detail, edit, delete + `ingest_sample_reading` persisting `AssetTelemetryReading` & conditional `AssetMaintenanceRequest`)
+- [ ] `apps/assets/urls/IntegrationApiHub/AssetTelemetryStreams.py`
+- [ ] `templates/assets/integrationapihub/asset_telemetry_stream/list.html`
+- [ ] `templates/assets/integrationapihub/asset_telemetry_stream/detail.html`
+- [ ] `templates/assets/integrationapihub/asset_telemetry_stream/form.html`
+
+### Entity 3: `AssetGlSyncBatch` (`AGLS-`)
+- [ ] `apps/assets/models/IntegrationApiHub/AssetGlSyncBatches.py`
+- [ ] `apps/assets/forms/IntegrationApiHub/AssetGlSyncBatches.py`
+- [ ] `apps/assets/views/IntegrationApiHub/AssetGlSyncBatches.py` (list, create, detail, edit, delete + `execute_reconcile_batch` posting balanced `accounting.JournalEntry`/`JournalLine` in `transaction.atomic()`)
+- [ ] `apps/assets/urls/IntegrationApiHub/AssetGlSyncBatches.py`
+- [ ] `templates/assets/integrationapihub/asset_gl_sync_batch/list.html`
+- [ ] `templates/assets/integrationapihub/asset_gl_sync_batch/detail.html`
+- [ ] `templates/assets/integrationapihub/asset_gl_sync_batch/form.html`
+
+### Entity 4: `AssetGisMapping` (`AGIS-`)
+- [ ] `apps/assets/models/IntegrationApiHub/AssetGisMappings.py`
+- [ ] `apps/assets/forms/IntegrationApiHub/AssetGisMappings.py`
+- [ ] `apps/assets/views/IntegrationApiHub/AssetGisMappings.py` (list, create, detail, edit, delete + `verify_spatial_sync`)
+- [ ] `apps/assets/urls/IntegrationApiHub/AssetGisMappings.py`
+- [ ] `templates/assets/integrationapihub/asset_gis_mapping/list.html`
+- [ ] `templates/assets/integrationapihub/asset_gis_mapping/detail.html`
+- [ ] `templates/assets/integrationapihub/asset_gis_mapping/form.html`
+
+### Integrate & Wire-up (Single-writer, after all 4 entity modules exist)
+- [ ] Surgical re-exports in `apps/assets/models/IntegrationApiHub/__init__.py` & `apps/assets/models/__init__.py`
+- [ ] Surgical re-exports in `apps/assets/forms/IntegrationApiHub/__init__.py` & `apps/assets/forms/__init__.py`
+- [ ] Surgical re-exports in `apps/assets/views/IntegrationApiHub/__init__.py` & `apps/assets/views/__init__.py`
+- [ ] Surgical include in `apps/assets/urls/IntegrationApiHub/__init__.py` & `apps/assets/urls/__init__.py`
+- [ ] Register all 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` idempotently (demo Acme + Beta data for all 4 entities, re-running `seed_assets` x2 without duplicates)
+- [ ] Add `LIVE_LINKS["11.15"]` in `apps/core/navigation.py` (pointing to `assets:asset_integration_connector_list` and hub routes)
+- [ ] Run `makemigrations assets` -> verify **`0018_...`** -> `migrate` -> `seed_assets` **twice** -> `manage.py check`
+
+### Smoke Gate (`qa-smoke-tester`)
+- [ ] Smoke test every 11.15 list/create/detail/edit URL + POST actions (`test_connection`, `rotate_secret` pop-once reveal, `ingest_sample_reading` CBM trigger, `execute_reconcile_batch` GL JournalEntry posting, `verify_spatial_sync`) as `admin_acme` (`password`), asserting non-blank rendered data, valid filter rows (L44), page 2 / junk-param tolerance, and cross-tenant Beta IDOR -> 404. Fix any drift against `contract-assets-11.15.md`.
+
+## Phase 4 & Phase 5 — Serial Review & Code Fixer
+- [ ] Run 6 serial reviewers (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) against `BASE...HEAD` and consolidate into `.claude/tasks/review-assets-11.15.md`
+- [ ] Run `code-fixer` agent against `.claude/tasks/review-assets-11.15.md` until zero `[ ] open` findings remain and `manage.py check` is clean
+
+## Phase 6 — Tests (Serial)
+- [ ] Pin test contract and extend `apps/assets/tests/conftest.py` cleanly for 11.15 fixtures (`_integration_api_hub_*` / `integration_api_hub_*`)
+- [ ] `apps/assets/tests/test_integration_api_hub_models.py` (numbering `AICN-`/`ATMS-`/`AGLS-`/`AGIS-`, choice max_lengths, constraints, secret hashing, GL posting / telemetry helpers)
+- [ ] `apps/assets/tests/test_integration_api_hub_forms.py` (`reject_foreign`, global `Currency` allowed, excluded `editable=False` fields, endpoint URI scheme validation, threshold/LRS/GeoJSON `clean()`)
+- [ ] `apps/assets/tests/test_integration_api_hub_views.py` (CRUD, search/FK/enum filters, pagination, `rotate_secret` pop-once session reveal, `ingest_sample_reading` + `AssetMaintenanceRequest`, `execute_reconcile_batch` + `JournalEntry`, `verify_spatial_sync`)
+- [ ] `apps/assets/tests/test_integration_api_hub_security.py` (unauthenticated redirect, Beta tenant IDOR 404 on list/detail/edit/delete/actions, non-admin blocked on `rotate_secret`/`execute_reconcile_batch`, `@require_POST` enforcement)
+- [ ] Run full unfiltered `pytest apps/assets/tests/` and fix green
+
+## Phase 7 — Close-out
+- [ ] Update `.claude/skills/assets/SKILL.md` with Sub-module 11.15 models, URLs, templates, and seeder coverage
+- [ ] Mark Sub-module 11.15 complete in `README.md`
+- [ ] Record any deferred/blocked items in `.agents/tasks/gaps-assets-11.15.md` (or explicitly declare `**Gaps**: None`) and add close-out `### Review notes` below
+
+## Later passes / deferred
+1. **Live outbound HTTP/MQTT/OPC-UA/ArcGIS runtime daemon**: Celery worker loops, live TLS socket clients, OPC-UA subscriptions, and live ArcGIS FeatureServer polling are deferred until an enterprise async broker / KMS vault exists in `core` (all 11.15 test/sync actions remain deterministic ORM/simulated).
+2. **Encrypted KMS/Vault envelope storage**: Storing external OAuth client secrets encrypted at rest with rotation KMS keys is deferred; `11.15` implements SHA-256 hashed inbound API keys + prefix + pop-once rotation reveal (`L20`, `L25`).
+3. **Interactive Leaflet / Mapbox vector tile & PostGIS geometry indexing**: Interactive GIS polygon drawing UI and PostGIS `GEOMETRY` columns are deferred while `django.db.backends.postgresql` / `CharField`/`DecimalField`/`geojson_payload` remain portable across PostgreSQL and SQLite test DBs.
+4. **Sibling integration consolidation (`3.12`, `4.16`, `5.16`, `6.19`, `7.14`, `8.16`, `9.16`, `10.16`, `11.12`)**: Coexists strictly without cross-FKs or schema edits to any of the 9 sibling integration tables (`L55`).
+
+## Review notes
+_(To be populated after Phase 4–6 close-out; link `.agents/tasks/gaps-assets-11.15.md` or state `**Gaps**: None`.)_
+
+---
 # Sub-module 11.13: Mobile Asset Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.13.md` (2026-11-11)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.11.
