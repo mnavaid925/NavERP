@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+
+from ._validators import validate_tenant_fks
 from django.db import models
 
 from apps.assets.models._base import TenantNumbered
@@ -374,5 +376,10 @@ class AssetIntegrationConnector(TenantNumbered):
             errors["polling_interval_minutes"] = (
                 "Polling interval must be at least 1 minute."
             )
+        validate_tenant_fks(
+            self,
+            errors,
+            ("vendor_partner", "default_org_unit", "owner"),
+        )
         if errors:
             raise ValidationError(errors)
