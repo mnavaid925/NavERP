@@ -1,11 +1,10 @@
-import json
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-
-from ._validators import validate_tenant_fks
 from django.db import models
+
+from ._validators import validate_json_object, validate_tenant_fks
 
 from apps.assets.models._base import TenantNumbered
 
@@ -220,17 +219,12 @@ class AssetGisMapping(TenantNumbered):
             errors["lrs_to_measure"] = (
                 "LRS end measure must be greater than or equal to start measure."
             )
-        raw_geojson = (self.geojson_payload or "").strip()
-        if raw_geojson:
-            try:
-                parsed = json.loads(raw_geojson)
-            except ValueError:
-                errors["geojson_payload"] = "GeoJSON payload must be valid JSON syntax."
-            else:
-                if not isinstance(parsed, dict):
-                    errors["geojson_payload"] = (
-                        "GeoJSON payload must be a JSON object ({...})."
-                    )
+        try:
+            validate_json_object(
+                self.geojson_payload, field_label="GeoJSON payload"
+            )
+        except ValidationError as exc:
+            errors["geojson_payload"] = exc.messages
         validate_tenant_fks(
             self,
             errors,
