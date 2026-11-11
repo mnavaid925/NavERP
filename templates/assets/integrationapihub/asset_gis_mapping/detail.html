@@ -89,7 +89,7 @@
             </div>
             <div class="detail-item">
                 <dt>WGS-84 Coordinates</dt>
-                <dd class="font-mono">{% if mapping.latitude is not None and mapping.longitude is not None %}{{ mapping.latitude }}, {{ mapping.longitude }}{% else %}<span class="text-muted">Not specified</span>{% endif %}</dd>
+                <dd class="font-mono">{% if mapping.latitude is not None and mapping.longitude is not None %}{{ mapping.latitude }}, {{ mapping.longitude }}{% elif mapping.latitude is not None or mapping.longitude is not None %}{% if mapping.latitude is not None %}Lat {{ mapping.latitude }}{% else %}Lat —{% endif %}, {% if mapping.longitude is not None %}Lon {{ mapping.longitude }}{% else %}Lon —{% endif %}{% else %}<span class="text-muted">Not specified</span>{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>Elevation (m)</dt>
