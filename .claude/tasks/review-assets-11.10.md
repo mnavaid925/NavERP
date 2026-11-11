@@ -2,7 +2,7 @@
 
 **Review Range**: `d469573958d456219878a4f3866014e78801de1e` (BASE) ... `ee669a93d2c307e35d5e736d59f25a083270d8fe` (HEAD)
 **Date**: 2026-11-10
-**Status**: REVIEW COMPLETE — PENDING PHASE 5 FIXES (6/6 Reviewer Passes Completed)
+**Status**: ALL FINDINGS FIXED (100% BURN DOWN — 31/31 Fixed)
 
 ---
 
@@ -47,5 +47,5 @@
 - [x] **M10**: Dark mode contrast styling in cards and detail sections (`templates/assets/assetleaserental/`). Add `dark:text-slate-100`, `dark:bg-slate-800`, `dark:border-slate-700` to detail templates.
 - [x] **M11**: Large text fields not deferred in modification and buy-analysis list views (`apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:22-30`, `AssetLeaseBuyAnalyses.py:22-26`). Apply `.defer(...)` to unused large text columns.
 - [x] **M12**: Unused `category` foreign-key join in `AssetLeaseBuyAnalysis` detail view (`apps/assets/views/AssetLeaseRental/AssetLeaseBuyAnalyses.py:89`). Remove unused `category` from `select_related`.
-- [ ] **M13**: Unchecked state transition in `asset_lease_contract_terminate` (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:251-271`). Guard `if lease.status not in ["active", "modified"]:` returning a warning message.
-- [ ] **M14**: Form status exposure allowing direct "executed" bypass in `AssetLeaseModificationForm` (`apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py:29`). Restrict selectable status choices to `("draft", "submitted")` or default to `"draft"`.
+- [x] **M13**: Unchecked state transition in `asset_lease_contract_terminate` (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:251-271`). Guard `if lease.status not in ["active", "modified"]:` returning a warning message.
+- [x] **M14**: Form status exposure allowing direct "executed" bypass in `AssetLeaseModificationForm` (`apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py:29`). Restrict selectable status choices to `("draft", "submitted")` or default to `"draft"`.
