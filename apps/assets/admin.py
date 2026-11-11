@@ -45,6 +45,10 @@ from apps.assets.models import (
     AssetWarranty,
     AssetWarrantyClaim,
     CapitalizationPolicy,
+    AssetGeofenceEvent,
+    AssetScanLog,
+    FieldWorkOrder,
+    MobileAssetInspection,
 )
 
 
@@ -398,6 +402,39 @@ class AssetLeaseBuyAnalysisAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "category", "evaluated_by", "approved_by")
     list_filter = ("status", "recommendation")
     search_fields = ("number", "title", "target_asset_name")
+
+
+@admin.register(MobileAssetInspection)
+class MobileAssetInspectionAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "asset", "inspection_type", "overall_result", "condition_rating", "inspector", "status", "tenant")
+    list_select_related = ("tenant", "asset", "inspector")
+    list_filter = ("status", "overall_result", "inspection_type")
+    search_fields = ("number", "title", "asset__name", "asset__code")
+
+
+@admin.register(FieldWorkOrder)
+class FieldWorkOrderAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "asset", "work_order_type", "priority", "assigned_technician", "labor_wrench_minutes", "status", "tenant")
+    list_select_related = ("tenant", "asset", "assigned_technician")
+    list_filter = ("status", "priority", "work_order_type")
+    search_fields = ("number", "title", "asset__name", "asset__code")
+
+
+@admin.register(AssetScanLog)
+class AssetScanLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "raw_payload", "asset", "scan_method", "scan_context", "match_status", "scanned_by", "scanned_at", "tenant")
+    list_select_related = ("tenant", "asset", "scanned_by")
+    list_filter = ("match_status", "scan_method", "scan_context")
+    search_fields = ("number", "raw_payload", "device_info")
+
+
+@admin.register(AssetGeofenceEvent)
+class AssetGeofenceEventAdmin(admin.ModelAdmin):
+    list_display = ("number", "fence_name", "asset", "event_type", "severity", "distance_from_center_m", "status", "detected_at", "tenant")
+    list_select_related = ("tenant", "asset", "acknowledged_by")
+    list_filter = ("status", "event_type", "severity")
+    search_fields = ("number", "fence_name", "resolution_notes")
+
 
 
 
