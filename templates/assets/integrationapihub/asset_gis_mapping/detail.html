@@ -99,7 +99,7 @@
                 <dt>Linear Referencing (LRS)</dt>
                 <dd>
                     {% if mapping.is_linear_asset %}
-                    Route {{ mapping.lrs_route_id|default:"—" }} ({{ mapping.lrs_from_measure|default:"0" }} &rarr; {{ mapping.lrs_to_measure|default:"0" }} {{ mapping.get_lrs_measure_unit_display }})
+                    Route {{ mapping.lrs_route_id|default:"—" }} ({% if mapping.lrs_from_measure is not None %}{{ mapping.lrs_from_measure }}{% else %}0{% endif %} &rarr; {% if mapping.lrs_to_measure is not None %}{{ mapping.lrs_to_measure }}{% else %}0{% endif %} {{ mapping.get_lrs_measure_unit_display }})
                     {% else %}
                     <span class="text-muted">Point / Polygon feature</span>
                     {% endif %}
