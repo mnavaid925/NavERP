@@ -35,6 +35,20 @@
   - `templates/assets/assetrisk/*/detail.html:21`: Missing explicit "Back to List" action button in `.page-actions` header.
   - `templates/assets/assetrisk/*/list.html:94`: Icon-only filter submit button missing `title` / `aria-label="Apply Filters"` for accessibility.
 
+### Pass 4: Performance Reviewer (`performance-reviewer`)
+- **Query Efficiency & Optimization Verification:**
+  - All 4 list views use single-query `.aggregate(...)` for KPI statistics.
+  - All foreign keys looped in templates are eagerly fetched via `select_related(...)`.
+  - All pagination queries are applied after filtering and use `Paginator(qs, 25)`.
+- **Critical:** None.
+- **Important:** None.
+- **Minor:**
+  - `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203`: In mutator/action views (`edit`, `delete`, `scan`), `write_audit_log` triggers lazy evaluation of `self.asset.name`.
+  - `apps/assets/management/commands/seed_assets.py:3024-3026`: Consolidate 5 queries into a single sliced evaluation (`list(Asset.objects.filter(tenant=tenant).order_by("pk")[:3])`).
+  - `apps/assets/management/commands/seed_assets.py:3056,3079,3102,3125`: Remove redundant manual `.save()` / `calculate_scores()` calls.
+  - `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py:20-25`: Add `"critical_spares_required"` to `.defer(...)` alongside other TextFields.
+  - Secondary filter columns can optionally add composite indexes (`idx_ark_ten_strat`, `idx_arma_ten_eff`, `idx_abc_ten_scen`, `idx_acs_ten_dev`).
+
 ---
 
 ## Review Pass Log
@@ -81,6 +95,20 @@
 - **Minor:**
   - `templates/assets/assetrisk/*/detail.html:21`: Missing explicit "Back to List" action button in `.page-actions` header.
   - `templates/assets/assetrisk/*/list.html:94`: Icon-only filter submit button missing `title` / `aria-label="Apply Filters"` for accessibility.
+
+### Pass 4: Performance Reviewer (`performance-reviewer`)
+- **Query Efficiency & Optimization Verification:**
+  - All 4 list views use single-query `.aggregate(...)` for KPI statistics.
+  - All foreign keys looped in templates are eagerly fetched via `select_related(...)`.
+  - All pagination queries are applied after filtering and use `Paginator(qs, 25)`.
+- **Critical:** None.
+- **Important:** None.
+- **Minor:**
+  - `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203`: In mutator/action views (`edit`, `delete`, `scan`), `write_audit_log` triggers lazy evaluation of `self.asset.name`.
+  - `apps/assets/management/commands/seed_assets.py:3024-3026`: Consolidate 5 queries into a single sliced evaluation (`list(Asset.objects.filter(tenant=tenant).order_by("pk")[:3])`).
+  - `apps/assets/management/commands/seed_assets.py:3056,3079,3102,3125`: Remove redundant manual `.save()` / `calculate_scores()` calls.
+  - `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py:20-25`: Add `"critical_spares_required"` to `.defer(...)` alongside other TextFields.
+  - Secondary filter columns can optionally add composite indexes (`idx_ark_ten_strat`, `idx_arma_ten_eff`, `idx_abc_ten_scen`, `idx_acs_ten_dev`).
 
 ---
 
