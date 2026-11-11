@@ -120,6 +120,8 @@ class FieldWorkOrder(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="assets_mfwo_ten_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "asset"], name="idx_mfwo_ten_asset"),
+            models.Index(fields=["tenant", "assigned_technician"], name="idx_mfwo_ten_tech"),
             models.Index(fields=["tenant", "status"], name="idx_mfwo_ten_stat"),
             models.Index(fields=["tenant", "priority"], name="idx_mfwo_ten_prio"),
             models.Index(fields=["tenant", "work_order_type"], name="idx_mfwo_ten_type"),
