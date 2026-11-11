@@ -51,7 +51,7 @@ All six reviewers have run in strictly serial order:
   - **Fix:** Change to `f"{self.number} — {self.asset.name if getattr(self, 'asset_id', None) else 'Unlinked'} ({self.get_device_type_display()})"`.
   - **Status:** [x] fixed — fix(assets): safeguard __str__ in AssetCyberSecurityProfile against unlinked asset
 
-- [ ] **`I3`**: `apps/assets/views/AssetRisk/` — Missing Server-Side State Machine Guards on Workflow Action Endpoints
+- [x] **`I3`**: `apps/assets/views/AssetRisk/` — Missing Server-Side State Machine Guards on Workflow Action Endpoints
   - **Issue:** Mutating POST actions execute unconditional status overwrites without validating the current status, allowing invalid transitions or regressions via direct POST.
   - **Fixes:**
     - In `AssetRiskRegisters.py:185`: `asset_risk_register_assess` must guard `if risk.status != "identified": return redirect(...)`.
@@ -59,6 +59,7 @@ All six reviewers have run in strictly serial order:
     - In `AssetBusinessContinuityPlans.py:177`: `asset_business_continuity_plan_activate` must guard `if plan.status not in ["draft", "under_review"]: return redirect(...)`.
     - In `AssetRiskMitigationActions.py:198`: `asset_risk_mitigation_action_complete` must guard `if action.status not in ["planned", "in_progress"]: return redirect(...)`.
     - In `AssetRiskMitigationActions.py:211`: `asset_risk_mitigation_action_verify` must guard `if action.status != "completed": return redirect(...)`.
+  - **Status:** [x] fixed — fix(assets): add state machine guards on workflow action endpoints across assetrisk views
 
 - [ ] **`I4`**: `apps/assets/views/AssetRisk/` — Authorization Privilege Disparity on Critical Workflow Endpoints
   - **Issue:** Administrative/governance endpoints (`close`, `activate`, `verify`) require only `@login_required` while standard CRUD views require `@tenant_admin_required`. Non-admin tenant users could close high-exposure risks, activate continuity plans, or sign off on mitigations.
