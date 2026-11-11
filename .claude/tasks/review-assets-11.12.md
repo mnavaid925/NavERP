@@ -61,12 +61,13 @@ All six reviewers have run in strictly serial order:
     - In `AssetRiskMitigationActions.py:211`: `asset_risk_mitigation_action_verify` must guard `if action.status != "completed": return redirect(...)`.
   - **Status:** [x] fixed — fix(assets): add state machine guards on workflow action endpoints across assetrisk views
 
-- [ ] **`I4`**: `apps/assets/views/AssetRisk/` — Authorization Privilege Disparity on Critical Workflow Endpoints
+- [x] **`I4`**: `apps/assets/views/AssetRisk/` — Authorization Privilege Disparity on Critical Workflow Endpoints
   - **Issue:** Administrative/governance endpoints (`close`, `activate`, `verify`) require only `@login_required` while standard CRUD views require `@tenant_admin_required`. Non-admin tenant users could close high-exposure risks, activate continuity plans, or sign off on mitigations.
   - **Fixes:**
     - `AssetRiskRegisters.py:196`: add `@tenant_admin_required` to `asset_risk_register_close`.
     - `AssetBusinessContinuityPlans.py:175`: add `@tenant_admin_required` to `asset_business_continuity_plan_activate`.
     - `AssetRiskMitigationActions.py:209`: add `@tenant_admin_required` to `asset_risk_mitigation_action_verify`.
+  - **Status:** [x] fixed — security(assets): require tenant_admin_required on critical workflow endpoints
 
 ---
 
