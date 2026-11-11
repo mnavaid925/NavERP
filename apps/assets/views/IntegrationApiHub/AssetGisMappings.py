@@ -17,6 +17,7 @@ from apps.assets.models.IntegrationApiHub.AssetIntegrationConnectors import (
     AssetIntegrationConnector,
 )
 from apps.assets.views._common import assets_object, assets_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.scm.models import Asset
 
@@ -214,7 +215,7 @@ def mapping_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def mapping_delete(request, pk):
     """Delete a tenant-scoped Asset GIS Mapping."""
