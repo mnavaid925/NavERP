@@ -58,6 +58,16 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
         "archived": "badge-muted",
     }
 
+    LOCKED_STATUSES = {"approved", "archived"}
+
+    ALLOWED_TRANSITIONS = {
+        "draft": {"calculated", "reviewed", "archived"},
+        "calculated": {"reviewed", "approved", "archived"},
+        "reviewed": {"approved", "archived"},
+        "approved": {"archived"},
+        "archived": set(),
+    }
+
     LIFECYCLE_STAGE_CSS = {
         "acquisition": "badge-info",
         "in_service": "badge-green",
@@ -287,6 +297,10 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
         return f"{self.number} — {self.title}"
 
     @property
+    def is_locked(self):
+        return self.status in self.LOCKED_STATUSES
+
+    @property
     def status_badge_class(self):
         return self.STATUS_CSS.get(self.status, "badge-slate")
 
@@ -391,6 +405,10 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
         Aggregate historical CapEx, depreciation, preventive/corrective maintenance, SLA contracts,
         energy, downtime, insurance, and disposal/warranty recoveries from linked asset records.
         """
+        if self.is_locked:
+            raise ValidationError(
+                "Approved or archived lifecycle cost analyses are locked and cannot be recalculated."
+            )
         if not self.tenant_id or (not self.fixed_asset_id and not self.operational_asset_id):
             if self.status == "draft":
                 self.status = "calculated"
