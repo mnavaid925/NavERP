@@ -180,6 +180,12 @@ def asset_lifecycle_cost_analysis_create(request):
 @tenant_admin_required
 def asset_lifecycle_cost_analysis_edit(request, pk):
     analysis = assets_object(request, AssetLifecycleCostAnalysis, pk)
+    if analysis.is_locked:
+        messages.error(
+            request,
+            f"Analysis '{analysis.number}' is locked ({analysis.get_status_display()}) and cannot be edited.",
+        )
+        return redirect("assets:asset_lifecycle_cost_analysis_detail", pk=analysis.pk)
     if request.method == "POST":
         form = AssetLifecycleCostAnalysisForm(request.POST, instance=analysis, tenant=request.tenant)
         if form.is_valid():
@@ -207,6 +213,12 @@ def asset_lifecycle_cost_analysis_edit(request, pk):
 @require_POST
 def asset_lifecycle_cost_analysis_delete(request, pk):
     analysis = assets_object(request, AssetLifecycleCostAnalysis, pk)
+    if analysis.is_locked:
+        messages.error(
+            request,
+            f"Analysis '{analysis.number}' is locked ({analysis.get_status_display()}) and cannot be deleted.",
+        )
+        return redirect("assets:asset_lifecycle_cost_analysis_detail", pk=analysis.pk)
     try:
         with transaction.atomic():
             write_audit_log(request.user, analysis, "delete", tenant=request.tenant)
@@ -222,6 +234,12 @@ def asset_lifecycle_cost_analysis_delete(request, pk):
 @require_POST
 def asset_lifecycle_cost_analysis_populate(request, pk):
     analysis = assets_object(request, AssetLifecycleCostAnalysis, pk)
+    if analysis.is_locked:
+        messages.error(
+            request,
+            f"Analysis '{analysis.number}' is locked ({analysis.get_status_display()}) and cannot sync upstream spend.",
+        )
+        return redirect("assets:asset_lifecycle_cost_analysis_detail", pk=analysis.pk)
     with transaction.atomic():
         analysis.populate_from_asset_records(save=True)
         write_audit_log(request.user, analysis, "populate", tenant=request.tenant)
@@ -238,12 +256,19 @@ def asset_lifecycle_cost_analysis_populate(request, pk):
 def asset_lifecycle_cost_analysis_transition(request, pk):
     analysis = assets_object(request, AssetLifecycleCostAnalysis, pk)
     target_status = request.POST.get("target_status", "").strip()
-    allowed_targets = {"calculated", "reviewed", "approved", "archived"}
-    if target_status not in allowed_targets:
+    status_labels = dict(AssetLifecycleCostAnalysis.STATUS_CHOICES)
+    if target_status not in status_labels:
         messages.error(request, "Invalid target lifecycle analysis status requested.")
         return redirect("assets:asset_lifecycle_cost_analysis_detail", pk=analysis.pk)
     if analysis.status == target_status:
         messages.info(request, f"Analysis '{analysis.number}' is already in '{analysis.get_status_display()}' status.")
+        return redirect("assets:asset_lifecycle_cost_analysis_detail", pk=analysis.pk)
+    allowed_next = AssetLifecycleCostAnalysis.ALLOWED_TRANSITIONS.get(analysis.status, set())
+    if target_status not in allowed_next:
+        messages.error(
+            request,
+            f"Cannot transition analysis '{analysis.number}' from '{analysis.get_status_display()}' to '{status_labels[target_status]}'.",
+        )
         return redirect("assets:asset_lifecycle_cost_analysis_detail", pk=analysis.pk)
     with transaction.atomic():
         analysis.status = target_status
