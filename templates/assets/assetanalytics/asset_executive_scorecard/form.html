@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ scorecard.number }}{% else %}New Executive Scorecard{% endif %} — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_executive_scorecard_list' %}">Executive Scorecards</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ scorecard.number }}{% else %}New Scorecard{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Executive Scorecard: {{ scorecard.number }}{% else %}New Asset Executive Scorecard{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Scorecard Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.period_type.id_for_label }}">Reporting Period Type *</label>
+                    {{ form.period_type }}
+                    {% if form.period_type.errors %}<div class="form-error">{{ form.period_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Reporting Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start Date *</label>
+                    {{ form.period_start }}
+                    {% if form.period_start.errors %}<div class="form-error">{{ form.period_start.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End Date *</label>
+                    {{ form.period_end }}
+                    {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit Scope</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_category.id_for_label }}">Asset Category Scope</label>
+                    {{ form.asset_category }}
+                    {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.prepared_by.id_for_label }}">Prepared By</label>
+                    {{ form.prepared_by }}
+                    {% if form.prepared_by.errors %}<div class="form-error">{{ form.prepared_by.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.approved_by.id_for_label }}">Executive Approver</label>
+                    {{ form.approved_by }}
+                    {% if form.approved_by.errors %}<div class="form-error">{{ form.approved_by.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Board Targets &amp; Economic Return Override</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.target_asset_roi_pct.id_for_label }}">Target Asset ROI (%)</label>
+                        {{ form.target_asset_roi_pct }}
+                        {% if form.target_asset_roi_pct.errors %}<div class="form-error">{{ form.target_asset_roi_pct.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.target_mcr_pct.id_for_label }}">Target Maintenance Cost / RAV (%)</label>
+                        {{ form.target_mcr_pct }}
+                        {% if form.target_mcr_pct.errors %}<div class="form-error">{{ form.target_mcr_pct.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.target_compliance_rate_pct.id_for_label }}">Target Compliance Pass Rate (%)</label>
+                        {{ form.target_compliance_rate_pct }}
+                        {% if form.target_compliance_rate_pct.errors %}<div class="form-error">{{ form.target_compliance_rate_pct.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.annual_asset_return_amount.id_for_label }}">Annual Operating Asset Return (Optional)</label>
+                        {{ form.annual_asset_return_amount }}
+                        {% if form.annual_asset_return_amount.errors %}<div class="form-error">{{ form.annual_asset_return_amount.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group mb-6">
+                <label class="form-label" for="{{ form.executive_summary.id_for_label }}">Executive Summary</label>
+                {{ form.executive_summary }}
+                {% if form.executive_summary.errors %}<div class="form-error">{{ form.executive_summary.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Draft Changes{% else %}Create Scorecard{% endif %}
+                </button>
+                {% if is_edit %}
+                <a href="{% url 'assets:asset_executive_scorecard_detail' scorecard.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_executive_scorecard_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
