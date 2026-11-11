@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+
+from ._validators import validate_tenant_fks
 from django.db import models
 from django.utils import timezone
 
@@ -243,6 +245,13 @@ class AssetGlSyncBatch(TenantNumbered):
     def clean(self):
         super().clean()
         errors = {}
+        src = self.source_amount if self.source_amount is not None else Decimal("0.00")
+        tgt = (
+            self.target_gl_amount
+            if self.target_gl_amount is not None
+            else Decimal("0.00")
+        )
+        self.variance_amount = src - tgt
         if self.source_amount is not None and self.source_amount < Decimal("0.00"):
             errors["source_amount"] = "Source amount cannot be negative."
         if (
@@ -271,6 +280,24 @@ class AssetGlSyncBatch(TenantNumbered):
                     errors["field_mapping_json"] = (
                         "Field mapping must be a JSON object ({...})."
                     )
+        validate_tenant_fks(
+            self,
+            errors,
+            (
+                "connector",
+                "fiscal_period",
+                "gl_account",
+                "offset_gl_account",
+                "fixed_asset",
+                "purchase_order",
+                "capitalization",
+                "depreciation_schedule",
+                "maintenance_request",
+                "cost_center",
+                "journal_entry",
+                "executed_by",
+            ),
+        )
         if errors:
             raise ValidationError(errors)
 
