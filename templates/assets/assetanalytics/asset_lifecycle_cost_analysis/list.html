@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}Lifecycle Cost Analyses (LCC) — Asset Analytics & BI — NavERP{% endblock %}
 
@@ -41,14 +40,14 @@
         <div class="stat-icon green"><i data-lucide="wallet"></i></div>
         <div class="stat-body">
             <div class="stat-label">Total Portfolio TCO</div>
-            <div class="stat-value">${{ total_tco_value|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ total_tco_value|floatformat:"2g" }}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
         <div class="stat-body">
             <div class="stat-label">Average Asset TCO</div>
-            <div class="stat-value">${{ avg_tco|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ avg_tco|floatformat:"2g" }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -162,8 +161,8 @@
                     <td>
                         <span class="badge {{ item.lifecycle_stage_badge_class }}">{{ item.get_lifecycle_stage_display }}</span>
                     </td>
-                    <td class="text-right font-mono font-semibold text-slate-900">${{ item.total_lifecycle_cost|floatformat:2|intcomma }}</td>
-                    <td class="text-right font-mono text-slate-700">${{ item.equivalent_annual_cost|floatformat:2|intcomma }}</td>
+                    <td class="text-right font-mono font-semibold text-slate-900">${{ item.total_lifecycle_cost|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono text-slate-700">${{ item.equivalent_annual_cost|floatformat:"2g" }}</td>
                     <td class="text-right font-mono">{{ item.maintenance_to_rav_pct|floatformat:1 }}%</td>
                     <td>
                         <span class="badge {{ item.recommendation_badge_class }}">{{ item.get_recommendation_display }}</span>
