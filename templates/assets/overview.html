@@ -199,6 +199,38 @@
     </a>
 </div>
 
+<!-- Sub-module 11.15 Integration & API Hub Quick Navigation Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <a href="{% url 'assets:asset_integration_connector_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-blue-500">
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-blue-600">API Connectors</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-blue-600"></i>
+        </div>
+        <p class="text-xs text-muted mt-1">{{ kpis.active_connectors }}/{{ kpis.total_connectors }} active &middot; ERP &amp; CMMS endpoints</p>
+    </a>
+    <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-emerald-500">
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600">IoT &amp; SCADA Streams</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-emerald-600"></i>
+        </div>
+        <p class="text-xs text-muted mt-1">{{ kpis.active_streams }}/{{ kpis.total_streams }} active &middot; real-time telemetry</p>
+    </a>
+    <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-amber-500">
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-amber-600">GL Sync &amp; Recon</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-amber-600"></i>
+        </div>
+        <p class="text-xs text-muted mt-1">{{ kpis.posted_gl_batches }}/{{ kpis.total_gl_batches }} posted &middot; ledger batches</p>
+    </a>
+    <a href="{% url 'assets:asset_gis_mapping_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-purple-500">
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-purple-600">GIS Spatial Mappings</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-purple-600"></i>
+        </div>
+        <p class="text-xs text-muted mt-1">{{ kpis.drifted_gis_mappings }}/{{ kpis.total_gis_mappings }} drifted &middot; spatial sync</p>
+    </a>
+</div>
+
 <!-- Recent Tables Grid -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Recent Requisitions -->
