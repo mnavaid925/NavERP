@@ -55,7 +55,7 @@ def mobile_asset_inspection_list(request):
     failed_count = metrics["failed"]
     offline_captured_count = metrics["offline"]
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
