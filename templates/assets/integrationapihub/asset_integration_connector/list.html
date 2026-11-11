@@ -29,31 +29,23 @@
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
         <div class="stat-icon blue"><i data-lucide="plug"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Total Connectors</div>
-            <div class="stat-value">{{ total_count }}</div>
-        </div>
+        <div class="stat-label">Total Connectors</div>
+        <div class="stat-value">{{ total_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Active</div>
-            <div class="stat-value">{{ active_count }}</div>
-        </div>
+        <div class="stat-label">Active</div>
+        <div class="stat-value">{{ active_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon purple"><i data-lucide="heart-pulse"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Healthy Endpoints</div>
-            <div class="stat-value">{{ healthy_count }}</div>
-        </div>
+        <div class="stat-label">Healthy Endpoints</div>
+        <div class="stat-value">{{ healthy_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Errors / Unreachable</div>
-            <div class="stat-value">{{ error_count }}</div>
-        </div>
+        <div class="stat-label">Errors / Unreachable</div>
+        <div class="stat-value">{{ error_count }}</div>
     </div>
 </div>
 
@@ -157,9 +149,9 @@
                     </td>
                     <td class="text-right">
                         <div class="flex justify-end gap-1">
-                            <a href="{% url 'assets:asset_integration_connector_detail' connector.pk %}" class="btn btn-outline btn-xs">View</a>
+                            <a href="{% url 'assets:asset_integration_connector_detail' connector.pk %}" class="btn btn-outline btn-sm">View</a>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                            <a href="{% url 'assets:asset_integration_connector_edit' connector.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                            <a href="{% url 'assets:asset_integration_connector_edit' connector.pk %}" class="btn btn-outline btn-sm">Edit</a>
                             {% endif %}
                         </div>
                     </td>
@@ -185,7 +177,7 @@
     </div>
 
     {% if is_paginated %}
-    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+    <div class="pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
         <div class="text-xs text-slate-500">
             Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
         </div>
