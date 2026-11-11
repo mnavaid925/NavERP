@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plan.number }} — {{ plan.title }} — Business Continuity — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_business_continuity_plan_list' %}">Continuity Plans</a>
+            <span>/</span>
+            <span>{{ plan.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ plan.number }} — {{ plan.title }}</h1>
+            <span class="badge {{ plan.status_badge_class }}">{{ plan.get_status_display }}</span>
+            <span class="badge {{ plan.redundancy_type_badge_class }}">{{ plan.get_redundancy_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_business_continuity_plan_edit' plan.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if plan.status == "draft" %}
+        <form method="post" action="{% url 'assets:asset_business_continuity_plan_activate' plan.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-emerald-600">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Activate Plan
+            </button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'assets:asset_business_continuity_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete continuity plan {{ plan.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Redundancy Architecture Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Redundancy Architecture & Asset Topology</h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Redundancy Strategy</div>
+                    <div>
+                        <span class="badge {{ plan.redundancy_type_badge_class }} text-sm">{{ plan.get_redundancy_type_display }}</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Disaster Scenario</div>
+                    <div>
+                        <span class="badge {{ plan.disaster_scenario_badge_class }} text-sm">{{ plan.get_disaster_scenario_display }}</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Primary Operational Asset</div>
+                    <div>
+                        {% if plan.primary_asset %}
+                        <div class="font-medium text-slate-900">{{ plan.primary_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.primary_asset.asset_code }}</div>
+                        {% else %}
+                        <span class="text-slate-400">All Facility Assets</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Designated Backup / Redundant Unit</div>
+                    <div>
+                        {% if plan.backup_redundant_asset %}
+                        <div class="font-medium text-slate-900">{{ plan.backup_redundant_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.backup_redundant_asset.asset_code }}</div>
+                        {% else %}
+                        <span class="text-slate-400">No Dedicated Redundant Machine</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Alternate Facility / Site</div>
+                    <div class="text-sm font-medium text-slate-800">{{ plan.alternate_facility_site|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Emergency Incident Lead</div>
+                    <div class="text-sm font-medium text-slate-800">
+                        {% if plan.emergency_lead %}
+                        {{ plan.emergency_lead.get_full_name|default:plan.emergency_lead.username }}
+                        {% else %}
+                        <span class="text-slate-400">Unassigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if plan.critical_spares_required %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Critical Spares & Vendor Commitments</div>
+                <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{{ plan.critical_spares_required }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Resilience Target Metrics & Drill Status -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Resilience Targets (ISO 22301)</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Recovery Time Objective (RTO)</div>
+                <div class="text-2xl font-bold text-slate-900 font-mono">{{ plan.recovery_time_objective_hours }} hrs</div>
+                <div class="text-xs text-slate-500">Max allowable time to switch to backup</div>
+            </div>
+
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Recovery Point Objective (RPO)</div>
+                <div class="text-2xl font-bold text-slate-900 font-mono">{{ plan.recovery_point_objective_hours }} hrs</div>
+                <div class="text-xs text-slate-500">Max acceptable operational data / WIP loss</div>
+            </div>
+
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Maximum Tolerable Downtime (MTD)</div>
+                <div class="text-2xl font-bold text-slate-900 font-mono">{{ plan.maximum_tolerable_downtime_hours }} hrs</div>
+                <div class="text-xs text-slate-500">Threshold before catastrophic business harm</div>
+            </div>
+
+            <!-- Drill History Card -->
+            <div class="pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Disaster Recovery Drill</div>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs text-slate-500">Frequency: {{ plan.get_drill_frequency_display }}</span>
+                    <span class="badge {{ plan.drill_result_badge_class }}">{{ plan.get_drill_result_display }}</span>
+                </div>
+                <div class="text-xs text-slate-600 mb-3">
+                    Last Drill: <strong>{{ plan.last_drill_date|default:"Never" }}</strong>
+                    {% if plan.next_drill_date %} • Next: <strong>{{ plan.next_drill_date }}</strong>{% endif %}
+                </div>
+
+                <!-- Record Drill Quick Form -->
+                <form method="post" action="{% url 'assets:asset_business_continuity_plan_drill' plan.pk %}" class="flex gap-2">
+                    {% csrf_token %}
+                    <select name="drill_result" class="form-select text-xs py-1">
+                        <option value="passed">Passed</option>
+                        <option value="passed_with_deficiencies">Passed with Deficiencies</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                    <button type="submit" class="btn btn-outline btn-sm whitespace-nowrap">
+                        Record Drill
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Procedures Section -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Failover Step-by-Step Procedure</h2>
+        </div>
+        <div class="card-body">
+            {% if plan.failover_procedure %}
+            <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed font-mono bg-slate-50 p-4 rounded-lg border border-slate-200">
+                {{ plan.failover_procedure }}
+            </div>
+            {% else %}
+            <p class="text-sm text-slate-500 italic">No failover procedure documented.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Failback Step-by-Step Procedure</h2>
+        </div>
+        <div class="card-body">
+            {% if plan.failback_procedure %}
+            <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed font-mono bg-slate-50 p-4 rounded-lg border border-slate-200">
+                {{ plan.failback_procedure }}
+            </div>
+            {% else %}
+            <p class="text-sm text-slate-500 italic">No failback procedure documented.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
