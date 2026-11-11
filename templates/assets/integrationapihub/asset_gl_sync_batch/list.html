@@ -51,12 +51,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
-                <label class="form-label text-xs">Search</label>
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Batch #, external ref, connector..." class="form-input">
+                <label class="form-label text-xs" for="id_filter_q">Search</label>
+                <input id="id_filter_q" type="text" name="q" value="{{ search_query }}" placeholder="Batch #, external ref, connector..." class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Connector</label>
-                <select name="connector" class="form-select">
+                <label class="form-label text-xs" for="id_filter_connector">Connector</label>
+                <select id="id_filter_connector" name="connector" class="form-select">
                     <option value="">All Connectors</option>
                     {% for c in connectors %}
                     <option value="{{ c.pk }}" {% if request.GET.connector == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} &middot; {{ c.name }}</option>
@@ -64,8 +64,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Sync Domain</label>
-                <select name="sync_domain" class="form-select">
+                <label class="form-label text-xs" for="id_filter_domain">Sync Domain</label>
+                <select id="id_filter_domain" name="sync_domain" class="form-select">
                     <option value="">All Domains</option>
                     {% for val, label in domain_choices %}
                     <option value="{{ val }}" {% if request.GET.sync_domain == val %}selected{% endif %}>{{ label }}</option>
@@ -73,8 +73,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Batch Status</label>
-                <select name="status" class="form-select">
+                <label class="form-label text-xs" for="id_filter_status">Batch Status</label>
+                <select id="id_filter_status" name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -82,8 +82,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Reconciliation</label>
-                <select name="reconciliation_status" class="form-select">
+                <label class="form-label text-xs" for="id_filter_recon">Reconciliation</label>
+                <select id="id_filter_recon" name="reconciliation_status" class="form-select">
                     <option value="">All Reconciliation</option>
                     {% for val, label in reconciliation_choices %}
                     <option value="{{ val }}" {% if request.GET.reconciliation_status == val %}selected{% endif %}>{{ label }}</option>
@@ -91,18 +91,18 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Date From</label>
-                <input type="date" name="date_from" value="{{ request.GET.date_from }}" class="form-input">
+                <label class="form-label text-xs" for="id_filter_date_from">Date From</label>
+                <input id="id_filter_date_from" type="date" name="date_from" value="{{ request.GET.date_from }}" class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Date To</label>
-                <input type="date" name="date_to" value="{{ request.GET.date_to }}" class="form-input">
+                <label class="form-label text-xs" for="id_filter_date_to">Date To</label>
+                <input id="id_filter_date_to" type="date" name="date_to" value="{{ request.GET.date_to }}" class="form-input">
             </div>
             <div class="flex items-end gap-2">
                 <button type="submit" class="btn btn-primary flex-1">
                     <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
                 </button>
-                <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="btn btn-outline" title="Reset filters">
+                <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
                     <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                 </a>
             </div>
