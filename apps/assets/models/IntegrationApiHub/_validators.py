@@ -1,6 +1,32 @@
 """Shared model validation helpers for Integration & API Hub (11.15)."""
 
-from django.core.exceptions import ObjectDoesNotExist
+import json
+
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
+
+
+def _reject_json_constant(value):
+    raise ValueError(f"Non-standard JSON constant {value!r} is not allowed.")
+
+
+def validate_json_object(raw_value, field_label="JSON field", max_bytes=65536):
+    """Validate optional JSON text: size-bounded, finite numbers, dict root."""
+    raw = (raw_value or "").strip()
+    if not raw:
+        return None
+    if len(raw.encode("utf-8")) > max_bytes:
+        raise ValidationError(
+            f"{field_label} exceeds maximum size of {max_bytes // 1024} KB."
+        )
+    try:
+        parsed = json.loads(raw, parse_constant=_reject_json_constant)
+    except (ValueError, RecursionError) as exc:
+        raise ValidationError(
+            f"{field_label} must be valid standard JSON syntax."
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise ValidationError(f"{field_label} must be a JSON object ({{...}}).")
+    return parsed
 
 
 def add_field_error(errors, field_name, message):
