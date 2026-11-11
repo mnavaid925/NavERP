@@ -164,7 +164,7 @@
                     </td>
                     <td>
                         {% if item.is_offline_captured %}
-                        <span class="badge badge-purple" title="Captured offline, synced {{ item.synced_at|date:'M d' }}">
+                        <span class="badge badge-info" title="Captured offline, synced {{ item.synced_at|date:'M d' }}">
                             <i data-lucide="wifi-off" class="w-3 h-3 inline me-1"></i>Offline
                         </span>
                         {% else %}
