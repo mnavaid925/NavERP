@@ -167,13 +167,13 @@
                             <a href="{% url 'assets:asset_executive_scorecard_edit' k.pk %}" class="btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
-                            {% endif %}
-                            <form method="post" action="{% url 'assets:asset_executive_scorecard_delete' k.pk %}" class="inline" onsubmit="return confirm('Delete scorecard {{ k.number }}?');">
+                            <form method="post" action="{% url 'assets:asset_executive_scorecard_delete' k.pk %}" class="inline" onsubmit="return confirm('Delete scorecard {{ k.number|escapejs }}?');">
                                 {% csrf_token %}
                                 <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
