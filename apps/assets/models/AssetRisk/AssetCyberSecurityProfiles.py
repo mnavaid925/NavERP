@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.assets.models._base import TenantNumbered
@@ -163,6 +164,7 @@ class AssetCyberSecurityProfile(TenantNumbered):
         max_digits=4,
         decimal_places=1,
         default=Decimal("0.0"),
+        validators=[MinValueValidator(Decimal("0.0")), MaxValueValidator(Decimal("10.0"))],
         help_text="Base CVSS score (0.0 to 10.0)",
     )
     compensating_controls = models.TextField(
