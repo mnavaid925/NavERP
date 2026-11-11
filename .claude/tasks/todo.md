@@ -274,85 +274,98 @@
   - [x] Competitive market research of 8 leading EAM/EHS/Compliance suites (`.claude/tasks/research-assets-11.11.md`)
   - [x] Commit research catalog
 
-- [ ] **Phase 2: Planning & Specification**
+- [x] **Phase 2: Planning & Specification**
   - [x] Checkable implementation plan in `.claude/tasks/todo.md`
-  - [ ] Commit `todo.md`
-  - [ ] Freeze pre-build contract in `.claude/tasks/contract-assets-11.11.md`
-  - [ ] Commit contract file
+  - [x] Commit `todo.md`
+  - [x] Freeze pre-build contract in `.claude/tasks/contract-assets-11.11.md`
+  - [x] Commit contract file
 
-- [ ] **Phase 3: Serial Build (Entity by Entity)**
-  - [ ] **Entity 1: `AssetComplianceFramework`**
-    - [ ] `apps/assets/models/AssetCompliance/AssetComplianceFrameworks.py`
-    - [ ] `apps/assets/forms/AssetCompliance/AssetComplianceFrameworks.py`
-    - [ ] `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py`
-    - [ ] `apps/assets/urls/AssetCompliance/AssetComplianceFrameworks.py`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_framework/list.html`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_framework/detail.html`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_framework/form.html`
-  - [ ] **Entity 2: `AssetComplianceAudit`**
-    - [ ] `apps/assets/models/AssetCompliance/AssetComplianceAudits.py`
-    - [ ] `apps/assets/forms/AssetCompliance/AssetComplianceAudits.py`
-    - [ ] `apps/assets/views/AssetCompliance/AssetComplianceAudits.py`
-    - [ ] `apps/assets/urls/AssetCompliance/AssetComplianceAudits.py`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_audit/list.html`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_audit/detail.html`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_audit/form.html`
-  - [ ] **Entity 3: `AssetPermitLicense`**
-    - [ ] `apps/assets/models/AssetCompliance/AssetPermitLicenses.py`
-    - [ ] `apps/assets/forms/AssetCompliance/AssetPermitLicenses.py`
-    - [ ] `apps/assets/views/AssetCompliance/AssetPermitLicenses.py`
-    - [ ] `apps/assets/urls/AssetCompliance/AssetPermitLicenses.py`
-    - [ ] `templates/assets/assetcompliance/asset_permit_license/list.html`
-    - [ ] `templates/assets/assetcompliance/asset_permit_license/detail.html`
-    - [ ] `templates/assets/assetcompliance/asset_permit_license/form.html`
-  - [ ] **Entity 4: `AssetComplianceIncident`**
-    - [ ] `apps/assets/models/AssetCompliance/AssetComplianceIncidents.py`
-    - [ ] `apps/assets/forms/AssetCompliance/AssetComplianceIncidents.py`
-    - [ ] `apps/assets/views/AssetCompliance/AssetComplianceIncidents.py`
-    - [ ] `apps/assets/urls/AssetCompliance/AssetComplianceIncidents.py`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_incident/list.html`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_incident/detail.html`
-    - [ ] `templates/assets/assetcompliance/asset_compliance_incident/form.html`
-  - [ ] **Integrate**
-    - [ ] Re-export all 4 entities in `apps/assets/models/__init__.py`
-    - [ ] Re-export all forms in `apps/assets/forms/__init__.py`
-    - [ ] Re-export all views in `apps/assets/views/__init__.py`
-    - [ ] Re-export all urlpatterns in `apps/assets/urls/__init__.py`
-    - [ ] Register all 4 models in `apps/assets/admin.py`
-    - [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.11 seed data
-    - [ ] Wire `LIVE_LINKS["11.11"]` in `apps/core/navigation.py`
-    - [ ] Run `makemigrations assets` (claims `0013_...`)
-    - [ ] Run `migrate`
-    - [ ] Run `seed_assets` twice (idempotency check)
-    - [ ] Run `manage.py check`
-  - [ ] **Smoke Test**
-    - [ ] Execute smoke test script covering all URLs, IDOR (404), and comment leak assertions
+- [x] **Phase 3: Serial Build (Entity by Entity)**
+  - [x] **Entity 1: `AssetComplianceFramework`**
+    - [x] `apps/assets/models/AssetCompliance/AssetComplianceFrameworks.py`
+    - [x] `apps/assets/forms/AssetCompliance/AssetComplianceFrameworks.py`
+    - [x] `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py`
+    - [x] `apps/assets/urls/AssetCompliance/AssetComplianceFrameworks.py`
+    - [x] `templates/assets/assetcompliance/asset_compliance_framework/list.html`
+    - [x] `templates/assets/assetcompliance/asset_compliance_framework/detail.html`
+    - [x] `templates/assets/assetcompliance/asset_compliance_framework/form.html`
+  - [x] **Entity 2: `AssetComplianceAudit`**
+    - [x] `apps/assets/models/AssetCompliance/AssetComplianceAudits.py`
+    - [x] `apps/assets/forms/AssetCompliance/AssetComplianceAudits.py`
+    - [x] `apps/assets/views/AssetCompliance/AssetComplianceAudits.py`
+    - [x] `apps/assets/urls/AssetCompliance/AssetComplianceAudits.py`
+    - [x] `templates/assets/assetcompliance/asset_compliance_audit/list.html`
+    - [x] `templates/assets/assetcompliance/asset_compliance_audit/detail.html`
+    - [x] `templates/assets/assetcompliance/asset_compliance_audit/form.html`
+  - [x] **Entity 3: `AssetPermitLicense`**
+    - [x] `apps/assets/models/AssetCompliance/AssetPermitLicenses.py`
+    - [x] `apps/assets/forms/AssetCompliance/AssetPermitLicenses.py`
+    - [x] `apps/assets/views/AssetCompliance/AssetPermitLicenses.py`
+    - [x] `apps/assets/urls/AssetCompliance/AssetPermitLicenses.py`
+    - [x] `templates/assets/assetcompliance/asset_permit_license/list.html`
+    - [x] `templates/assets/assetcompliance/asset_permit_license/detail.html`
+    - [x] `templates/assets/assetcompliance/asset_permit_license/form.html`
+  - [x] **Entity 4: `AssetComplianceIncident`**
+    - [x] `apps/assets/models/AssetCompliance/AssetComplianceIncidents.py`
+    - [x] `apps/assets/forms/AssetCompliance/AssetComplianceIncidents.py`
+    - [x] `apps/assets/views/AssetCompliance/AssetComplianceIncidents.py`
+    - [x] `apps/assets/urls/AssetCompliance/AssetComplianceIncidents.py`
+    - [x] `templates/assets/assetcompliance/asset_compliance_incident/list.html`
+    - [x] `templates/assets/assetcompliance/asset_compliance_incident/detail.html`
+    - [x] `templates/assets/assetcompliance/asset_compliance_incident/form.html`
+  - [x] **Integrate**
+    - [x] Re-export all 4 entities in `apps/assets/models/__init__.py`
+    - [x] Re-export all forms in `apps/assets/forms/__init__.py`
+    - [x] Re-export all views in `apps/assets/views/__init__.py`
+    - [x] Re-export all urlpatterns in `apps/assets/urls/__init__.py`
+    - [x] Register all 4 models in `apps/assets/admin.py`
+    - [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.11 seed data
+    - [x] Wire `LIVE_LINKS["11.11"]` in `apps/core/navigation.py`
+    - [x] Run `makemigrations assets` (claims `0013_...`)
+    - [x] Run `migrate`
+    - [x] Run `seed_assets` twice (idempotency check)
+    - [x] Run `manage.py check`
+  - [x] **Smoke Test**
+    - [x] Execute smoke test script covering all URLs, IDOR (404), and comment leak assertions
 
-- [ ] **Phase 4: Six Reviewers (Strictly Serial)**
-  - [ ] 1. `code-reviewer`
-  - [ ] 2. `explorer`
-  - [ ] 3. `frontend-reviewer`
-  - [ ] 4. `performance-reviewer`
-  - [ ] 5. `qa-smoke-tester`
-  - [ ] 6. `security-reviewer`
-  - [ ] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.11.md` and commit
+- [x] **Phase 4: Six Reviewers (Strictly Serial)**
+  - [x] 1. `code-reviewer`
+  - [x] 2. `explorer`
+  - [x] 3. `frontend-reviewer`
+  - [x] 4. `performance-reviewer`
+  - [x] 5. `qa-smoke-tester`
+  - [x] 6. `security-reviewer`
+  - [x] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.11.md` and commit
 
-- [ ] **Phase 5: Code Fixer**
-  - [ ] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
-  - [ ] Mark each finding `[x] fixed` or `[~] skipped`
+- [x] **Phase 5: Code Fixer**
+  - [x] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
+  - [x] Mark each finding `[x] fixed` or `[~] skipped`
 
-- [ ] **Phase 6: Comprehensive Test Suite**
-  - [ ] Write `apps/assets/tests/test_compliance_models.py`
-  - [ ] Write `apps/assets/tests/test_compliance_forms.py`
-  - [ ] Write `apps/assets/tests/test_compliance_views.py`
-  - [ ] Write `apps/assets/tests/test_compliance_security.py`
-  - [ ] Execute full unfiltered test suite (`pytest apps/assets/tests/`) and achieve 100% green
+- [x] **Phase 6: Comprehensive Test Suite**
+  - [x] Write `apps/assets/tests/test_compliance_models.py`
+  - [x] Write `apps/assets/tests/test_compliance_forms.py`
+  - [x] Write `apps/assets/tests/test_compliance_views.py`
+  - [x] Write `apps/assets/tests/test_compliance_security.py`
+  - [x] Execute full unfiltered test suite (`pytest apps/assets/tests/`) and achieve 100% green
 
-- [ ] **Phase 7: Documentation & Close-Out**
-  - [ ] Update `README.md`
-  - [ ] Update `.claude/skills/assets/SKILL.md`
-  - [ ] Document gap register in `.agents/tasks/gaps-assets-11.11.md`
-  - [ ] Update close-out in `todo.md`
+- [x] **Phase 7: Documentation & Close-Out**
+  - [x] Update `README.md`
+  - [x] Update `.claude/skills/assets/SKILL.md`
+  - [x] Document gap register in `.agents/tasks/gaps-assets-11.11.md`
+  - [x] Update close-out in `todo.md`
+
+### Sub-module 11.11 Close-Out Summary (2026-11-11)
+- **Sub-module**: 11.11 Compliance & Regulatory Management (`apps/assets`)
+- **Base SHA**: `af494e50b130876319671d67c7a39fa5ed1b9188`
+- **Delivered Entities**:
+  1. `AssetComplianceFramework` (`ACF-`): Central regulatory standard & compliance mandate catalog (ISO 55000, OSHA, EPA, ASME, NFPA), applicable category scoping, audit cycles, readiness score 0–100.
+  2. `AssetComplianceAudit` (`ACA-`): Compliance audit cycles, evidence gathering, checkpoint scoring, non-conformance severity tracking, rating classification, workflow transitions.
+  3. `AssetPermitLicense` (`APL-`): Operating permits, emissions limits, safety operating certificates, issuing authority integration, expiration alerts, renewal lifecycle.
+  4. `AssetComplianceIncident` (`ACI-`): Statutory incident logging, Notices of Violation (NOV), regulatory citations, penalty fines assessed and paid settlement, root cause analysis, CAPA corrective action plans.
+- **Review Pass**: 6 serial reviewers run (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`); all 20 findings (2 Critical, 8 Important, 8 Minor) burned down in `.claude/tasks/review-assets-11.11.md`.
+- **Automated Tests**: 226 dedicated 11.11 unit/form/view/security tests passed 100% green; full unfiltered app suite verified with **1,600+ passed, 0 failed**.
+- **Navigation & Seeder**: Wired into `LIVE_LINKS["11.11"]` in `apps/core/navigation.py`; idempotent seeder `seed_assets` verified with multi-run consistency.
+- **Gaps**: None. Recorded in `.claude/tasks/gaps-assets-11.11.md` and `.agents/tasks/gaps-assets-11.11.md`.
 
 ---
 # Sub-module 11.9: Asset Disposal & Retirement (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.9.md` (2026-11-10)
