@@ -196,6 +196,9 @@ class AssetPortfolioScenario(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_awif_ten_stat"),
             models.Index(fields=["tenant", "scenario_type"], name="idx_awif_ten_type"),
             models.Index(fields=["tenant", "base_fiscal_year"], name="idx_awif_ten_yr"),
+            models.Index(fields=["tenant", "scope_org_unit"], name="idx_awif_ten_org"),
+            models.Index(fields=["tenant", "scope_category"], name="idx_awif_ten_cat"),
+            models.Index(fields=["tenant", "is_baseline"], name="idx_awif_ten_base"),
         ]
 
     def __str__(self):
