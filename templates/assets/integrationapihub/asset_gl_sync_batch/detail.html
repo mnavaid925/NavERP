@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}{{ batch.number }} — GL Sync Batch — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_gl_sync_batch_list' %}">GL Sync Batches</a>
+            <span>/</span>
+            <span>{{ batch.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-1">
+            <h1 class="page-title">{{ batch.number }} &middot; {{ batch.get_sync_domain_display }}</h1>
+            <span class="badge {{ batch.status_badge_class }}">{{ batch.get_status_display }}</span>
+            <span class="badge {{ batch.reconciliation_badge_class }}">{{ batch.get_reconciliation_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <form method="post" action="{% url 'assets:asset_gl_sync_batch_execute' batch.pk %}" class="inline" onsubmit="return confirm('Execute GL reconciliation and Journal Entry posting for {{ batch.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i data-lucide="play" class="w-4 h-4 me-1"></i> Execute &amp; Reconcile GL Batch
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_gl_sync_batch_edit' batch.pk %}" class="btn btn-outline btn-sm">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if not batch.journal_entry and batch.status != "posted" %}
+        <form method="post" action="{% url 'assets:asset_gl_sync_batch_delete' batch.pk %}" class="inline" onsubmit="return confirm('Delete GL sync batch {{ batch.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="btn btn-outline btn-sm">Back to List</a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Financial Synchronization &amp; Reconciliation Summary</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Batch Number</dt>
+                <dd class="font-mono font-semibold">{{ batch.number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Integration Connector</dt>
+                <dd>
+                    <a href="{% url 'assets:asset_integration_connector_detail' batch.connector.pk %}" class="text-brand hover:underline">
+                        {{ batch.connector.number }} &middot; {{ batch.connector.name }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Sync Domain</dt>
+                <dd>{{ batch.get_sync_domain_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Direction</dt>
+                <dd>{{ batch.get_sync_direction_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>External Batch Reference</dt>
+                <dd class="font-mono">{{ batch.external_batch_ref|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Batch Date &amp; Fiscal Period</dt>
+                <dd>{{ batch.batch_date|date:"Y-m-d" }}{% if batch.fiscal_period %} &middot; {{ batch.fiscal_period.name }} ({{ batch.fiscal_period.get_status_display }}){% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Source Subledger Amount</dt>
+                <dd class="font-mono font-semibold">{{ batch.source_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Target GL Amount</dt>
+                <dd class="font-mono font-semibold">{{ batch.target_gl_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Variance Amount</dt>
+                <dd class="font-mono font-semibold {% if batch.variance_amount != 0 %}text-danger{% endif %}">{{ batch.variance_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Primary GL Account (Dr)</dt>
+                <dd>{{ batch.gl_account|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Offset GL Account (Cr)</dt>
+                <dd>{{ batch.offset_gl_account|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Cost Center (Org Unit)</dt>
+                <dd>{{ batch.cost_center|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Posted Journal Entry</dt>
+                <dd>
+                    {% if batch.journal_entry %}
+                    <a href="{% url 'accounting:journal_entry_detail' batch.journal_entry.pk %}" class="text-brand font-mono font-semibold hover:underline">
+                        {{ batch.journal_entry.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-muted">Not posted</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Record Counters (Processed / OK / Failed)</dt>
+                <dd class="font-mono">{{ batch.records_processed }} / {{ batch.records_succeeded }} / {{ batch.records_failed }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Synced At / Executed By</dt>
+                <dd>{% if batch.synced_at %}{{ batch.synced_at|date:"Y-m-d H:i" }} ({{ batch.executed_by|default:"—" }}){% else %}<span class="text-muted">Pending execution</span>{% endif %}</dd>
+            </div>
+        </dl>
+
+        <div class="mt-6 pt-4 border-t border-slate-100">
+            <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-3">Linked ERP &amp; Asset Subledger References</h3>
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Financial Fixed Asset</dt>
+                    <dd>
+                        {% if batch.fixed_asset %}
+                        <a href="{% url 'accounting:fixed_asset_detail' batch.fixed_asset.pk %}" class="text-brand hover:underline">{{ batch.fixed_asset }}</a>
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Purchase Order</dt>
+                    <dd>{{ batch.purchase_order|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Asset Capitalization</dt>
+                    <dd>
+                        {% if batch.capitalization %}
+                        <a href="{% url 'assets:asset_capitalization_detail' batch.capitalization.pk %}" class="text-brand hover:underline">{{ batch.capitalization }}</a>
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Depreciation Schedule</dt>
+                    <dd>
+                        {% if batch.depreciation_schedule %}
+                        <a href="{% url 'assets:depreciation_schedule_detail' batch.depreciation_schedule.pk %}" class="text-brand hover:underline">{{ batch.depreciation_schedule }}</a>
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Maintenance Request</dt>
+                    <dd>
+                        {% if batch.maintenance_request %}
+                        <a href="{% url 'assets:asset_maintenance_request_detail' batch.maintenance_request.pk %}" class="text-brand hover:underline">{{ batch.maintenance_request }}</a>
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+
+        {% if batch.field_mapping_json %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Field Mapping Schema (JSON)</div>
+            <pre class="font-mono text-xs bg-slate-50 p-3 rounded border border-slate-200 overflow-x-auto">{{ batch.field_mapping_json }}</pre>
+        </div>
+        {% endif %}
+
+        {% if batch.payload_summary %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Payload Summary</div>
+            <p class="text-sm text-slate-700 whitespace-pre-line">{{ batch.payload_summary }}</p>
+        </div>
+        {% endif %}
+
+        {% if batch.notes %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Notes</div>
+            <p class="text-sm text-slate-700 whitespace-pre-line">{{ batch.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
