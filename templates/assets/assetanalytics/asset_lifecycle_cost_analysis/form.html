@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ analysis.number }}{% else %}New Lifecycle Cost Analysis{% endif %} — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}">Lifecycle Cost Analyses</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ analysis.number }}{% else %}New LCC Analysis{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Lifecycle Cost Analysis: {{ analysis.number }}{% else %}New Asset Lifecycle Cost Analysis{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Analysis Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.analysis_date.id_for_label }}">Analysis Date *</label>
+                    {{ form.analysis_date }}
+                    {% if form.analysis_date.errors %}<div class="form-error">{{ form.analysis_date.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_category.id_for_label }}">Asset Category</label>
+                    {{ form.asset_category }}
+                    {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_model.id_for_label }}">Asset Model</label>
+                    {{ form.asset_model }}
+                    {% if form.asset_model.errors %}<div class="form-error">{{ form.asset_model.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.analyzed_by.id_for_label }}">Analyst</label>
+                    {{ form.analyzed_by }}
+                    {% if form.analyzed_by.errors %}<div class="form-error">{{ form.analyzed_by.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lifecycle_stage.id_for_label }}">Lifecycle Stage *</label>
+                    {{ form.lifecycle_stage }}
+                    {% if form.lifecycle_stage.errors %}<div class="form-error">{{ form.lifecycle_stage.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.analysis_horizon_years.id_for_label }}">Horizon (Years) *</label>
+                    {{ form.analysis_horizon_years }}
+                    {% if form.analysis_horizon_years.errors %}<div class="form-error">{{ form.analysis_horizon_years.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.discount_rate_pct.id_for_label }}">Discount Rate (%) *</label>
+                    {{ form.discount_rate_pct }}
+                    {% if form.discount_rate_pct.errors %}<div class="form-error">{{ form.discount_rate_pct.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.current_replacement_value.id_for_label }}">Current Replacement Value (RAV)</label>
+                    {{ form.current_replacement_value }}
+                    {% if form.current_replacement_value.errors %}<div class="form-error">{{ form.current_replacement_value.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">CapEx, Maintenance, Operating Spend &amp; Recoveries</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.acquisition_capital_cost.id_for_label }}">Acquisition Capital Cost</label>
+                        {{ form.acquisition_capital_cost }}
+                        {% if form.acquisition_capital_cost.errors %}<div class="form-error">{{ form.acquisition_capital_cost.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.installation_commissioning_cost.id_for_label }}">Installation &amp; Commissioning</label>
+                        {{ form.installation_commissioning_cost }}
+                        {% if form.installation_commissioning_cost.errors %}<div class="form-error">{{ form.installation_commissioning_cost.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.accumulated_depreciation_cost.id_for_label }}">Accumulated Depreciation</label>
+                        {{ form.accumulated_depreciation_cost }}
+                        {% if form.accumulated_depreciation_cost.errors %}<div class="form-error">{{ form.accumulated_depreciation_cost.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.preventive_maintenance_cost.id_for_label }}">Preventive Maintenance Cost</label>
+                        {{ form.preventive_maintenance_cost }}
+                        {% if form.preventive_maintenance_cost.errors %}<div class="form-error">{{ form.preventive_maintenance_cost.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.corrective_maintenance_cost.id_for_label }}">Corrective / Repair Cost</label>
+                        {{ form.corrective_maintenance_cost }}
+                        {% if form.corrective_maintenance_cost.errors %}<div class="form-error">{{ form.corrective_maintenance_cost.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.service_contract_cost.id_for_label }}">Service Contract Cost</label>
+                        {{ form.service_contract_cost }}
+                        {% if form.service_contract_cost.errors %}<div class="form-error">{{ form.service_contract_cost.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.energy_utility_cost.id_for_label }}">Energy &amp; Utility Cost</label>
+                        {{ form.energy_utility_cost }}
+                        {% if form.energy_utility_cost.errors %}<div class="form-error">{{ form.energy_utility_cost.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.downtime_opportunity_cost.id_for_label }}">Downtime Opportunity Loss</label>
+                        {{ form.downtime_opportunity_cost }}
+                        {% if form.downtime_opportunity_cost.errors %}<div class="form-error">{{ form.downtime_opportunity_cost.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.insurance_compliance_cost.id_for_label }}">Insurance &amp; Compliance Cost</label>
+                        {{ form.insurance_compliance_cost }}
+                        {% if form.insurance_compliance_cost.errors %}<div class="form-error">{{ form.insurance_compliance_cost.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.expected_salvage_value.id_for_label }}">Expected Salvage Value</label>
+                        {{ form.expected_salvage_value }}
+                        {% if form.expected_salvage_value.errors %}<div class="form-error">{{ form.expected_salvage_value.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.warranty_insurance_recoveries.id_for_label }}">Warranty &amp; Insurance Recoveries</label>
+                        {{ form.warranty_insurance_recoveries }}
+                        {% if form.warranty_insurance_recoveries.errors %}<div class="form-error">{{ form.warranty_insurance_recoveries.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group mb-6">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Analyst Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create LCC Analysis{% endif %}
+                </button>
+                {% if is_edit %}
+                <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' analysis.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
