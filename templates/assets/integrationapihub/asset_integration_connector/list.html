@@ -117,7 +117,7 @@
                     <th>Status</th>
                     <th>Health</th>
                     <th>Credential</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -147,7 +147,7 @@
                         <span class="text-muted">Not rotated</span>
                         {% endif %}
                     </td>
-                    <td class="text-right">
+                    <td class="text-end">
                         <div class="flex justify-end gap-1">
                             <a href="{% url 'assets:asset_integration_connector_detail' connector.pk %}" class="btn btn-outline btn-sm">View</a>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
