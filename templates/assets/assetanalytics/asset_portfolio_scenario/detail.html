@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ scenario.number }} — {{ scenario.name }} — What-If Scenario — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:portfolio_dashboard' %}">Asset Analytics &amp; BI</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_portfolio_scenario_list' %}">What-If Scenarios</a>
+            <span>/</span>
+            <span>{{ scenario.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ scenario.number }} — {{ scenario.name }}</h1>
+            <span class="badge {{ scenario.status_badge_class }}">{{ scenario.get_status_display }}</span>
+            <span class="badge {{ scenario.scenario_type_badge_class }}">{{ scenario.get_scenario_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:scenario_compare' %}?scenarios={{ scenario.pk }}" class="btn btn-outline">
+            <i data-lucide="git-compare" class="w-4 h-4 me-1"></i> Compare
+        </a>
+        <form method="post" action="{% url 'assets:asset_portfolio_scenario_simulate' scenario.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="play" class="w-4 h-4 me-1"></i> Run Simulation
+            </button>
+        </form>
+        {% if scenario.status in "draft,simulated" %}
+        <form method="post" action="{% url 'assets:asset_portfolio_scenario_transition' scenario.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="under_review" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="eye" class="w-4 h-4 me-1"></i> Submit Review
+            </button>
+        </form>
+        {% endif %}
+        {% if scenario.status in "simulated,under_review" %}
+        <form method="post" action="{% url 'assets:asset_portfolio_scenario_transition' scenario.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="recommended" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="thumbs-up" class="w-4 h-4 me-1"></i> Mark Recommended
+            </button>
+        </form>
+        {% endif %}
+        {% if scenario.status == "recommended" %}
+        <form method="post" action="{% url 'assets:asset_portfolio_scenario_transition' scenario.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="adopted" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Adopt Scenario
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_portfolio_scenario_edit' scenario.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_portfolio_scenario_delete' scenario.pk %}" class="inline" onsubmit="return confirm('Delete scenario {{ scenario.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_portfolio_scenario_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Simulation Financial Summary KPIs -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Simulated CapEx Total</div>
+            <div class="stat-value">${{ scenario.simulated_capex_total|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="piggy-bank"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Projected OpEx Savings</div>
+            <div class="stat-value">${{ scenario.opex_savings_amount|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Net Present Value (NPV)</div>
+            <div class="stat-value">${{ scenario.net_present_value|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="percent"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Benefit-Cost Ratio / Payback</div>
+            <div class="stat-value">{{ scenario.benefit_cost_ratio|floatformat:2 }}x / {{ scenario.payback_period_years|floatformat:1 }}y</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Scenario Levers -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Scope &amp; Modeling Levers</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Scenario Number</dt>
+                    <dd class="font-mono">{{ scenario.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fiscal Year &amp; Horizon</dt>
+                    <dd>FY{{ scenario.base_fiscal_year }} ({{ scenario.horizon_years }} yrs)</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Scope Org Unit</dt>
+                    <dd>{{ scenario.scope_org_unit.name|default:"Enterprise-Wide" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Scope Category</dt>
+                    <dd>{{ scenario.scope_category.name|default:"All Categories" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Annual CapEx Limit</dt>
+                    <dd class="font-mono">${{ scenario.annual_capex_budget_limit|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Discount / Inflation</dt>
+                    <dd class="font-mono">{{ scenario.discount_rate_pct|floatformat:2 }}% / {{ scenario.inflation_rate_pct|floatformat:2 }}%</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Schedule Shift</dt>
+                    <dd class="font-mono">{{ scenario.acceleration_months }} months</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fleet Growth / Consolidation</dt>
+                    <dd class="font-mono">+{{ scenario.fleet_growth_pct|floatformat:1 }}% / -{{ scenario.consolidation_reduction_pct|floatformat:1 }}%</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Maint Efficiency Gain</dt>
+                    <dd class="font-mono">{{ scenario.maintenance_efficiency_gain_pct|floatformat:1 }}%</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Owner</dt>
+                    <dd>{{ scenario.owner.get_full_name|default:scenario.owner|default:"—" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Baseline vs Simulated Matrix -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Baseline vs. Simulated Portfolio Impact</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Portfolio Indicator</th>
+                            <th class="text-right">Baseline (BAU)</th>
+                            <th class="text-right">Simulated Outcome</th>
+                            <th class="text-right">Delta / Variance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Cumulative Capital Expenditure (CapEx)</td>
+                            <td class="text-right font-mono">${{ scenario.baseline_capex_total|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_capex_total|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ scenario.capex_variance_amount|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Maintenance Operating Spend (OpEx)</td>
+                            <td class="text-right font-mono">${{ scenario.baseline_opex_maintenance|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_opex_maintenance|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono text-emerald-700">${{ scenario.opex_savings_amount|floatformat:2|intcomma }} saved</td>
+                        </tr>
+                        <tr>
+                            <td>Deferred Maintenance Backlog</td>
+                            <td class="text-right font-mono">${{ scenario.baseline_deferred_backlog|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_deferred_backlog|floatformat:2|intcomma }}</td>
+                            <td class="text-right text-xs text-slate-500">Backlog impact</td>
+                        </tr>
+                        <tr>
+                            <td>Portfolio Health Score (0–100)</td>
+                            <td class="text-right font-mono">{{ scenario.baseline_avg_health_score|floatformat:2 }}</td>
+                            <td class="text-right font-mono font-semibold">{{ scenario.simulated_avg_health_score|floatformat:2 }}</td>
+                            <td class="text-right text-xs text-slate-500">Avg asset health</td>
+                        </tr>
+                        <tr>
+                            <td>Portfolio Facility Condition Index (FCI %)</td>
+                            <td class="text-right font-mono">{{ scenario.baseline_fci_pct|floatformat:2 }}%</td>
+                            <td class="text-right font-mono font-semibold">{{ scenario.simulated_fci_pct|floatformat:2 }}%</td>
+                            <td class="text-right text-xs text-slate-500">Condition index</td>
+                        </tr>
+                        <tr>
+                            <td>Open Financial Risk Exposure</td>
+                            <td class="text-right font-mono">${{ scenario.baseline_risk_exposure|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_risk_exposure|floatformat:2|intcomma }}</td>
+                            <td class="text-right text-xs text-slate-500">Risk mitigation</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if scenario.assumptions_summary %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Assumptions &amp; Modeling Notes</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-sm text-slate-700 whitespace-pre-line">{{ scenario.assumptions_summary }}</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
