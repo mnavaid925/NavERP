@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Mobile Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_geofence_event_list' %}">Geofence Alerts</a>
+            <span>/</span>
+            <span>{% if event %}{{ event.number }}{% else %}Log Alert{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">Perimeter Event Parameters & GPS Stamping</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the following errors:</div>
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field, errors in form.errors.items %}
+                    <li><strong>{{ field|title }}:</strong> {{ errors|join:", " }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.fence_name.id_for_label }}">Geofence / Yard Boundary Name *</label>
+                    {{ form.fence_name }}
+                    {% if form.fence_name.errors %}<div class="form-error">{{ form.fence_name.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Subject Asset *</label>
+                    {{ form.asset }}
+                    {% if form.asset.errors %}<div class="form-error">{{ form.asset.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.event_type.id_for_label }}">Event Type *</label>
+                    {{ form.event_type }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.severity.id_for_label }}">Severity *</label>
+                    {{ form.severity }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Investigation Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.center_latitude.id_for_label }}">Perimeter Center Latitude *</label>
+                    {{ form.center_latitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.center_longitude.id_for_label }}">Perimeter Center Longitude *</label>
+                    {{ form.center_longitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.radius_meters.id_for_label }}">Perimeter Radius (Meters) *</label>
+                    {{ form.radius_meters }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.distance_from_center_m.id_for_label }}">Current Distance from Center (Meters) *</label>
+                    {{ form.distance_from_center_m }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.recorded_latitude.id_for_label }}">Recorded Asset Latitude *</label>
+                    {{ form.recorded_latitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.recorded_longitude.id_for_label }}">Recorded Asset Longitude *</label>
+                    {{ form.recorded_longitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.recorded_accuracy_m.id_for_label }}">Fix Accuracy (Meters)</label>
+                    {{ form.recorded_accuracy_m }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.acknowledged_by.id_for_label }}">Acknowledged By</label>
+                    {{ form.acknowledged_by }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.resolution_notes.id_for_label }}">Investigation / Security Notes</label>
+                    {{ form.resolution_notes }}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if event %}{% url 'assets:asset_geofence_event_detail' event.pk %}{% else %}{% url 'assets:asset_geofence_event_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Geofence Alert
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
