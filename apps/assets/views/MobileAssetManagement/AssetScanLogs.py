@@ -56,7 +56,7 @@ def asset_scan_log_list(request):
     not_found_count = metrics["not_found"]
     rfid_count = metrics["rfid"]
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
