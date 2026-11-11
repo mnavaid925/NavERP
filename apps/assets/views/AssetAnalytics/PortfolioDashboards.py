@@ -55,13 +55,10 @@ def _build_portfolio_context(request):
         scm_qs = scm_qs.filter(location_id=loc_id)
 
     fa_qs = FixedAsset.objects.filter(tenant=tenant).exclude(status="disposed")
-    if org_unit_id:
-        linked_fa_ids = list(
-            scm_qs.exclude(fixed_asset_id__isnull=True).values_list("fixed_asset_id", flat=True)
+    if org_unit_id or loc_id:
+        fa_qs = fa_qs.filter(
+            pk__in=scm_qs.exclude(fixed_asset_id__isnull=True).values("fixed_asset_id")
         )
-        fa_qs = fa_qs.filter(pk__in=linked_fa_ids)
-    elif loc_id:
-        fa_qs = fa_qs.filter(location_id=loc_id)
 
     alcc_qs = assets_scope(
         AssetLifecycleCostAnalysis.objects.select_related(
