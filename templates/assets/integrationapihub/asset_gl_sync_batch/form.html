@@ -143,18 +143,6 @@
                     {% if form.maintenance_request.errors %}<div class="form-error">{{ form.maintenance_request.errors|first }}</div>{% endif %}
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="{{ form.status.id_for_label }}">Batch Status *</label>
-                    {{ form.status }}
-                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors|first }}</div>{% endif %}
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="{{ form.reconciliation_status.id_for_label }}">Reconciliation Status *</label>
-                    {{ form.reconciliation_status }}
-                    {% if form.reconciliation_status.errors %}<div class="form-error">{{ form.reconciliation_status.errors|first }}</div>{% endif %}
-                </div>
-
                 <div class="form-group md:col-span-2">
                     <label class="form-label" for="{{ form.field_mapping_json.id_for_label }}">Field Mapping JSON</label>
                     {{ form.field_mapping_json }}
