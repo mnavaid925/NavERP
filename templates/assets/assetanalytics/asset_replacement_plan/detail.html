@@ -25,12 +25,14 @@
         <button type="button" onclick="window.print()" class="btn btn-outline">
             <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print CIP Sheet
         </button>
+        {% if not plan.is_locked %}
         <form method="post" action="{% url 'assets:asset_replacement_plan_recalculate' plan.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline">
                 <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Recalculate Scoring
             </button>
         </form>
+        {% endif %}
         {% if plan.status == "forecasted" %}
         <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline">
             {% csrf_token %}
@@ -40,8 +42,17 @@
             </button>
         </form>
         {% endif %}
-        {% if plan.status in "forecasted,proposed" %}
+        {% if plan.status == "deferred" %}
         <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="proposed" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="rotate-ccw" class="w-4 h-4 me-1"></i> Re-Propose
+            </button>
+        </form>
+        {% endif %}
+        {% if plan.status == "forecasted" or plan.status == "proposed" %}
+        <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline" onsubmit="return confirm('Approve replacement plan {{ plan.number|escapejs }}? Approved plans are locked against edits.');">
             {% csrf_token %}
             <input type="hidden" name="target_status" value="approved" />
             <button type="submit" class="btn btn-outline">
@@ -58,15 +69,44 @@
             </button>
         </form>
         {% endif %}
+        {% if plan.status == "scheduled" %}
+        <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline" onsubmit="return confirm('Mark replacement plan {{ plan.number|escapejs }} as executed? This status is terminal.');">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="executed" />
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-check" class="w-4 h-4 me-1"></i> Mark Executed
+            </button>
+        </form>
+        {% endif %}
+        {% if plan.status == "forecasted" or plan.status == "proposed" or plan.status == "approved" or plan.status == "scheduled" %}
+        <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline" onsubmit="return confirm('Defer replacement plan {{ plan.number|escapejs }}?');">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="deferred" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="clock" class="w-4 h-4 me-1"></i> Defer
+            </button>
+        </form>
+        {% endif %}
+        {% if plan.status != "executed" and plan.status != "cancelled" %}
+        <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline" onsubmit="return confirm('Cancel replacement plan {{ plan.number|escapejs }}? This status is terminal.');">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="cancelled" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="x-circle" class="w-4 h-4 me-1"></i> Cancel Plan
+            </button>
+        </form>
+        {% endif %}
+        {% if not plan.is_locked %}
         <a href="{% url 'assets:asset_replacement_plan_edit' plan.pk %}" class="btn btn-outline">
             <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
-        <form method="post" action="{% url 'assets:asset_replacement_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Delete replacement plan {{ plan.number }}?');">
+        <form method="post" action="{% url 'assets:asset_replacement_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Delete replacement plan {{ plan.number|escapejs }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
                 <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
+        {% endif %}
         <a href="{% url 'assets:asset_replacement_plan_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
         </a>
