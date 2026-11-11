@@ -46,7 +46,7 @@ def _build_portfolio_context(request):
     loc_id = parse_pos_int(request.GET.get("location"))
     base_year = parse_pos_int(request.GET.get("fiscal_year")) or timezone.localdate().year
 
-    scm_qs = assets_scope(Asset.objects.select_related("fixed_asset"), request).exclude(
+    scm_qs = assets_scope(Asset.objects.all(), request).exclude(
         status__in=["retired", "disposed"]
     )
     if org_unit_id:
@@ -60,30 +60,21 @@ def _build_portfolio_context(request):
             pk__in=scm_qs.exclude(fixed_asset_id__isnull=True).values("fixed_asset_id")
         )
 
-    alcc_qs = assets_scope(
-        AssetLifecycleCostAnalysis.objects.select_related(
-            "operational_asset", "fixed_asset", "asset_category", "asset_model", "org_unit", "currency"
-        ),
-        request,
-    ).exclude(status="archived")
-    arpl_qs = assets_scope(
-        AssetReplacementPlan.objects.select_related("asset_category", "org_unit", "location", "currency"),
-        request,
-    ).exclude(status__in=["executed", "cancelled"])
-    cond_qs = AssetConditionAssessment.objects.filter(tenant=tenant).exclude(status="archived").select_related(
-        "operational_asset"
+    alcc_qs = assets_scope(AssetLifecycleCostAnalysis.objects.all(), request).exclude(
+        status="archived"
     )
+    arpl_qs = assets_scope(AssetReplacementPlan.objects.all(), request).exclude(
+        status__in=["executed", "cancelled"]
+    )
+    cond_qs = AssetConditionAssessment.objects.filter(tenant=tenant).exclude(status="archived")
     risk_qs = AssetRiskRegister.objects.filter(tenant=tenant).exclude(status="closed")
     audit_qs = AssetComplianceAudit.objects.filter(tenant=tenant).exclude(status="cancelled")
     inc_qs = AssetComplianceIncident.objects.filter(tenant=tenant).exclude(
         status__in=["resolved", "closed"]
     )
-    akpi_qs = assets_scope(
-        AssetExecutiveScorecard.objects.select_related(
-            "org_unit", "asset_category", "currency", "prepared_by", "approved_by"
-        ),
-        request,
-    ).exclude(status="archived")
+    akpi_qs = assets_scope(AssetExecutiveScorecard.objects.all(), request).exclude(
+        status="archived"
+    )
 
     if org_unit_id:
         alcc_qs = alcc_qs.filter(org_unit_id=org_unit_id)
@@ -138,8 +129,6 @@ def _build_portfolio_context(request):
     avg_health_raw = cond_qs.aggregate(avg_h=Avg("health_score"))["avg_h"]
     avg_health = Decimal(str(avg_health_raw)).quantize(Decimal("0.01")) if avg_health_raw is not None else ZERO
 
-    risk_agg = risk_qs.aggregate(total_exp=Sum("financial_exposure_amount"))
-    open_risk_exposure = risk_agg["total_exp"] or ZERO
     open_incidents_count = inc_qs.count()
 
     # Asset Health Heat Map Matrix (Condition Grade x Asset Criticality)
@@ -148,21 +137,46 @@ def _build_portfolio_context(request):
         for key, label in AssetConditionAssessment.CONDITION_GRADE_CHOICES
     }
     seen_assets = set()
-    for assess in cond_qs.order_by("-assessment_date", "-id"):
-        dedupe_key = ("op", assess.operational_asset_id) if assess.operational_asset_id else ("ca", assess.pk)
+    for assess in (
+        cond_qs.order_by("-assessment_date", "-id")
+        .values("id", "operational_asset_id", "condition_grade", "operational_asset__criticality")
+        .iterator(chunk_size=500)
+    ):
+        dedupe_key = ("op", assess["operational_asset_id"]) if assess["operational_asset_id"] else ("ca", assess["id"])
         if dedupe_key in seen_assets:
             continue
         seen_assets.add(dedupe_key)
-        crit = (assess.operational_asset.criticality if assess.operational_asset else None) or "medium"
+        crit = assess["operational_asset__criticality"] or "medium"
         if crit not in _CRIT_COLS:
             crit = "medium"
-        row = matrix_map.get(assess.condition_grade)
+        row = matrix_map.get(assess["condition_grade"])
         if row:
             row["counts"][crit] += 1
             row["total"] += 1
     health_matrix = list(matrix_map.values())
 
-    bad_actors = list(alcc_qs.order_by("-maintenance_to_rav_pct", "-total_lifecycle_cost")[:5])
+    bad_actors = list(
+        alcc_qs.select_related("operational_asset", "fixed_asset", "asset_category", "currency")
+        .only(
+            "id",
+            "number",
+            "title",
+            "total_lifecycle_cost",
+            "equivalent_annual_cost",
+            "maintenance_to_rav_pct",
+            "recommendation",
+            "operational_asset__id",
+            "operational_asset__name",
+            "fixed_asset__id",
+            "fixed_asset__name",
+            "asset_category__id",
+            "asset_category__name",
+            "currency__id",
+            "currency__code",
+            "currency__symbol",
+        )
+        .order_by("-maintenance_to_rav_pct", "-total_lifecycle_cost")[:5]
+    )
 
     # 5-Year CapEx Forecast by Year
     forecast_rows_qs = (
@@ -197,18 +211,24 @@ def _build_portfolio_context(request):
             cnt=Count("id"), exposure=Sum("financial_exposure_amount")
         )
     }
+    open_risk_exposure = ZERO
     risk_posture_rows = []
     for level_key, level_label in AssetRiskRegister.RISK_LEVEL_CHOICES:
         r = risk_grouped.get(level_key, {})
+        exp = r.get("exposure") or ZERO
+        open_risk_exposure += exp
         risk_posture_rows.append(
             {
                 "level": level_key,
                 "label": level_label,
                 "badge_class": AssetRiskRegister.RISK_LEVEL_CSS.get(level_key, "badge-slate"),
                 "count": r.get("cnt") or 0,
-                "exposure": r.get("exposure") or ZERO,
+                "exposure": exp,
             }
         )
+    for level_key, r in risk_grouped.items():
+        if level_key not in {k for k, _ in AssetRiskRegister.RISK_LEVEL_CHOICES}:
+            open_risk_exposure += r.get("exposure") or ZERO
 
     audit_agg = audit_qs.aggregate(
         total_audits=Count("id"),
@@ -222,7 +242,25 @@ def _build_portfolio_context(request):
         else ZERO
     )
 
-    recent_scorecards = list(akpi_qs.order_by("-period_end", "-id")[:5])
+    recent_scorecards = list(
+        akpi_qs.select_related("currency")
+        .only(
+            "id",
+            "number",
+            "title",
+            "period_start",
+            "period_end",
+            "rag_status",
+            "status",
+            "asset_roi_pct",
+            "maintenance_cost_to_rav_pct",
+            "portfolio_fci_pct",
+            "currency__id",
+            "currency__code",
+            "currency__symbol",
+        )
+        .order_by("-period_end", "-id")[:5]
+    )
     latest_scorecard = recent_scorecards[0] if recent_scorecards else None
 
     kpis = {
@@ -244,9 +282,9 @@ def _build_portfolio_context(request):
     fiscal_years = list(range(cur_year - 1, cur_year + 5))
 
     return {
-        "org_units": OrgUnit.objects.filter(tenant=tenant).order_by("name"),
-        "categories": AssetCategory.objects.filter(tenant=tenant).order_by("name"),
-        "locations": Location.objects.filter(tenant=tenant, is_active=True).order_by("name"),
+        "org_units": OrgUnit.objects.filter(tenant=tenant).only("id", "name").order_by("name"),
+        "categories": AssetCategory.objects.filter(tenant=tenant).only("id", "name").order_by("name"),
+        "locations": Location.objects.filter(tenant=tenant, is_active=True).only("id", "name").order_by("name"),
         "fiscal_years": fiscal_years,
         "selected_fiscal_year": base_year,
         "kpis": kpis,
