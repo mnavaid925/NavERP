@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}{{ stream.number }} — Telemetry Stream — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_telemetry_stream_list' %}">Telemetry Streams</a>
+            <span>/</span>
+            <span>{{ stream.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-1">
+            <h1 class="page-title">{{ stream.stream_name }}</h1>
+            <span class="badge badge-slate">{{ stream.number }}</span>
+            <span class="badge {{ stream.status_badge_class }}">{{ stream.get_stream_status_display }}</span>
+            {% if stream.auto_trigger_maintenance %}
+            <span class="badge badge-info">Auto-CBM Enabled</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_telemetry_stream_edit' stream.pk %}" class="btn btn-outline btn-sm">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_telemetry_stream_delete' stream.pk %}" class="inline" onsubmit="return confirm('Delete telemetry stream {{ stream.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline btn-sm">Back to List</a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Simulate / Ingest Sample Reading</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" action="{% url 'assets:asset_telemetry_stream_ingest' stream.pk %}" class="flex flex-wrap items-end gap-3">
+            {% csrf_token %}
+            <div class="w-64">
+                <label class="form-label text-xs" for="id_raw_value">Raw Sensor Value ({{ stream.get_metric_unit_display }})</label>
+                <input id="id_raw_value" type="number" step="0.0001" name="raw_value" placeholder="{{ stream.warning_threshold|default:'25.0000' }}" class="form-input">
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="zap" class="w-4 h-4 me-1"></i> Ingest Sample Reading
+            </button>
+            <div class="text-xs text-muted">
+                Normalized = (raw &times; {{ stream.scale_factor }}) + {{ stream.offset_value }}; records directly into 11.7 Asset Telemetry and triggers 11.5 Maintenance Request if critical threshold is breached.
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Stream Definition &amp; Calibration Rules</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Stream Number</dt>
+                <dd class="font-mono font-semibold">{{ stream.number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Connector</dt>
+                <dd>
+                    <a href="{% url 'assets:asset_integration_connector_detail' stream.connector.pk %}" class="text-brand hover:underline">
+                        {{ stream.connector.number }} &middot; {{ stream.connector.name }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Tag / Topic / Register</dt>
+                <dd class="font-mono text-sm break-all">{{ stream.tag_address }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Stream Protocol</dt>
+                <dd>{{ stream.get_stream_protocol_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Operational Asset</dt>
+                <dd>{% if stream.operational_asset %}{{ stream.operational_asset }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Financial Fixed Asset</dt>
+                <dd>{% if stream.fixed_asset %}{{ stream.fixed_asset }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Metric &amp; Unit</dt>
+                <dd>{{ stream.get_metric_type_display }} ({{ stream.get_metric_unit_display }})</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Ingestion Mode &amp; Cadence</dt>
+                <dd>{{ stream.get_ingestion_mode_display }} &middot; every {{ stream.polling_interval_seconds }}s</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Calibration (Scale / Offset / Deadband)</dt>
+                <dd class="font-mono">&times;{{ stream.scale_factor }} + {{ stream.offset_value }} (deadband &plusmn;{{ stream.deadband_delta }})</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Thresholds (Base / Warn / Crit)</dt>
+                <dd class="font-mono">{{ stream.baseline_value|default:"—" }} / {{ stream.warning_threshold|default:"—" }} / {{ stream.critical_threshold|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Last Ingested Value</dt>
+                <dd class="font-mono">{% if stream.last_ingested_value is not None %}{{ stream.last_ingested_value }} ({{ stream.readings_ingested_count }} total){% else %}<span class="text-muted">None</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Last Ingested At</dt>
+                <dd>{% if stream.last_ingested_at %}{{ stream.last_ingested_at|date:"Y-m-d H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Last Telemetry Reading (11.7)</dt>
+                <dd>
+                    {% if stream.last_telemetry_reading %}
+                    <a href="{% url 'assets:asset_telemetry_reading_detail' stream.last_telemetry_reading.pk %}" class="text-brand font-mono hover:underline">
+                        {{ stream.last_telemetry_reading.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Latest Auto Maintenance Request (11.5)</dt>
+                <dd>
+                    {% if stream.latest_maintenance_request %}
+                    <a href="{% url 'assets:asset_maintenance_request_detail' stream.latest_maintenance_request.pk %}" class="text-brand font-mono hover:underline">
+                        {{ stream.latest_maintenance_request.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Stream Steward</dt>
+                <dd>{{ stream.steward|default:"—" }}</dd>
+            </div>
+        </dl>
+
+        {% if stream.notes %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Engineering Notes</div>
+            <p class="text-sm text-slate-700 whitespace-pre-line">{{ stream.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title text-base">Recent Telemetry Readings (11.7)</h2>
+        <a href="{% url 'assets:asset_telemetry_reading_list' %}" class="btn btn-outline btn-xs">Open Telemetry Console</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Reading #</th>
+                    <th>Recorded At</th>
+                    <th>Metric</th>
+                    <th>Value</th>
+                    <th>Threshold Status</th>
+                    <th>Triggered Request</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in recent_readings %}
+                <tr>
+                    <td class="font-mono">
+                        <a href="{% url 'assets:asset_telemetry_reading_detail' r.pk %}" class="text-brand hover:underline">{{ r.number }}</a>
+                    </td>
+                    <td>{{ r.recorded_at|date:"Y-m-d H:i" }}</td>
+                    <td>{{ r.get_metric_type_display }}</td>
+                    <td class="font-mono">{{ r.reading_value }} {{ r.get_metric_unit_display }}</td>
+                    <td>
+                        {% if r.threshold_status == "critical" %}
+                        <span class="badge badge-red">{{ r.get_threshold_status_display }}</span>
+                        {% elif r.threshold_status == "warning" or r.threshold_status == "anomaly_detected" %}
+                        <span class="badge badge-amber">{{ r.get_threshold_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-green">{{ r.get_threshold_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if r.triggered_maintenance_request %}
+                        <a href="{% url 'assets:asset_maintenance_request_detail' r.triggered_maintenance_request.pk %}" class="text-brand font-mono hover:underline">{{ r.triggered_maintenance_request.number }}</a>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted text-sm">No telemetry readings recorded for this asset yet. Use Ingest Sample Reading above to test normalization.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
