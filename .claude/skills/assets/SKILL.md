@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, and lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, and asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -27,6 +27,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.9 Asset Disposal & Retirement**: Asset decommissioning requests, technical & residual value appraisals, multi-channel disposal execution (competitive auctions / private resales with bid tracking, equipment vendor trade-ins with dealer allowance netting, and certified scrap/salvage de-manufacturing with EPA hazardous waste abatement compliance and Certificate of Destruction COD tracking).
 - **11.10 Lease & Rental Management**: Master Lease Agreement (MLA) administration, ASC 842 / IFRS 16 statutory operating vs finance lease classification, actuarial amortization payment schedules with ROU asset depreciation and liability reduction, contract modifications/remeasurements, early buyouts and terminations, and discounted cash flow Lease vs. Buy total cost of ownership (TCO) and Net Advantage to Leasing (NAL) modeling.
 - **11.11 Compliance & Regulatory Management**: Asset compliance frameworks, regulatory audits, operating permits & environmental licenses, and safety/compliance incident tracking.
+- **11.12 Asset Risk Management**: Enterprise asset risk register with 5x5 inherent/residual scoring (`[ARK-]`), business continuity and redundancy failover plans with drill tracking (`[ABC-]`), OT/IoT/SCADA cybersecurity profiles with Purdue network zoning and CVE/CVSS scoring (`[ACS-]`), and risk mitigation / geopolitical dual-sourcing contingency actions with verification (`[ARMA-]`).
 
 ---
 
@@ -88,6 +89,11 @@ apps/assets/
       AssetComplianceAudits.py                <- AssetComplianceAudit [ACA-]
       AssetPermitLicenses.py                  <- AssetPermitLicense [APL-]
       AssetComplianceIncidents.py             <- AssetComplianceIncident [ACI-]
+    AssetRisk/                                <- Sub-module 11.12 models
+      AssetRiskRegisters.py                   <- AssetRiskRegister [ARK-]
+      AssetBusinessContinuityPlans.py         <- AssetBusinessContinuityPlan [ABC-]
+      AssetCyberSecurityProfiles.py           <- AssetCyberSecurityProfile [ACS-]
+      AssetRiskMitigationActions.py           <- AssetRiskMitigationAction [ARMA-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -141,6 +147,11 @@ apps/assets/
       AssetComplianceAudits.py                <- AssetComplianceAuditForm
       AssetPermitLicenses.py                  <- AssetPermitLicenseForm
       AssetComplianceIncidents.py             <- AssetComplianceIncidentForm
+    AssetRisk/                                <- Sub-module 11.12 forms
+      AssetRiskRegisters.py                   <- AssetRiskRegisterForm
+      AssetBusinessContinuityPlans.py         <- AssetBusinessContinuityPlanForm
+      AssetCyberSecurityProfiles.py           <- AssetCyberSecurityProfileForm
+      AssetRiskMitigationActions.py           <- AssetRiskMitigationActionForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -195,6 +206,11 @@ apps/assets/
       AssetComplianceAudits.py                <- Audit CRUD + start, complete, delete (status guarded, tenant admin)
       AssetPermitLicenses.py                  <- Permit CRUD + renew (status guarded), delete (tenant admin)
       AssetComplianceIncidents.py             <- Incident CRUD + resolve, close, delete (status guarded, tenant admin)
+    AssetRisk/                                <- Sub-module 11.12 views
+      AssetRiskRegisters.py                   <- Risk Register CRUD + assess, close (status guarded)
+      AssetBusinessContinuityPlans.py         <- BCP CRUD + activate, drill
+      AssetCyberSecurityProfiles.py           <- Cyber Profile CRUD + scan
+      AssetRiskMitigationActions.py           <- Mitigation Action CRUD (?risk= prefill) + complete, verify
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -247,9 +263,14 @@ apps/assets/
       AssetComplianceAudits.py
       AssetPermitLicenses.py
       AssetComplianceIncidents.py
+    AssetRisk/                                <- Sub-module 11.12 URL route definitions
+      AssetRiskRegisters.py
+      AssetBusinessContinuityPlans.py
+      AssetCyberSecurityProfiles.py
+      AssetRiskMitigationActions.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8 & 11.9)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.12)
   tests/
     conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies, disposal)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
@@ -292,6 +313,10 @@ apps/assets/
     test_compliance_forms.py                  <- 11.11 Form validation, mass-assignment exclusion, reject_foreign
     test_compliance_views.py                  <- 11.11 View context contracts, filters, status guards, actions
     test_compliance_security.py               <- 11.11 IDOR (404), RBAC gates (403), method safety (405), audits
+    test_asset_risk_models.py                 <- 11.12 Model invariants, 5x5 matrix scoring, CVSS bounds, constraints
+    test_asset_risk_forms.py                  <- 11.12 Form validation, disabled drill fields, reject_foreign, system exclusions
+    test_asset_risk_views.py                  <- 11.12 View contracts, asset__code search, filters, state guards, actions
+    test_asset_risk_security.py               <- 11.12 IDOR (404), RBAC gates (403), method safety (405), injection, mass assignment
 ```
 
 ---
@@ -768,6 +793,41 @@ Namespace: `assets:`
   - `assets:asset_compliance_incident_close`: `/assets/compliance/incidents/<pk>/close/` [POST]
   - `assets:asset_compliance_incident_delete`: `/assets/compliance/incidents/<pk>/delete/` [POST, Admin]
 
+### 11.12 Asset Risk Management
+Templates under `templates/assets/assetrisk/{asset_risk_register,asset_business_continuity,asset_cybersecurity,asset_risk_mitigation}/{list,detail,form}.html`. Seeder method `_seed_tenant_11_12(tenant)` in `seed_assets.py` creates demo Risk Registers (`ARK-`), Continuity Plans (`ABC-`), OT/IoT Cyber Profiles (`ACS-`), and Mitigation Actions (`ARMA-`).
+
+- **Asset Risk Registers (`AssetRiskRegister` [ARK-]):** Reuses `scm.Asset`, `AssetCategory`, `User`; auto-computes 5x5 `inherent_risk_score`/`inherent_risk_level` and `residual_risk_score`/`residual_risk_level`.
+  - `assets:asset_risk_register_list`: `/assets/risk/registers/`
+  - `assets:asset_risk_register_create`: `/assets/risk/registers/create/` [Admin]
+  - `assets:asset_risk_register_detail`: `/assets/risk/registers/<pk>/`
+  - `assets:asset_risk_register_edit`: `/assets/risk/registers/<pk>/edit/` [Admin]
+  - `assets:asset_risk_register_delete`: `/assets/risk/registers/<pk>/delete/` [POST, Admin]
+  - `assets:asset_risk_register_assess`: `/assets/risk/registers/<pk>/assess/` [POST, identified only]
+  - `assets:asset_risk_register_close`: `/assets/risk/registers/<pk>/close/` [POST, Admin, non-closed only]
+- **Business Continuity Plans (`AssetBusinessContinuityPlan` [ABC-]):** Reuses `scm.Asset`, `User`; enforces distinct primary vs backup assets and disables `last_drill_date`/`drill_result` on direct edit.
+  - `assets:asset_business_continuity_plan_list`: `/assets/risk/continuity-plans/`
+  - `assets:asset_business_continuity_plan_create`: `/assets/risk/continuity-plans/create/` [Admin]
+  - `assets:asset_business_continuity_plan_detail`: `/assets/risk/continuity-plans/<pk>/`
+  - `assets:asset_business_continuity_plan_edit`: `/assets/risk/continuity-plans/<pk>/edit/` [Admin]
+  - `assets:asset_business_continuity_plan_delete`: `/assets/risk/continuity-plans/<pk>/delete/` [POST, Admin]
+  - `assets:asset_business_continuity_plan_activate`: `/assets/risk/continuity-plans/<pk>/activate/` [POST, Admin, draft/under_review only]
+  - `assets:asset_business_continuity_plan_drill`: `/assets/risk/continuity-plans/<pk>/drill/` [POST, audit verb `"drill"`]
+- **OT / IoT Cybersecurity Profiles (`AssetCyberSecurityProfile` [ACS-]):** Reuses `scm.Asset`; validates CVSS score `[0.0, 10.0]` and searches `asset__code`.
+  - `assets:asset_cybersecurity_profile_list`: `/assets/risk/cybersecurity/`
+  - `assets:asset_cybersecurity_profile_create`: `/assets/risk/cybersecurity/create/` [Admin]
+  - `assets:asset_cybersecurity_profile_detail`: `/assets/risk/cybersecurity/<pk>/`
+  - `assets:asset_cybersecurity_profile_edit`: `/assets/risk/cybersecurity/<pk>/edit/` [Admin]
+  - `assets:asset_cybersecurity_profile_delete`: `/assets/risk/cybersecurity/<pk>/delete/` [POST, Admin]
+  - `assets:asset_cybersecurity_profile_scan`: `/assets/risk/cybersecurity/<pk>/scan/` [POST]
+- **Risk Mitigation Actions (`AssetRiskMitigationAction` [ARMA-]):** Reuses `AssetRiskRegister`, `User`, `core.Party` (`alternative_supplier`); create supports `?risk=<pk>` prefill.
+  - `assets:asset_risk_mitigation_action_list`: `/assets/risk/mitigations/`
+  - `assets:asset_risk_mitigation_action_create`: `/assets/risk/mitigations/create/` [Admin]
+  - `assets:asset_risk_mitigation_action_detail`: `/assets/risk/mitigations/<pk>/`
+  - `assets:asset_risk_mitigation_action_edit`: `/assets/risk/mitigations/<pk>/edit/` [Admin]
+  - `assets:asset_risk_mitigation_action_delete`: `/assets/risk/mitigations/<pk>/delete/` [POST, Admin]
+  - `assets:asset_risk_mitigation_action_complete`: `/assets/risk/mitigations/<pk>/complete/` [POST, planned/in_progress only]
+  - `assets:asset_risk_mitigation_action_verify`: `/assets/risk/mitigations/<pk>/verify/` [POST, Admin, completed only]
+
 ---
 
 ## Conventions & Gotchas
@@ -802,7 +862,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (1,686 passing tests across 11.1 through 11.11).
+Unfiltered run on SQLite in-memory test database (1,908 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12).
 
 ---
 
@@ -818,4 +878,5 @@ Unfiltered run on SQLite in-memory test database (1,686 passing tests across 11.
 - `11.9`: Asset Disposal & Retirement (`assets:asset_disposal_request_list`)
 - `11.10`: Lease & Rental Management (`assets:asset_lease_contract_list`)
 - `11.11`: Compliance & Regulatory Management (`assets:asset_compliance_framework_list`)
+- `11.12`: Risk Identification & Assessment (`assets:asset_risk_register_list`), Business Continuity Planning (`assets:asset_business_continuity_plan_list`), Cybersecurity for Connected Assets (`assets:asset_cybersecurity_profile_list`), Geopolitical & Supply Chain Risk / Risk Mitigation & Contingency (`assets:asset_risk_mitigation_action_list`)
 
