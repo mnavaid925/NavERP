@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}What-If Portfolio Scenarios — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:portfolio_dashboard' %}">Asset Analytics &amp; BI</a>
+            <span>/</span>
+            <span>What-If Scenario Modeling</span>
+        </div>
+        <h1 class="page-title">What-If Portfolio Scenario Modeling</h1>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:scenario_compare' %}" class="btn btn-outline">
+            <i data-lucide="git-compare" class="w-4 h-4 me-1"></i> Compare Scenarios
+        </a>
+        <a href="{% url 'assets:asset_portfolio_scenario_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&scenario_type={{ request.GET.scenario_type|urlencode }}&base_fiscal_year={{ request.GET.base_fiscal_year|urlencode }}&scope_org_unit={{ request.GET.scope_org_unit|urlencode }}&scope_category={{ request.GET.scope_category|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_portfolio_scenario_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New What-If Scenario
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="layers"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Scenarios</div>
+            <div class="stat-value">{{ total_scenarios }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="play-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Simulated Scenarios</div>
+            <div class="stat-value">{{ simulated_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Adopted Roadmaps</div>
+            <div class="stat-value">{{ adopted_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="trending-up"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Peak Scenario NPV</div>
+            <div class="stat-value">${{ best_npv|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, scenario..." class="form-input" />
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="scenario_type" class="form-select">
+                    <option value="">All Scenario Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.scenario_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="base_fiscal_year" class="form-select">
+                    <option value="">All Base Years</option>
+                    {% for yr in years %}
+                    <option value="{{ yr }}" {% if request.GET.base_fiscal_year == yr|stringformat:"d" %}selected{% endif %}>{{ yr }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="scope_org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.scope_org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="scope_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.pk }}" {% if request.GET.scope_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline" title="Apply Filters" aria-label="Apply Filters">
+                    <i data-lucide="filter" class="w-4 h-4"></i>
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.scenario_type or request.GET.base_fiscal_year or request.GET.scope_org_unit or request.GET.scope_category %}
+                <a href="{% url 'assets:asset_portfolio_scenario_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Scenario # &amp; Name</th>
+                    <th>Scenario Type</th>
+                    <th>Horizon</th>
+                    <th class="text-right">Simulated CapEx</th>
+                    <th class="text-right">OpEx Savings</th>
+                    <th class="text-right">Simulated FCI %</th>
+                    <th class="text-right">NPV / BCR</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in scenarios %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ s.number }}
+                        </a>
+                        {% if s.is_baseline %}
+                        <span class="badge badge-slate ml-1">Baseline</span>
+                        {% endif %}
+                        <div class="text-xs text-slate-500">{{ s.name|truncatechars:42 }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ s.scenario_type_badge_class }}">{{ s.get_scenario_type_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">FY{{ s.base_fiscal_year }} ({{ s.horizon_years }} yrs)</div>
+                        <div class="text-xs text-slate-500">{{ s.scope_org_unit.name|default:"Enterprise-Wide" }}</div>
+                    </td>
+                    <td class="text-right font-mono font-semibold">${{ s.simulated_capex_total|floatformat:2|intcomma }}</td>
+                    <td class="text-right font-mono text-emerald-700">${{ s.opex_savings_amount|floatformat:2|intcomma }}</td>
+                    <td class="text-right font-mono">{{ s.simulated_fci_pct|floatformat:2 }}%</td>
+                    <td class="text-right font-mono">
+                        <div>${{ s.net_present_value|floatformat:2|intcomma }}</div>
+                        <div class="text-xs text-slate-500">BCR: {{ s.benefit_cost_ratio|floatformat:2 }}x</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_portfolio_scenario_edit' s.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_portfolio_scenario_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete scenario {{ s.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="git-branch" class="w-12 h-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No What-If Portfolio Scenarios Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Model expansion, consolidation, accelerated replacement, or budget cap scenarios across your portfolio.</p>
+                            <a href="{% url 'assets:asset_portfolio_scenario_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New What-If Scenario
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} scenarios
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.scenario_type %}&scenario_type={{ request.GET.scenario_type|urlencode }}{% endif %}{% if request.GET.base_fiscal_year %}&base_fiscal_year={{ request.GET.base_fiscal_year|urlencode }}{% endif %}{% if request.GET.scope_org_unit %}&scope_org_unit={{ request.GET.scope_org_unit|urlencode }}{% endif %}{% if request.GET.scope_category %}&scope_category={{ request.GET.scope_category|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Previous</button>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.scenario_type %}&scenario_type={{ request.GET.scenario_type|urlencode }}{% endif %}{% if request.GET.base_fiscal_year %}&base_fiscal_year={{ request.GET.base_fiscal_year|urlencode }}{% endif %}{% if request.GET.scope_org_unit %}&scope_org_unit={{ request.GET.scope_org_unit|urlencode }}{% endif %}{% if request.GET.scope_category %}&scope_category={{ request.GET.scope_category|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Next</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
