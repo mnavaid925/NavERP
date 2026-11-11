@@ -63,8 +63,8 @@ class AssetPortfolioScenarioForm(TenantUniqueMixin, TenantModelForm):
             "annual_capex_budget_limit": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0"}),
             "discount_rate_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0", "max": "100"}),
             "inflation_rate_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0", "max": "50"}),
-            "acceleration_months": forms.NumberInput(attrs={"class": "form-input"}),
-            "fleet_growth_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
+            "acceleration_months": forms.NumberInput(attrs={"class": "form-input", "min": "-60", "max": "120"}),
+            "fleet_growth_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "-95", "max": "500"}),
             "consolidation_reduction_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0", "max": "100"}),
             "maintenance_efficiency_gain_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0", "max": "100"}),
             "assumptions_summary": forms.Textarea(
@@ -91,8 +91,14 @@ class AssetPortfolioScenarioForm(TenantUniqueMixin, TenantModelForm):
         if self.instance and self.instance.pk and base and base.pk == self.instance.pk:
             self.add_error("baseline_scenario", "A scenario cannot reference itself as its baseline.")
         horizon = cleaned.get("horizon_years")
-        if horizon is not None and horizon < 1:
-            self.add_error("horizon_years", "Horizon must be at least 1 year.")
+        if horizon is not None and not (1 <= horizon <= 30):
+            self.add_error("horizon_years", "Horizon must be between 1 and 30 years.")
+        accel = cleaned.get("acceleration_months")
+        if accel is not None and not (-60 <= accel <= 120):
+            self.add_error("acceleration_months", "Acceleration months must be between -60 and 120.")
+        growth = cleaned.get("fleet_growth_pct")
+        if growth is not None and (growth < Decimal("-95.00") or growth > Decimal("500.00")):
+            self.add_error("fleet_growth_pct", "Fleet growth % must be between -95.00% and 500.00%.")
         year = cleaned.get("base_fiscal_year")
         if year is not None and not (2000 <= year <= 2100):
             self.add_error("base_fiscal_year", "Base fiscal year must be between 2000 and 2100.")
