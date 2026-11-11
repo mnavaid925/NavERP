@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Integration Connectors — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Integration &amp; API Hub</span>
+            <span>/</span>
+            <span>Connectors</span>
+        </div>
+        <h1 class="page-title">Asset Integration Connectors</h1>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline btn-sm">Telemetry Streams</a>
+        <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="btn btn-outline btn-sm">GL Sync Batches</a>
+        <a href="{% url 'assets:asset_gis_mapping_list' %}" class="btn btn-outline btn-sm">GIS Mappings</a>
+        <a href="{% url 'assets:asset_integration_connector_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Connector
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="plug"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Connectors</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="heart-pulse"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Healthy Endpoints</div>
+            <div class="stat-value">{{ healthy_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Errors / Unreachable</div>
+            <div class="stat-value">{{ error_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Number, name, endpoint..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Category</label>
+                <select name="connector_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if request.GET.connector_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Provider</label>
+                <select name="provider" class="form-select">
+                    <option value="">All Providers</option>
+                    {% for val, label in provider_choices %}
+                    <option value="{{ val }}" {% if request.GET.provider == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Health</label>
+                <select name="health_status" class="form-select">
+                    <option value="">All Health</option>
+                    {% for val, label in health_choices %}
+                    <option value="{{ val }}" {% if request.GET.health_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_integration_connector_list' %}" class="btn btn-outline" title="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Connector</th>
+                    <th>Category</th>
+                    <th>Provider / Protocol</th>
+                    <th>Env</th>
+                    <th>Status</th>
+                    <th>Health</th>
+                    <th>Credential</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for connector in connectors %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'assets:asset_integration_connector_detail' connector.pk %}" class="text-brand hover:underline">
+                            {{ connector.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ connector.name }}</div>
+                        <div class="text-xs text-muted font-mono truncate max-w-xs">{{ connector.endpoint_url }}</div>
+                    </td>
+                    <td><span class="badge badge-slate">{{ connector.get_connector_category_display }}</span></td>
+                    <td>
+                        <div>{{ connector.get_provider_display }}</div>
+                        <div class="text-xs text-muted">{{ connector.get_protocol_display }}</div>
+                    </td>
+                    <td><span class="badge badge-info">{{ connector.get_environment_display }}</span></td>
+                    <td><span class="badge {{ connector.status_badge_class }}">{{ connector.get_status_display }}</span></td>
+                    <td><span class="badge {{ connector.health_badge_class }}">{{ connector.get_health_status_display }}</span></td>
+                    <td class="font-mono text-xs">
+                        {% if connector.api_key_prefix %}
+                        {{ connector.api_key_prefix }}***
+                        {% else %}
+                        <span class="text-muted">Not rotated</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="flex justify-end gap-1">
+                            <a href="{% url 'assets:asset_integration_connector_detail' connector.pk %}" class="btn btn-outline btn-xs">View</a>
+                            <a href="{% url 'assets:asset_integration_connector_edit' connector.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="plug" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
+                            <div class="text-slate-600 font-medium">No asset integration connectors found</div>
+                            <div class="text-xs text-slate-400 mb-3">Register ERP, SCADA/IoT, CMMS, General Ledger, or GIS endpoints for Asset Management.</div>
+                            <a href="{% url 'assets:asset_integration_connector_create' %}" class="btn btn-primary btn-sm">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register First Connector
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+        <div class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if request.GET.connector_category %}&connector_category={{ request.GET.connector_category|urlencode }}{% endif %}{% if request.GET.provider %}&provider={{ request.GET.provider|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.health_status %}&health_status={{ request.GET.health_status|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if request.GET.connector_category %}&connector_category={{ request.GET.connector_category|urlencode }}{% endif %}{% if request.GET.provider %}&provider={{ request.GET.provider|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.health_status %}&health_status={{ request.GET.health_status|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
