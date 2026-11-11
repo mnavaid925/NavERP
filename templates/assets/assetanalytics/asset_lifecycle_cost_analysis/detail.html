@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}{{ analysis.number }} — {{ analysis.title }} — Lifecycle Cost Analysis — NavERP{% endblock %}
 
@@ -70,14 +69,14 @@
         <div class="stat-icon blue"><i data-lucide="calculator"></i></div>
         <div class="stat-body">
             <div class="stat-label">Net Lifecycle Cost (TCO)</div>
-            <div class="stat-value">${{ analysis.total_lifecycle_cost|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ analysis.total_lifecycle_cost|floatformat:"2g" }}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="calendar-clock"></i></div>
         <div class="stat-body">
             <div class="stat-label">Equivalent Annual Cost (EAC)</div>
-            <div class="stat-value">${{ analysis.equivalent_annual_cost|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ analysis.equivalent_annual_cost|floatformat:"2g" }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -175,74 +174,74 @@
                         <tr>
                             <td>Acquisition Capital Cost</td>
                             <td><span class="badge badge-info">CapEx</span></td>
-                            <td class="text-right font-mono">${{ analysis.acquisition_capital_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.acquisition_capital_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Installation &amp; Commissioning</td>
                             <td><span class="badge badge-info">CapEx</span></td>
-                            <td class="text-right font-mono">${{ analysis.installation_commissioning_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.installation_commissioning_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr class="bg-slate-50 font-semibold">
                             <td colspan="2">Total Initial CapEx</td>
-                            <td class="text-right font-mono">${{ total_capex|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ total_capex|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Preventive &amp; Calibration Maintenance</td>
                             <td><span class="badge badge-green">Maint OpEx</span></td>
-                            <td class="text-right font-mono">${{ analysis.preventive_maintenance_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.preventive_maintenance_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Corrective &amp; Breakdown Repairs</td>
                             <td><span class="badge badge-red">Maint OpEx</span></td>
-                            <td class="text-right font-mono">${{ analysis.corrective_maintenance_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.corrective_maintenance_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>OEM Service &amp; SLA Contracts</td>
                             <td><span class="badge badge-slate">Maint OpEx</span></td>
-                            <td class="text-right font-mono">${{ analysis.service_contract_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.service_contract_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Energy &amp; Utility Consumption</td>
                             <td><span class="badge badge-amber">Operating OpEx</span></td>
-                            <td class="text-right font-mono">${{ analysis.energy_utility_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.energy_utility_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Downtime Opportunity Loss</td>
                             <td><span class="badge badge-red">Operating OpEx</span></td>
-                            <td class="text-right font-mono">${{ analysis.downtime_opportunity_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.downtime_opportunity_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Insurance &amp; Compliance Costs</td>
                             <td><span class="badge badge-slate">Operating OpEx</span></td>
-                            <td class="text-right font-mono">${{ analysis.insurance_compliance_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.insurance_compliance_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr class="bg-slate-50 font-semibold">
-                            <td colspan="2">Total Lifecycle OpEx (incl. ${{ total_maint|floatformat:2|intcomma }} Maintenance)</td>
-                            <td class="text-right font-mono">${{ total_opex|floatformat:2|intcomma }}</td>
+                            <td colspan="2">Total Lifecycle OpEx (incl. ${{ total_maint|floatformat:"2g" }} Maintenance)</td>
+                            <td class="text-right font-mono">${{ total_opex|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Expected Salvage / Residual Value</td>
                             <td><span class="badge badge-green">Credit / Recovery</span></td>
-                            <td class="text-right font-mono text-emerald-700">-${{ analysis.expected_salvage_value|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono text-emerald-700">-${{ analysis.expected_salvage_value|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Warranty, Insurance &amp; Disposal Recoveries</td>
                             <td><span class="badge badge-green">Credit / Recovery</span></td>
-                            <td class="text-right font-mono text-emerald-700">-${{ analysis.warranty_insurance_recoveries|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono text-emerald-700">-${{ analysis.warranty_insurance_recoveries|floatformat:"2g" }}</td>
                         </tr>
                         <tr class="bg-blue-50 font-bold">
-                            <td colspan="2">Net Total Lifecycle Cost (CapEx + OpEx - ${{ total_recoveries|floatformat:2|intcomma }} Recoveries)</td>
-                            <td class="text-right font-mono text-blue-900">${{ analysis.total_lifecycle_cost|floatformat:2|intcomma }}</td>
+                            <td colspan="2">Net Total Lifecycle Cost (CapEx + OpEx - ${{ total_recoveries|floatformat:"2g" }} Recoveries)</td>
+                            <td class="text-right font-mono text-blue-900">${{ analysis.total_lifecycle_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Current Replacement Value (RAV Benchmark)</td>
                             <td><span class="badge badge-muted">Reference</span></td>
-                            <td class="text-right font-mono">${{ analysis.current_replacement_value|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.current_replacement_value|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Posted Accumulated Depreciation (Ref.)</td>
                             <td><span class="badge badge-muted">Reference</span></td>
-                            <td class="text-right font-mono">${{ analysis.accumulated_depreciation_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ analysis.accumulated_depreciation_cost|floatformat:"2g" }}</td>
                         </tr>
                     </tbody>
                 </table>
