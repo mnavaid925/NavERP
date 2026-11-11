@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Mobile Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:field_work_order_list' %}">Field Work Orders</a>
+            <span>/</span>
+            <span>{% if work_order %}{{ work_order.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">Work Order Details & Field Parameters</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the following errors:</div>
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field, errors in form.errors.items %}
+                    <li><strong>{{ field|title }}:</strong> {{ errors|join:", " }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Work Order Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.work_order_type.id_for_label }}">Work Order Type *</label>
+                    {{ form.work_order_type }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.priority.id_for_label }}">Priority *</label>
+                    {{ form.priority }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Subject Asset *</label>
+                    {{ form.asset }}
+                    {% if form.asset.errors %}<div class="form-error">{{ form.asset.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.assigned_technician.id_for_label }}">Assigned Technician *</label>
+                    {{ form.assigned_technician }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Workflow Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.maintenance_request.id_for_label }}">Originating Maintenance Request (Optional)</label>
+                    {{ form.maintenance_request }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Financial Fixed Asset (Optional)</label>
+                    {{ form.fixed_asset }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scheduled_start.id_for_label }}">Scheduled Start *</label>
+                    {{ form.scheduled_start }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scheduled_end.id_for_label }}">Scheduled End</label>
+                    {{ form.scheduled_end }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.labor_wrench_minutes.id_for_label }}">Labor Wrench Time (Minutes)</label>
+                    {{ form.labor_wrench_minutes }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.estimated_parts_cost.id_for_label }}">Estimated Parts Cost ($)</label>
+                    {{ form.estimated_parts_cost }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.parts_requisition_notes.id_for_label }}">Parts & Materials Requisition</label>
+                    {{ form.parts_requisition_notes }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.work_performed_notes.id_for_label }}">Technician Diagnosis & Work Performed</label>
+                    {{ form.work_performed_notes }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signature_name.id_for_label }}">Verification Signee Name</label>
+                    {{ form.signature_name }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signature_designation.id_for_label }}">Signee Title / Role</label>
+                    {{ form.signature_designation }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.dispatch_latitude.id_for_label }}">Dispatch Latitude</label>
+                    {{ form.dispatch_latitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.dispatch_longitude.id_for_label }}">Dispatch Longitude</label>
+                    {{ form.dispatch_longitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.completion_latitude.id_for_label }}">Completion Latitude</label>
+                    {{ form.completion_latitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.completion_longitude.id_for_label }}">Completion Longitude</label>
+                    {{ form.completion_longitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.client_sync_id.id_for_label }}">Offline Client Sync UUID</label>
+                    {{ form.client_sync_id }}
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center gap-6 pt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.safety_lockout_confirmed }}
+                        <span class="text-sm font-medium text-slate-800">Safety Lockout / Tagout (LOTO) Confirmed</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_offline_captured }}
+                        <span class="text-sm font-medium text-slate-800">Captured Offline</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if work_order %}{% url 'assets:field_work_order_detail' work_order.pk %}{% else %}{% url 'assets:field_work_order_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Work Order
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
