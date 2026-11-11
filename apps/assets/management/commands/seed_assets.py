@@ -141,7 +141,9 @@ class Command(BaseCommand):
             self._seed_tenant_11_9(tenant)
             self._seed_tenant_11_10(tenant)
             self._seed_tenant_11_11(tenant)
-            self._seed_tenant_11_12(tenant)
+            if hasattr(self, '_seed_tenant_11_12'):
+                self._seed_tenant_11_12(tenant)
+            self._seed_tenant_11_13(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -2718,6 +2720,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f"[{tenant.name}] 11.10 Seeding complete (3 lease contracts, schedules, 1 modification, 2 lease vs buy analyses).")
 
+    def _seed_tenant_11_13(self, tenant):
         # Sub-module 11.13: Mobile Asset Management
         if MobileAssetInspection.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"[{tenant.name}] 11.13 Mobile Asset Management already seeded; skipping.")
@@ -2728,6 +2731,7 @@ class Command(BaseCommand):
             if not scm_asset1:
                 self.stdout.write(f"[{tenant.name}] Warning: No SCM assets found; skipping 11.13 mobile seeding.")
             else:
+                user = User.objects.filter(tenant=tenant).first()
                 fixed_asset1 = FixedAsset.objects.filter(tenant=tenant).first()
 
                 # Inspections
