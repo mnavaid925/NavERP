@@ -16,6 +16,7 @@ from apps.assets.models.AssetAnalytics.AssetPortfolioScenarios import (
 from apps.assets.models.AssetClassification.AssetCategories import AssetCategory
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.AssetAnalytics._helpers import (
+    PAGE_SIZE,
     ZERO,
     apply_choice_filter,
     apply_fk_filter,
@@ -80,7 +81,7 @@ def asset_portfolio_scenario_list(request):
         best_npv=Max("net_present_value"),
     )
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
     cur_year = timezone.localdate().year
@@ -303,6 +304,6 @@ def asset_portfolio_scenario_export_csv(request):
             f"{s.payback_period_years:.2f}",
             f"{s.benefit_cost_ratio:.2f}",
         ]
-        for s in qs
+        for s in qs[:10000].iterator(chunk_size=500)
     )
     return csv_export_response(filename="awif-scenarios.csv", headers=headers, rows=rows)
