@@ -1,6 +1,7 @@
 import hashlib
 import ipaddress
 import secrets
+import socket
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -26,6 +27,45 @@ BLOCKED_HOSTNAMES = frozenset(
 )
 
 BLOCKED_HOST_SUFFIXES = (".local", ".internal", ".localhost")
+_CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+
+
+def _unwrap_ip_targets(ip_obj):
+    """Yield an IP address and any embedded IPv4 transition targets recursively."""
+    seen = set()
+    stack = [ip_obj]
+    while stack:
+        cur = stack.pop()
+        if cur in seen:
+            continue
+        seen.add(cur)
+        yield cur
+        if isinstance(cur, ipaddress.IPv6Address):
+            if cur.ipv4_mapped is not None:
+                stack.append(cur.ipv4_mapped)
+            if cur.sixtofour is not None:
+                stack.append(cur.sixtofour)
+            if cur.teredo is not None:
+                stack.extend(cur.teredo)
+
+
+def _is_blocked_ip(ip_obj):
+    for ip_check in _unwrap_ip_targets(ip_obj):
+        if (
+            not ip_check.is_global
+            or ip_check.is_private
+            or ip_check.is_loopback
+            or ip_check.is_link_local
+            or ip_check.is_multicast
+            or ip_check.is_reserved
+            or ip_check.is_unspecified
+            or (
+                isinstance(ip_check, ipaddress.IPv4Address)
+                and ip_check in _CGNAT_NETWORK
+            )
+        ):
+            return True
+    return False
 
 
 def validate_connector_endpoint_url(value):
@@ -33,8 +73,12 @@ def validate_connector_endpoint_url(value):
     raw = (value or "").strip()
     if not raw:
         raise ValidationError("Endpoint URL is required.")
-    if any(ch.isspace() for ch in raw):
-        raise ValidationError("Endpoint URL cannot contain whitespace characters.")
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in raw):
+        raise ValidationError(
+            "Endpoint URL cannot contain whitespace or control characters."
+        )
+    if "\\" in raw:
+        raise ValidationError("Endpoint URL cannot contain backslash characters.")
 
     parsed = urlparse(raw)
     scheme = (parsed.scheme or "").lower()
@@ -44,12 +88,36 @@ def validate_connector_endpoint_url(value):
             f"Unsupported URI scheme '{scheme or '(none)'}'. Allowed schemes: {allowed}."
         )
 
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or "@" in (parsed.netloc or "")
+    ):
+        raise ValidationError(
+            "Endpoint URL must not contain embedded user credentials."
+        )
+
     try:
         _ = parsed.port
     except ValueError as exc:
         raise ValidationError("Endpoint URL contains an invalid port number.") from exc
 
-    hostname = (parsed.hostname or "").rstrip(".").lower()
+    raw_host = (parsed.hostname or "").strip().rstrip(".")
+    if not raw_host:
+        raise ValidationError("Endpoint URL must include a valid host name or address.")
+    if "%" in raw_host:
+        raise ValidationError(
+            "Percent-encoded hosts and IPv6 zone identifiers are not permitted."
+        )
+
+    host_no_zone = raw_host.split("%", 1)[0]
+    try:
+        hostname = host_no_zone.encode("idna").decode("ascii").rstrip(".").lower()
+    except UnicodeError as exc:
+        raise ValidationError(
+            "Endpoint URL contains an invalid internationalized host name."
+        ) from exc
+
     if not hostname:
         raise ValidationError("Endpoint URL must include a valid host name or address.")
 
@@ -58,22 +126,23 @@ def validate_connector_endpoint_url(value):
             "Localhost, link-local, and internal host targets are not permitted."
         )
 
+    ip_candidates = []
     try:
-        ip_obj = ipaddress.ip_address(hostname)
+        ip_candidates.append(ipaddress.ip_address(hostname))
     except ValueError:
-        ip_obj = None
+        pass
+    try:
+        packed_ipv4 = socket.inet_aton(hostname)
+    except OSError:
+        packed_ipv4 = None
+    if packed_ipv4 is not None:
+        ip_candidates.append(ipaddress.IPv4Address(packed_ipv4))
 
-    if ip_obj is not None and (
-        ip_obj.is_private
-        or ip_obj.is_loopback
-        or ip_obj.is_link_local
-        or ip_obj.is_multicast
-        or ip_obj.is_reserved
-        or ip_obj.is_unspecified
-    ):
-        raise ValidationError(
-            "Private, loopback, link-local, multicast, or reserved IP addresses are not permitted."
-        )
+    for ip_obj in ip_candidates:
+        if _is_blocked_ip(ip_obj):
+            raise ValidationError(
+                "Private, loopback, link-local, CGNAT, multicast, or reserved IP addresses are not permitted."
+            )
 
     return raw
 
