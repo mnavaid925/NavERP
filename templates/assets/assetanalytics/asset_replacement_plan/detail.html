@@ -25,6 +25,7 @@
         <button type="button" onclick="window.print()" class="btn btn-outline">
             <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print CIP Sheet
         </button>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         {% if not plan.is_locked %}
         <form method="post" action="{% url 'assets:asset_replacement_plan_recalculate' plan.pk %}" class="inline">
             {% csrf_token %}
@@ -106,6 +107,7 @@
                 <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
+        {% endif %}
         {% endif %}
         <a href="{% url 'assets:asset_replacement_plan_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
