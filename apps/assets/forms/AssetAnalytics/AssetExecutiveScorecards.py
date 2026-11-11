@@ -22,7 +22,6 @@ class AssetExecutiveScorecardForm(TenantUniqueMixin, TenantModelForm):
         "org_unit": OrgUnit,
         "asset_category": AssetCategory,
         "prepared_by": User,
-        "approved_by": User,
     }
 
     class Meta:
@@ -36,7 +35,6 @@ class AssetExecutiveScorecardForm(TenantUniqueMixin, TenantModelForm):
             "asset_category",
             "currency",
             "prepared_by",
-            "approved_by",
             "target_asset_roi_pct",
             "target_mcr_pct",
             "target_compliance_rate_pct",
@@ -54,7 +52,6 @@ class AssetExecutiveScorecardForm(TenantUniqueMixin, TenantModelForm):
             "asset_category": forms.Select(attrs={"class": "form-select"}),
             "currency": forms.Select(attrs={"class": "form-select"}),
             "prepared_by": forms.Select(attrs={"class": "form-select"}),
-            "approved_by": forms.Select(attrs={"class": "form-select"}),
             "target_asset_roi_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "target_mcr_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0", "max": "100"}),
             "target_compliance_rate_pct": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0", "max": "100"}),
