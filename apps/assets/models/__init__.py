@@ -78,6 +78,12 @@ from apps.assets.models.MobileAssetManagement import (
     FieldWorkOrder,
     MobileAssetInspection,
 )
+from apps.assets.models.IntegrationApiHub import (
+    AssetGisMapping,
+    AssetGlSyncBatch,
+    AssetIntegrationConnector,
+    AssetTelemetryStream,
+)
 
 __all__ = [
     "TenantOwned",
@@ -134,4 +140,8 @@ __all__ = [
     "FieldWorkOrder",
     "AssetScanLog",
     "AssetGeofenceEvent",
+    "AssetIntegrationConnector",
+    "AssetTelemetryStream",
+    "AssetGlSyncBatch",
+    "AssetGisMapping",
 ]
