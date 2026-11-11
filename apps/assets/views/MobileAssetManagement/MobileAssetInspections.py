@@ -87,6 +87,8 @@ def mobile_asset_inspection_create(request):
             inspection.tenant = request.tenant
             if not inspection.inspector_id:
                 inspection.inspector = request.user
+            if inspection.is_offline_captured and not inspection.synced_at:
+                inspection.synced_at = timezone.now()
             inspection.save()
             write_audit_log(request.user, inspection, "create", tenant=request.tenant)
             messages.success(request, f"Mobile inspection {inspection.number} created successfully.")
@@ -123,7 +125,10 @@ def mobile_asset_inspection_edit(request, pk):
     if request.method == "POST":
         form = MobileAssetInspectionForm(request.POST, instance=inspection, tenant=request.tenant)
         if form.is_valid():
-            inspection = form.save()
+            inspection = form.save(commit=False)
+            if inspection.is_offline_captured and not inspection.synced_at:
+                inspection.synced_at = timezone.now()
+            inspection.save()
             write_audit_log(request.user, inspection, "update", tenant=request.tenant)
             messages.success(request, f"Mobile inspection {inspection.number} updated successfully.")
             return redirect("assets:mobile_asset_inspection_detail", pk=inspection.pk)
