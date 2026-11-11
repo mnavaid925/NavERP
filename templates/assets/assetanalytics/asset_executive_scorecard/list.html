@@ -21,9 +21,11 @@
         <a href="{% url 'assets:asset_executive_scorecard_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&period_type={{ request.GET.period_type|urlencode }}&rag_status={{ request.GET.rag_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&asset_category={{ request.GET.asset_category|urlencode }}" class="btn btn-outline">
             <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <a href="{% url 'assets:asset_executive_scorecard_create' %}" class="btn btn-primary">
             <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Scorecard
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -164,6 +166,7 @@
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not k.is_locked %}
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_executive_scorecard_edit' k.pk %}" class="btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
@@ -173,6 +176,7 @@
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                             {% endif %}
                         </div>
                     </td>
@@ -184,9 +188,11 @@
                             <i data-lucide="award" class="w-12 h-12 text-slate-400 mb-3"></i>
                             <h3 class="text-base font-semibold text-slate-800">No Executive Scorecards Found</h3>
                             <p class="text-sm text-slate-500 mb-4">Create a period executive scorecard to track Asset ROI, Maintenance Cost Ratio, FCI, and compliance posture.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_executive_scorecard_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Scorecard
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
