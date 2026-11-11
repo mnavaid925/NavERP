@@ -60,6 +60,14 @@ class AssetLeaseModificationForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant, is_active=True
             ).order_by("username")
 
+        # Restrict selectable statuses to draft and submitted (prevent bypassing approval workflow)
+        allowed_statuses = ["draft", "submitted"]
+        if self.instance and self.instance.pk and self.instance.status not in allowed_statuses:
+            allowed_statuses.append(self.instance.status)
+        self.fields["status"].choices = [
+            c for c in AssetLeaseModification.STATUS_CHOICES if c[0] in allowed_statuses
+        ]
+
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["lease_contract", "requested_by"])
