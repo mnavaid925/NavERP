@@ -122,8 +122,8 @@ class AssetLifecycleCostAnalysisForm(TenantUniqueMixin, TenantModelForm):
         cleaned = super().clean()
         reject_foreign(self, cleaned, list(self._TENANT_FIELDS.keys()))
         horizon = cleaned.get("analysis_horizon_years")
-        if horizon is not None and horizon < 1:
-            self.add_error("analysis_horizon_years", "Analysis horizon must be at least 1 year.")
+        if horizon is not None and not (1 <= horizon <= 50):
+            self.add_error("analysis_horizon_years", "Analysis horizon must be between 1 and 50 years.")
         rate = cleaned.get("discount_rate_pct")
         if rate is not None and (rate < ZERO or rate > Decimal("100.00")):
             self.add_error("discount_rate_pct", "Discount rate must be between 0.00% and 100.00%.")
