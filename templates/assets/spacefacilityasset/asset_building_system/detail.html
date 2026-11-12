@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}{{ system.number }} — {{ system.name }} — Building System — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_building_system_list' %}">HVAC &amp; Building Systems</a>
+            <span>/</span>
+            <span>{{ system.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ system.number }} — {{ system.name }}</h1>
+            <span class="badge {{ system.comfort_badge_class }}">{{ system.get_comfort_status_display }}</span>
+            <span class="badge {{ system.condition_badge_class }}">{{ system.get_condition_grade_display }}</span>
+            <span class="badge {{ system.criticality_badge_class }}">{{ system.get_criticality_tier_display }}</span>
+            <span class="badge {{ system.status_badge_class }}">{{ system.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <form method="post" action="{% url 'assets:asset_building_system_evaluate_comfort' system.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="thermometer" class="w-4 h-4 me-1"></i> Evaluate Comfort Band
+            </button>
+        </form>
+
+        {% if not system.is_locked %}
+        <form method="post" action="{% url 'assets:asset_building_system_record_inspection' system.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="clipboard-check" class="w-4 h-4 me-1"></i> Record Inspection
+            </button>
+        </form>
+        {% endif %}
+
+        {% if system.status == "operational" or system.status == "degraded" %}
+        <form method="post" action="{% url 'assets:asset_building_system_flag_maintenance' system.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="wrench" class="w-4 h-4 me-1"></i> Flag Maintenance
+            </button>
+        </form>
+        {% endif %}
+
+        {% if system.status != "operational" and system.status != "decommissioned" %}
+        <form method="post" action="{% url 'assets:asset_building_system_restore_operational' system.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Restore Operational
+            </button>
+        </form>
+        {% endif %}
+
+        {% if not system.is_locked %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_building_system_decommission' system.pk %}" class="inline" onsubmit="return confirm('Decommission building system {{ system.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Decommission
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if can_edit %}
+        <a href="{% url 'assets:asset_building_system_edit' system.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if can_delete %}
+        <form method="post" action="{% url 'assets:asset_building_system_delete' system.pk %}" class="inline" onsubmit="return confirm('Delete building system {{ system.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_building_system_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="thermometer"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Setpoint vs Measured</div>
+            <div class="stat-value">{{ system.setpoint_temp_c|default:"—" }}&deg;C / {{ system.measured_temp_c|default:"—" }}&deg;C</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="droplets"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Humidity Target / Actual</div>
+            <div class="stat-value">{{ system.target_humidity_pct|default:"—" }}% / {{ system.measured_humidity_pct|default:"—" }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="hourglass"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Remaining Useful Life</div>
+            <div class="stat-value">{% if system.remaining_useful_life_years is not None %}{{ system.remaining_useful_life_years }} yrs{% else %}—{% endif %}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Replacement Estimate</div>
+            <div class="stat-value">${{ system.replacement_cost_estimate|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header"><h2 class="text-sm font-semibold uppercase tracking-wide">Technical Specs, Spatial Placement &amp; Statutory Compliance</h2></div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item"><dt>System Domain</dt><dd>{{ system.get_system_domain_display }}</dd></div>
+            <div class="detail-item"><dt>Subsystem Type</dt><dd>{{ system.get_subsystem_type_display }}</dd></div>
+            <div class="detail-item">
+                <dt>Facility Space</dt>
+                <dd>{% if system.facility_space %}<a href="{% url 'assets:asset_facility_space_detail' system.facility_space.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ system.facility_space.code }} — {{ system.facility_space.name }}</a>{% else %}—{% endif %}</dd>
+            </div>
+            <div class="detail-item"><dt>Floor Plan Pin (X, Y)</dt><dd class="font-mono">{% if system.pin_x_pct is not None and system.pin_y_pct is not None %}{{ system.pin_x_pct }}%, {{ system.pin_y_pct }}%{% else %}—{% endif %}</dd></div>
+            <div class="detail-item"><dt>Manufacturer / Model</dt><dd>{{ system.manufacturer|default:"—" }} {% if system.model_number %}({{ system.model_number }}){% endif %}</dd></div>
+            <div class="detail-item"><dt>Serial Number</dt><dd class="font-mono">{{ system.serial_number|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Load / Voltage Rating</dt><dd class="font-mono">{{ system.load_or_voltage_rating|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>ASHRAE / NFPA Code</dt><dd class="font-mono">{{ system.ashrae_nfpa_code_ref|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Served Area / Capacity</dt><dd class="font-mono">{{ system.served_area_sqft|default:"—" }} sqft / {{ system.design_capacity_btu_kw|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Airflow / Refrigerant</dt><dd>{{ system.airflow_cfm|default:"—" }} CFM / {{ system.refrigerant_type|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Efficiency Rating</dt><dd>{{ system.energy_efficiency_rating|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Service Vendor</dt><dd>{% if system.service_vendor %}{{ system.service_vendor.name }}{% else %}—{% endif %}</dd></div>
+            <div class="detail-item"><dt>Last Inspection</dt><dd>{{ system.last_statutory_inspection_date|date:"Y-m-d"|default:"—" }}</dd></div>
+            <div class="detail-item">
+                <dt>Next Inspection Due</dt>
+                <dd class="{% if system.is_inspection_overdue %}text-danger font-semibold{% endif %}">{{ system.next_inspection_due_date|date:"Y-m-d"|default:"—" }}{% if system.is_inspection_overdue %} (Overdue){% endif %}</dd>
+            </div>
+            <div class="detail-item"><dt>SCM Asset</dt><dd>{% if system.operational_asset %}{{ system.operational_asset }}{% else %}—{% endif %}</dd></div>
+            <div class="detail-item"><dt>Fixed Asset</dt><dd>{% if system.fixed_asset %}{{ system.fixed_asset }}{% else %}—{% endif %}</dd></div>
+            <div class="detail-item">
+                <dt>Energy Reading (11.6)</dt>
+                <dd>{% if system.latest_energy_reading %}<a href="{% url 'assets:asset_energy_reading_detail' system.latest_energy_reading.pk %}" class="text-blue-600 hover:underline">{{ system.latest_energy_reading.number }}</a>{% else %}—{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>PM Schedule (11.5)</dt>
+                <dd>{% if system.maintenance_schedule %}<a href="{% url 'assets:asset_maintenance_schedule_detail' system.maintenance_schedule.pk %}" class="text-blue-600 hover:underline">{{ system.maintenance_schedule.number }}</a>{% else %}—{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Operating Permit (11.11)</dt>
+                <dd>{% if system.operating_permit %}<a href="{% url 'assets:asset_permit_license_detail' system.operating_permit.pk %}" class="text-blue-600 hover:underline">{{ system.operating_permit.number }}</a>{% else %}—{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Schematic Document (11.16)</dt>
+                <dd>{% if system.schematic_document %}<a href="{% url 'assets:asset_document_detail' system.schematic_document.pk %}" class="text-blue-600 hover:underline">{{ system.schematic_document.number }}</a>{% else %}—{% endif %}</dd>
+            </div>
+        </dl>
+        {% if system.notes %}
+        <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <div class="text-xs font-semibold uppercase text-muted mb-1">Notes</div>
+            <p class="text-sm whitespace-pre-line">{{ system.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h2 class="text-sm font-semibold uppercase tracking-wide">Shared System Chargebacks ({{ linked_chargebacks|length }})</h2></div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Number</th><th>Title</th><th>Org Unit / Party</th><th>Net Amount</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for cb in linked_chargebacks %}
+                <tr>
+                    <td class="font-mono text-xs"><a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="text-blue-600 hover:underline">{{ cb.number }}</a></td>
+                    <td class="text-sm">{{ cb.title }}</td>
+                    <td class="text-xs">{% if cb.charged_org_unit %}{{ cb.charged_org_unit.name }}{% elif cb.occupant_party %}{{ cb.occupant_party.name }}{% else %}—{% endif %}</td>
+                    <td class="text-xs font-mono">${{ cb.net_chargeback_amount|floatformat:2 }}</td>
+                    <td><span class="badge {{ cb.status_badge_class }}">{{ cb.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-xs text-muted text-center py-4">No shared-system chargebacks linked.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
