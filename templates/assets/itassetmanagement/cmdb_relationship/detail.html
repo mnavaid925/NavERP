@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}{{ relationship.number }} — CMDB Dependency — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:cmdb_relationship_list' %}">CMDB Registry</a>
+            <span>/</span>
+            <span>{{ relationship.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ relationship.number }}: {{ relationship.source_label }} &rarr; {{ relationship.target_label }}</h1>
+            <span class="badge {{ relationship.status_badge_class }}">{{ relationship.get_status_display }}</span>
+            <span class="badge {{ relationship.criticality_badge_class }}">{{ relationship.get_criticality_display }}</span>
+            {% if relationship.is_single_point_of_failure %}
+            <span class="badge badge-red">Single Point of Failure</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if relationship.source_ci_key %}
+        <a href="{% url 'assets:cmdb_impact_analysis' %}?ci={{ relationship.source_ci_key.0 }}:{{ relationship.source_ci_key.1 }}" class="btn btn-outline">
+            <i data-lucide="network" class="w-4 h-4 me-1"></i> Trace Source Blast Radius
+        </a>
+        {% endif %}
+
+        {% if not relationship.is_locked %}
+            <form method="post" action="{% url 'assets:cmdb_relationship_verify' relationship.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Verify Active
+                </button>
+            </form>
+
+            {% if relationship.status != "deprecated" %}
+            <form method="post" action="{% url 'assets:cmdb_relationship_deprecate' relationship.pk %}" class="inline" onsubmit="return confirm('Mark {{ relationship.number|escapejs }} as deprecated?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Deprecate</button>
+            </form>
+            {% endif %}
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'assets:cmdb_relationship_sever' relationship.pk %}" class="inline" onsubmit="return confirm('Sever {{ relationship.number|escapejs }}? Severed edges become locked.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Sever Edge</button>
+            </form>
+            {% endif %}
+
+            <a href="{% url 'assets:cmdb_relationship_edit' relationship.pk %}" class="btn btn-outline">
+                <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+            </a>
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'assets:cmdb_relationship_delete' relationship.pk %}" class="inline" onsubmit="return confirm('Delete CMDB relationship {{ relationship.number|escapejs }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">
+                    <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+                </button>
+            </form>
+            {% endif %}
+        {% endif %}
+
+        <a href="{% url 'assets:cmdb_relationship_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Topology Endpoints Summary -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="box"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Source CI ({{ relationship.get_source_ci_type_display }})</div>
+            <div class="stat-value !text-base">{{ relationship.source_label }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="arrow-right-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Relationship Semantics</div>
+            <div class="stat-value !text-base">{{ relationship.get_relationship_type_display }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ relationship.get_environment_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="server"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Target CI ({{ relationship.get_target_ci_type_display }})</div>
+            <div class="stat-value !text-base">{{ relationship.target_label }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Edge Metadata -->
+<div class="card mb-6">
+    <div class="card-header"><h2 class="card-title">Impact Assessment &amp; Verification</h2></div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item"><dt>Impact Severity</dt><dd>{{ relationship.get_impact_severity_display }}</dd></div>
+            <div class="detail-item"><dt>Single Point of Failure</dt><dd>{% if relationship.is_single_point_of_failure %}Yes — SPOF{% else %}No{% endif %}</dd></div>
+            <div class="detail-item"><dt>Edge Owner</dt><dd>{% if relationship.owner %}{{ relationship.owner.get_full_name|default:relationship.owner.username }}{% else %}—{% endif %}</dd></div>
+            <div class="detail-item"><dt>Verified By / On</dt><dd>{% if relationship.verified_by %}{{ relationship.verified_by.get_full_name|default:relationship.verified_by.username }}{% else %}—{% endif %}{% if relationship.verified_on %} ({{ relationship.verified_on|date:"Y-m-d" }}){% endif %}</dd></div>
+            <div class="detail-item"><dt>Severed At</dt><dd>{% if relationship.severed_at %}{{ relationship.severed_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+            <div class="detail-item"><dt>Environment</dt><dd>{{ relationship.get_environment_display }}</dd></div>
+        </dl>
+        {% if relationship.blast_radius_notes %}
+        <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300">
+            <div class="text-xs font-semibold uppercase text-slate-400 mb-1">Blast Radius Notes</div>
+            {{ relationship.blast_radius_notes|linebreaksbr }}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Adjacent Topology Edges -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Other Edges From Same Source CI</h2></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Edge #</th><th>Relation</th><th>Target CI</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for edge in related_source_edges %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td>{{ edge.get_relationship_type_display }}</td>
+                        <td class="text-sm">{{ edge.target_label }}</td>
+                        <td><span class="badge {{ edge.status_badge_class }}">{{ edge.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-sm text-slate-400 py-4">No other outbound edges from this source CI.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Other Edges Into Same Target CI</h2></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Edge #</th><th>Source CI</th><th>Relation</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for edge in related_target_edges %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td class="text-sm">{{ edge.source_label }}</td>
+                        <td>{{ edge.get_relationship_type_display }}</td>
+                        <td><span class="badge {{ edge.status_badge_class }}">{{ edge.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-sm text-slate-400 py-4">No other inbound edges into this target CI.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
