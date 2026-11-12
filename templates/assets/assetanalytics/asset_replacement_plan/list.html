@@ -66,10 +66,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div>
-                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, title, asset..." class="form-input" />
+                <label for="arpl-filter-q" class="sr-only">Search replacement plans</label>
+                <input id="arpl-filter-q" type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, title, asset..." class="form-input" />
             </div>
             <div>
-                <select name="status" class="form-select">
+                <label for="arpl-filter-status" class="sr-only">Status</label>
+                <select id="arpl-filter-status" name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -77,7 +79,8 @@
                 </select>
             </div>
             <div>
-                <select name="funding_status" class="form-select">
+                <label for="arpl-filter-funding" class="sr-only">Funding Status</label>
+                <select id="arpl-filter-funding" name="funding_status" class="form-select">
                     <option value="">All Funding States</option>
                     {% for val, label in funding_choices %}
                     <option value="{{ val }}" {% if request.GET.funding_status == val %}selected{% endif %}>{{ label }}</option>
@@ -85,7 +88,8 @@
                 </select>
             </div>
             <div>
-                <select name="priority_band" class="form-select">
+                <label for="arpl-filter-priority" class="sr-only">Priority Band</label>
+                <select id="arpl-filter-priority" name="priority_band" class="form-select">
                     <option value="">All Priorities</option>
                     {% for val, label in priority_choices %}
                     <option value="{{ val }}" {% if request.GET.priority_band == val %}selected{% endif %}>{{ label }}</option>
@@ -93,7 +97,8 @@
                 </select>
             </div>
             <div>
-                <select name="replacement_strategy" class="form-select">
+                <label for="arpl-filter-strategy" class="sr-only">Replacement Strategy</label>
+                <select id="arpl-filter-strategy" name="replacement_strategy" class="form-select">
                     <option value="">All Strategies</option>
                     {% for val, label in strategy_choices %}
                     <option value="{{ val }}" {% if request.GET.replacement_strategy == val %}selected{% endif %}>{{ label }}</option>
@@ -101,7 +106,8 @@
                 </select>
             </div>
             <div>
-                <select name="planned_replacement_year" class="form-select">
+                <label for="arpl-filter-year" class="sr-only">Planned Replacement Year</label>
+                <select id="arpl-filter-year" name="planned_replacement_year" class="form-select">
                     <option value="">All Years</option>
                     {% for yr in years %}
                     <option value="{{ yr }}" {% if request.GET.planned_replacement_year == yr|stringformat:"d" %}selected{% endif %}>{{ yr }}</option>
@@ -109,7 +115,8 @@
                 </select>
             </div>
             <div>
-                <select name="org_unit" class="form-select">
+                <label for="arpl-filter-org-unit" class="sr-only">Org Unit</label>
+                <select id="arpl-filter-org-unit" name="org_unit" class="form-select">
                     <option value="">All Org Units</option>
                     {% for ou in org_units %}
                     <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
@@ -117,7 +124,8 @@
                 </select>
             </div>
             <div>
-                <select name="asset_category" class="form-select">
+                <label for="arpl-filter-category" class="sr-only">Asset Category</label>
+                <select id="arpl-filter-category" name="asset_category" class="form-select">
                     <option value="">All Categories</option>
                     {% for cat in categories %}
                     <option value="{{ cat.pk }}" {% if request.GET.asset_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
@@ -125,7 +133,8 @@
                 </select>
             </div>
             <div class="flex gap-2 md:col-span-2">
-                <select name="location" class="form-select">
+                <label for="arpl-filter-location" class="sr-only">Location</label>
+                <select id="arpl-filter-location" name="location" class="form-select">
                     <option value="">All Locations</option>
                     {% for loc in locations %}
                     <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.name }}</option>
@@ -135,7 +144,7 @@
                     <i data-lucide="filter" class="w-4 h-4"></i>
                 </button>
                 {% if request.GET.q or request.GET.status or request.GET.funding_status or request.GET.priority_band or request.GET.replacement_strategy or request.GET.planned_replacement_year or request.GET.org_unit or request.GET.asset_category or request.GET.location %}
-                <a href="{% url 'assets:asset_replacement_plan_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'assets:asset_replacement_plan_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
@@ -204,17 +213,17 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'assets:asset_replacement_plan_detail' p.pk %}" class="btn btn-icon" title="View Details">
+                            <a href="{% url 'assets:asset_replacement_plan_detail' p.pk %}" class="btn btn-icon" title="View Details" aria-label="View {{ p.number }}">
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not p.is_locked %}
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                            <a href="{% url 'assets:asset_replacement_plan_edit' p.pk %}" class="btn btn-icon" title="Edit">
+                            <a href="{% url 'assets:asset_replacement_plan_edit' p.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ p.number }}">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'assets:asset_replacement_plan_delete' p.pk %}" class="inline" onsubmit="return confirm('Delete replacement plan {{ p.number|escapejs }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon danger" title="Delete">
+                                <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete {{ p.number }}">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
