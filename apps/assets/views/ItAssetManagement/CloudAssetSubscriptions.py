@@ -233,12 +233,12 @@ def cloud_asset_subscription_detail(request, pk):
     outbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, source_cloud=cloud_asset)
         .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
-        .order_by("-updated_at")
+        .order_by("-updated_at")[:50]
     )
     inbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, target_cloud=cloud_asset)
         .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
-        .order_by("-updated_at")
+        .order_by("-updated_at")[:50]
     )
     return render(
         request,
