@@ -85,9 +85,11 @@
                     {{ form.review_cycle_months }}
                     {% if form.review_cycle_months.errors %}<div class="form-error">{{ form.review_cycle_months.errors }}</div>{% endif %}
                 </div>
-                <div class="form-group flex items-center gap-2 pt-6">
-                    {{ form.loto_required }}
-                    <label class="form-label mb-0" for="{{ form.loto_required.id_for_label }}">LOTO Energy Isolation Mandatory</label>
+                <div class="form-group pt-6">
+                    <div class="flex flex-row items-center gap-2">
+                        {{ form.loto_required }}
+                        <label class="form-label mb-0" for="{{ form.loto_required.id_for_label }}">LOTO Energy Isolation Mandatory</label>
+                    </div>
                     {% if form.loto_required.errors %}<div class="form-error">{{ form.loto_required.errors }}</div>{% endif %}
                 </div>
             </div>
