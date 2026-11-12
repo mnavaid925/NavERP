@@ -3350,7 +3350,12 @@ class Command(BaseCommand):
 
         self.stdout.write(f"[{tenant.name}] Seeding 11.14 Asset Analytics & BI...")
         today = timezone.now().date()
-        user = User.objects.filter(tenant=tenant).first()
+        user = User.objects.filter(tenant=tenant).order_by("id").first()
+        approver = (
+            User.objects.filter(tenant=tenant).exclude(pk=user.pk).order_by("id").first()
+            if user
+            else None
+        )
         currency = Currency.objects.filter(is_active=True).order_by("code").first()
         org_unit = OrgUnit.objects.filter(tenant=tenant).first()
         location = Location.objects.filter(tenant=tenant).first()
@@ -3525,7 +3530,6 @@ class Command(BaseCommand):
                 deferral_penalty_cost=Decimal("26500.00"),
                 notes="Variable-speed magnetic-bearing chiller upgrade cutting HVAC kWh by 24%.",
             )
-            rpl_1.recalculate_metrics()
             rpl_1.save()
 
             rpl_2 = AssetReplacementPlan(
@@ -3557,7 +3561,6 @@ class Command(BaseCommand):
                 deferral_penalty_cost=Decimal("21000.00"),
                 notes="High unfunded backlog priority; environmental compliance deadline approaching.",
             )
-            rpl_2.recalculate_metrics()
             rpl_2.save()
 
             rpl_3 = AssetReplacementPlan(
@@ -3589,7 +3592,6 @@ class Command(BaseCommand):
                 deferral_penalty_cost=Decimal("8400.00"),
                 notes="Phased lithium-ion battery transition eliminating lead-acid charging bay.",
             )
-            rpl_3.recalculate_metrics()
             rpl_3.save()
 
             rpl_4 = AssetReplacementPlan(
@@ -3621,7 +3623,6 @@ class Command(BaseCommand):
                 deferral_penalty_cost=Decimal("6200.00"),
                 notes="Scheduled mid-life OEM spindle rebuild to defer full machine CapEx 5 years.",
             )
-            rpl_4.recalculate_metrics()
             rpl_4.save()
 
             scen_base = AssetPortfolioScenario(
@@ -3700,7 +3701,7 @@ class Command(BaseCommand):
                 org_unit=org_unit,
                 currency=currency,
                 prepared_by=user,
-                approved_by=user,
+                approved_by=approver,
                 status="draft",
                 annual_asset_return_amount=Decimal("95000.00"),
                 target_asset_roi_pct=Decimal("12.00"),
