@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, ProtectedError, Q, Sum
@@ -33,14 +34,10 @@ def _filtered_chargebacks_queryset(request):
     base_qs = assets_scope(AssetSpaceChargeback.objects.all(), request)
     qs = base_qs.select_related(
         "facility_space",
-        "shared_building_system",
-        "lease_contract",
         "charged_org_unit",
         "occupant_party",
         "currency",
-        "fiscal_period",
         "journal_entry",
-        "ar_invoice",
     ).defer("notes")
 
     q = (request.GET.get("q") or "").strip()
@@ -127,32 +124,31 @@ def asset_space_chargeback_list(request):
 def asset_space_chargeback_export_csv(request):
     """Export filtered space chargebacks & TI allocations as formula-safe CSV."""
     _base, qs, _q = _filtered_chargebacks_queryset(request)
-    rows = []
-    for cb in qs.order_by("-period_start", "-number")[:5000]:
-        rows.append(
-            [
-                cb.number,
-                cb.title,
-                cb.get_coordination_type_display(),
-                cb.get_allocation_basis_display(),
-                cb.facility_space.code if cb.facility_space else "",
-                cb.charged_org_unit.name if cb.charged_org_unit else "",
-                cb.occupant_party.name if cb.occupant_party else "",
-                cb.period_start.isoformat() if cb.period_start else "",
-                cb.period_end.isoformat() if cb.period_end else "",
-                f"{cb.allocated_area_sqft:.2f}",
-                f"{cb.allocation_share_pct:.2f}",
-                f"{cb.base_cost_amount:.2f}",
-                f"{cb.shared_cam_amount:.2f}",
-                f"{cb.utility_recovery_amount:.2f}",
-                f"{cb.ti_improvement_cost:.2f}",
-                f"{cb.ti_allowance_offset:.2f}",
-                f"{cb.net_chargeback_amount:.2f}",
-                cb.currency.code if cb.currency else "",
-                cb.get_status_display(),
-                str(cb.journal_entry_id or ""),
-            ]
-        )
+    rows = (
+        [
+            cb.number,
+            cb.title,
+            cb.get_coordination_type_display(),
+            cb.get_allocation_basis_display(),
+            cb.facility_space.code if cb.facility_space else "",
+            cb.charged_org_unit.name if cb.charged_org_unit else "",
+            cb.occupant_party.name if cb.occupant_party else "",
+            cb.period_start.isoformat() if cb.period_start else "",
+            cb.period_end.isoformat() if cb.period_end else "",
+            f"{cb.allocated_area_sqft:.2f}",
+            f"{cb.allocation_share_pct:.2f}",
+            f"{cb.base_cost_amount:.2f}",
+            f"{cb.shared_cam_amount:.2f}",
+            f"{cb.utility_recovery_amount:.2f}",
+            f"{cb.ti_improvement_cost:.2f}",
+            f"{cb.ti_allowance_offset:.2f}",
+            f"{cb.net_chargeback_amount:.2f}",
+            cb.currency.code if cb.currency else "",
+            cb.get_status_display(),
+            str(cb.journal_entry_id or ""),
+        ]
+        for cb in qs.order_by("-period_start", "-number").iterator(chunk_size=500)
+    )
     return csv_export_response(
         filename="asset_space_chargebacks.csv",
         headers=[
@@ -185,6 +181,9 @@ def asset_space_chargeback_export_csv(request):
 def asset_space_chargeback_create(request):
     """Create a space chargeback / occupancy coordination entry with optional ?facility_space= prefill."""
     tenant = getattr(request, "tenant", None)
+    if tenant is None:
+        messages.error(request, "An active tenant workspace is required to create a space chargeback.")
+        return redirect("assets:asset_space_chargeback_list")
     initial = {}
     space_pk = parse_pos_int(request.GET.get("facility_space"))
     if space_pk is not None and tenant is not None:
@@ -259,15 +258,20 @@ def asset_space_chargeback_detail(request, pk):
         and chargeback.journal_entry_id is None
         and chargeback.status == "approved"
     )
+    can_dispute = chargeback.journal_entry_id is None and (
+        chargeback.status == "pending_approval"
+        or (chargeback.status == "approved" and admin_user)
+    )
     return render(
         request,
         "assets/spacefacilityasset/asset_space_chargeback/detail.html",
         {
             "chargeback": chargeback,
             "can_edit": can_edit,
-            "can_delete": can_edit,
+            "can_delete": admin_user and can_edit,
             "can_approve": can_approve,
             "can_post_gl": can_post_gl,
+            "can_dispute": can_dispute,
         },
     )
 
@@ -275,19 +279,21 @@ def asset_space_chargeback_detail(request, pk):
 @login_required
 def asset_space_chargeback_edit(request, pk):
     """Edit a draft or disputed space chargeback."""
-    chargeback = assets_object(request, AssetSpaceChargeback, pk)
-    if not chargeback.can_edit or chargeback.journal_entry_id is not None:
-        messages.error(
-            request,
-            f"Chargeback {chargeback.number} ({chargeback.get_status_display()}) cannot be edited.",
-        )
-        return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
-
     tenant = getattr(request, "tenant", None)
     if request.method == "POST":
-        form = AssetSpaceChargebackForm(request.POST, instance=chargeback, tenant=tenant)
-        if form.is_valid():
-            with transaction.atomic():
+        with transaction.atomic():
+            chargeback = get_object_or_404(
+                assets_scope(AssetSpaceChargeback.objects.select_for_update(), request),
+                pk=pk,
+            )
+            if not chargeback.can_edit or chargeback.journal_entry_id is not None:
+                messages.error(
+                    request,
+                    f"Chargeback {chargeback.number} ({chargeback.get_status_display()}) cannot be edited.",
+                )
+                return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
+            form = AssetSpaceChargebackForm(request.POST, instance=chargeback, tenant=tenant)
+            if form.is_valid():
                 chargeback = form.save()
                 write_audit_log(
                     request.user,
@@ -299,9 +305,16 @@ def asset_space_chargeback_edit(request, pk):
                     },
                     tenant=tenant,
                 )
-            messages.success(request, f"Space chargeback {chargeback.number} updated.")
-            return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
+                messages.success(request, f"Space chargeback {chargeback.number} updated.")
+                return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
     else:
+        chargeback = assets_object(request, AssetSpaceChargeback, pk)
+        if not chargeback.can_edit or chargeback.journal_entry_id is not None:
+            messages.error(
+                request,
+                f"Chargeback {chargeback.number} ({chargeback.get_status_display()}) cannot be edited.",
+            )
+            return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
         form = AssetSpaceChargebackForm(instance=chargeback, tenant=tenant)
 
     return render(
@@ -317,20 +330,23 @@ def asset_space_chargeback_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_space_chargeback_delete(request, pk):
-    """Delete an unposted draft or disputed space chargeback."""
-    chargeback = assets_object(request, AssetSpaceChargeback, pk)
-    if not chargeback.can_edit or chargeback.journal_entry_id is not None:
-        messages.error(
-            request,
-            f"Chargeback {chargeback.number} ({chargeback.get_status_display()}) cannot be deleted.",
-        )
-        return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
-
-    number = chargeback.number
+    """Delete an unposted draft or disputed space chargeback (tenant admin only)."""
     try:
         with transaction.atomic():
+            chargeback = get_object_or_404(
+                assets_scope(AssetSpaceChargeback.objects.select_for_update(), request),
+                pk=pk,
+            )
+            if not chargeback.can_edit or chargeback.journal_entry_id is not None:
+                messages.error(
+                    request,
+                    f"Chargeback {chargeback.number} ({chargeback.get_status_display()}) cannot be deleted.",
+                )
+                return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
+            number = chargeback.number
             write_audit_log(
                 request.user,
                 chargeback,
@@ -340,7 +356,7 @@ def asset_space_chargeback_delete(request, pk):
             )
             chargeback.delete()
     except ProtectedError:
-        messages.error(request, f"Cannot delete {number} because linked records depend on it.")
+        messages.error(request, f"Cannot delete chargeback because linked records depend on it.")
         return redirect("assets:asset_space_chargeback_detail", pk=pk)
 
     messages.success(request, f"Space chargeback {number} deleted.")
@@ -537,7 +553,7 @@ def asset_space_chargeback_post_gl(request, pk):
 @login_required
 @require_POST
 def asset_space_chargeback_dispute(request, pk):
-    """Flag an unposted pending or approved chargeback as Disputed."""
+    """Flag an unposted pending chargeback (or approved by admin) as Disputed."""
     with transaction.atomic():
         chargeback = get_object_or_404(
             assets_scope(AssetSpaceChargeback.objects.select_for_update(), request),
@@ -546,14 +562,22 @@ def asset_space_chargeback_dispute(request, pk):
         if chargeback.journal_entry_id is not None:
             messages.error(request, f"Chargeback {chargeback.number} is already posted to GL and cannot be disputed.")
             return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
+        if chargeback.status == "approved" and not is_tenant_admin_user(request.user):
+            raise PermissionDenied("Only a workspace administrator can dispute an approved chargeback.")
         if chargeback.status not in ("pending_approval", "approved"):
             messages.error(
                 request,
                 f"Chargeback {chargeback.number} cannot be disputed from {chargeback.get_status_display()}.",
             )
             return redirect("assets:asset_space_chargeback_detail", pk=chargeback.pk)
+        was_approved = chargeback.status == "approved"
         chargeback.status = "disputed"
-        chargeback.save(update_fields=["status", "updated_at"])
+        update_fields = ["status", "updated_at"]
+        if was_approved:
+            chargeback.approved_by = None
+            chargeback.approved_at = None
+            update_fields.extend(["approved_by", "approved_at"])
+        chargeback.save(update_fields=update_fields)
         write_audit_log(
             request.user,
             chargeback,
