@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load asset_analytics_tags %}
 
 {% block title %}{{ scenario.number }} — {{ scenario.name }} — What-If Scenario — NavERP{% endblock %}
 
@@ -93,21 +94,21 @@
         <div class="stat-icon blue"><i data-lucide="dollar-sign"></i></div>
         <div class="stat-body">
             <div class="stat-label">Simulated CapEx Total</div>
-            <div class="stat-value">${{ scenario.simulated_capex_total|floatformat:"2g" }}</div>
+            <div class="stat-value">{% fmt_money scenario.simulated_capex_total scenario.currency %}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="piggy-bank"></i></div>
         <div class="stat-body">
             <div class="stat-label">Projected OpEx Savings</div>
-            <div class="stat-value">${{ scenario.opex_savings_amount|floatformat:"2g" }}</div>
+            <div class="stat-value">{% fmt_money scenario.opex_savings_amount scenario.currency %}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
         <div class="stat-body">
             <div class="stat-label">Net Present Value (NPV)</div>
-            <div class="stat-value">${{ scenario.net_present_value|floatformat:"2g" }}</div>
+            <div class="stat-value">{% fmt_money scenario.net_present_value scenario.currency %}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -144,8 +145,12 @@
                     <dd>{{ scenario.scope_category.name|default:"All Categories" }}</dd>
                 </div>
                 <div class="detail-item">
+                    <dt>Currency</dt>
+                    <dd>{{ scenario.currency.code|default:"Default" }}</dd>
+                </div>
+                <div class="detail-item">
                     <dt>Annual CapEx Limit</dt>
-                    <dd class="font-mono">${{ scenario.annual_capex_budget_limit|floatformat:"2g" }}</dd>
+                    <dd class="font-mono">{% fmt_money scenario.annual_capex_budget_limit scenario.currency %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Discount / Inflation</dt>
@@ -190,20 +195,20 @@
                     <tbody>
                         <tr>
                             <td>Cumulative Capital Expenditure (CapEx)</td>
-                            <td class="text-right font-mono">${{ scenario.baseline_capex_total|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_capex_total|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono">${{ scenario.capex_variance_amount|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono">{% fmt_money scenario.baseline_capex_total scenario.currency %}</td>
+                            <td class="text-right font-mono font-semibold">{% fmt_money scenario.simulated_capex_total scenario.currency %}</td>
+                            <td class="text-right font-mono">{% fmt_money scenario.capex_variance_amount scenario.currency %}</td>
                         </tr>
                         <tr>
                             <td>Maintenance Operating Spend (OpEx)</td>
-                            <td class="text-right font-mono">${{ scenario.baseline_opex_maintenance|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_opex_maintenance|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">${{ scenario.opex_savings_amount|floatformat:"2g" }} saved</td>
+                            <td class="text-right font-mono">{% fmt_money scenario.baseline_opex_maintenance scenario.currency %}</td>
+                            <td class="text-right font-mono font-semibold">{% fmt_money scenario.simulated_opex_maintenance scenario.currency %}</td>
+                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money scenario.opex_savings_amount scenario.currency %} saved</td>
                         </tr>
                         <tr>
                             <td>Deferred Maintenance Backlog</td>
-                            <td class="text-right font-mono">${{ scenario.baseline_deferred_backlog|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_deferred_backlog|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono">{% fmt_money scenario.baseline_deferred_backlog scenario.currency %}</td>
+                            <td class="text-right font-mono font-semibold">{% fmt_money scenario.simulated_deferred_backlog scenario.currency %}</td>
                             <td class="text-right text-xs text-slate-500 dark:text-slate-400">Backlog impact</td>
                         </tr>
                         <tr>
@@ -220,8 +225,8 @@
                         </tr>
                         <tr>
                             <td>Open Financial Risk Exposure</td>
-                            <td class="text-right font-mono">${{ scenario.baseline_risk_exposure|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_risk_exposure|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono">{% fmt_money scenario.baseline_risk_exposure scenario.currency %}</td>
+                            <td class="text-right font-mono font-semibold">{% fmt_money scenario.simulated_risk_exposure scenario.currency %}</td>
                             <td class="text-right text-xs text-slate-500 dark:text-slate-400">Risk mitigation</td>
                         </tr>
                     </tbody>
