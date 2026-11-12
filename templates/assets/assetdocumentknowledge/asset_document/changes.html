@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Version Control &amp; Change Management — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_document_list' %}">Asset Documentation Repository</a>
+            <span>/</span>
+            <span>Version Control &amp; Change Management</span>
+        </div>
+        <h1 class="page-title">Version Control &amp; Change Management</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_document_list' %}" class="btn btn-outline">
+            <i data-lucide="folder-kanban" class="w-4 h-4 me-1"></i> Full Repository
+        </a>
+        <a href="{% url 'assets:asset_document_export_csv' %}?q={{ request.GET.q|urlencode }}&document_class={{ request.GET.document_class|urlencode }}&change_type={{ request.GET.change_type|urlencode }}&status={{ request.GET.status|urlencode }}&operational_asset={{ request.GET.operational_asset|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_document_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Revision / Change
+        </a>
+    </div>
+</div>
+
+<!-- Change Queue KPIs -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="git-branch"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Revisions &amp; Changes</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="file-edit"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Draft Revisions</div>
+            <div class="stat-value">{{ draft_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="eye"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Awaiting Review / Release</div>
+            <div class="stat-value">{{ in_review_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="lock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Currently Checked Out</div>
+            <div class="stat-value">{{ checked_out_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div>
+                <label for="adoc-chg-q" class="sr-only">Search change queue</label>
+                <input id="adoc-chg-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, title, ECR, rev..." class="form-input" />
+            </div>
+            <div>
+                <label for="adoc-chg-type" class="sr-only">Change Type</label>
+                <select id="adoc-chg-type" name="change_type" class="form-select">
+                    <option value="">All Change Types</option>
+                    {% for val, label in change_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.change_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-chg-status" class="sr-only">Status</label>
+                <select id="adoc-chg-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-chg-class" class="sr-only">Document Class</label>
+                <select id="adoc-chg-class" name="document_class" class="form-select">
+                    <option value="">All Classes</option>
+                    {% for val, label in class_choices %}
+                    <option value="{{ val }}" {% if request.GET.document_class == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-chg-asset" class="sr-only">Operational Asset</label>
+                <select id="adoc-chg-asset" name="operational_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for ast in assets_list %}
+                    <option value="{{ ast.pk }}" {% if request.GET.operational_asset == ast.pk|stringformat:"d" %}selected{% endif %}>{{ ast }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_document_change_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Change Control Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Doc #</th>
+                    <th>Title &amp; Redline Summary</th>
+                    <th>Revision Lineage</th>
+                    <th>ECR &amp; Change Type</th>
+                    <th>Checkout Lock</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in documents %}
+                <tr>
+                    <td class="font-mono text-xs whitespace-nowrap">
+                        <a href="{% url 'assets:asset_document_detail' item.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">{{ item.title }}</div>
+                        {% if item.redline_summary %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ item.redline_summary|truncatewords:14 }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm whitespace-nowrap">
+                        <span class="badge {% if item.is_current_revision %}badge-green{% else %}badge-info{% endif %}">
+                            {{ item.revision_label }} (#{{ item.revision_sequence }})
+                        </span>
+                        {% if item.supersedes %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Supersedes <a href="{% url 'assets:asset_document_detail' item.supersedes.pk %}" class="underline">{{ item.supersedes.number }}</a>
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        <div>{{ item.get_change_type_display }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ item.change_request_ref|default:"—" }}</div>
+                    </td>
+                    <td class="text-sm whitespace-nowrap">
+                        {% if item.checked_out_by %}
+                        <span class="badge badge-amber">{{ item.checked_out_by.username }}</span>
+                        {% else %}
+                        <span class="text-xs text-slate-500 dark:text-slate-400">Available</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'assets:asset_document_detail' item.pk %}" class="btn btn-icon" title="Review Revision" aria-label="View {{ item.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if not item.is_locked %}
+                            <a href="{% url 'assets:asset_document_edit' item.pk %}" class="btn btn-icon" title="Edit Revision" aria-label="Edit {{ item.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="git-branch" class="w-12 h-12 text-slate-400 dark:text-slate-500 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">No Active Document Changes Found</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Revisions, field redlines, and ECO change packages appear here when created or checked out.</p>
+                            <a href="{% url 'assets:asset_document_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Revision
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }} changes</span>
+
+        {% if page_obj.has_previous %}
+        <a aria-label="Previous page" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.change_type %}&change_type={{ request.GET.change_type|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.document_class %}&document_class={{ request.GET.document_class|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
+
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a aria-label="Next page" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.change_type %}&change_type={{ request.GET.change_type|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.document_class %}&document_class={{ request.GET.document_class|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
