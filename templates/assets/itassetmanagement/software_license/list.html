@@ -176,7 +176,7 @@
                     <td class="text-xs">
                         <div>Ren: {{ lic.renewal_date|date:"Y-m-d"|default:"—" }}</div>
                         {% if lic.vendor_eol_date %}
-                        <div class="text-slate-500">EOL: {{ lic.vendor_eol_date|date:"Y-m-d" }}</div>
+                        <div class="text-slate-500 dark:text-slate-400">EOL: {{ lic.vendor_eol_date|date:"Y-m-d" }}</div>
                         {% endif %}
                     </td>
                     <td>
