@@ -72,6 +72,10 @@ from apps.assets.models import (
     AssetReplacementPlan,
     AssetPortfolioScenario,
     AssetExecutiveScorecard,
+    ItHardwareAsset,
+    SoftwareLicense,
+    CloudAssetSubscription,
+    CmdbRelationship,
 )
 
 
@@ -3911,3 +3915,337 @@ def analytics_scorecard_b(
     scorecard.full_clean()
     scorecard.save()
     return scorecard
+
+
+# ---------------------------------------------------------------------------
+# Module 11.18 — IT Asset Management (ITAM)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def it_hardware_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    location_a,
+    vendor_party_a,
+    currency_usd,
+    admin_user,
+):
+    today = timezone.localdate()
+    hw = ItHardwareAsset(
+        tenant=tenant_a,
+        hostname="acme-app-srv01",
+        fqdn="acme-app-srv01.acme.local",
+        device_class="physical_server",
+        serial_number="SN-ACME-ITHW-001",
+        asset_tag_code="IT-SRV-001",
+        manufacturer="Dell",
+        model_name="PowerEdge R760",
+        operating_system="Ubuntu",
+        os_version="24.04 LTS",
+        environment="production",
+        criticality="high",
+        mdm_enrolled=True,
+        mdm_platform="Microsoft Intune",
+        disk_encryption_status="luks_encrypted",
+        status="deployed",
+        commissioned_date=today - timedelta(days=365),
+        assigned_date=today - timedelta(days=360),
+        vendor_eos_date=today + timedelta(days=365),
+        vendor_eol_date=today + timedelta(days=730),
+        refresh_cycle_months=48,
+        estimated_refresh_cost=Decimal("8500.00"),
+        currency=currency_usd,
+        sanitization_required=True,
+        sanitization_method="none",
+        sanitization_status="pending_wipe",
+        org_unit=org_unit_a,
+        location=location_a,
+        custodian_party=vendor_party_a,
+        vendor_party=vendor_party_a,
+        owner=admin_user,
+    )
+    hw.full_clean()
+    hw.save()
+    return hw
+
+
+@pytest.fixture
+def it_hardware_b(
+    db,
+    tenant_b,
+    org_unit_b,
+    location_b,
+    vendor_party_b,
+    currency_usd,
+    admin_b,
+):
+    today = timezone.localdate()
+    hw = ItHardwareAsset(
+        tenant=tenant_b,
+        hostname="globex-lap-001",
+        fqdn="globex-lap-001.globex.local",
+        device_class="laptop",
+        serial_number="SN-GLOBEX-ITHW-001",
+        asset_tag_code="IT-LAP-001",
+        manufacturer="Apple",
+        model_name="MacBook Pro 14",
+        operating_system="macOS",
+        os_version="15.3",
+        environment="corporate_enduser",
+        criticality="medium",
+        mdm_enrolled=True,
+        mdm_platform="Jamf Pro",
+        disk_encryption_status="bitlocker_filevault",
+        status="staged_in_stock",
+        commissioned_date=today - timedelta(days=180),
+        vendor_eos_date=today + timedelta(days=540),
+        vendor_eol_date=today + timedelta(days=900),
+        refresh_cycle_months=36,
+        estimated_refresh_cost=Decimal("2400.00"),
+        currency=currency_usd,
+        sanitization_required=True,
+        sanitization_method="none",
+        sanitization_status="pending_wipe",
+        org_unit=org_unit_b,
+        location=location_b,
+        custodian_party=vendor_party_b,
+        vendor_party=vendor_party_b,
+        owner=admin_b,
+    )
+    hw.full_clean()
+    hw.save()
+    return hw
+
+
+@pytest.fixture
+def software_license_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    vendor_party_a,
+    currency_usd,
+    admin_user,
+):
+    today = timezone.localdate()
+    lic = SoftwareLicense(
+        tenant=tenant_a,
+        software_name="Microsoft 365 E5",
+        publisher_name="Microsoft",
+        product_sku="M365-E5-ENT",
+        version_edition="Enterprise 2026",
+        software_category="productivity_suite",
+        license_type="subscription_term",
+        license_metric="per_user",
+        agreement_number="EA-ACME-2026-01",
+        license_key_ref="MS365-****-9X2K",
+        entitled_quantity=100,
+        allocated_quantity=95,
+        active_used_quantity=90,
+        reclaimable_inactive_count=0,
+        unit_license_cost=Decimal("420.00"),
+        total_annual_spend=Decimal("42000.00"),
+        currency=currency_usd,
+        effective_date=today - timedelta(days=180),
+        renewal_date=today + timedelta(days=185),
+        vendor_eol_date=today + timedelta(days=730),
+        auto_renew=True,
+        status="active_compliant",
+        publisher_party=vendor_party_a,
+        org_unit=org_unit_a,
+        license_owner=admin_user,
+    )
+    lic.full_clean()
+    lic.save()
+    return lic
+
+
+@pytest.fixture
+def software_license_b(
+    db,
+    tenant_b,
+    org_unit_b,
+    vendor_party_b,
+    currency_usd,
+    admin_b,
+):
+    today = timezone.localdate()
+    lic = SoftwareLicense(
+        tenant=tenant_b,
+        software_name="JetBrains All Products Pack",
+        publisher_name="JetBrains",
+        product_sku="JB-ALL-ENT",
+        version_edition="2026.1",
+        software_category="devops_ide",
+        license_type="subscription_term",
+        license_metric="per_user",
+        agreement_number="JB-GLOBEX-2026-01",
+        license_key_ref="JBALL-****-4P7M",
+        entitled_quantity=50,
+        allocated_quantity=45,
+        active_used_quantity=42,
+        reclaimable_inactive_count=0,
+        unit_license_cost=Decimal("289.00"),
+        total_annual_spend=Decimal("14450.00"),
+        currency=currency_usd,
+        effective_date=today - timedelta(days=90),
+        renewal_date=today + timedelta(days=275),
+        vendor_eol_date=today + timedelta(days=730),
+        auto_renew=False,
+        status="active_compliant",
+        publisher_party=vendor_party_b,
+        org_unit=org_unit_b,
+        license_owner=admin_b,
+    )
+    lic.full_clean()
+    lic.save()
+    return lic
+
+
+@pytest.fixture
+def cloud_subscription_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    vendor_party_a,
+    currency_usd,
+    admin_user,
+):
+    today = timezone.localdate()
+    sub = CloudAssetSubscription(
+        tenant=tenant_a,
+        name="AWS Production EKS Cluster",
+        asset_kind="iaas_compute",
+        provider="aws",
+        external_account_id="aws-acct-acme-1001",
+        cloud_resource_id="arn:aws:eks:us-east-1:1001:cluster/prod",
+        cloud_region="us-east-1",
+        environment="production",
+        resource_tags={"env": "prod", "cost_center": "CC-ENG", "owner": "devops"},
+        billing_cadence="monthly",
+        commitment_term="1yr_reserved",
+        monthly_recurring_cost=Decimal("4500.00"),
+        annual_contract_value=Decimal("54000.00"),
+        currency=currency_usd,
+        provisioned_seats=40,
+        active_seats_30d=36,
+        sso_status="sso_enforced",
+        approval_status="sanctioned",
+        renewal_date=today + timedelta(days=180),
+        cancellation_notice_days=30,
+        auto_renew=True,
+        vendor_eol_date=today + timedelta(days=730),
+        status="active",
+        org_unit=org_unit_a,
+        vendor_party=vendor_party_a,
+        business_owner=admin_user,
+        technical_owner=admin_user,
+    )
+    sub.full_clean()
+    sub.save()
+    return sub
+
+
+@pytest.fixture
+def cloud_subscription_b(
+    db,
+    tenant_b,
+    org_unit_b,
+    vendor_party_b,
+    currency_usd,
+    admin_b,
+):
+    today = timezone.localdate()
+    sub = CloudAssetSubscription(
+        tenant=tenant_b,
+        name="Azure Core App Service",
+        asset_kind="paas_database",
+        provider="azure",
+        external_account_id="az-sub-globex-2001",
+        cloud_resource_id="/subscriptions/2001/resourceGroups/prod/providers/Microsoft.Web/sites/core",
+        cloud_region="eastus",
+        environment="production",
+        resource_tags={"env": "prod", "cost_center": "CC-OPS", "owner": "platform"},
+        billing_cadence="annual",
+        commitment_term="annual_contract",
+        monthly_recurring_cost=Decimal("2200.00"),
+        annual_contract_value=Decimal("26400.00"),
+        currency=currency_usd,
+        provisioned_seats=25,
+        active_seats_30d=22,
+        sso_status="sso_enforced",
+        approval_status="sanctioned",
+        renewal_date=today + timedelta(days=200),
+        cancellation_notice_days=30,
+        auto_renew=True,
+        vendor_eol_date=today + timedelta(days=730),
+        status="active",
+        org_unit=org_unit_b,
+        vendor_party=vendor_party_b,
+        business_owner=admin_b,
+        technical_owner=admin_b,
+    )
+    sub.full_clean()
+    sub.save()
+    return sub
+
+
+@pytest.fixture
+def cmdb_relationship_a(
+    db,
+    tenant_a,
+    software_license_a,
+    it_hardware_a,
+    admin_user,
+):
+    rel = CmdbRelationship(
+        tenant=tenant_a,
+        source_ci_type="software_license",
+        source_software=software_license_a,
+        relationship_type="runs_on",
+        target_ci_type="it_hardware",
+        target_hardware=it_hardware_a,
+        environment="production",
+        criticality="tier_2_business_important",
+        impact_severity="degraded_performance",
+        is_single_point_of_failure=False,
+        verified_on=timezone.localdate(),
+        verified_by=admin_user,
+        status="active",
+        owner=admin_user,
+        blast_radius_notes="Primary productivity license suite running on Acme app server.",
+    )
+    rel.full_clean()
+    rel.save()
+    return rel
+
+
+@pytest.fixture
+def cmdb_relationship_b(
+    db,
+    tenant_b,
+    software_license_b,
+    it_hardware_b,
+    admin_b,
+):
+    rel = CmdbRelationship(
+        tenant=tenant_b,
+        source_ci_type="software_license",
+        source_software=software_license_b,
+        relationship_type="runs_on",
+        target_ci_type="it_hardware",
+        target_hardware=it_hardware_b,
+        environment="production",
+        criticality="tier_3_operational",
+        impact_severity="informational",
+        is_single_point_of_failure=False,
+        verified_on=timezone.localdate(),
+        verified_by=admin_b,
+        status="active",
+        owner=admin_b,
+        blast_radius_notes="Globex developer IDE license deployed on corporate endpoint.",
+    )
+    rel.full_clean()
+    rel.save()
+    return rel
