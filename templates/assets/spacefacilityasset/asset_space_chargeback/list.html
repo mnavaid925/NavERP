@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Tenant &amp; Occupancy Coordination — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Space &amp; Facility Asset Management</span>
+            <span>/</span>
+            <span>Tenant &amp; Occupancy Coordination</span>
+        </div>
+        <h1 class="page-title">Tenant &amp; Occupancy Coordination</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_space_chargeback_export_csv' %}?q={{ request.GET.q|urlencode }}&coordination_type={{ request.GET.coordination_type|urlencode }}&allocation_basis={{ request.GET.allocation_basis|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&charged_org_unit={{ request.GET.charged_org_unit|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_space_chargeback_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Space Chargeback
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="receipt"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Chargebacks</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Approved (Ready for GL)</div>
+            <div class="stat-value">{{ approved_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="book-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Posted to GL / Invoiced</div>
+            <div class="stat-value">{{ posted_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Net Recovery</div>
+            <div class="stat-value text-base">{{ total_net_chargeback|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label for="afcb-filter-q" class="sr-only">Search chargebacks</label>
+                <input id="afcb-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, title, space, tenant..." class="form-input" />
+            </div>
+            <div>
+                <label for="afcb-filter-type" class="sr-only">Coordination Type</label>
+                <select id="afcb-filter-type" name="coordination_type" class="form-select">
+                    <option value="">All Coordination Types</option>
+                    {% for val, label in coordination_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.coordination_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afcb-filter-basis" class="sr-only">Allocation Basis</label>
+                <select id="afcb-filter-basis" name="allocation_basis" class="form-select">
+                    <option value="">All Allocation Bases</option>
+                    {% for val, label in basis_choices %}
+                    <option value="{{ val }}" {% if request.GET.allocation_basis == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afcb-filter-status" class="sr-only">Status</label>
+                <select id="afcb-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afcb-filter-space" class="sr-only">Facility Space</label>
+                <select id="afcb-filter-space" name="facility_space" class="form-select">
+                    <option value="">All Spaces</option>
+                    {% for sp in spaces %}
+                    <option value="{{ sp.pk }}" {% if request.GET.facility_space == sp.pk|stringformat:"d" %}selected{% endif %}>{{ sp.code }} — {{ sp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afcb-filter-org" class="sr-only">Charged Org Unit</label>
+                <select id="afcb-filter-org" name="charged_org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.charged_org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2 md:col-span-2">
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{% url 'assets:asset_space_chargeback_list' %}" class="btn btn-outline">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Chargeback #</th>
+                    <th>Title &amp; Type</th>
+                    <th>Space &amp; Occupant</th>
+                    <th>Period</th>
+                    <th>Net Chargeback</th>
+                    <th>GL Entry</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cb in chargebacks %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ cb.number }}</a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800 dark:text-slate-100">{{ cb.title }}</div>
+                        <div class="text-xs text-muted">{{ cb.get_coordination_type_display }} &middot; {{ cb.get_allocation_basis_display }}</div>
+                    </td>
+                    <td class="text-xs">
+                        <div>
+                            <a href="{% url 'assets:asset_facility_space_detail' cb.facility_space.pk %}" class="text-blue-600 hover:underline font-medium">{{ cb.facility_space.code }}</a>
+                        </div>
+                        <div class="text-muted">
+                            {% if cb.charged_org_unit %}{{ cb.charged_org_unit.name }}{% endif %}
+                            {% if cb.occupant_party %}{% if cb.charged_org_unit %} / {% endif %}{{ cb.occupant_party.name }}{% endif %}
+                        </div>
+                    </td>
+                    <td class="text-xs font-mono">
+                        {{ cb.period_start|date:"Y-m-d" }} &rarr; {{ cb.period_end|date:"Y-m-d" }}
+                    </td>
+                    <td class="font-mono text-xs font-semibold">
+                        {% if cb.currency %}{{ cb.currency.code }} {% endif %}{{ cb.net_chargeback_amount|floatformat:2|intcomma }}
+                    </td>
+                    <td class="font-mono text-xs">
+                        {% if cb.journal_entry %}
+                        <span class="badge badge-green">{{ cb.journal_entry.number }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td><span class="badge {{ cb.status_badge_class }}">{{ cb.get_status_display }}</span></td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                        {% if cb.can_edit and not cb.journal_entry %}
+                        <a href="{% url 'assets:asset_space_chargeback_edit' cb.pk %}" class="btn btn-icon btn-outline" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+                        <form method="post" action="{% url 'assets:asset_space_chargeback_delete' cb.pk %}" class="inline" onsubmit="return confirm('Delete space chargeback {{ cb.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="receipt" class="w-8 h-8 mx-auto mb-2 text-muted"></i>
+                            <p class="font-medium">No space chargebacks found</p>
+                            <p class="text-xs text-muted mt-1">Create departmental chargebacks, CAM/utility recoveries, or leasehold TI amortizations.</p>
+                            <a href="{% url 'assets:asset_space_chargeback_create' %}" class="btn btn-primary mt-3">New Space Chargeback</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="text-xs text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&coordination_type={{ request.GET.coordination_type|urlencode }}&allocation_basis={{ request.GET.allocation_basis|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&charged_org_unit={{ request.GET.charged_org_unit|urlencode }}" class="btn btn-outline">Previous</a>
+            {% else %}
+            <span class="btn btn-outline opacity-50 pointer-events-none">Previous</span>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&coordination_type={{ request.GET.coordination_type|urlencode }}&allocation_basis={{ request.GET.allocation_basis|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&charged_org_unit={{ request.GET.charged_org_unit|urlencode }}" class="btn btn-outline">Next</a>
+            {% else %}
+            <span class="btn btn-outline opacity-50 pointer-events-none">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
