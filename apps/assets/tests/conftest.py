@@ -1,4 +1,5 @@
 """Shared test contract fixtures for apps/assets (Module 11)."""
+from datetime import timedelta
 from decimal import Decimal
 import pytest
 from django.utils import timezone
@@ -63,6 +64,10 @@ from apps.assets.models import (
     AssetTelemetryStream,
     AssetGlSyncBatch,
     AssetGisMapping,
+    AssetDocument,
+    AssetOperatingProcedure,
+    AssetOperatorCertification,
+    AssetKnowledgeArticle,
 )
 
 
@@ -3072,3 +3077,372 @@ def integration_gis_mapping_b(
     mapping.save()
     return mapping
 
+
+
+# ===== 11.16 Document & Knowledge Management =====
+
+
+@pytest.fixture
+def adk_document_a(
+    db,
+    tenant_a,
+    operational_asset_a,
+    category_root_a,
+    org_unit_a,
+    admin_user,
+):
+    doc = AssetDocument(
+        tenant=tenant_a,
+        title="CNC Lathe OEM Service Manual",
+        document_class="manual",
+        access_classification="public_floor",
+        revision_label="Rev A",
+        revision_sequence=1,
+        is_current_revision=True,
+        change_type="new_issue",
+        status="approved",
+        owner=admin_user,
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+        operational_asset=operational_asset_a,
+        asset_category=category_root_a,
+        org_unit=org_unit_a,
+        effective_date=timezone.localdate(),
+    )
+    doc.full_clean()
+    doc.save()
+    return doc
+
+
+@pytest.fixture
+def adk_document_draft_a(db, tenant_a, operational_asset_a, admin_user):
+    doc = AssetDocument(
+        tenant=tenant_a,
+        title="CNC Hydraulic Schematic Draft",
+        document_class="schematic_pid",
+        access_classification="internal_tech",
+        revision_label="Rev A",
+        revision_sequence=1,
+        is_current_revision=True,
+        change_type="drawing_redline",
+        status="draft",
+        owner=admin_user,
+        operational_asset=operational_asset_a,
+    )
+    doc.full_clean()
+    doc.save()
+    return doc
+
+
+@pytest.fixture
+def adk_document_restricted_a(db, tenant_a, operational_asset_a, admin_user):
+    doc = AssetDocument(
+        tenant=tenant_a,
+        title="Restricted Firmware & Calibration Dossier",
+        document_class="inspection_dossier",
+        access_classification="restricted_eng",
+        revision_label="Rev A",
+        revision_sequence=1,
+        is_current_revision=True,
+        change_type="spec_update",
+        status="approved",
+        owner=admin_user,
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+        operational_asset=operational_asset_a,
+    )
+    doc.full_clean()
+    doc.save()
+    return doc
+
+
+@pytest.fixture
+def adk_document_b(
+    db,
+    tenant_b,
+    operational_asset_b,
+    category_root_b,
+    org_unit_b,
+    admin_b,
+):
+    doc = AssetDocument(
+        tenant=tenant_b,
+        title="Globex Forklift Manual",
+        document_class="manual",
+        access_classification="public_floor",
+        revision_label="Rev A",
+        revision_sequence=1,
+        is_current_revision=True,
+        change_type="new_issue",
+        status="approved",
+        owner=admin_b,
+        approved_by=admin_b,
+        approved_at=timezone.now(),
+        operational_asset=operational_asset_b,
+        asset_category=category_root_b,
+        org_unit=org_unit_b,
+        effective_date=timezone.localdate(),
+    )
+    doc.full_clean()
+    doc.save()
+    return doc
+
+
+@pytest.fixture
+def adk_procedure_a(
+    db,
+    tenant_a,
+    operational_asset_a,
+    category_root_a,
+    maintenance_schedule_a,
+    adk_document_a,
+    admin_user,
+):
+    proc = AssetOperatingProcedure(
+        tenant=tenant_a,
+        title="CNC Main Breaker LOTO Procedure",
+        procedure_type="loto_isolation",
+        safety_level="high_hazard_loto",
+        revision_label="Rev 1.0",
+        loto_required=True,
+        required_qualification_code="LOTO-01",
+        estimated_duration_minutes=45,
+        review_cycle_months=12,
+        effective_date=timezone.localdate(),
+        next_review_date=timezone.localdate() + timedelta(days=180),
+        status="active",
+        author=admin_user,
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+        operational_asset=operational_asset_a,
+        asset_category=category_root_a,
+        maintenance_schedule=maintenance_schedule_a,
+        primary_document=adk_document_a,
+    )
+    proc.full_clean()
+    proc.save()
+    return proc
+
+
+@pytest.fixture
+def adk_procedure_draft_a(db, tenant_a, operational_asset_a, admin_user):
+    proc = AssetOperatingProcedure(
+        tenant=tenant_a,
+        title="Spindle Alignment PM SOP Draft",
+        procedure_type="pm_protocol",
+        safety_level="standard",
+        revision_label="Rev 1.0",
+        loto_required=False,
+        status="draft",
+        author=admin_user,
+        operational_asset=operational_asset_a,
+    )
+    proc.full_clean()
+    proc.save()
+    return proc
+
+
+@pytest.fixture
+def adk_procedure_b(
+    db,
+    tenant_b,
+    operational_asset_b,
+    category_root_b,
+    maintenance_schedule_b,
+    adk_document_b,
+    admin_b,
+):
+    proc = AssetOperatingProcedure(
+        tenant=tenant_b,
+        title="Globex Yard LOTO Protocol",
+        procedure_type="loto_isolation",
+        safety_level="high_hazard_loto",
+        revision_label="Rev 1.0",
+        loto_required=True,
+        status="active",
+        author=admin_b,
+        approved_by=admin_b,
+        approved_at=timezone.now(),
+        operational_asset=operational_asset_b,
+        asset_category=category_root_b,
+        maintenance_schedule=maintenance_schedule_b,
+        primary_document=adk_document_b,
+    )
+    proc.full_clean()
+    proc.save()
+    return proc
+
+
+@pytest.fixture
+def adk_certification_a(
+    db,
+    tenant_a,
+    vendor_party_a,
+    admin_user,
+    operational_asset_a,
+    adk_procedure_a,
+):
+    cert = AssetOperatorCertification(
+        tenant=tenant_a,
+        title="LOTO Authorized CNC Technician",
+        qualification_code="LOTO-01",
+        qualification_type="loto_authorized",
+        proficiency_level="qualified_operator",
+        issued_date=timezone.localdate() - timedelta(days=30),
+        expires_on=timezone.localdate() + timedelta(days=180),
+        renewal_lead_days=30,
+        status="active",
+        operator_party=vendor_party_a,
+        operator_user=admin_user,
+        operational_asset=operational_asset_a,
+        operating_procedure=adk_procedure_a,
+    )
+    cert.full_clean()
+    cert.save()
+    return cert
+
+
+@pytest.fixture
+def adk_certification_pending_a(
+    db,
+    tenant_a,
+    vendor_party_a,
+    member_user,
+    operational_asset_a,
+):
+    cert = AssetOperatorCertification(
+        tenant=tenant_a,
+        title="CNC Trainee Qualification Pending",
+        qualification_code="OP-TRAINEE",
+        qualification_type="equipment_operator",
+        proficiency_level="trainee_supervised",
+        issued_date=timezone.localdate(),
+        expires_on=timezone.localdate() + timedelta(days=365),
+        renewal_lead_days=30,
+        status="pending",
+        operator_party=vendor_party_a,
+        operator_user=member_user,
+        operational_asset=operational_asset_a,
+    )
+    cert.full_clean()
+    cert.save()
+    return cert
+
+
+@pytest.fixture
+def adk_certification_b(
+    db,
+    tenant_b,
+    vendor_party_b,
+    admin_b,
+    operational_asset_b,
+    adk_procedure_b,
+):
+    cert = AssetOperatorCertification(
+        tenant=tenant_b,
+        title="Globex LOTO Authorization",
+        qualification_code="LOTO-B1",
+        qualification_type="loto_authorized",
+        proficiency_level="qualified_operator",
+        issued_date=timezone.localdate() - timedelta(days=15),
+        expires_on=timezone.localdate() + timedelta(days=180),
+        renewal_lead_days=30,
+        status="active",
+        operator_party=vendor_party_b,
+        operator_user=admin_b,
+        operational_asset=operational_asset_b,
+        operating_procedure=adk_procedure_b,
+    )
+    cert.full_clean()
+    cert.save()
+    return cert
+
+
+@pytest.fixture
+def adk_article_a(
+    db,
+    tenant_a,
+    operational_asset_a,
+    failure_mode_a,
+    incident_a,
+    adk_document_a,
+    adk_procedure_a,
+    admin_user,
+):
+    article = AssetKnowledgeArticle(
+        tenant=tenant_a,
+        title="Spindle Bearing Overheating RCA",
+        article_type="rca_post_incident",
+        rca_methodology="five_whys",
+        severity="high",
+        symptom_problem="Spindle temperature exceeded 85C under sustained load.",
+        root_cause_summary="Clogged coolant return strainer starved bearing cooling.",
+        remedy_corrective_action="Flush coolant circuit and install 100-mesh strainer.",
+        preventive_lessons="Add weekly differential-pressure inspection to PM checklist.",
+        downtime_hours_impacted=Decimal("4.50"),
+        recurrence_count=1,
+        tags="spindle,coolant,bearing",
+        status="published",
+        author=admin_user,
+        reviewed_by=admin_user,
+        published_at=timezone.now(),
+        operational_asset=operational_asset_a,
+        failure_mode=failure_mode_a,
+        incident_report=incident_a,
+        related_document=adk_document_a,
+        recommended_procedure=adk_procedure_a,
+    )
+    article.full_clean()
+    article.save()
+    return article
+
+
+@pytest.fixture
+def adk_article_draft_a(db, tenant_a, operational_asset_a, admin_user):
+    article = AssetKnowledgeArticle(
+        tenant=tenant_a,
+        title="Coolant Pump Cavitation Note Draft",
+        article_type="lessons_learned",
+        rca_methodology="problem_cause_remedy",
+        severity="medium",
+        symptom_problem="Intermittent pump pressure ripple during shift startup.",
+        status="draft",
+        author=admin_user,
+        operational_asset=operational_asset_a,
+    )
+    article.full_clean()
+    article.save()
+    return article
+
+
+@pytest.fixture
+def adk_article_b(
+    db,
+    tenant_b,
+    operational_asset_b,
+    failure_mode_b,
+    incident_b,
+    adk_document_b,
+    adk_procedure_b,
+    admin_b,
+):
+    article = AssetKnowledgeArticle(
+        tenant=tenant_b,
+        title="Globex Forklift Mast Seal RCA",
+        article_type="rca_post_incident",
+        rca_methodology="five_whys",
+        severity="medium",
+        symptom_problem="Hydraulic mast weep observed after heavy lift cycle.",
+        status="published",
+        author=admin_b,
+        reviewed_by=admin_b,
+        published_at=timezone.now(),
+        operational_asset=operational_asset_b,
+        failure_mode=failure_mode_b,
+        incident_report=incident_b,
+        related_document=adk_document_b,
+        recommended_procedure=adk_procedure_b,
+    )
+    article.full_clean()
+    article.save()
+    return article
