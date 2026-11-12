@@ -16,7 +16,7 @@ from apps.assets.models.ItAssetManagement.CmdbRelationships import CmdbRelations
 from apps.assets.models.ItAssetManagement.ItHardwareAssets import ItHardwareAsset
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.ItAssetManagement._helpers import (
-    CMDB_REL_SELECT_RELATED,
+    CMDB_REL_EDGE_SELECT_RELATED,
     PAGE_SIZE,
     apply_choice_filter,
     apply_fk_filter,
@@ -29,13 +29,13 @@ from apps.core.utils import write_audit_log
 
 _HW_LIST_SELECT_RELATED = (
     "org_unit",
-    "location",
     "custodian_party",
     "employee_profile__party",
-    "currency",
 )
 
 _HW_DETAIL_SELECT_RELATED = _HW_LIST_SELECT_RELATED + (
+    "location",
+    "currency",
     "operational_asset",
     "fixed_asset",
     "asset_model",
@@ -258,12 +258,12 @@ def it_hardware_asset_detail(request, pk):
     )
     outbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, source_hardware=hardware)
-        .select_related(*CMDB_REL_SELECT_RELATED)
+        .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
         .order_by("-updated_at")
     )
     inbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, target_hardware=hardware)
-        .select_related(*CMDB_REL_SELECT_RELATED)
+        .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
         .order_by("-updated_at")
     )
     return render(
