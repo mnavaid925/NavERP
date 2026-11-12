@@ -97,7 +97,9 @@ def _filter_document_queryset(
     return qs
 
 
-def _build_document_list_context(request, base_qs, filtered_qs):
+def _build_document_list_context(
+    request, base_qs, filtered_qs, include_repo_filters=True
+):
     """Assemble shared KPI, filter dropdown, and paginated context for document lists."""
     today = timezone.localdate()
     paginator = Paginator(filtered_qs, PAGE_SIZE)
@@ -120,7 +122,7 @@ def _build_document_list_context(request, base_qs, filtered_qs):
         draft_count=Count("id", filter=Q(status="draft")),
     )
 
-    return {
+    context = {
         "documents": page_obj,
         "paginator": paginator,
         "page_obj": page_obj,
@@ -136,12 +138,16 @@ def _build_document_list_context(request, base_qs, filtered_qs):
         "change_type_choices": AssetDocument.CHANGE_TYPE_CHOICES,
         "status_choices": AssetDocument.STATUS_CHOICES,
         "assets_list": Asset.objects.filter(tenant=request.tenant).order_by("name"),
-        "categories": AssetCategory.objects.filter(tenant=request.tenant).order_by(
-            "name"
-        ),
-        "org_units": OrgUnit.objects.filter(tenant=request.tenant).order_by("name"),
         "search_query": request.GET.get("q", "").strip(),
     }
+    if include_repo_filters:
+        context["categories"] = AssetCategory.objects.filter(
+            tenant=request.tenant
+        ).order_by("name")
+        context["org_units"] = OrgUnit.objects.filter(
+            tenant=request.tenant
+        ).order_by("name")
+    return context
 
 
 @login_required
@@ -181,7 +187,9 @@ def asset_document_change_list(request):
     filtered_qs = _filter_document_queryset(request, base_qs).defer(
         "spec_delta_notes", "review_notes", "description"
     )
-    context = _build_document_list_context(request, base_qs, filtered_qs)
+    context = _build_document_list_context(
+        request, base_qs, filtered_qs, include_repo_filters=False
+    )
     return render(
         request,
         "assets/assetdocumentknowledge/asset_document/changes.html",
