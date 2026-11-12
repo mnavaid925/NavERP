@@ -318,8 +318,7 @@ class AssetDocument(TenantNumbered):
             orig_name, size_bytes, checksum = compute_uploaded_file_metadata(self.file)
             if orig_name:
                 self.original_filename = orig_name
-            if size_bytes:
-                self.file_size_bytes = size_bytes
+            self.file_size_bytes = size_bytes
             if checksum:
                 self.file_checksum = checksum
 
