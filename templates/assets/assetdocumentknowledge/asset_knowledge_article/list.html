@@ -144,7 +144,7 @@
                     <th>Impact</th>
                     <th>Votes / Views</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -187,7 +187,7 @@
                     <td>
                         <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
                     </td>
-                    <td class="text-right whitespace-nowrap">
+                    <td class="text-end whitespace-nowrap">
                         <div class="flex items-center justify-end gap-1">
                             <a href="{% url 'assets:asset_knowledge_article_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
                                 <i data-lucide="eye"></i>
