@@ -122,6 +122,7 @@ def asset_operator_certification_list(request):
         "procedures": AssetOperatingProcedure.objects.filter(
             tenant=request.tenant
         ).order_by("number"),
+        "can_manage": is_tenant_admin_user(request.user),
         "search_query": request.GET.get("q", "").strip(),
     }
     return render(
@@ -197,7 +198,7 @@ def asset_operator_certification_detail(request, pk):
     is_admin = is_tenant_admin_user(request.user)
     context = {
         "certification": cert,
-        "can_edit": cert.status in AssetOperatorCertification.EDITABLE_STATUSES,
+        "can_edit": is_admin and cert.status in AssetOperatorCertification.EDITABLE_STATUSES,
         "can_verify": is_admin and cert.status == "pending",
         "can_acknowledge_sop": (
             (cert.operator_user_id == request.user.id or is_admin)
@@ -247,6 +248,7 @@ def asset_operator_certification_create(request):
 
 
 @login_required
+@tenant_admin_required
 def asset_operator_certification_edit(request, pk):
     """Edit an editable (non-revoked/non-expired) operator certification."""
     cert = assets_object(request, AssetOperatorCertification, pk)
