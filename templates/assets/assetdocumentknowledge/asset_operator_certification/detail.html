@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}{{ certification.number }} — {{ certification.operator_display_name }} — Certifications — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_operator_certification_list' %}">Training &amp; Certification Records</a>
+            <span>/</span>
+            <span>{{ certification.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ certification.number }} — {{ certification.title }}</h1>
+            <span class="badge {{ certification.status_badge_class }}">{{ certification.get_status_display }}</span>
+            <span class="badge {{ certification.proficiency_badge_class }}">{{ certification.get_proficiency_level_display }}</span>
+            {% if certification.sop_acknowledged %}
+            <span class="badge badge-green">SOP Acknowledged</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if certification.certificate_file %}
+        <a href="{% url 'assets:asset_operator_certification_download' certification.pk %}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Download Certificate
+        </a>
+        {% endif %}
+
+        {% if can_verify %}
+        <form method="post" action="{% url 'assets:asset_operator_certification_verify_activate' certification.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="badge-check" class="w-4 h-4 me-1"></i> Verify &amp; Activate
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_acknowledge_sop %}
+        <form method="post" action="{% url 'assets:asset_operator_certification_acknowledge_sop' certification.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="check-square" class="w-4 h-4 me-1"></i> Acknowledge Linked SOP
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_renew %}
+        <form method="post" action="{% url 'assets:asset_operator_certification_renew' certification.pk %}" class="inline" onsubmit="return confirm('Renew certification {{ certification.number|escapejs }} for 1 additional year?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Renew (+1 Year)
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_revoke %}
+        <form method="post" action="{% url 'assets:asset_operator_certification_revoke' certification.pk %}" class="inline" onsubmit="return confirm('Revoke certification {{ certification.number|escapejs }}? Revoked credentials cannot be reactivated.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="ban" class="w-4 h-4 me-1"></i> Revoke
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_edit %}
+        <a href="{% url 'assets:asset_operator_certification_edit' certification.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if certification.status != "revoked" %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_operator_certification_delete' certification.pk %}" class="inline" onsubmit="return confirm('Delete certification {{ certification.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        <a href="{% url 'assets:asset_operator_certification_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="user-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Qualified Operator</div>
+            <div class="stat-value text-base">{{ certification.operator_display_name }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Training Hours</div>
+            <div class="stat-value">{{ certification.training_hours }} hrs</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="graduation-cap"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Assessment Score</div>
+            <div class="stat-value">{% if certification.assessment_score is not None %}{{ certification.assessment_score }}%{% else %}—{% endif %}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Days Until Expiry</div>
+            <div class="stat-value">
+                {% if certification.days_until_expiry is not None %}{{ certification.days_until_expiry }}d{% else %}Lifetime{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Operator &amp; Competency Scope</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>Certification #</dt><dd class="font-mono">{{ certification.number }}</dd></div>
+                <div class="detail-item"><dt>Qualification Code</dt><dd class="font-mono">{{ certification.qualification_code|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Qualification Type</dt><dd>{{ certification.get_qualification_type_display }}</dd></div>
+                <div class="detail-item"><dt>Proficiency Level</dt><dd>{{ certification.get_proficiency_level_display }}</dd></div>
+                <div class="detail-item"><dt>Operator Party</dt><dd>{{ certification.operator_party|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Operator User Account</dt><dd>{{ certification.operator_user|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>HRM Employee Profile</dt><dd>{{ certification.employee_profile|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>HRM Training Certificate</dt><dd>{{ certification.hrm_certificate|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Operational Asset Scope</dt><dd>{{ certification.operational_asset|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Asset Category / Model</dt><dd>{{ certification.asset_category|default:"—" }}{% if certification.asset_model %} · {{ certification.asset_model }}{% endif %}</dd></div>
+                <div class="detail-item"><dt>Linked SOP / LOTO</dt><dd>{% if certification.operating_procedure %}<a href="{% url 'assets:asset_operating_procedure_detail' certification.operating_procedure.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">{{ certification.operating_procedure }}</a>{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Compliance Framework</dt><dd>{{ certification.compliance_framework|default:"—" }}</dd></div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Issuance, Assessment &amp; Renewal Governance</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>Issuing Authority</dt><dd>{{ certification.issuing_authority|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Issuing Party (External)</dt><dd>{{ certification.issuing_party|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Certificate Reference #</dt><dd class="font-mono">{{ certification.certificate_reference|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Assessor</dt><dd>{{ certification.assessor|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Issued Date</dt><dd>{{ certification.issued_date|date:"Y-m-d" }}</dd></div>
+                <div class="detail-item"><dt>Expires On</dt><dd>{% if certification.expires_on %}{{ certification.expires_on|date:"Y-m-d" }}{% else %}No Expiry{% endif %}</dd></div>
+                <div class="detail-item"><dt>Renewal Lead Alert</dt><dd>{{ certification.renewal_lead_days }} days before expiry</dd></div>
+                <div class="detail-item"><dt>Last Assessed Date</dt><dd>{% if certification.last_assessed_date %}{{ certification.last_assessed_date|date:"Y-m-d" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>SOP Comprehension</dt><dd>{% if certification.sop_acknowledged %}Acknowledged{% if certification.sop_acknowledged_at %} ({{ certification.sop_acknowledged_at|date:"Y-m-d H:i" }}){% endif %}{% else %}Pending Operator Ack{% endif %}</dd></div>
+                <div class="detail-item"><dt>Org Unit</dt><dd>{{ certification.org_unit|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Certificate File</dt><dd>{% if certification.certificate_file %}{{ certification.original_filename|default:"Attached Certificate" }}{% else %}None uploaded{% endif %}</dd></div>
+            </dl>
+
+            {% if certification.notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Assessment Notes &amp; Restrictions</h3>
+                <p class="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{{ certification.notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
