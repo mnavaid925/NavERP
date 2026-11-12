@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ fixture.number }}{% else %}New Furniture / Fixture{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_furniture_fixture_list' %}">Furniture &amp; Fixture Tracking</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ fixture.number }}{% else %}New Furniture / Fixture{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and fixture %}
+        <a href="{% url 'assets:asset_furniture_fixture_detail' fixture.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to FF&amp;E
+        </a>
+        {% else %}
+        <a href="{% url 'assets:asset_furniture_fixture_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">FF&amp;E Item Details</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Item Name <span class="req">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ffe_category.id_for_label }}">FF&amp;E Category</label>
+                    {{ form.ffe_category }}
+                    {% if form.ffe_category.errors %}<div class="form-error">{{ form.ffe_category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_tag_code.id_for_label }}">Asset Tag / Barcode</label>
+                    {{ form.asset_tag_code }}
+                    {% if form.asset_tag_code.errors %}<div class="form-error">{{ form.asset_tag_code.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.manufacturer.id_for_label }}">Manufacturer</label>
+                    {{ form.manufacturer }}
+                    {% if form.manufacturer.errors %}<div class="form-error">{{ form.manufacturer.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.model_sku.id_for_label }}">Model / SKU</label>
+                    {{ form.model_sku }}
+                    {% if form.model_sku.errors %}<div class="form-error">{{ form.model_sku.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.finish_material.id_for_label }}">Finish / Material</label>
+                    {{ form.finish_material }}
+                    {% if form.finish_material.errors %}<div class="form-error">{{ form.finish_material.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.quantity.id_for_label }}">Quantity <span class="req">*</span></label>
+                    {{ form.quantity }}
+                    {% if form.quantity.errors %}<div class="form-error">{{ form.quantity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.unit_replacement_cost.id_for_label }}">Unit Replacement Cost</label>
+                    {{ form.unit_replacement_cost }}
+                    {% if form.unit_replacement_cost.errors %}<div class="form-error">{{ form.unit_replacement_cost.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.condition_grade.id_for_label }}">Condition Grade</label>
+                    {{ form.condition_grade }}
+                    {% if form.condition_grade.errors %}<div class="form-error">{{ form.condition_grade.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="form-label" for="{{ form.pin_x_pct.id_for_label }}">Pin X (%)</label>
+                        {{ form.pin_x_pct }}
+                        {% if form.pin_x_pct.errors %}<div class="form-error">{{ form.pin_x_pct.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ form.pin_y_pct.id_for_label }}">Pin Y (%)</label>
+                        {{ form.pin_y_pct }}
+                        {% if form.pin_y_pct.errors %}<div class="form-error">{{ form.pin_y_pct.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Placement, IMAC Move Plan &amp; ERP Links</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.facility_space.id_for_label }}">Current Facility Space <span class="req">*</span></label>
+                    {{ form.facility_space }}
+                    {% if form.facility_space.errors %}<div class="form-error">{{ form.facility_space.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_space.id_for_label }}">Target Relocation Space</label>
+                    {{ form.target_space }}
+                    {% if form.target_space.errors %}<div class="form-error">{{ form.target_space.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.reconfiguration_batch_ref.id_for_label }}">IMAC Batch Reference</label>
+                    {{ form.reconfiguration_batch_ref }}
+                    {% if form.reconfiguration_batch_ref.errors %}<div class="form-error">{{ form.reconfiguration_batch_ref.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.move_scheduled_date.id_for_label }}">Scheduled Move Date</label>
+                    {{ form.move_scheduled_date }}
+                    {% if form.move_scheduled_date.errors %}<div class="form-error">{{ form.move_scheduled_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.estimated_move_cost.id_for_label }}">Estimated Move Cost</label>
+                    {{ form.estimated_move_cost }}
+                    {% if form.estimated_move_cost.errors %}<div class="form-error">{{ form.estimated_move_cost.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.move_coordinator.id_for_label }}">Move Coordinator</label>
+                    {{ form.move_coordinator }}
+                    {% if form.move_coordinator.errors %}<div class="form-error">{{ form.move_coordinator.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.assigned_org_unit.id_for_label }}">Assigned Org Unit</label>
+                    {{ form.assigned_org_unit }}
+                    {% if form.assigned_org_unit.errors %}<div class="form-error">{{ form.assigned_org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.custodian_party.id_for_label }}">Custodian Party</label>
+                    {{ form.custodian_party }}
+                    {% if form.custodian_party.errors %}<div class="form-error">{{ form.custodian_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational SCM Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Accounting Fixed Asset</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group mb-6">
+                <label class="form-label" for="{{ form.move_notes.id_for_label }}">Move &amp; Installation Notes</label>
+                {{ form.move_notes }}
+                {% if form.move_notes.errors %}<div class="form-error">{{ form.move_notes.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and fixture %}
+                <a href="{% url 'assets:asset_furniture_fixture_detail' fixture.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_furniture_fixture_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Furniture / Fixture
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
