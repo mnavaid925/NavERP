@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}HVAC &amp; Building Systems — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Space &amp; Facility Asset Management</span>
+            <span>/</span>
+            <span>HVAC &amp; Building Systems</span>
+        </div>
+        <h1 class="page-title">HVAC &amp; Building Systems</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_infrastructure_board' %}" class="btn btn-outline">
+            <i data-lucide="layers" class="w-4 h-4 me-1"></i> Infrastructure Board
+        </a>
+        <a href="{% url 'assets:asset_building_system_export_csv' %}?q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&subsystem_type={{ request.GET.subsystem_type|urlencode }}&comfort_status={{ request.GET.comfort_status|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_building_system_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Building System
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="wind"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Building Systems</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Operational</div>
+            <div class="stat-value">{{ operational_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="thermometer"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Comfort Drift / Alert</div>
+            <div class="stat-value">{{ comfort_alert_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Overdue Inspections</div>
+            <div class="stat-value">{{ overdue_inspection_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div>
+                <label for="afbs-filter-q" class="sr-only">Search systems</label>
+                <input id="afbs-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, name, OEM, ASHRAE/NFPA..." class="form-input" />
+            </div>
+            <div>
+                <label for="afbs-filter-domain" class="sr-only">System Domain</label>
+                <select id="afbs-filter-domain" name="system_domain" class="form-select">
+                    <option value="">All Domains</option>
+                    {% for val, label in domain_choices %}
+                    <option value="{{ val }}" {% if request.GET.system_domain == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afbs-filter-subsystem" class="sr-only">Subsystem Type</label>
+                <select id="afbs-filter-subsystem" name="subsystem_type" class="form-select">
+                    <option value="">All Subsystems</option>
+                    {% for val, label in subsystem_choices %}
+                    <option value="{{ val }}" {% if request.GET.subsystem_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afbs-filter-comfort" class="sr-only">Comfort Band</label>
+                <select id="afbs-filter-comfort" name="comfort_status" class="form-select">
+                    <option value="">All Comfort States</option>
+                    {% for val, label in comfort_choices %}
+                    <option value="{{ val }}" {% if request.GET.comfort_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afbs-filter-condition" class="sr-only">Condition Grade</label>
+                <select id="afbs-filter-condition" name="condition_grade" class="form-select">
+                    <option value="">All Condition Grades</option>
+                    {% for val, label in condition_choices %}
+                    <option value="{{ val }}" {% if request.GET.condition_grade == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afbs-filter-status" class="sr-only">Status</label>
+                <select id="afbs-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afbs-filter-space" class="sr-only">Facility Space</label>
+                <select id="afbs-filter-space" name="facility_space" class="form-select">
+                    <option value="">All Spaces</option>
+                    {% for sp in spaces %}
+                    <option value="{{ sp.pk }}" {% if request.GET.facility_space == sp.pk|stringformat:"d" %}selected{% endif %}>{{ sp.code }} — {{ sp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{% url 'assets:asset_building_system_list' %}" class="btn btn-outline">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>System #</th>
+                    <th>Name &amp; Subsystem</th>
+                    <th>Space</th>
+                    <th>Temp / Comfort</th>
+                    <th>Condition</th>
+                    <th>Next Inspection</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sys in systems %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'assets:asset_building_system_detail' sys.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ sys.number }}</a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800 dark:text-slate-100">{{ sys.name }}</div>
+                        <div class="text-xs text-muted">{{ sys.get_system_domain_display }} &middot; {{ sys.get_subsystem_type_display }}</div>
+                    </td>
+                    <td class="text-xs">
+                        {% if sys.facility_space %}
+                        <a href="{% url 'assets:asset_facility_space_detail' sys.facility_space.pk %}" class="text-blue-600 hover:underline">{{ sys.facility_space.code }}</a>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if sys.setpoint_temp_c is not None or sys.measured_temp_c is not None %}
+                        <div class="text-xs font-mono mb-1">{{ sys.measured_temp_c|default:"—" }}&deg;C / {{ sys.setpoint_temp_c|default:"—" }}&deg;C</div>
+                        {% endif %}
+                        <span class="badge {{ sys.comfort_badge_class }}">{{ sys.get_comfort_status_display }}</span>
+                    </td>
+                    <td><span class="badge {{ sys.condition_badge_class }}">{{ sys.get_condition_grade_display }}</span></td>
+                    <td class="text-xs">
+                        {% if sys.next_inspection_due_date %}
+                            <span class="{% if sys.is_inspection_overdue %}text-danger font-semibold{% endif %}">{{ sys.next_inspection_due_date|date:"Y-m-d" }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td><span class="badge {{ sys.status_badge_class }}">{{ sys.get_status_display }}</span></td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'assets:asset_building_system_detail' sys.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                        {% if not sys.is_locked %}
+                        <a href="{% url 'assets:asset_building_system_edit' sys.pk %}" class="btn btn-icon btn-outline" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+                        <form method="post" action="{% url 'assets:asset_building_system_delete' sys.pk %}" class="inline" onsubmit="return confirm('Delete building system {{ sys.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="wind" class="w-8 h-8 mx-auto mb-2 text-muted"></i>
+                            <p class="font-medium">No building systems found</p>
+                            <p class="text-xs text-muted mt-1">Register HVAC, electrical, plumbing, elevator, fire, or structural systems.</p>
+                            <a href="{% url 'assets:asset_building_system_create' %}" class="btn btn-primary mt-3">New Building System</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="text-xs text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&subsystem_type={{ request.GET.subsystem_type|urlencode }}&comfort_status={{ request.GET.comfort_status|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}" class="btn btn-outline">Previous</a>
+            {% else %}
+            <span class="btn btn-outline opacity-50 pointer-events-none">Previous</span>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&subsystem_type={{ request.GET.subsystem_type|urlencode }}&comfort_status={{ request.GET.comfort_status|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}" class="btn btn-outline">Next</a>
+            {% else %}
+            <span class="btn btn-outline opacity-50 pointer-events-none">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
