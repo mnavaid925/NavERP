@@ -44,7 +44,7 @@ _HW_DETAIL_SELECT_RELATED = _HW_LIST_SELECT_RELATED + (
     "requisition",
     "replacement_plan",
     "disposal_request",
-    "scrap_salvage",
+    "scrap_salvage__fixed_asset",
     "vendor_party",
     "owner",
     "sanitization_verified_by",
