@@ -11,6 +11,10 @@ from apps.assets.forms.SpaceFacilityAsset._helpers import (
     scope_tenant_querysets,
     validate_safe_floor_plan_upload,
 )
+from apps.assets.models.AssetDocumentKnowledge._validators import (
+    is_asset_document_readable,
+    readable_asset_document_q,
+)
 from apps.assets.models.AssetDocumentKnowledge.AssetDocuments import AssetDocument
 from apps.assets.models.IntegrationApiHub.AssetGisMappings import AssetGisMapping
 from apps.assets.models.SpaceFacilityAsset.AssetFacilitySpaces import AssetFacilitySpace
@@ -85,9 +89,14 @@ class AssetFacilitySpaceForm(TenantUniqueMixin, TenantModelForm):
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
         super().__init__(*args, **kwargs)
         scope_tenant_querysets(self, self._TENANT_FK_MAP)
+        if "floor_plan_document" in self.fields and self.tenant is not None:
+            self.fields["floor_plan_document"].queryset = self.fields[
+                "floor_plan_document"
+            ].queryset.filter(readable_asset_document_q(self.user))
 
     def clean_code(self):
         code = (self.cleaned_data.get("code") or "").strip().upper()
@@ -101,6 +110,13 @@ class AssetFacilitySpaceForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, list(self._TENANT_FK_MAP.keys()))
+
+        doc = cleaned.get("floor_plan_document")
+        if doc is not None and not is_asset_document_readable(doc, self.user):
+            self.add_error(
+                "floor_plan_document",
+                "You do not have permission to reference this restricted document.",
+            )
 
         parent = cleaned.get("parent")
         if parent is not None and self.instance.pk and parent.pk == self.instance.pk:
