@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.number }} — {{ article.title }} — Knowledge Base — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_knowledge_article_list' %}">Lessons Learned &amp; Failure Analysis</a>
+            <span>/</span>
+            <span>{{ article.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ article.number }} — {{ article.title }}</h1>
+            <span class="badge {{ article.status_badge_class }}">{{ article.get_status_display }}</span>
+            <span class="badge {{ article.severity_badge_class }}">{{ article.get_severity_display }}</span>
+            <span class="badge badge-info">{{ article.get_rca_methodology_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if article.attachment %}
+        <a href="{% url 'assets:asset_knowledge_article_download' article.pk %}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Download Evidence
+        </a>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:asset_knowledge_article_mark_helpful' article.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="thumbs-up" class="w-4 h-4 me-1"></i> Helpful ({{ article.helpful_votes }})
+            </button>
+        </form>
+
+        {% if article.status == "draft" %}
+        <form method="post" action="{% url 'assets:asset_knowledge_article_submit_review' article.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Submit for Peer Review
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_publish %}
+        <form method="post" action="{% url 'assets:asset_knowledge_article_publish' article.pk %}" class="inline" onsubmit="return confirm('Publish {{ article.number|escapejs }} to the organization Knowledge Base?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Publish Article
+            </button>
+        </form>
+        {% endif %}
+
+        {% if article.status != "retired" %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_knowledge_article_retire' article.pk %}" class="inline" onsubmit="return confirm('Retire knowledge article {{ article.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Retire
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if can_edit %}
+        <a href="{% url 'assets:asset_knowledge_article_edit' article.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_knowledge_article_delete' article.pk %}" class="inline" onsubmit="return confirm('Delete knowledge article {{ article.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        <a href="{% url 'assets:asset_knowledge_article_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Downtime Impacted</div>
+            <div class="stat-value">{{ article.downtime_hours_impacted }} hrs</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="repeat"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Observed Recurrences</div>
+            <div class="stat-value">{{ article.recurrence_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="thumbs-up"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Technician Helpful Votes</div>
+            <div class="stat-value">{{ article.helpful_votes }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="eye"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Article Views</div>
+            <div class="stat-value">{{ article.view_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Core Narrative & Asset Cross-Links -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title">Failure Symptom, Root Cause &amp; Preventive Remedy</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Symptom &amp; Problem Statement</h3>
+                <p class="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-line">{{ article.symptom_problem }}</p>
+            </div>
+            <div>
+                <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Confirmed Root Cause Summary</h3>
+                <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ article.root_cause_summary|default:"—" }}</p>
+            </div>
+            <div>
+                <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Remedy &amp; Corrective Action</h3>
+                <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ article.remedy_corrective_action|default:"—" }}</p>
+            </div>
+            <div>
+                <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Preventive Lessons Learned</h3>
+                <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ article.preventive_lessons|default:"—" }}</p>
+            </div>
+            {% if article.tag_list %}
+            <div class="flex flex-wrap gap-1.5 pt-2">
+                {% for tg in article.tag_list %}
+                <span class="badge badge-slate">#{{ tg }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Cross-Module Lineage &amp; Governance</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>Article Number</dt><dd class="font-mono">{{ article.number }}</dd></div>
+                <div class="detail-item"><dt>Article Type</dt><dd>{{ article.get_article_type_display }}</dd></div>
+                <div class="detail-item"><dt>Incident Date</dt><dd>{% if article.incident_occurred_on %}{{ article.incident_occurred_on|date:"Y-m-d" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Author</dt><dd>{{ article.author|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Peer Reviewer</dt><dd>{{ article.reviewed_by|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Published At</dt><dd>{% if article.published_at %}{{ article.published_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Operational Asset</dt><dd>{{ article.operational_asset|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Fixed Asset</dt><dd>{{ article.fixed_asset|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Category / Model</dt><dd>{{ article.asset_category|default:"—" }}{% if article.asset_model %} · {{ article.asset_model }}{% endif %}</dd></div>
+                <div class="detail-item"><dt>Failure Mode (11.5)</dt><dd>{{ article.failure_mode|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Work Request / Log</dt><dd>{{ article.maintenance_request|default:"—" }}{% if article.maintenance_log %} · {{ article.maintenance_log }}{% endif %}</dd></div>
+                <div class="detail-item"><dt>Incident Report</dt><dd>{{ article.incident_report|default:"—" }}{% if article.compliance_incident %} · {{ article.compliance_incident }}{% endif %}</dd></div>
+                <div class="detail-item"><dt>Related Controlled Doc</dt><dd>{% if article.related_document %}<a href="{% url 'assets:asset_document_detail' article.related_document.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">{{ article.related_document }}</a>{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Recommended SOP</dt><dd>{% if article.recommended_procedure %}<a href="{% url 'assets:asset_operating_procedure_detail' article.recommended_procedure.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">{{ article.recommended_procedure }}</a>{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Evidence Attachment</dt><dd>{% if article.attachment %}{{ article.original_filename|default:"Attached" }}{% else %}None{% endif %}</dd></div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<!-- 5-Why Chain & Fishbone 6M Matrix -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">5-Why Root Cause Investigation Chain</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Why #</th>
+                        <th>Investigation Question</th>
+                        <th>Confirmed Finding / Answer</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in article.five_whys %}
+                    <tr>
+                        <td class="font-mono">Why {{ item.why_level|default:forloop.counter }}</td>
+                        <td class="font-medium text-sm">{{ item.question|default:"—" }}</td>
+                        <td class="text-sm">{{ item.answer|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center text-sm text-slate-500 dark:text-slate-400 py-4">No 5-Why progression steps recorded.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Fishbone / Ishikawa (6M) Contributing Factors</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>6M Category</th>
+                        <th>Contributing Cause Factor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for category, detail_text in article.contributing_factors.items %}
+                    <tr>
+                        <td class="font-semibold capitalize">{{ category }}</td>
+                        <td class="text-sm">{{ detail_text }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="2" class="text-center text-sm text-slate-500 dark:text-slate-400 py-4">No Fishbone 6M contributing factors recorded.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
