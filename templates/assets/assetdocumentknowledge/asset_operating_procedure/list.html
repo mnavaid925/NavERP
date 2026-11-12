@@ -114,7 +114,7 @@
                     <option value="">All LOTO</option>
                     <option value="1" {% if request.GET.loto_only == "1" %}selected{% endif %}>LOTO Only</option>
                 </select>
-                <button type="submit" class="btn btn-outline">
+                <button type="submit" class="btn btn-outline" aria-label="Apply filters" title="Apply filters">
                     <i data-lucide="filter" class="w-4 h-4"></i>
                 </button>
                 <a href="{% url 'assets:asset_operating_procedure_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
