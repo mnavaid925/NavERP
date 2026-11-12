@@ -2,6 +2,7 @@
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
@@ -302,15 +303,20 @@ def cmdb_relationship_verify(request, pk):
     if relationship.is_locked:
         messages.warning(request, f"CMDB Relationship {relationship.number} is severed.")
         return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
-    with transaction.atomic():
-        relationship.verified_on = timezone.now().date()
-        relationship.verified_by = request.user
-        if relationship.status != "active":
-            relationship.status = "active"
-        relationship.save(
-            update_fields=["verified_on", "verified_by", "status", "updated_at"]
-        )
-        write_audit_log(request.user, relationship, "verify", tenant=request.tenant)
+    try:
+        with transaction.atomic():
+            relationship.verified_on = timezone.now().date()
+            relationship.verified_by = request.user
+            if relationship.status != "active":
+                relationship.status = "active"
+            relationship.full_clean()
+            relationship.save(
+                update_fields=["verified_on", "verified_by", "status", "updated_at"]
+            )
+            write_audit_log(request.user, relationship, "verify", tenant=request.tenant)
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+        return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
     messages.success(request, f"CMDB Relationship {relationship.number} verified as active.")
     return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
 
