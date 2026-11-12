@@ -147,14 +147,14 @@
                 {% for k in scorecards %}
                 <tr>
                     <td>
-                        <a href="{% url 'assets:asset_executive_scorecard_detail' k.pk %}" class="font-medium text-blue-600 hover:underline">
+                        <a href="{% url 'assets:asset_executive_scorecard_detail' k.pk %}" class="font-medium text-blue-600 dark:text-blue-400 hover:underline">
                             {{ k.number }}
                         </a>
-                        <div class="text-xs text-slate-500">{{ k.title|truncatechars:42 }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ k.title|truncatechars:42 }}</div>
                     </td>
                     <td>
                         <div class="text-sm font-medium">{{ k.get_period_type_display }}</div>
-                        <div class="text-xs text-slate-500">{{ k.period_start }} → {{ k.period_end }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ k.period_start }} → {{ k.period_end }}</div>
                     </td>
                     <td>
                         <span class="badge {{ k.rag_status_badge_class }}">{{ k.get_rag_status_display }}</span>
@@ -191,9 +191,9 @@
                 <tr>
                     <td colspan="9">
                         <div class="empty-state">
-                            <i data-lucide="award" class="w-12 h-12 text-slate-400 mb-3"></i>
-                            <h3 class="text-base font-semibold text-slate-800">No Executive Scorecards Found</h3>
-                            <p class="text-sm text-slate-500 mb-4">Create a period executive scorecard to track Asset ROI, Maintenance Cost Ratio, FCI, and compliance posture.</p>
+                            <i data-lucide="award" class="w-12 h-12 text-slate-400 dark:text-slate-500 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">No Executive Scorecards Found</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Create a period executive scorecard to track Asset ROI, Maintenance Cost Ratio, FCI, and compliance posture.</p>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_executive_scorecard_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Scorecard
