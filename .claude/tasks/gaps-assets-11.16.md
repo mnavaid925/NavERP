@@ -33,6 +33,6 @@
 
 ### GAP-assets-11.16-04 — Sibling Clone Observation: `AssetAnalytics/_helpers.py:apply_choice_filter`
 - **Owner**: `assets` (`11.14` Asset Analytics cleanup pass)
-- **Waiting For / Blocked On**: Dedicated `11.14` pass (`11.16` `code-fixer` fixed `AssetDocumentKnowledge/_helpers.py` `apply_choice_filter` per `I4` and left `AssetAnalytics/_helpers.py:22-29` untouched to respect diff scope).
-- **Status**: `- [ ]` Open — Out-of-scope clone observation in sibling `apps/assets/views/AssetAnalytics/_helpers.py:22-29` where unrecognized GET choice parameters return `qs.none()` instead of ignoring invalid values cleanly (L11).
+- **Waiting For / Blocked On**: Resolved during `11.14` Asset Analytics & BI completion pass.
+- **Status**: `- [x]` Closed — `apps/assets/views/AssetAnalytics/_helpers.py:apply_choice_filter` updated in commit `dfbd261a` to return `qs` unchanged on unrecognized GET choice parameters, verified by `test_assetanalytics_views.py::test_assetanalytics_apply_choice_filter_ignores_unrecognized_and_filters_valid` (L11).
 - **Done When**: `apps/assets/views/AssetAnalytics/_helpers.py:apply_choice_filter` ignores unrecognized GET choice params (returns `qs` unchanged) with an accompanying unit/view test in `11.14`.
