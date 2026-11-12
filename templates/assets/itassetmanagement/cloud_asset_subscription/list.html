@@ -150,7 +150,7 @@
                 {% for item in cloud_assets %}
                 <tr>
                     <td class="font-mono text-xs whitespace-nowrap">
-                        <a href="{% url 'assets:cloud_asset_subscription_detail' item.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ item.number }}</a>
+                        <a href="{% url 'assets:cloud_asset_subscription_detail' item.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">{{ item.number }}</a>
                     </td>
                     <td>
                         <div class="font-medium text-slate-900 dark:text-slate-100">{{ item.name }}</div>
@@ -165,7 +165,7 @@
                     <td class="text-sm whitespace-nowrap">
                         <div class="font-medium">{% if item.currency %}{{ item.currency.code }} {% endif %}{{ item.monthly_recurring_cost|floatformat:2 }}/mo</div>
                         {% if item.wasted_monthly_spend > 0 %}
-                        <div class="text-xs text-amber-600">Est. waste: {{ item.wasted_monthly_spend|floatformat:2 }}</div>
+                        <div class="text-xs text-amber-600 dark:text-amber-400">Est. waste: {{ item.wasted_monthly_spend|floatformat:2 }}</div>
                         {% endif %}
                     </td>
                     <td class="text-sm whitespace-nowrap">
