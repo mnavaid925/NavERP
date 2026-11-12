@@ -425,6 +425,7 @@ def asset_document_edit(request, pk):
         )
         if form.is_valid():
             updated = form.save(commit=False)
+            updated.is_current_revision = not bool(updated.supersedes_id)
             if updated.supersedes_id:
                 updated.revision_sequence = max(
                     2, (updated.supersedes.revision_sequence or 1) + 1
