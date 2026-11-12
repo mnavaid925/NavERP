@@ -17,11 +17,11 @@
     <div class="page-actions">
         {% if is_edit and system %}
         <a href="{% url 'assets:asset_building_system_detail' system.pk %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to System
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back to System
         </a>
         {% else %}
         <a href="{% url 'assets:asset_building_system_list' %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back to List
         </a>
         {% endif %}
     </div>
@@ -228,7 +228,7 @@
             </div>
 
             <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-                <a href="{% url 'assets:asset_building_system_list' %}" class="btn btn-outline">Cancel</a>
+                <a href="{% if is_edit and system %}{% url 'assets:asset_building_system_detail' system.pk %}{% else %}{% url 'assets:asset_building_system_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
                 <button type="submit" class="btn btn-primary">
                     <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Building System{% endif %}
                 </button>
