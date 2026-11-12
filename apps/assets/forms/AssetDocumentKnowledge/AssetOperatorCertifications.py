@@ -93,6 +93,7 @@ class AssetOperatorCertificationForm(TenantUniqueMixin, TenantModelForm):
             "certificate_reference": forms.TextInput(
                 attrs={"placeholder": "e.g. CERT-2026-88412"}
             ),
+            "certificate_file": forms.FileInput(attrs={"class": "form-input"}),
             "renewal_lead_days": forms.NumberInput(attrs={"min": "1", "max": "365"}),
             "training_hours": forms.NumberInput(attrs={"min": "0", "step": "0.5"}),
             "assessment_score": forms.NumberInput(
