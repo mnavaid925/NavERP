@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Furniture &amp; Fixture Tracking — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Space &amp; Facility Asset Management</span>
+            <span>/</span>
+            <span>Furniture &amp; Fixture Tracking</span>
+        </div>
+        <h1 class="page-title">Furniture &amp; Fixture Tracking</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_furniture_fixture_export_csv' %}?q={{ request.GET.q|urlencode }}&ffe_category={{ request.GET.ffe_category|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&move_status={{ request.GET.move_status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&assigned_org_unit={{ request.GET.assigned_org_unit|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_furniture_fixture_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Furniture / Fixture
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="armchair"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">FF&amp;E Records</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Place / Relocated</div>
+            <div class="stat-value">{{ in_place_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="move"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Pending IMAC Moves</div>
+            <div class="stat-value">{{ pending_move_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="layers"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Units Deployed</div>
+            <div class="stat-value">{{ total_quantity|intcomma }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label for="affe-filter-q" class="sr-only">Search FF&amp;E</label>
+                <input id="affe-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, name, tag, batch..." class="form-input" />
+            </div>
+            <div>
+                <label for="affe-filter-category" class="sr-only">FF&amp;E Category</label>
+                <select id="affe-filter-category" name="ffe_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if request.GET.ffe_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="affe-filter-condition" class="sr-only">Condition</label>
+                <select id="affe-filter-condition" name="condition_grade" class="form-select">
+                    <option value="">All Conditions</option>
+                    {% for val, label in condition_choices %}
+                    <option value="{{ val }}" {% if request.GET.condition_grade == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="affe-filter-move-status" class="sr-only">Move Status</label>
+                <select id="affe-filter-move-status" name="move_status" class="form-select">
+                    <option value="">All IMAC States</option>
+                    {% for val, label in move_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.move_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="affe-filter-space" class="sr-only">Current Space</label>
+                <select id="affe-filter-space" name="facility_space" class="form-select">
+                    <option value="">All Spaces</option>
+                    {% for sp in spaces %}
+                    <option value="{{ sp.pk }}" {% if request.GET.facility_space == sp.pk|stringformat:"d" %}selected{% endif %}>{{ sp.code }} — {{ sp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="affe-filter-org" class="sr-only">Org Unit</label>
+                <select id="affe-filter-org" name="assigned_org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.assigned_org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2 md:col-span-2">
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{% url 'assets:asset_furniture_fixture_list' %}" class="btn btn-outline">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>FF&amp;E #</th>
+                    <th>Item &amp; Category</th>
+                    <th>Current &rarr; Target Space</th>
+                    <th>Qty / Value</th>
+                    <th>Condition</th>
+                    <th>IMAC Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in fixtures %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'assets:asset_furniture_fixture_detail' item.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ item.number }}</a>
+                        {% if item.asset_tag_code %}
+                        <div class="text-muted font-normal">{{ item.asset_tag_code }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800 dark:text-slate-100">{{ item.name }}</div>
+                        <div class="text-xs text-muted">{{ item.get_ffe_category_display }}{% if item.manufacturer %} &middot; {{ item.manufacturer }}{% endif %}</div>
+                    </td>
+                    <td class="text-xs">
+                        <div>
+                            <a href="{% url 'assets:asset_facility_space_detail' item.facility_space.pk %}" class="text-blue-600 hover:underline font-medium">{{ item.facility_space.code }}</a>
+                            {% if item.target_space %}
+                            &rarr; <a href="{% url 'assets:asset_facility_space_detail' item.target_space.pk %}" class="text-amber-600 hover:underline">{{ item.target_space.code }}</a>
+                            {% endif %}
+                        </div>
+                        {% if item.reconfiguration_batch_ref %}
+                        <div class="text-muted">Batch: {{ item.reconfiguration_batch_ref }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-xs">
+                        <div>{{ item.quantity }} unit{{ item.quantity|pluralize }}</div>
+                        <div class="text-muted">{{ item.total_replacement_value|floatformat:2|intcomma }}</div>
+                    </td>
+                    <td><span class="badge {{ item.condition_badge_class }}">{{ item.get_condition_grade_display }}</span></td>
+                    <td><span class="badge {{ item.move_status_badge_class }}">{{ item.get_move_status_display }}</span></td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'assets:asset_furniture_fixture_detail' item.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                        {% if not item.is_locked %}
+                        <a href="{% url 'assets:asset_furniture_fixture_edit' item.pk %}" class="btn btn-icon btn-outline" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+                        <form method="post" action="{% url 'assets:asset_furniture_fixture_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete FF&amp;E item {{ item.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="armchair" class="w-8 h-8 mx-auto mb-2 text-muted"></i>
+                            <p class="font-medium">No furniture &amp; fixtures found</p>
+                            <p class="text-xs text-muted mt-1">Register workstations, seating, millwork, or IMAC space moves.</p>
+                            <a href="{% url 'assets:asset_furniture_fixture_create' %}" class="btn btn-primary mt-3">New Furniture / Fixture</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="text-xs text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&ffe_category={{ request.GET.ffe_category|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&move_status={{ request.GET.move_status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&assigned_org_unit={{ request.GET.assigned_org_unit|urlencode }}" class="btn btn-outline">Previous</a>
+            {% else %}
+            <span class="btn btn-outline opacity-50 pointer-events-none">Previous</span>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&ffe_category={{ request.GET.ffe_category|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&move_status={{ request.GET.move_status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&assigned_org_unit={{ request.GET.assigned_org_unit|urlencode }}" class="btn btn-outline">Next</a>
+            {% else %}
+            <span class="btn btn-outline opacity-50 pointer-events-none">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
