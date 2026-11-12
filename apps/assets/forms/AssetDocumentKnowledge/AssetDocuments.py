@@ -93,6 +93,7 @@ class AssetDocumentForm(TenantUniqueMixin, TenantModelForm):
                 attrs={"placeholder": "e.g. Trane Model CVHF-770"}
             ),
             "document_language": forms.TextInput(attrs={"placeholder": "en"}),
+            "file": forms.FileInput(attrs={"class": "form-input"}),
             "storage_location_ref": forms.TextInput(
                 attrs={"placeholder": "e.g. Vault Rack B-04 / DMS Folder 12"}
             ),
