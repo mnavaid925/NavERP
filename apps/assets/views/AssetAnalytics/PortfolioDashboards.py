@@ -93,6 +93,7 @@ def _build_portfolio_context(request):
         akpi_qs = akpi_qs.filter(asset_category_id=cat_id)
 
     if loc_id:
+        alcc_qs = alcc_qs.filter(operational_asset__location_id=loc_id)
         arpl_qs = arpl_qs.filter(location_id=loc_id)
         cond_qs = cond_qs.filter(operational_asset__location_id=loc_id)
         risk_qs = risk_qs.filter(asset__location_id=loc_id)
