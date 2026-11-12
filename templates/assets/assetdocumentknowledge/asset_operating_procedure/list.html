@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}SOP &amp; Procedure Management — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Document &amp; Knowledge Management</span>
+            <span>/</span>
+            <span>SOP &amp; Procedure Management</span>
+        </div>
+        <h1 class="page-title">SOP &amp; Procedure Management</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_operating_procedure_export_csv' %}?q={{ request.GET.q|urlencode }}&procedure_type={{ request.GET.procedure_type|urlencode }}&safety_level={{ request.GET.safety_level|urlencode }}&status={{ request.GET.status|urlencode }}&operational_asset={{ request.GET.operational_asset|urlencode }}&asset_category={{ request.GET.asset_category|urlencode }}&loto_only={{ request.GET.loto_only|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_operating_procedure_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Operating Procedure
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total SOPs &amp; Checklists</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Controlled SOPs</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="lock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">LOTO Mandatory Procedures</div>
+            <div class="stat-value">{{ loto_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="calendar-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Overdue Periodic Reviews</div>
+            <div class="stat-value">{{ overdue_review_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div>
+                <label for="asop-filter-q" class="sr-only">Search SOPs</label>
+                <input id="asop-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, title, PPE, qual..." class="form-input" />
+            </div>
+            <div>
+                <label for="asop-filter-type" class="sr-only">Procedure Type</label>
+                <select id="asop-filter-type" name="procedure_type" class="form-select">
+                    <option value="">All Procedure Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.procedure_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="asop-filter-safety" class="sr-only">Safety Level</label>
+                <select id="asop-filter-safety" name="safety_level" class="form-select">
+                    <option value="">All Safety Levels</option>
+                    {% for val, label in safety_choices %}
+                    <option value="{{ val }}" {% if request.GET.safety_level == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="asop-filter-status" class="sr-only">Status</label>
+                <select id="asop-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="asop-filter-asset" class="sr-only">Operational Asset</label>
+                <select id="asop-filter-asset" name="operational_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for ast in assets_list %}
+                    <option value="{{ ast.pk }}" {% if request.GET.operational_asset == ast.pk|stringformat:"d" %}selected{% endif %}>{{ ast }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="asop-filter-category" class="sr-only">Asset Category</label>
+                <select id="asop-filter-category" name="asset_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.pk }}" {% if request.GET.asset_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select id="asop-filter-loto" name="loto_only" class="form-select" aria-label="LOTO Filter">
+                    <option value="">All LOTO</option>
+                    <option value="1" {% if request.GET.loto_only == "1" %}selected{% endif %}>LOTO Only</option>
+                </select>
+                <button type="submit" class="btn btn-outline">
+                    <i data-lucide="filter" class="w-4 h-4"></i>
+                </button>
+                <a href="{% url 'assets:asset_operating_procedure_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Procedures Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>SOP #</th>
+                    <th>Title &amp; PPE / Qual</th>
+                    <th>Type</th>
+                    <th>Safety &amp; LOTO</th>
+                    <th>Steps / Dur</th>
+                    <th>Asset / Scope</th>
+                    <th>Next Review</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in procedures %}
+                <tr>
+                    <td class="font-mono text-xs whitespace-nowrap">
+                        <a href="{% url 'assets:asset_operating_procedure_detail' item.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                            {{ item.number }}
+                        </a>
+                        <div class="text-xs text-slate-400">{{ item.revision_label }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">{{ item.title }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">
+                            {% if item.required_qualification_code %}Qual: {{ item.required_qualification_code }}{% endif %}
+                            {% if item.required_qualification_code and item.required_ppe %} · {% endif %}
+                            {% if item.required_ppe %}PPE: {{ item.required_ppe|truncatewords:6 }}{% endif %}
+                        </div>
+                    </td>
+                    <td class="text-sm">{{ item.get_procedure_type_display }}</td>
+                    <td class="whitespace-nowrap">
+                        <span class="badge {{ item.safety_badge_class }}">{{ item.get_safety_level_display }}</span>
+                        {% if item.loto_required %}
+                        <span class="badge badge-red ms-1">LOTO ({{ item.isolation_point_count }})</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm whitespace-nowrap">
+                        {{ item.step_count }} steps · {{ item.estimated_duration_minutes }}m
+                    </td>
+                    <td class="text-sm">
+                        {% if item.operational_asset %}{{ item.operational_asset }}{% elif item.asset_category %}{{ item.asset_category.name }}{% else %}—{% endif %}
+                    </td>
+                    <td class="text-sm whitespace-nowrap">
+                        {% if item.next_review_date %}
+                            {% if item.is_review_overdue %}
+                            <span class="badge badge-red">{{ item.next_review_date|date:"Y-m-d" }}</span>
+                            {% else %}
+                            {{ item.next_review_date|date:"Y-m-d" }}
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'assets:asset_operating_procedure_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_operating_procedure_print' item.pk %}" class="btn btn-icon" title="Print Sheet" aria-label="Print {{ item.number }}">
+                                <i data-lucide="printer"></i>
+                            </a>
+                            {% if not item.is_locked %}
+                            <a href="{% url 'assets:asset_operating_procedure_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'assets:asset_operating_procedure_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete SOP {{ item.number|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete {{ item.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="clipboard-check" class="w-12 h-12 text-slate-400 dark:text-slate-500 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">No Operating Procedures Found</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Author step-by-step SOPs, PM checklists, and LOTO energy isolation matrices.</p>
+                            <a href="{% url 'assets:asset_operating_procedure_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Operating Procedure
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }} procedures</span>
+
+        {% if page_obj.has_previous %}
+        <a aria-label="Previous page" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.procedure_type %}&procedure_type={{ request.GET.procedure_type|urlencode }}{% endif %}{% if request.GET.safety_level %}&safety_level={{ request.GET.safety_level|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.loto_only %}&loto_only={{ request.GET.loto_only|urlencode }}{% endif %}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
+
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a aria-label="Next page" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.procedure_type %}&procedure_type={{ request.GET.procedure_type|urlencode }}{% endif %}{% if request.GET.safety_level %}&safety_level={{ request.GET.safety_level|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.loto_only %}&loto_only={{ request.GET.loto_only|urlencode }}{% endif %}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
