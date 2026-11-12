@@ -7,6 +7,297 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.18: IT Asset Management (ITAM) (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.18.md` (2026-11-12)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.16 (`11.17` unbuilt).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0023_assetdocument_idx_adoc_ten_upd_and_more.py`, so **11.18 claims `0024_...`** (L43).
+> Plan written from `.claude/tasks/research-assets-11.18.md` (Phase 1) and `NavERP.md` (`### 11.18 IT Asset Management (ITAM)`).
+> Package folder name: `apps/assets/{models,forms,views,urls}/ItAssetManagement/<Entity>.py` (`ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`, plus workbench modules `ItRefreshBoards.py` and `CmdbImpactAnalyses.py` in `views/` & `urls/`)
+> Template folder name: `templates/assets/itassetmanagement/{it_hardware_asset,software_license,cloud_asset_subscription,cmdb_relationship}/{list,detail,form}.html` + `templates/assets/itassetmanagement/{it_refresh_board,cmdb_impact_analysis}.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`ITHW`** (`ItHardwareAsset`), **`ITSW`** (`SoftwareLicense`), **`ITCL`** (`CloudAssetSubscription`), **`CMDB`** (`CmdbRelationship`), all four model class names, and all URL stems (`it_hardware_asset_*`, `software_license_*`, `cloud_asset_subscription_*`, `cmdb_relationship_*`, `it_refresh_board`, `cmdb_impact_analysis`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped EXCEPT `accounting.Currency`): `scm.Asset` (`apps/scm/models/AssetManagement/Assets.py`), `scm.Location` (`apps/scm/models/InventoryManagement/Locations.py`), `scm.PurchaseOrder` (`apps/scm/models/ProcurementManagement/PurchaseOrders.py`), `accounting.FixedAsset` (`apps/accounting/models/FixedAssets/FixedAssetsRegister.py`), `accounting.GLAccount` (`apps/accounting/models/GeneralLedger/GLAccounts.py`), `core.Party` (`apps/core/models/Party.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `core.ServiceComponent` (`apps/core/models/Monitoring.py` — `TenantConsistentMixin` with `tenant` FK), `hrm.EmployeeProfile` (`apps/hrm/models/EmployeeManagement/EmployeeProfiles.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - `assets` siblings (all tenant-scoped): `assets.AssetCategory`, `assets.AssetModel`, `assets.AssetWarranty`, `assets.AssetServiceContract`, `assets.AssetRequisition`, `assets.AssetReplacementPlan` (`11.14`), `assets.AssetDisposalRequest` (`11.9`), `assets.AssetScrapSalvage` (`11.9`).
+  - Non-existent / separate domains NOT conflated: `apps/itsm` (Module 18) does not exist yet; `tenants.Subscription` / `LicenseAssignment` / `EntitlementFeature` belong to NavERP's own SaaS tenant billing (0.1) and MUST NOT be FK'd or duplicated; `assets.AssetCyberSecurityProfile` (`11.12`) stays dedicated to OT/ICS Purdue levels.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - `accounting.Currency` is GLOBAL (no `tenant` FK). Queryset in `ItHardwareAssetForm`, `SoftwareLicenseForm`, and `CloudAssetSubscriptionForm` MUST filter `Currency.objects.filter(is_active=True)` ONLY and MUST NOT be passed to `reject_foreign(...)`.
+  - All tenant-scoped FKs (including `core.ServiceComponent`, `hrm.EmployeeProfile`, `accounts.User`, `scm.*`, `accounting.FixedAsset`/`GLAccount`, `core.Party`/`OrgUnit`, `assets.*`) MUST be populated in `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets (never over-restricted to `"active"` only) and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Secrets, workflow state & read-only timestamp hygiene (L20, L22, L25)**:
+  - `SoftwareLicense.license_key_ref` stores masked/reference strings only (e.g. `MS365-****-9X2K`) — `clean()` rejects obvious unmasked raw secret formats if flagged or UI help-text enforces masked reference entry.
+  - System/workflow timestamps (`last_seen_checkin`, `sanitized_at`, `retired_at`, `last_reconciled_at`, `last_finops_sync_at`, `decommissioned_at`, `verified_on`, `severed_at`), workflow-set user stamps (`sanitization_verified_by`, `verified_by`), and workflow-controlled `status` fields MUST have `editable=False` (for timestamps/stamps) and be excluded from `Meta.fields` in every ModelForm.
+  - Derived/computed KPIs (`compliance_delta`, `is_under_licensed`, `utilization_pct`, `estimated_true_up_cost`, `reclaim_savings_potential`, `seat_utilization_pct`, `wasted_monthly_spend`, `has_required_tags`, `refresh_priority`, `is_eol_expired`, `is_eos_approaching`) MUST be `@property` / helper methods — NEVER stored editable columns (L22) and NEVER colliding with view aggregate keys (L57).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters (exact lengths verified below).
+- **L66 Audit log signature**: Every mutating view (`create`, `edit`, `delete`, and every custom POST workflow action) calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Stat icon colors ONLY from `.stat-icon.{blue,green,orange,purple,slate,red}` (NO `amber`).
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>` (NEVER `.detail-label`/`.detail-value`).
+  - Delete & workflow action forms use `@require_POST`; privileged actions (`retire`, `mark_sanitized`, `record_true_up`, `decommission`, `sever_relationship`, deletes) use `@tenant_admin_required`; `confirm(...)` uses system `number` with `\'` escaped apostrophes (L42); paginators guard `has_previous` / `has_next` (L9); CSV exports use `csv_safe(...)` formula neutralization.
+
+---
+
+## Models (from research — 4)
+
+### 1. `ItHardwareAsset` (`ITHW-`)
+*Maps NavERP bullets: `Hardware Lifecycle Management`, `End-of-Life & Refresh Cycles` + NIST SP 800-88 data sanitization & MDM/encryption compliance*
+- **File**: `apps/assets/models/ItAssetManagement/ItHardwareAssets.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "ITHW"`)
+- **Fields & Choices (L65 verified)**:
+  - `hostname`: `CharField(max_length=120)`
+  - `fqdn`: `CharField(max_length=200, blank=True)`
+  - `device_class`: `CharField(max_length=24, choices=DEVICE_CLASS_CHOICES)` — `"laptop"`, `"desktop"`, `"workstation"`, `"physical_server"`, `"virtual_host"`, `"network_switch"`, `"router_firewall"`, `"wireless_ap"`, `"storage_array"`, `"mobile_tablet"`, `"printer_mfp"`, `"peripheral"` (longest: 15)
+  - `serial_number`: `CharField(max_length=80, blank=True)`
+  - `asset_tag_code`: `CharField(max_length=64, blank=True)`
+  - `manufacturer`: `CharField(max_length=120, blank=True)`
+  - `model_name`: `CharField(max_length=120, blank=True)`
+  - `mac_address`: `CharField(max_length=48, blank=True)`
+  - `ip_address`: `GenericIPAddressField(null=True, blank=True)`
+  - `operating_system`: `CharField(max_length=100, blank=True)`
+  - `os_version`: `CharField(max_length=64, blank=True)`
+  - `cpu_spec`: `CharField(max_length=120, blank=True)`
+  - `ram_gb`: `PositiveIntegerField(null=True, blank=True)`
+  - `storage_gb`: `PositiveIntegerField(null=True, blank=True)`
+  - `bios_firmware_version`: `CharField(max_length=64, blank=True)`
+  - `rack_unit_ref`: `CharField(max_length=64, blank=True)`
+  - `environment`: `CharField(max_length=24, choices=ENVIRONMENT_CHOICES, default="corporate_enduser")` — `"corporate_enduser"`, `"production"`, `"staging"`, `"development"`, `"dr_standby"` (longest: 17)
+  - `criticality`: `CharField(max_length=16, choices=CRITICALITY_CHOICES, default="medium")` — `"critical"`, `"high"`, `"medium"`, `"low"` (longest: 8)
+  - `mdm_enrolled`: `BooleanField(default=False)`
+  - `mdm_platform`: `CharField(max_length=60, blank=True)`
+  - `mdm_device_id`: `CharField(max_length=80, blank=True)`
+  - `disk_encryption_status`: `CharField(max_length=24, choices=DISK_ENCRYPTION_CHOICES, default="unencrypted")` — `"bitlocker_filevault"`, `"luks_encrypted"`, `"unencrypted"`, `"exempt"` (longest: 19)
+  - `last_seen_checkin`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="procured")` — `"procured"`, `"staged_in_stock"`, `"deployed"`, `"in_repair"`, `"loaner_pool"`, `"pending_refresh"`, `"sanitized_retired"`, `"disposed"` (longest: 17)
+  - `commissioned_date`: `DateField(null=True, blank=True)`
+  - `assigned_date`: `DateField(null=True, blank=True)`
+  - `vendor_eos_date`: `DateField(null=True, blank=True)`
+  - `vendor_eol_date`: `DateField(null=True, blank=True)`
+  - `refresh_cycle_months`: `PositiveSmallIntegerField(default=48)`
+  - `refresh_due_date`: `DateField(null=True, blank=True)` (auto-derived from `commissioned_date + refresh_cycle_months` or `vendor_eol_date` in `save()` if omitted)
+  - `estimated_refresh_cost`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `currency`: `ForeignKey("accounting.Currency", on_delete=SET_NULL, null=True, blank=True, related_name="it_hardware_assets")` (GLOBAL — no tenant filter, NOT in `reject_foreign`)
+  - `sanitization_required`: `BooleanField(default=True)`
+  - `sanitization_method`: `CharField(max_length=24, choices=SANITIZATION_METHOD_CHOICES, default="none")` — `"none"`, `"nist_clear"`, `"nist_purge"`, `"crypto_erase"`, `"physical_shredding"` (longest: 18)
+  - `sanitization_status`: `CharField(max_length=24, choices=SANITIZATION_STATUS_CHOICES, default="pending_wipe")` — `"not_required"`, `"pending_wipe"`, `"wiped_verified"`, `"certificate_on_file"` (longest: 19)
+  - `sanitization_date`: `DateField(null=True, blank=True)`
+  - `sanitization_certificate_ref`: `CharField(max_length=100, blank=True)`
+  - `sanitization_verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="verified_it_sanitizations")` (L22)
+  - `sanitized_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `retired_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - Verified FKs (all tenant-validated in `clean()`): `operational_asset` (`scm.Asset`), `fixed_asset` (`accounting.FixedAsset`), `asset_model` (`assets.AssetModel`), `asset_category` (`assets.AssetCategory`), `warranty` (`assets.AssetWarranty`), `requisition` (`assets.AssetRequisition`), `replacement_plan` (`assets.AssetReplacementPlan`), `disposal_request` (`assets.AssetDisposalRequest`), `scrap_salvage` (`assets.AssetScrapSalvage`), `org_unit` (`core.OrgUnit`), `location` (`scm.Location`), `custodian_party` (`core.Party`), `vendor_party` (`core.Party`), `employee_profile` (`hrm.EmployeeProfile`), `owner` (`settings.AUTH_USER_MODEL`)
+  - `notes`: `TextField(blank=True)`
+- **Computed properties**: `refresh_priority` (`overdue_critical`, `due_within_90d`, `planned_fy`, `healthy`), `is_eol_expired`, `is_eos_approaching`
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_ithw_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_ithw_ten_stat")` (17)
+  - `Index(fields=["tenant", "device_class"], name="idx_ithw_ten_dcls")` (17)
+  - `Index(fields=["tenant", "vendor_eol_date"], name="idx_ithw_ten_eol")` (16)
+  - `Index(fields=["tenant", "refresh_due_date"], name="idx_ithw_ten_rfsh")` (17)
+- **Form (`ItHardwareAssetForm`)**:
+  - Excluded (`editable=False` / workflow / system): `tenant`, `number`, `status`, `last_seen_checkin`, `sanitization_verified_by`, `sanitized_at`, `retired_at`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(...)` on all tenant-scoped FKs (excluding `currency`); validate `refresh_cycle_months >= 1` and `estimated_refresh_cost >= 0`; if `vendor_eos_date` and `vendor_eol_date` both set, ensure `vendor_eol_date >= vendor_eos_date`.
+- **Workflow POST actions**: `deploy`, `move_to_stock`, `send_to_repair`, `move_to_loaner`, `flag_for_refresh`, `mark_sanitized` (`@tenant_admin_required`), `retire` (`@tenant_admin_required`, requires `sanitization_status in ("not_required", "wiped_verified", "certificate_on_file")` when `sanitization_required=True`).
+- **Badge CSS**: `STATUS_CSS` (`procured -> badge-slate`, `staged_in_stock -> badge-info`, `deployed -> badge-green`, `in_repair -> badge-amber`, `loaner_pool -> badge-info`, `pending_refresh -> badge-amber`, `sanitized_retired -> badge-slate`, `disposed -> badge-muted`).
+
+### 2. `SoftwareLicense` (`ITSW-`)
+*Maps NavERP bullets: `Software License Management`, `End-of-Life & Refresh Cycles` (software EOL) + ELP compliance delta, true-up exposure, inactive seat harvesting*
+- **File**: `apps/assets/models/ItAssetManagement/SoftwareLicenses.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "ITSW"`)
+- **Fields & Choices (L65 verified)**:
+  - `software_name`: `CharField(max_length=200)`
+  - `publisher_name`: `CharField(max_length=150)`
+  - `product_sku`: `CharField(max_length=80, blank=True)`
+  - `version_edition`: `CharField(max_length=80, blank=True)`
+  - `software_category`: `CharField(max_length=24, choices=SOFTWARE_CATEGORY_CHOICES)` — `"os_platform"`, `"productivity_suite"`, `"erp_finance"`, `"devops_ide"`, `"database_engine"`, `"security_edr"`, `"design_cad"`, `"virtualization"`, `"middleware"`, `"other"` (longest: 18)
+  - `license_type`: `CharField(max_length=32, choices=LICENSE_TYPE_CHOICES)` — `"subscription_term"`, `"perpetual"`, `"enterprise_ela"`, `"oem_bundled"`, `"open_source_commercial"` (longest: 22)
+  - `license_metric`: `CharField(max_length=24, choices=LICENSE_METRIC_CHOICES)` — `"per_user"`, `"per_device"`, `"per_core"`, `"per_cpu_socket"`, `"concurrent_floating"`, `"site_unlimited"`, `"cal_client_access"` (longest: 19)
+  - `agreement_number`: `CharField(max_length=80, blank=True)`
+  - `license_key_ref`: `CharField(max_length=120, blank=True)` (masked reference only — e.g. `MS365-****-9X2K`)
+  - `entitled_quantity`: `PositiveIntegerField(default=1)`
+  - `allocated_quantity`: `PositiveIntegerField(default=0)`
+  - `active_used_quantity`: `PositiveIntegerField(default=0)`
+  - `reclaimable_inactive_count`: `PositiveIntegerField(default=0)`
+  - `unit_license_cost`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `total_annual_spend`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `currency`: `ForeignKey("accounting.Currency", on_delete=SET_NULL, null=True, blank=True, related_name="software_licenses")` (GLOBAL — no tenant filter, NOT in `reject_foreign`)
+  - `effective_date`: `DateField(null=True, blank=True)`
+  - `renewal_date`: `DateField(null=True, blank=True)`
+  - `vendor_eol_date`: `DateField(null=True, blank=True)`
+  - `auto_renew`: `BooleanField(default=False)`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft")` — `"draft"`, `"active_compliant"`, `"surplus_reclaimable"`, `"true_up_required"`, `"audit_hold"`, `"expired"`, `"retired"` (longest: 19)
+  - `last_reconciled_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `retired_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - Verified FKs (all tenant-validated in `clean()`): `publisher_party` (`core.Party`), `reseller_party` (`core.Party`), `org_unit` (`core.OrgUnit`), `gl_expense_account` (`accounting.GLAccount`), `purchase_order` (`scm.PurchaseOrder`), `service_contract` (`assets.AssetServiceContract`), `license_owner` (`settings.AUTH_USER_MODEL`)
+  - `notes`: `TextField(blank=True)`
+- **Computed properties**: `compliance_delta` (`entitled_quantity - allocated_quantity`), `is_under_licensed`, `utilization_pct`, `estimated_true_up_cost`, `reclaim_savings_potential`, `is_eol_expired`
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_itsw_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_itsw_ten_stat")` (17)
+  - `Index(fields=["tenant", "software_category"], name="idx_itsw_ten_cat")` (16)
+  - `Index(fields=["tenant", "renewal_date"], name="idx_itsw_ten_ren")` (16)
+  - `Index(fields=["tenant", "vendor_eol_date"], name="idx_itsw_ten_eol")` (16)
+- **Form (`SoftwareLicenseForm`)**:
+  - Excluded (`editable=False` / workflow / system): `tenant`, `number`, `status`, `last_reconciled_at`, `retired_at`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(...)` on all tenant-scoped FKs (excluding `currency`); validate `entitled_quantity >= 1`, `unit_license_cost >= 0`, `total_annual_spend >= 0`, `reclaimable_inactive_count <= allocated_quantity`; if `effective_date` and `renewal_date` set, validate `renewal_date >= effective_date`.
+- **Workflow POST actions**: `sync_compliance_status` (recomputes ELP status from quantities/dates and sets `last_reconciled_at`), `reclaim_inactive` (harvests `reclaimable_inactive_count` from `allocated_quantity`), `record_true_up` (`@tenant_admin_required`, increases `entitled_quantity` to cover shortfall and re-syncs status), `renew_term` (advances `renewal_date` by 1 year and clears `expired`), `place_audit_hold` (`@tenant_admin_required`), `retire` (`@tenant_admin_required`).
+- **Badge CSS**: `STATUS_CSS` (`draft -> badge-slate`, `active_compliant -> badge-green`, `surplus_reclaimable -> badge-info`, `true_up_required -> badge-red`, `audit_hold -> badge-amber`, `expired -> badge-red`, `retired -> badge-muted`).
+
+### 3. `CloudAssetSubscription` (`ITCL-`)
+*Maps NavERP bullets: `Cloud Asset & Subscription Tracking`, `End-of-Life & Refresh Cycles` (SaaS/cloud EOL) + FinOps tagging compliance, shadow IT & SSO governance*
+- **File**: `apps/assets/models/ItAssetManagement/CloudAssetSubscriptions.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "ITCL"`)
+- **Fields & Choices (L65 verified)**:
+  - `name`: `CharField(max_length=200)`
+  - `asset_kind`: `CharField(max_length=24, choices=ASSET_KIND_CHOICES)` — `"saas_application"`, `"iaas_compute"`, `"paas_database"`, `"reserved_instance"`, `"savings_plan"`, `"cloud_storage"`, `"cloud_network_cdn"`, `"ai_api_platform"` (longest: 17)
+  - `provider`: `CharField(max_length=24, choices=PROVIDER_CHOICES)` — `"aws"`, `"azure"`, `"gcp"`, `"oracle_cloud"`, `"microsoft_365"`, `"google_workspace"`, `"salesforce"`, `"atlassian"`, `"github"`, `"slack"`, `"datadog"`, `"other_saas"` (longest: 16)
+  - `external_account_id`: `CharField(max_length=120, blank=True)`
+  - `cloud_resource_id`: `CharField(max_length=200, blank=True)`
+  - `cloud_region`: `CharField(max_length=64, blank=True)`
+  - `environment`: `CharField(max_length=24, choices=ENVIRONMENT_CHOICES, default="corporate_saas")` — `"production"`, `"staging"`, `"development"`, `"corporate_saas"`, `"sandbox"` (longest: 14)
+  - `resource_tags`: `JSONField(default=dict, blank=True)` (e.g. `{"env": "prod", "cost_center": "IT-100", "owner": "devops"}`)
+  - `billing_cadence`: `CharField(max_length=16, choices=BILLING_CADENCE_CHOICES, default="monthly")` — `"monthly"`, `"quarterly"`, `"annual"`, `"multi_year"`, `"usage_payg"` (longest: 10)
+  - `commitment_term`: `CharField(max_length=24, choices=COMMITMENT_TERM_CHOICES, default="annual_contract")` — `"on_demand"`, `"1yr_reserved"`, `"3yr_reserved"`, `"annual_contract"`, `"monthly_flex"` (longest: 15)
+  - `monthly_recurring_cost`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `annual_contract_value`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))`
+  - `currency`: `ForeignKey("accounting.Currency", on_delete=SET_NULL, null=True, blank=True, related_name="cloud_asset_subscriptions")` (GLOBAL — no tenant filter, NOT in `reject_foreign`)
+  - `provisioned_seats`: `PositiveIntegerField(default=0)`
+  - `active_seats_30d`: `PositiveIntegerField(default=0)`
+  - `sso_status`: `CharField(max_length=28, choices=SSO_STATUS_CHOICES, default="sso_optional")` — `"sso_enforced"`, `"sso_optional"`, `"local_auth_only"`, `"shadow_it_unapproved"` (longest: 20)
+  - `approval_status`: `CharField(max_length=28, choices=APPROVAL_STATUS_CHOICES, default="sanctioned")` — `"sanctioned"`, `"under_review"`, `"shadow_it_flagged"`, `"consolidation_target"`, `"decommissioned"` (longest: 20)
+  - `renewal_date`: `DateField(null=True, blank=True)`
+  - `cancellation_notice_days`: `PositiveSmallIntegerField(default=30)`
+  - `auto_renew`: `BooleanField(default=True)`
+  - `vendor_eol_date`: `DateField(null=True, blank=True)`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="active")` — `"active"`, `"expiring_soon"`, `"underutilized"`, `"shadow_flagged"`, `"suspended"`, `"cancelled"` (longest: 14)
+  - `last_finops_sync_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `decommissioned_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - Verified FKs (all tenant-validated in `clean()`): `org_unit` (`core.OrgUnit`), `vendor_party` (`core.Party`), `gl_expense_account` (`accounting.GLAccount`), `business_owner` (`settings.AUTH_USER_MODEL`), `technical_owner` (`settings.AUTH_USER_MODEL`)
+  - `notes`: `TextField(blank=True)`
+- **Computed properties**: `seat_utilization_pct`, `wasted_monthly_spend`, `has_required_tags` (checks `env`, `cost_center`, `owner` keys in `resource_tags` dict), `is_eol_expired`
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_itcl_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_itcl_ten_stat")` (17)
+  - `Index(fields=["tenant", "provider"], name="idx_itcl_ten_prov")` (17)
+  - `Index(fields=["tenant", "approval_status"], name="idx_itcl_ten_aprv")` (17)
+  - `Index(fields=["tenant", "renewal_date"], name="idx_itcl_ten_ren")` (16)
+- **Form (`CloudAssetSubscriptionForm`)**:
+  - Excluded (`editable=False` / workflow / system): `tenant`, `number`, `status`, `last_finops_sync_at`, `decommissioned_at`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(...)` on all tenant-scoped FKs (excluding `currency`); validate `resource_tags` is a JSON `dict`; validate `monthly_recurring_cost >= 0`, `annual_contract_value >= 0`, `active_seats_30d <= provisioned_seats` (when `provisioned_seats > 0`).
+- **Workflow POST actions**: `sanction_app`, `flag_shadow_it`, `sync_finops_status`, `renew_subscription`, `suspend_subscription` (`@tenant_admin_required`), `decommission` (`@tenant_admin_required`).
+- **Badge CSS**: `STATUS_CSS` (`active -> badge-green`, `expiring_soon -> badge-amber`, `underutilized -> badge-info`, `shadow_flagged -> badge-red`, `suspended -> badge-amber`, `cancelled -> badge-muted`).
+
+### 4. `CmdbRelationship` (`CMDB-`)
+*Maps NavERP bullet: `Configuration Management Database (CMDB)` + cross-estate dependency topology, SPOF flagging, cycle/self-loop prevention, upstream/downstream blast-radius analysis*
+- **File**: `apps/assets/models/ItAssetManagement/CmdbRelationships.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "CMDB"`)
+- **Fields & Choices (L65 verified)**:
+  - `CI_TYPE_CHOICES`: `"it_hardware"`, `"software_license"`, `"cloud_asset"`, `"service_component"`, `"operational_asset"` (longest: 17)
+  - `source_ci_type`: `CharField(max_length=24, choices=CI_TYPE_CHOICES)`
+  - `source_hardware`: `ForeignKey("assets.ItHardwareAsset", on_delete=CASCADE, null=True, blank=True, related_name="outbound_cmdb_edges")`
+  - `source_software`: `ForeignKey("assets.SoftwareLicense", on_delete=CASCADE, null=True, blank=True, related_name="outbound_cmdb_edges")`
+  - `source_cloud`: `ForeignKey("assets.CloudAssetSubscription", on_delete=CASCADE, null=True, blank=True, related_name="outbound_cmdb_edges")`
+  - `source_service`: `ForeignKey("core.ServiceComponent", on_delete=CASCADE, null=True, blank=True, related_name="outbound_cmdb_edges")`
+  - `source_asset`: `ForeignKey("scm.Asset", on_delete=CASCADE, null=True, blank=True, related_name="outbound_cmdb_edges")`
+  - `relationship_type`: `CharField(max_length=24, choices=RELATIONSHIP_TYPE_CHOICES)` — `"runs_on"`, `"depends_on"`, `"hosted_in"`, `"connects_to"`, `"backed_up_by"`, `"licensed_by"`, `"integrates_with"`, `"replicates_to"` (longest: 15)
+  - `target_ci_type`: `CharField(max_length=24, choices=CI_TYPE_CHOICES)`
+  - `target_hardware`: `ForeignKey("assets.ItHardwareAsset", on_delete=CASCADE, null=True, blank=True, related_name="inbound_cmdb_edges")`
+  - `target_software`: `ForeignKey("assets.SoftwareLicense", on_delete=CASCADE, null=True, blank=True, related_name="inbound_cmdb_edges")`
+  - `target_cloud`: `ForeignKey("assets.CloudAssetSubscription", on_delete=CASCADE, null=True, blank=True, related_name="inbound_cmdb_edges")`
+  - `target_service`: `ForeignKey("core.ServiceComponent", on_delete=CASCADE, null=True, blank=True, related_name="inbound_cmdb_edges")`
+  - `target_asset`: `ForeignKey("scm.Asset", on_delete=CASCADE, null=True, blank=True, related_name="inbound_cmdb_edges")`
+  - `environment`: `CharField(max_length=20, choices=ENVIRONMENT_CHOICES, default="production")` — `"production"`, `"staging"`, `"development"`, `"dr_failover"`, `"shared_infra"` (longest: 12)
+  - `criticality`: `CharField(max_length=32, choices=CRITICALITY_CHOICES, default="tier_2_business_important")` — `"tier_1_mission_critical"`, `"tier_2_business_important"`, `"tier_3_operational"`, `"tier_4_low"` (longest: 23)
+  - `impact_severity`: `CharField(max_length=28, choices=IMPACT_SEVERITY_CHOICES, default="degraded_performance")` — `"hard_outage"`, `"degraded_performance"`, `"failover_available"`, `"informational"` (longest: 20)
+  - `is_single_point_of_failure`: `BooleanField(default=False)`
+  - `verified_on`: `DateField(null=True, blank=True, editable=False)` (L22)
+  - `verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="verified_cmdb_edges")` (L22)
+  - `severed_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `status`: `CharField(max_length=16, choices=STATUS_CHOICES, default="active")` — `"active"`, `"planned"`, `"deprecated"`, `"severed"` (longest: 10)
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="owned_cmdb_relationships")`
+  - `blast_radius_notes`: `TextField(blank=True)`
+- **Clean rules & helpers**: `source_ci` / `target_ci` properties returning the active node object; `clean()` enforces exact single FK match for `source_ci_type` and `target_ci_type` (all other 4 source/target FKs must be None), forbids self-loops (`(source_ci_type, source_pk) == (target_ci_type, target_pk)`), forbids duplicate active `(tenant, source_key, relationship_type, target_key)` edges, and validates same-tenant ownership on every populated FK.
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_cmdb_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_cmdb_ten_stat")` (17)
+  - `Index(fields=["tenant", "relationship_type"], name="idx_cmdb_ten_rel")` (16)
+  - `Index(fields=["tenant", "source_ci_type"], name="idx_cmdb_ten_src")` (16)
+  - `Index(fields=["tenant", "target_ci_type"], name="idx_cmdb_ten_tgt")` (16)
+- **Form (`CmdbRelationshipForm`)**:
+  - Excluded (`editable=False` / workflow / system): `tenant`, `number`, `status`, `verified_on`, `verified_by`, `severed_at`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(...)` on all 10 CI FKs + `owner`; clears non-matching CI FKs or validates exact single CI selection per side.
+- **Workflow POST actions**: `verify_edge` (sets `verified_on=today`, `verified_by=request.user`, `status="active"`), `mark_deprecated`, `sever_relationship` (`@tenant_admin_required`, sets `status="severed"`, `severed_at=timezone.now()`).
+- **Badge CSS**: `STATUS_CSS` (`active -> badge-green`, `planned -> badge-info`, `deprecated -> badge-amber`, `severed -> badge-muted`).
+
+---
+
+## Computed Workbenches (2 — covering NavERP bullets 4 & 5)
+
+- [ ] **EOL & Refresh Cycles Command Board (`it_refresh_board`)** — `apps/assets/views/ItAssetManagement/ItRefreshBoards.py` + `urls/ItAssetManagement/ItRefreshBoards.py` (`it_refresh_board`, `it_refresh_board_export_csv`):
+  - Aggregates hardware items overdue/due within 90d/EOL-expired, software & cloud items approaching `vendor_eol_date` / `renewal_date`, CapEx refresh budget totals by `core.OrgUnit`, pending NIST SP 800-88 data-sanitization backlog (`pending_wipe`), and active CMDB downstream dependency counts per EOL CI (single-query edge map, zero N+1). Supports `org_unit`, `priority`, `horizon_days`, and CSV export (`csv_safe`).
+- [ ] **CMDB Dependency & Blast-Radius Impact Analysis (`cmdb_impact_analysis`)** — `apps/assets/views/ItAssetManagement/CmdbImpactAnalyses.py` + `urls/ItAssetManagement/CmdbImpactAnalyses.py` (`cmdb_impact_analysis`, `cmdb_impact_analysis_export_csv`):
+  - Loads active/planned tenant `CmdbRelationship` edges in 1 query with `select_related(...)` across all 10 typed CI pointers, lets the user pick any CI (`ci_type` + `ci_id`, or `CmdbRelationship` focus) + `environment` filter, and executes a cycle-safe BFS traversal returning **Upstream Dependencies**, **Downstream Blast Radius** (all impacted services/hosts/apps with hop distance & criticality), **SPOF Alerts**, and CSV export (`csv_safe`).
+
+---
+
+## Backend (`apps/assets/{models,forms,views,urls}/ItAssetManagement/`)
+
+- [ ] **Models package**: `apps/assets/models/ItAssetManagement/__init__.py` + `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`
+- [ ] **Forms package**: `apps/assets/forms/ItAssetManagement/__init__.py` + `_helpers.py`, `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`
+- [ ] **Views package**: `apps/assets/views/ItAssetManagement/__init__.py` + `_helpers.py` (`csv_safe`, BFS impact helpers, EOL priority helpers), `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`, `ItRefreshBoards.py`, `CmdbImpactAnalyses.py`
+  - Every entity view provides full CRUD (`list`, `create`, `detail`, `edit`, `delete`), `export_csv`, search + dropdown filters (all `*_choices` + tenant FK querysets passed in context, `.isdigit()` validated), pagination (`has_previous`/`has_next`), single-query KPI `.aggregate(...)`, `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`, and POST workflow actions.
+- [ ] **URLs package**: `apps/assets/urls/ItAssetManagement/__init__.py` + `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`, `ItRefreshBoards.py`, `CmdbImpactAnalyses.py` (all literal paths `new/`, `export-csv/`, `refresh-board/`, `cmdb/impact-analysis/` registered BEFORE `<int:pk>/`)
+- [ ] **Re-export blocks** added surgically to `apps/assets/models/__init__.py`, `apps/assets/forms/__init__.py`, `apps/assets/views/__init__.py`, `apps/assets/urls/__init__.py`
+- [ ] **Admin registration**: register `ItHardwareAsset`, `SoftwareLicense`, `CloudAssetSubscription`, `CmdbRelationship` in `apps/assets/admin.py` with `list_display`, `list_filter`, `search_fields`, `readonly_fields` (matching `editable=False` & auto `number`/`created_at`/`updated_at`)
+- [ ] **Incremental migration (`0024_...`)**: `venv\Scripts\python.exe manage.py makemigrations assets`
+- [ ] **Extend idempotent seeder (`apps/assets/management/commands/seed_assets.py`)**: reuse existing Acme/Demo `Tenant`, `OrgUnit`, `Party`, `User`, `Currency`, `GLAccount`, `scm.Asset`, `scm.Location`, `scm.PurchaseOrder`, `accounting.FixedAsset`, `core.ServiceComponent`, `hrm.EmployeeProfile`, and `assets` sibling records (`AssetCategory`, `AssetModel`, `AssetWarranty`, `AssetServiceContract`, `AssetRequisition`, `AssetReplacementPlan`, `AssetDisposalRequest`, `AssetScrapSalvage`); seed realistic IT hardware (laptops, production servers, core firewall/switch with EOL/sanitization states), software licenses (compliant, surplus reclaimable, true-up shortfall), cloud/SaaS subscriptions (sanctioned AWS/M365, shadow-IT flagged SaaS, underutilized seats), and CMDB directed dependency graph (services -> DB/cluster -> hardware/cloud with SPOF edge).
+
+## Wire-up
+
+- [ ] **`apps/core/navigation.py` (`LIVE_LINKS["11.18"]`)**:
+  - `"Hardware Lifecycle Management": "assets:it_hardware_asset_list"`
+  - `"Software License Management": "assets:software_license_list"`
+  - `"Cloud Asset & Subscription Tracking": "assets:cloud_asset_subscription_list"`
+  - `"Configuration Management Database (CMDB)": "assets:cmdb_relationship_list"`
+  - `"End-of-Life & Refresh Cycles": "assets:it_refresh_board"`
+  - `"CMDB Impact Analysis": "assets:cmdb_impact_analysis"`
+
+## Templates (`templates/assets/itassetmanagement/`)
+
+- [ ] `templates/assets/itassetmanagement/it_hardware_asset/{list,detail,form}.html` — filter bar reflecting `request.GET` (search, `status`, `device_class`, `environment`, `disk_encryption_status`, `org_unit`, `eol_state`), KPI cards, Actions column (view/edit/delete POST+confirm+csrf), detail `<dl class="detail-grid">`, NIST sanitization & workflow action buttons, related CMDB edges panel
+- [ ] `templates/assets/itassetmanagement/software_license/{list,detail,form}.html` — filter bar (search, `status`, `software_category`, `license_type`, `license_metric`, `org_unit`), ELP delta & true-up exposure KPI cards, Actions column, `reclaim_inactive` / `record_true_up` / `sync_compliance_status` / `renew_term` POST actions
+- [ ] `templates/assets/itassetmanagement/cloud_asset_subscription/{list,detail,form}.html` — filter bar (search, `status`, `asset_kind`, `provider`, `approval_status`, `sso_status`, `org_unit`), FinOps spend/waste/shadow-IT KPI cards, resource tags & seat utilization panel, `sanction_app` / `flag_shadow_it` / `sync_finops_status` / `decommission` POST actions
+- [ ] `templates/assets/itassetmanagement/cmdb_relationship/{list,detail,form}.html` — filter bar (search, `status`, `relationship_type`, `environment`, `criticality`, `spof`), CI source -> verb -> target table, detail upstream/downstream 1-hop context & `verify_edge` / `mark_deprecated` / `sever_relationship` POST actions
+- [ ] `templates/assets/itassetmanagement/it_refresh_board.html` — EOL & Refresh Cycles workbench (filters, CapEx by OrgUnit summary, overdue/approaching hardware/software/cloud tables with CMDB downstream dependency count, NIST 800-88 sanitization backlog, CSV export)
+- [ ] `templates/assets/itassetmanagement/cmdb_impact_analysis.html` — CMDB Dependency & Blast-Radius explorer (CI selector, environment filter, Upstream Dependencies table, Downstream Blast Radius hop table, SPOF alerts, CSV export)
+
+## Verify
+
+- [ ] `venv\Scripts\python.exe manage.py migrate` (migration `0024_*` clean)
+- [ ] `venv\Scripts\python.exe manage.py seed_assets` run **twice** (strictly idempotent — zero duplicate rows or IntegrityError)
+- [ ] `venv\Scripts\python.exe manage.py check` (zero issues)
+- [ ] `temp/` smoke sweep as `admin_acme` / `password`: all new `assets:*` URLs return 200/302, real seeded records & titles present, zero `{#` / `{% comment` template leaks, junk-param list & page-2 pagination work, cross-tenant IDOR returns 404, POST workflow actions & CSV export verified
+- [ ] Sidebar shows all 5 `11.18` NavERP.md bullets + `CMDB Impact Analysis` Live (no `On the roadmap` placeholder left for `11.18`)
+
+## Close-out
+
+- [ ] Phase 4 review agents run strictly serially (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) -> `.claude/tasks/review-assets-11.18.md`
+- [ ] Phase 5 `code-fixer` agent burns down all findings in `.claude/tasks/review-assets-11.18.md`
+- [ ] Phase 6 tests (`conftest.py` + `test_itam_models.py`, `test_itam_forms.py`, `test_itam_views.py`, `test_itam_security.py`) + full unfiltered `apps/assets` suite green
+- [ ] Phase 7 update `.claude/skills/assets/SKILL.md` and `README.md` (and record any remaining items in `.agents/tasks/gaps-assets-11.18.md` or declare `Gaps: None`)
+
+## Later passes / deferred
+- Agentless network & endpoint discovery scanners (WMI/SSH/SNMP sweeps and Intune/Jamf/Kandji MDM webhooks via `11.15` connectors)
+- Automated AWS CUR / Azure EA / GCP BigQuery billing ingestion & Okta/Entra ID SCIM user activity sync (`11.15` / `0.4`)
+- Interactive force-directed SVG/WebGL CMDB topology canvas & automated CAB Change Request gating in `Module 18` (`apps/itsm`)
+- ITAD certified recycler EDI / automated NIST SP 800-88 wipe-log & CoD PDF ingestion
+
+## Review notes
+(filled in at the end)
+
+---
 # Sub-module 11.15: Integration & API Hub (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.15.md` (2026-11-11)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.13 (`11.14` unbuilt).
