@@ -29,13 +29,13 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div class="form-group md:col-span-2">
-                    <label class="form-label" for="{{ form.title.id_for_label }}">Scorecard Title *</label>
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Scorecard Title <span class="req">*</span></label>
                     {{ form.title }}
                     {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.period_type.id_for_label }}">Reporting Period Type *</label>
+                    <label class="form-label" for="{{ form.period_type.id_for_label }}">Reporting Period Type <span class="req">*</span></label>
                     {{ form.period_type }}
                     {% if form.period_type.errors %}<div class="form-error">{{ form.period_type.errors }}</div>{% endif %}
                 </div>
@@ -46,12 +46,12 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start Date *</label>
+                    <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start Date <span class="req">*</span></label>
                     {{ form.period_start }}
                     {% if form.period_start.errors %}<div class="form-error">{{ form.period_start.errors }}</div>{% endif %}
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End Date *</label>
+                    <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End Date <span class="req">*</span></label>
                     {{ form.period_end }}
                     {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors }}</div>{% endif %}
                 </div>
