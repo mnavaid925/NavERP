@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Training &amp; Certification Records — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Document &amp; Knowledge Management</span>
+            <span>/</span>
+            <span>Training &amp; Certification Records</span>
+        </div>
+        <h1 class="page-title">Training &amp; Certification Records</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_operator_certification_refresh_alerts' %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Refresh Expiry Alerts
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_operator_certification_export_csv' %}?q={{ request.GET.q|urlencode }}&qualification_type={{ request.GET.qualification_type|urlencode }}&proficiency_level={{ request.GET.proficiency_level|urlencode }}&status={{ request.GET.status|urlencode }}&operational_asset={{ request.GET.operational_asset|urlencode }}&operating_procedure={{ request.GET.operating_procedure|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_operator_certification_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Certification
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="award"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Certifications</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="badge-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active / Certified</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Expiring Soon</div>
+            <div class="stat-value">{{ expiring_soon_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Expired Credentials</div>
+            <div class="stat-value">{{ expired_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div>
+                <label for="aoct-filter-q" class="sr-only">Search certifications</label>
+                <input id="aoct-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, operator, code, cert..." class="form-input" />
+            </div>
+            <div>
+                <label for="aoct-filter-qtype" class="sr-only">Qualification Type</label>
+                <select id="aoct-filter-qtype" name="qualification_type" class="form-select">
+                    <option value="">All Qualification Types</option>
+                    {% for val, label in qualification_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.qualification_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="aoct-filter-prof" class="sr-only">Proficiency Level</label>
+                <select id="aoct-filter-prof" name="proficiency_level" class="form-select">
+                    <option value="">All Proficiency Levels</option>
+                    {% for val, label in proficiency_choices %}
+                    <option value="{{ val }}" {% if request.GET.proficiency_level == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="aoct-filter-status" class="sr-only">Status</label>
+                <select id="aoct-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="aoct-filter-asset" class="sr-only">Operational Asset</label>
+                <select id="aoct-filter-asset" name="operational_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for ast in assets_list %}
+                    <option value="{{ ast.pk }}" {% if request.GET.operational_asset == ast.pk|stringformat:"d" %}selected{% endif %}>{{ ast }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="aoct-filter-proc" class="sr-only">Operating Procedure</label>
+                <select id="aoct-filter-proc" name="operating_procedure" class="form-select">
+                    <option value="">All SOPs</option>
+                    {% for sop in procedures %}
+                    <option value="{{ sop.pk }}" {% if request.GET.operating_procedure == sop.pk|stringformat:"d" %}selected{% endif %}>{{ sop.number }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_operator_certification_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Certifications Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Cert #</th>
+                    <th>Operator &amp; Qualification</th>
+                    <th>Type &amp; Proficiency</th>
+                    <th>Asset / SOP Scope</th>
+                    <th>SOP Ack</th>
+                    <th>Expires On</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in certifications %}
+                <tr>
+                    <td class="font-mono text-xs whitespace-nowrap">
+                        <a href="{% url 'assets:asset_operator_certification_detail' item.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                            {{ item.number }}
+                        </a>
+                        {% if item.qualification_code %}
+                        <div class="text-xs text-slate-400">{{ item.qualification_code }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">{{ item.operator_display_name }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ item.title }}</div>
+                    </td>
+                    <td class="text-sm">
+                        <div>{{ item.get_qualification_type_display }}</div>
+                        <span class="badge {{ item.proficiency_badge_class }} mt-1">{{ item.get_proficiency_level_display }}</span>
+                    </td>
+                    <td class="text-sm">
+                        <div>{% if item.operational_asset %}{{ item.operational_asset }}{% elif item.asset_category %}{{ item.asset_category.name }}{% else %}Site-Wide{% endif %}</div>
+                        {% if item.operating_procedure %}
+                        <div class="text-xs text-indigo-600 dark:text-indigo-400">{{ item.operating_procedure.number }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap">
+                        {% if item.sop_acknowledged %}
+                        <span class="badge badge-green">Acknowledged</span>
+                        {% else %}
+                        <span class="badge badge-amber">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm whitespace-nowrap">
+                        {% if item.expires_on %}
+                            {% if item.is_expired %}
+                            <span class="badge badge-red">{{ item.expires_on|date:"Y-m-d" }}</span>
+                            {% elif item.is_renewal_due %}
+                            <span class="badge badge-amber">{{ item.expires_on|date:"Y-m-d" }}</span>
+                            {% else %}
+                            {{ item.expires_on|date:"Y-m-d" }}
+                            {% endif %}
+                        {% else %}
+                            No Expiry
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'assets:asset_operator_certification_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if item.certificate_file %}
+                            <a href="{% url 'assets:asset_operator_certification_download' item.pk %}" class="btn btn-icon" title="Download Certificate" aria-label="Download {{ item.number }}">
+                                <i data-lucide="download"></i>
+                            </a>
+                            {% endif %}
+                            {% if item.status == "pending" or item.status == "active" or item.status == "expiring_soon" %}
+                            <a href="{% url 'assets:asset_operator_certification_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% endif %}
+                            {% if item.status != "revoked" %}
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'assets:asset_operator_certification_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete certification {{ item.number|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete {{ item.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="award" class="w-12 h-12 text-slate-400 dark:text-slate-500 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">No Operator Certifications Found</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Track equipment operator qualifications, LOTO authorization, SOP sign-offs, and renewal deadlines.</p>
+                            <a href="{% url 'assets:asset_operator_certification_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Certification
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }} certifications</span>
+
+        {% if page_obj.has_previous %}
+        <a aria-label="Previous page" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.qualification_type %}&qualification_type={{ request.GET.qualification_type|urlencode }}{% endif %}{% if request.GET.proficiency_level %}&proficiency_level={{ request.GET.proficiency_level|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.operating_procedure %}&operating_procedure={{ request.GET.operating_procedure|urlencode }}{% endif %}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
+
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a aria-label="Next page" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.qualification_type %}&qualification_type={{ request.GET.qualification_type|urlencode }}{% endif %}{% if request.GET.proficiency_level %}&proficiency_level={{ request.GET.proficiency_level|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.operating_procedure %}&operating_procedure={{ request.GET.operating_procedure|urlencode }}{% endif %}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
