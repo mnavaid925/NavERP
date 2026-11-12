@@ -33,7 +33,8 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div>
-                <select name="org_unit" class="form-select">
+                <label for="dash-filter-org-unit" class="sr-only">Org Unit</label>
+                <select id="dash-filter-org-unit" name="org_unit" class="form-select">
                     <option value="">All Org Units</option>
                     {% for ou in org_units %}
                     <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
@@ -41,7 +42,8 @@
                 </select>
             </div>
             <div>
-                <select name="asset_category" class="form-select">
+                <label for="dash-filter-category" class="sr-only">Asset Category</label>
+                <select id="dash-filter-category" name="asset_category" class="form-select">
                     <option value="">All Asset Categories</option>
                     {% for cat in categories %}
                     <option value="{{ cat.pk }}" {% if request.GET.asset_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
@@ -49,7 +51,8 @@
                 </select>
             </div>
             <div>
-                <select name="location" class="form-select">
+                <label for="dash-filter-location" class="sr-only">Location</label>
+                <select id="dash-filter-location" name="location" class="form-select">
                     <option value="">All Locations</option>
                     {% for loc in locations %}
                     <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.name }}</option>
@@ -57,7 +60,8 @@
                 </select>
             </div>
             <div>
-                <select name="fiscal_year" class="form-select">
+                <label for="dash-filter-fiscal-year" class="sr-only">Forecast Base Fiscal Year</label>
+                <select id="dash-filter-fiscal-year" name="fiscal_year" class="form-select">
                     {% for yr in fiscal_years %}
                     <option value="{{ yr }}" {% if selected_fiscal_year == yr %}selected{% endif %}>Forecast Base: FY{{ yr }}</option>
                     {% endfor %}
@@ -68,7 +72,7 @@
                     <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter Portfolio
                 </button>
                 {% if request.GET.org_unit or request.GET.asset_category or request.GET.location or request.GET.fiscal_year %}
-                <a href="{% url 'assets:portfolio_dashboard' %}" class="btn btn-outline" title="Reset Filters">
+                <a href="{% url 'assets:portfolio_dashboard' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
