@@ -3354,6 +3354,13 @@ LIVE_LINKS = {
         # Extra live leaf for unfiltered connector hub
         "Integration Connectors": "assets:asset_integration_connector_list",
     },
+    "11.16": {
+        "Asset Documentation Repository": "assets:asset_document_list",
+        "Version Control & Change Management": "assets:asset_document_change_list",
+        "SOP & Procedure Management": "assets:asset_operating_procedure_list",
+        "Training & Certification Records": "assets:asset_operator_certification_list",
+        "Lessons Learned & Failure Analysis": "assets:asset_knowledge_article_list",
+    },
 
 
 
