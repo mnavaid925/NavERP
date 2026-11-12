@@ -161,7 +161,7 @@
                     </td>
                     <td>
                         <div class="text-sm font-medium">FY{{ s.base_fiscal_year }} ({{ s.horizon_years }} yrs)</div>
-                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ s.scope_org_unit.name|default:"Enterprise-Wide" }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{% if s.scope_org_unit %}{{ s.scope_org_unit.name }}{% else %}Enterprise-Wide{% endif %}</div>
                     </td>
                     <td class="text-right font-mono font-semibold">{% fmt_money s.simulated_capex_total s.currency %}</td>
                     <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money s.opex_savings_amount s.currency %}</td>
