@@ -17,6 +17,9 @@ from apps.assets.models.AssetClassification.AssetSpecificationTemplates import (
 from apps.assets.models.AssetCompliance.AssetComplianceFrameworks import (
     AssetComplianceFramework,
 )
+from apps.assets.models.AssetDocumentKnowledge._validators import (
+    readable_asset_document_q,
+)
 from apps.assets.models.AssetDocumentKnowledge.AssetDocuments import AssetDocument
 from apps.assets.models.AssetWarrantyInsurance.AssetWarranties import AssetWarranty
 from apps.core.models.Document import Document
@@ -121,9 +124,14 @@ class AssetDocumentForm(TenantUniqueMixin, TenantModelForm):
             ),
         }
 
-    def __init__(self, *args, tenant=None, **kwargs):
+    def __init__(self, *args, tenant=None, user=None, **kwargs):
+        self.user = user
         super().__init__(*args, tenant=tenant, **kwargs)
         scope_tenant_querysets(self, self._TENANT_FIELDS)
+        if "supersedes" in self.fields and self.tenant is not None:
+            self.fields["supersedes"].queryset = self.fields[
+                "supersedes"
+            ].queryset.filter(readable_asset_document_q(self.user))
         if "reviewer" in self.fields and self.tenant is not None:
             self.fields["reviewer"].queryset = self.fields["reviewer"].queryset.order_by(
                 "username"
