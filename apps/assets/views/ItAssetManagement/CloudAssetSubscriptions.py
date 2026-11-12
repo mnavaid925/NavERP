@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q, Sum
@@ -27,6 +28,7 @@ from apps.assets.views.ItAssetManagement._helpers import (
     apply_choice_filter,
     apply_fk_filter,
     csv_export_response,
+    is_tenant_admin_user,
 )
 from apps.core.decorators import tenant_admin_required
 from apps.core.models.OrgUnit import OrgUnit
@@ -255,6 +257,8 @@ def cloud_asset_subscription_edit(request, pk):
             f"Cloud Asset {cloud_asset.number} is cancelled and cannot be edited.",
         )
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
+    if cloud_asset.status == "suspended" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
 
     if request.method == "POST":
         form = CloudAssetSubscriptionForm(request.POST, instance=cloud_asset, tenant=request.tenant)
@@ -309,12 +313,12 @@ def cloud_asset_subscription_sanction(request, pk):
     if cloud_asset.is_locked:
         messages.warning(request, f"Cloud Asset {cloud_asset.number} is cancelled.")
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
+    if cloud_asset.status == "suspended" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
     with transaction.atomic():
         cloud_asset.approval_status = "sanctioned"
         if cloud_asset.sso_status == "shadow_it_unapproved":
             cloud_asset.sso_status = "sso_optional"
-        if cloud_asset.status == "suspended":
-            cloud_asset.status = "active"
         cloud_asset.status = cloud_asset.compute_operational_status()
         cloud_asset.last_finops_sync_at = timezone.now()
         cloud_asset.save(
@@ -339,6 +343,8 @@ def cloud_asset_subscription_flag_shadow(request, pk):
     if cloud_asset.is_locked:
         messages.warning(request, f"Cloud Asset {cloud_asset.number} is cancelled.")
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
+    if cloud_asset.status == "suspended" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
     with transaction.atomic():
         cloud_asset.approval_status = "shadow_it_flagged"
         cloud_asset.status = "shadow_flagged"
@@ -356,6 +362,8 @@ def cloud_asset_subscription_sync_finops(request, pk):
     if cloud_asset.is_locked:
         messages.warning(request, f"Cloud Asset {cloud_asset.number} is cancelled.")
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
+    if cloud_asset.status == "suspended" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
     with transaction.atomic():
         cloud_asset.status = cloud_asset.compute_operational_status()
         cloud_asset.last_finops_sync_at = timezone.now()
@@ -376,12 +384,12 @@ def cloud_asset_subscription_renew(request, pk):
     if cloud_asset.is_locked:
         messages.warning(request, f"Cloud Asset {cloud_asset.number} is cancelled.")
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
+    if cloud_asset.status == "suspended" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
     today = timezone.now().date()
     base_date = max(cloud_asset.renewal_date, today) if cloud_asset.renewal_date else today
     with transaction.atomic():
         cloud_asset.renewal_date = add_months(base_date, 12)
-        if cloud_asset.status == "suspended":
-            cloud_asset.status = "active"
         cloud_asset.status = cloud_asset.compute_operational_status(today=today)
         cloud_asset.last_finops_sync_at = timezone.now()
         cloud_asset.save(
