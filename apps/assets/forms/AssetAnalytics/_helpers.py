@@ -5,17 +5,22 @@ from decimal import Decimal
 ZERO = Decimal("0.00")
 
 
-def scope_tenant_fields(form, tenant_field_models, global_querysets=None):
+def scope_tenant_fields(form, tenant_field_models, global_querysets=None, select_related_map=None):
     """
     Filter tenant-owned ForeignKey/ModelChoice fields to ``form.tenant`` without
     filtering global reference tables such as ``accounting.Currency``, and return
     empty querysets when ``form.tenant`` is None.
     """
     tenant = getattr(form, "tenant", None)
+    select_related_map = select_related_map or {}
     for field_name, model_cls in tenant_field_models.items():
         if field_name in form.fields:
             if tenant is not None:
-                form.fields[field_name].queryset = model_cls.objects.filter(tenant=tenant)
+                qs = model_cls.objects.filter(tenant=tenant)
+                rels = select_related_map.get(field_name)
+                if rels:
+                    qs = qs.select_related(*rels)
+                form.fields[field_name].queryset = qs
             else:
                 form.fields[field_name].queryset = model_cls.objects.none()
     if global_querysets:
