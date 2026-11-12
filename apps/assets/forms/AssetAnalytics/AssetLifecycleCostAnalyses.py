@@ -34,6 +34,12 @@ class AssetLifecycleCostAnalysisForm(TenantUniqueMixin, TenantModelForm):
         "analyzed_by": User,
     }
 
+    _SELECT_RELATED = {
+        "fixed_asset": ("location", "custodian"),
+        "operational_asset": ("org_unit", "location", "fixed_asset"),
+        "asset_model": ("category", "manufacturer"),
+    }
+
     _MONETARY_FIELDS = (
         "acquisition_capital_cost",
         "installation_commissioning_cost",
@@ -116,6 +122,7 @@ class AssetLifecycleCostAnalysisForm(TenantUniqueMixin, TenantModelForm):
             self,
             self._TENANT_FIELDS,
             global_querysets={"currency": Currency.objects.filter(is_active=True)},
+            select_related_map=self._SELECT_RELATED,
         )
 
     def clean(self):
