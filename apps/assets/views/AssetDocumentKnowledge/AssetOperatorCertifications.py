@@ -506,28 +506,41 @@ def asset_operator_certification_revoke(request, pk):
 def asset_operator_certification_refresh_alerts(request):
     """Recompute active / expiring_soon / expired statuses across all tenant certifications."""
     today = timezone.localdate()
-    updated_count = 0
-    first_changed = None
+    now = timezone.now()
+    changed_certs = []
     with transaction.atomic():
-        certs = AssetOperatorCertification.objects.select_for_update().filter(
-            tenant=request.tenant,
-            status__in=("active", "expiring_soon", "expired"),
+        certs = (
+            AssetOperatorCertification.objects.select_for_update()
+            .filter(
+                tenant=request.tenant,
+                status__in=("active", "expiring_soon", "expired"),
+            )
+            .only("id", "status", "expires_on", "renewal_lead_days", "updated_at")
         )
         for cert in certs:
-            if cert.sync_expiry_status(save=True, as_of=today):
-                updated_count += 1
-                if first_changed is None:
-                    first_changed = cert
-        if first_changed is not None:
+            if cert.sync_expiry_status(save=False, as_of=today):
+                cert.updated_at = now
+                changed_certs.append(cert)
+        if changed_certs:
+            AssetOperatorCertification.objects.bulk_update(
+                changed_certs, ["status", "updated_at"]
+            )
+            first_changed = (
+                AssetOperatorCertification.objects.select_related(
+                    "operator_party",
+                    "operator_user",
+                    "employee_profile__party",
+                ).get(pk=changed_certs[0].pk)
+            )
             write_audit_log(
                 request.user,
                 first_changed,
                 "sync_exp",
-                changes={"updated_count": updated_count},
+                changes={"updated_count": len(changed_certs)},
                 tenant=request.tenant,
             )
     messages.success(
         request,
-        f"Synchronized certification expiry statuses ({updated_count} updated).",
+        f"Synchronized certification expiry statuses ({len(changed_certs)} updated).",
     )
     return redirect("assets:asset_operator_certification_list")
