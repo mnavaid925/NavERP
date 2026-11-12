@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ document.number }}{% else %}New Asset Document{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_document_list' %}">Asset Documentation Repository</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ document.number }}{% else %}New Document{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and document %}
+        <a href="{% url 'assets:asset_document_detail' document.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Document
+        </a>
+        {% else %}
+        <a href="{% url 'assets:asset_document_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Repository
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Document Identity &amp; Classification</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Document Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.document_class.id_for_label }}">Document Class *</label>
+                    {{ form.document_class }}
+                    {% if form.document_class.errors %}<div class="form-error">{{ form.document_class.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.access_classification.id_for_label }}">Access Classification *</label>
+                    {{ form.access_classification }}
+                    {% if form.access_classification.errors %}<div class="form-error">{{ form.access_classification.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.tag_code.id_for_label }}">Equipment Tag / Drawing #</label>
+                    {{ form.tag_code }}
+                    {% if form.tag_code.errors %}<div class="form-error">{{ form.tag_code.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.manufacturer_ref.id_for_label }}">Manufacturer / OEM Ref</label>
+                    {{ form.manufacturer_ref }}
+                    {% if form.manufacturer_ref.errors %}<div class="form-error">{{ form.manufacturer_ref.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.document_language.id_for_label }}">Language</label>
+                    {{ form.document_language }}
+                    {% if form.document_language.errors %}<div class="form-error">{{ form.document_language.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.storage_location_ref.id_for_label }}">Physical / DMS Vault Reference</label>
+                    {{ form.storage_location_ref }}
+                    {% if form.storage_location_ref.errors %}<div class="form-error">{{ form.storage_location_ref.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.file.id_for_label }}">Document File Upload (PDF, CAD/Office, Image, ZIP &le; 20 MB)</label>
+                    {{ form.file }}
+                    {% if is_edit and document and document.file %}
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Current attachment:
+                        <a href="{% url 'assets:asset_document_download' document.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">
+                            {{ document.original_filename|default:"Download existing file" }}
+                        </a>
+                        {% if document.short_checksum %}(SHA-256: {{ document.short_checksum }}){% endif %}
+                    </p>
+                    {% endif %}
+                    {% if form.file.errors %}<div class="form-error">{{ form.file.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Version Control, Dates &amp; Governance</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.revision_label.id_for_label }}">Revision Label *</label>
+                    {{ form.revision_label }}
+                    {% if form.revision_label.errors %}<div class="form-error">{{ form.revision_label.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.supersedes.id_for_label }}">Supersedes Revision</label>
+                    {{ form.supersedes }}
+                    {% if form.supersedes.errors %}<div class="form-error">{{ form.supersedes.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.change_type.id_for_label }}">Change Type *</label>
+                    {{ form.change_type }}
+                    {% if form.change_type.errors %}<div class="form-error">{{ form.change_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.change_request_ref.id_for_label }}">ECR / Change Request Ref</label>
+                    {{ form.change_request_ref }}
+                    {% if form.change_request_ref.errors %}<div class="form-error">{{ form.change_request_ref.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.reviewer.id_for_label }}">Engineering Reviewer</label>
+                    {{ form.reviewer }}
+                    {% if form.reviewer.errors %}<div class="form-error">{{ form.reviewer.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.retention_years.id_for_label }}">Retention (Years)</label>
+                    {{ form.retention_years }}
+                    {% if form.retention_years.errors %}<div class="form-error">{{ form.retention_years.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.effective_date.id_for_label }}">Effective Date</label>
+                    {{ form.effective_date }}
+                    {% if form.effective_date.errors %}<div class="form-error">{{ form.effective_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.expiry_date.id_for_label }}">Expiry / Renewal Date</label>
+                    {{ form.expiry_date }}
+                    {% if form.expiry_date.errors %}<div class="form-error">{{ form.expiry_date.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Asset, Compliance &amp; Vendor Links</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_category.id_for_label }}">Asset Category</label>
+                    {{ form.asset_category }}
+                    {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_model.id_for_label }}">Asset Model</label>
+                    {{ form.asset_model }}
+                    {% if form.asset_model.errors %}<div class="form-error">{{ form.asset_model.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.specification_template.id_for_label }}">Specification Template</label>
+                    {{ form.specification_template }}
+                    {% if form.specification_template.errors %}<div class="form-error">{{ form.specification_template.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.warranty.id_for_label }}">Warranty Record</label>
+                    {{ form.warranty }}
+                    {% if form.warranty.errors %}<div class="form-error">{{ form.warranty.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.compliance_framework.id_for_label }}">Compliance Framework</label>
+                    {{ form.compliance_framework }}
+                    {% if form.compliance_framework.errors %}<div class="form-error">{{ form.compliance_framework.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vendor_party.id_for_label }}">Vendor / OEM Party</label>
+                    {{ form.vendor_party }}
+                    {% if form.vendor_party.errors %}<div class="form-error">{{ form.vendor_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.core_document.id_for_label }}">Core DMS Document</label>
+                    {{ form.core_document }}
+                    {% if form.core_document.errors %}<div class="form-error">{{ form.core_document.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Change Notes &amp; Scope</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.redline_summary.id_for_label }}">Field Redline Summary</label>
+                    {{ form.redline_summary }}
+                    {% if form.redline_summary.errors %}<div class="form-error">{{ form.redline_summary.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.spec_delta_notes.id_for_label }}">Specification Delta Notes</label>
+                    {{ form.spec_delta_notes }}
+                    {% if form.spec_delta_notes.errors %}<div class="form-error">{{ form.spec_delta_notes.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.review_notes.id_for_label }}">Review Notes</label>
+                    {{ form.review_notes }}
+                    {% if form.review_notes.errors %}<div class="form-error">{{ form.review_notes.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Description &amp; Distribution Scope</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and document %}
+                <a href="{% url 'assets:asset_document_detail' document.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_document_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Document{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
