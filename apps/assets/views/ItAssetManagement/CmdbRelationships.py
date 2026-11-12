@@ -307,6 +307,10 @@ def cmdb_relationship_verify(request, pk):
     if relationship.is_locked:
         messages.warning(request, f"CMDB Relationship {relationship.number} is severed.")
         return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
+    prev_status = relationship.status
+    prev_verified_on = (
+        relationship.verified_on.isoformat() if relationship.verified_on else None
+    )
     try:
         with transaction.atomic():
             relationship.verified_on = timezone.now().date()
@@ -317,7 +321,16 @@ def cmdb_relationship_verify(request, pk):
             relationship.save(
                 update_fields=["verified_on", "verified_by", "status", "updated_at"]
             )
-            write_audit_log(request.user, relationship, "verify", tenant=request.tenant)
+            write_audit_log(
+                request.user,
+                relationship,
+                "verify",
+                changes={
+                    "status": [prev_status, "active"],
+                    "verified_on": [prev_verified_on, relationship.verified_on.isoformat()],
+                },
+                tenant=request.tenant,
+            )
     except ValidationError as exc:
         messages.error(request, "; ".join(exc.messages))
         return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
@@ -333,10 +346,17 @@ def cmdb_relationship_deprecate(request, pk):
     if relationship.is_locked:
         messages.warning(request, f"CMDB Relationship {relationship.number} is severed.")
         return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
+    prev_status = relationship.status
     with transaction.atomic():
         relationship.status = "deprecated"
         relationship.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, relationship, "deprec", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            relationship,
+            "deprec",
+            changes={"status": [prev_status, "deprecated"]},
+            tenant=request.tenant,
+        )
     messages.warning(request, f"CMDB Relationship {relationship.number} marked deprecated.")
     return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
 
@@ -349,10 +369,17 @@ def cmdb_relationship_sever(request, pk):
     if relationship.is_locked:
         messages.warning(request, f"CMDB Relationship {relationship.number} is already severed.")
         return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
+    prev_status = relationship.status
     with transaction.atomic():
         relationship.status = "severed"
         relationship.severed_at = timezone.now()
         relationship.save(update_fields=["status", "severed_at", "updated_at"])
-        write_audit_log(request.user, relationship, "sever", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            relationship,
+            "sever",
+            changes={"status": [prev_status, "severed"]},
+            tenant=request.tenant,
+        )
     messages.success(request, f"CMDB Relationship {relationship.number} severed.")
     return redirect("assets:cmdb_relationship_detail", pk=relationship.pk)
