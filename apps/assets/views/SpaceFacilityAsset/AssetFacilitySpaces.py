@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.assets.forms.SpaceFacilityAsset.AssetFacilitySpaces import AssetFacilitySpaceForm
+from apps.assets.models.AssetDocumentKnowledge._validators import is_asset_document_readable
 from apps.assets.models.SpaceFacilityAsset.AssetFacilitySpaces import AssetFacilitySpace
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.SpaceFacilityAsset._helpers import (
@@ -31,9 +32,6 @@ def _filtered_spaces_queryset(request):
     qs = base_qs.select_related(
         "parent",
         "org_unit",
-        "scm_location",
-        "floor_plan_document",
-        "space_steward",
     ).defer("notes")
 
     q = (request.GET.get("q") or "").strip()
@@ -187,7 +185,9 @@ def asset_facility_space_create(request):
         return redirect("assets:asset_facility_space_list")
 
     if request.method == "POST":
-        form = AssetFacilitySpaceForm(request.POST, request.FILES, tenant=request.tenant)
+        form = AssetFacilitySpaceForm(
+            request.POST, request.FILES, tenant=request.tenant, user=request.user
+        )
         if form.is_valid():
             with transaction.atomic():
                 space = form.save(commit=False)
@@ -203,7 +203,7 @@ def asset_facility_space_create(request):
             messages.success(request, f"Facility space {space.number} ({space.code}) created.")
             return redirect("assets:asset_facility_space_detail", pk=space.pk)
     else:
-        form = AssetFacilitySpaceForm(tenant=request.tenant)
+        form = AssetFacilitySpaceForm(tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -233,22 +233,29 @@ def asset_facility_space_detail(request, pk):
             "space_steward",
         ),
     )
-    child_spaces = space.child_spaces.filter(tenant=request.tenant).order_by("code", "name")[:20]
-    mounted_systems = (
+    child_spaces = list(
+        space.child_spaces.filter(tenant=request.tenant).order_by("code", "name")[:20]
+    )
+    mounted_systems = list(
         space.building_systems.filter(tenant=request.tenant)
-        .select_related("service_vendor")
         .order_by("system_domain", "name")[:20]
     )
-    placed_ffe = (
+    placed_ffe = list(
         space.furniture_fixtures.filter(tenant=request.tenant)
-        .select_related("assigned_org_unit")
         .order_by("ffe_category", "name")[:20]
     )
-    active_chargebacks = (
+    active_chargebacks = list(
         space.space_chargebacks.filter(tenant=request.tenant)
-        .select_related("charged_org_unit", "occupant_party")
         .order_by("-period_start")[:10]
     )
+
+    admin_user = is_tenant_admin_user(request.user)
+    if not admin_user or space.is_locked:
+        can_delete = False
+    elif child_spaces or mounted_systems or placed_ffe or active_chargebacks:
+        can_delete = False
+    else:
+        can_delete = not space.incoming_furniture_fixtures.exists()
 
     return render(
         request,
@@ -260,7 +267,10 @@ def asset_facility_space_detail(request, pk):
             "placed_ffe": placed_ffe,
             "active_chargebacks": active_chargebacks,
             "can_edit": not space.is_locked,
-            "can_delete": _can_delete_space(space),
+            "can_delete": can_delete,
+            "can_view_floor_plan_document": is_asset_document_readable(
+                space.floor_plan_document, request.user
+            ),
         },
     )
 
@@ -268,20 +278,22 @@ def asset_facility_space_detail(request, pk):
 @login_required
 def asset_facility_space_edit(request, pk):
     """Edit an active/planned/renovation facility space."""
-    space = assets_object(request, AssetFacilitySpace, pk)
-    if space.is_locked:
-        messages.error(
-            request,
-            f"Facility space {space.number} is decommissioned and locked from editing.",
-        )
-        return redirect("assets:asset_facility_space_detail", pk=space.pk)
-
     if request.method == "POST":
-        form = AssetFacilitySpaceForm(
-            request.POST, request.FILES, instance=space, tenant=request.tenant
-        )
-        if form.is_valid():
-            with transaction.atomic():
+        with transaction.atomic():
+            space = get_object_or_404(
+                assets_scope(AssetFacilitySpace.objects.select_for_update(), request),
+                pk=pk,
+            )
+            if space.is_locked:
+                messages.error(
+                    request,
+                    f"Facility space {space.number} is decommissioned and locked from editing.",
+                )
+                return redirect("assets:asset_facility_space_detail", pk=space.pk)
+            form = AssetFacilitySpaceForm(
+                request.POST, request.FILES, instance=space, tenant=request.tenant, user=request.user
+            )
+            if form.is_valid():
                 space = form.save()
                 write_audit_log(
                     request.user,
@@ -290,10 +302,17 @@ def asset_facility_space_edit(request, pk):
                     changes={"number": space.number, "code": space.code},
                     tenant=request.tenant,
                 )
-            messages.success(request, f"Facility space {space.number} updated.")
-            return redirect("assets:asset_facility_space_detail", pk=space.pk)
+                messages.success(request, f"Facility space {space.number} updated.")
+                return redirect("assets:asset_facility_space_detail", pk=space.pk)
     else:
-        form = AssetFacilitySpaceForm(instance=space, tenant=request.tenant)
+        space = assets_object(request, AssetFacilitySpace, pk)
+        if space.is_locked:
+            messages.error(
+                request,
+                f"Facility space {space.number} is decommissioned and locked from editing.",
+            )
+            return redirect("assets:asset_facility_space_detail", pk=space.pk)
+        form = AssetFacilitySpaceForm(instance=space, tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -308,20 +327,24 @@ def asset_facility_space_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_facility_space_delete(request, pk):
-    """Delete an unlinked, non-decommissioned facility space."""
-    space = assets_object(request, AssetFacilitySpace, pk)
-    if not _can_delete_space(space):
-        messages.error(
-            request,
-            f"Cannot delete {space.number}: decommissioned spaces or spaces with linked systems, FF&E, child spaces, or chargebacks cannot be deleted.",
-        )
-        return redirect("assets:asset_facility_space_detail", pk=space.pk)
-
-    label = space.number
+    """Delete an unlinked, non-decommissioned facility space (tenant admin only)."""
+    label = "facility space"
     try:
         with transaction.atomic():
+            space = get_object_or_404(
+                assets_scope(AssetFacilitySpace.objects.select_for_update(), request),
+                pk=pk,
+            )
+            label = space.number
+            if not _can_delete_space(space):
+                messages.error(
+                    request,
+                    f"Cannot delete {space.number}: decommissioned spaces or spaces with linked systems, FF&E, child spaces, or chargebacks cannot be deleted.",
+                )
+                return redirect("assets:asset_facility_space_detail", pk=space.pk)
             write_audit_log(
                 request.user,
                 space,
@@ -354,10 +377,12 @@ def asset_facility_space_recalculate_utilization(request, pk):
     """Recompute occupancy status and utilization metrics for a space."""
     with transaction.atomic():
         space = get_object_or_404(
-            AssetFacilitySpace.objects.select_for_update(),
+            assets_scope(AssetFacilitySpace.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
+        if space.is_locked:
+            messages.error(request, f"Facility space {space.number} is decommissioned and locked.")
+            return redirect("assets:asset_facility_space_detail", pk=space.pk)
         new_occ = space.compute_occupancy_status()
         space.occupancy_status = new_occ
         space.save(update_fields=["occupancy_status", "updated_at"])
@@ -384,9 +409,8 @@ def asset_facility_space_mark_under_renovation(request, pk):
     """Place an active/planned space into Under Renovation status."""
     with transaction.atomic():
         space = get_object_or_404(
-            AssetFacilitySpace.objects.select_for_update(),
+            assets_scope(AssetFacilitySpace.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
         if space.is_locked:
             messages.error(request, f"Space {space.number} is decommissioned.")
@@ -410,9 +434,8 @@ def asset_facility_space_activate(request, pk):
     """Activate a planned or renovation space."""
     with transaction.atomic():
         space = get_object_or_404(
-            AssetFacilitySpace.objects.select_for_update(),
+            assets_scope(AssetFacilitySpace.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
         if space.status == "decommissioned" and not is_tenant_admin_user(request.user):
             messages.error(
@@ -439,9 +462,8 @@ def asset_facility_space_decommission(request, pk):
     """Decommission a facility space (admin only)."""
     with transaction.atomic():
         space = get_object_or_404(
-            AssetFacilitySpace.objects.select_for_update(),
+            assets_scope(AssetFacilitySpace.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
         if space.status == "decommissioned":
             messages.info(request, f"Space {space.number} is already decommissioned.")
