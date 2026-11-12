@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Documentation Repository — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Document &amp; Knowledge Management</span>
+            <span>/</span>
+            <span>Asset Documentation Repository</span>
+        </div>
+        <h1 class="page-title">Asset Documentation Repository</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_document_change_list' %}" class="btn btn-outline">
+            <i data-lucide="git-branch" class="w-4 h-4 me-1"></i> Change Control Queue
+        </a>
+        <a href="{% url 'assets:asset_document_export_csv' %}?q={{ request.GET.q|urlencode }}&document_class={{ request.GET.document_class|urlencode }}&access_classification={{ request.GET.access_classification|urlencode }}&change_type={{ request.GET.change_type|urlencode }}&status={{ request.GET.status|urlencode }}&operational_asset={{ request.GET.operational_asset|urlencode }}&asset_category={{ request.GET.asset_category|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_document_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Document
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="folder-kanban"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Controlled Docs</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Current Approved Releases</div>
+            <div class="stat-value">{{ approved_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Expiring (&le; 30 Days)</div>
+            <div class="stat-value">{{ expiring_soon_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="lock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Checked Out / In Review</div>
+            <div class="stat-value">{{ checked_out_count }} / {{ in_review_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div>
+                <label for="adoc-filter-q" class="sr-only">Search documents</label>
+                <input id="adoc-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, title, tag, ECR..." class="form-input" />
+            </div>
+            <div>
+                <label for="adoc-filter-class" class="sr-only">Document Class</label>
+                <select id="adoc-filter-class" name="document_class" class="form-select">
+                    <option value="">All Classes</option>
+                    {% for val, label in class_choices %}
+                    <option value="{{ val }}" {% if request.GET.document_class == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-filter-access" class="sr-only">Access Classification</label>
+                <select id="adoc-filter-access" name="access_classification" class="form-select">
+                    <option value="">All Access Levels</option>
+                    {% for val, label in classification_choices %}
+                    <option value="{{ val }}" {% if request.GET.access_classification == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-filter-status" class="sr-only">Status</label>
+                <select id="adoc-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-filter-change-type" class="sr-only">Change Type</label>
+                <select id="adoc-filter-change-type" name="change_type" class="form-select">
+                    <option value="">All Change Types</option>
+                    {% for val, label in change_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.change_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-filter-asset" class="sr-only">Operational Asset</label>
+                <select id="adoc-filter-asset" name="operational_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for ast in assets_list %}
+                    <option value="{{ ast.pk }}" {% if request.GET.operational_asset == ast.pk|stringformat:"d" %}selected{% endif %}>{{ ast }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-filter-category" class="sr-only">Asset Category</label>
+                <select id="adoc-filter-category" name="asset_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.pk }}" {% if request.GET.asset_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="adoc-filter-org" class="sr-only">Org Unit</label>
+                <select id="adoc-filter-org" name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_document_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Documents Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Doc #</th>
+                    <th>Title &amp; Tag</th>
+                    <th>Class</th>
+                    <th>Rev</th>
+                    <th>Asset / Scope</th>
+                    <th>Access</th>
+                    <th>Status</th>
+                    <th>Expiry</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in documents %}
+                <tr>
+                    <td class="font-mono text-xs whitespace-nowrap">
+                        <a href="{% url 'assets:asset_document_detail' item.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">{{ item.title }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">
+                            {% if item.tag_code %}Tag: {{ item.tag_code }}{% endif %}
+                            {% if item.tag_code and item.manufacturer_ref %} · {% endif %}
+                            {% if item.manufacturer_ref %}{{ item.manufacturer_ref }}{% endif %}
+                            {% if item.checked_out_by %}
+                            <span class="badge badge-amber ms-1">Checked out: {{ item.checked_out_by.username }}</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-sm">{{ item.get_document_class_display }}</td>
+                    <td class="whitespace-nowrap">
+                        <span class="badge {% if item.is_current_revision %}badge-info{% else %}badge-muted{% endif %}">{{ item.revision_label }}</span>
+                    </td>
+                    <td class="text-sm">
+                        {% if item.operational_asset %}{{ item.operational_asset }}{% elif item.asset_category %}{{ item.asset_category.name }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.access_classification_badge_class }}">{{ item.get_access_classification_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
+                    </td>
+                    <td class="text-sm whitespace-nowrap">
+                        {% if item.expiry_date %}
+                            {% if item.is_expired %}
+                            <span class="badge badge-red">{{ item.expiry_date|date:"Y-m-d" }}</span>
+                            {% elif item.is_expiring_soon %}
+                            <span class="badge badge-amber">{{ item.expiry_date|date:"Y-m-d" }}</span>
+                            {% else %}
+                            {{ item.expiry_date|date:"Y-m-d" }}
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'assets:asset_document_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if item.file %}
+                            <a href="{% url 'assets:asset_document_download' item.pk %}" class="btn btn-icon" title="Download" aria-label="Download {{ item.number }}">
+                                <i data-lucide="download"></i>
+                            </a>
+                            {% endif %}
+                            {% if not item.is_locked %}
+                            <a href="{% url 'assets:asset_document_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'assets:asset_document_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete document {{ item.number|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete {{ item.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="file-text" class="w-12 h-12 text-slate-400 dark:text-slate-500 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">No Asset Documents Found</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Register controlled OEM manuals, P&amp;IDs, schematics, warranties, and compliance dossiers.</p>
+                            <a href="{% url 'assets:asset_document_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Document
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }} documents</span>
+
+        {% if page_obj.has_previous %}
+        <a aria-label="Previous page" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.document_class %}&document_class={{ request.GET.document_class|urlencode }}{% endif %}{% if request.GET.access_classification %}&access_classification={{ request.GET.access_classification|urlencode }}{% endif %}{% if request.GET.change_type %}&change_type={{ request.GET.change_type|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
+
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a aria-label="Next page" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.document_class %}&document_class={{ request.GET.document_class|urlencode }}{% endif %}{% if request.GET.access_classification %}&access_classification={{ request.GET.access_classification|urlencode }}{% endif %}{% if request.GET.change_type %}&change_type={{ request.GET.change_type|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
