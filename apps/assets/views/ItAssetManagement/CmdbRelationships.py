@@ -180,7 +180,11 @@ def cmdb_relationship_export_csv(request):
 def cmdb_relationship_create(request):
     """Create a new tenant-scoped CMDB dependency edge."""
     if request.method == "POST":
+        if request.tenant is None:
+            messages.warning(request, "Workspace context is required to create a CMDB relationship.")
+            return redirect("assets:cmdb_relationship_list")
         form = CmdbRelationshipForm(request.POST, tenant=request.tenant)
+        form.instance.tenant = request.tenant
         if form.is_valid():
             with transaction.atomic():
                 relationship = form.save(commit=False)
