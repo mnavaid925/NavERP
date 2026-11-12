@@ -103,31 +103,61 @@ def _filter_procedure_queryset(request, base_qs):
     return qs
 
 
+_SOP_LINEAGE_FIELDS = (
+    "id",
+    "tenant_id",
+    "number",
+    "revision_label",
+    "status",
+    "supersedes_id",
+)
+
+
 def _build_procedure_detail_context(request, proc):
-    """Shared context builder for SOP detail and printable bench sheet."""
+    """Shared context builder for SOP detail views with bounded lineage queries."""
     seen = {proc.pk}
     ancestors = []
-    cur = proc.supersedes
-    while cur is not None and len(ancestors) < 25:
-        if cur.pk in seen or cur.tenant_id != request.tenant.pk:
+    cur = proc
+    for _ in range(25):
+        next_id = cur.supersedes_id
+        if not next_id or next_id in seen:
             break
-        seen.add(cur.pk)
-        ancestors.append(cur)
-        cur = cur.supersedes
-
-    descendants = []
-    frontier = proc
-    while len(descendants) < 25:
-        nxt = (
-            frontier.superseded_by_procedures.filter(tenant=request.tenant)
-            .order_by("pk")
-            .first()
-        )
-        if nxt is None or nxt.pk in seen:
+        if "supersedes" in cur._state.fields_cache:
+            nxt = cur._state.fields_cache["supersedes"]
+        else:
+            nxt = (
+                AssetOperatingProcedure.objects.filter(
+                    tenant=request.tenant, pk=next_id
+                )
+                .only(*_SOP_LINEAGE_FIELDS)
+                .first()
+            )
+        if nxt is None or nxt.pk in seen or nxt.tenant_id != request.tenant.pk:
             break
         seen.add(nxt.pk)
-        descendants.append(nxt)
-        frontier = nxt
+        ancestors.append(nxt)
+        cur = nxt
+
+    descendants = []
+    frontier_ids = [proc.pk]
+    while frontier_ids and len(descendants) < 25:
+        children = list(
+            AssetOperatingProcedure.objects.filter(
+                tenant=request.tenant, supersedes_id__in=frontier_ids
+            )
+            .only(*_SOP_LINEAGE_FIELDS)
+            .order_by("pk")
+        )
+        next_frontier = []
+        for child in children:
+            if child.pk in seen:
+                continue
+            seen.add(child.pk)
+            descendants.append(child)
+            next_frontier.append(child.pk)
+            if len(descendants) >= 25:
+                break
+        frontier_ids = next_frontier
 
     revision_history = list(reversed(ancestors)) + [proc] + descendants
     revision_history.reverse()
@@ -255,7 +285,7 @@ def asset_operating_procedure_detail(request, pk):
             "author",
             "safety_reviewer",
             "approved_by",
-            "supersedes",
+            "supersedes__supersedes__supersedes__supersedes",
         ),
     )
     context = _build_procedure_detail_context(request, proc)
@@ -280,14 +310,16 @@ def asset_operating_procedure_print(request, pk):
             "org_unit",
             "primary_document",
             "author",
+            "safety_reviewer",
+            "maintenance_schedule",
             "approved_by",
+            "supersedes",
         ),
     )
-    context = _build_procedure_detail_context(request, proc)
     return render(
         request,
         "assets/assetdocumentknowledge/asset_operating_procedure/print.html",
-        context,
+        {"procedure": proc},
     )
 
 
