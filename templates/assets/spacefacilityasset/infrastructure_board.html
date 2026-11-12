@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}Infrastructure Asset Management — Assets &amp; Fleet — NavERP{% endblock %}
 
@@ -61,7 +60,7 @@
         <div class="stat-icon slate"><i data-lucide="dollar-sign"></i></div>
         <div class="stat-body">
             <div class="stat-label">Replacement Exposure</div>
-            <div class="stat-value text-base">{{ total_replacement_exposure|floatformat:2|intcomma }}</div>
+            <div class="stat-value text-base">{{ total_replacement_exposure|floatformat:2 }}</div>
         </div>
     </div>
 </div>
@@ -171,7 +170,7 @@
                             <span class="{% if sys.is_inspection_overdue %}text-danger font-semibold{% endif %}">{{ sys.next_inspection_due_date|date:"Y-m-d" }}</span>
                         {% else %}—{% endif %}
                     </td>
-                    <td class="font-mono text-xs">{{ sys.replacement_cost_estimate|floatformat:2|intcomma }}</td>
+                    <td class="font-mono text-xs">{{ sys.replacement_cost_estimate|floatformat:2 }}</td>
                     <td><span class="badge {{ sys.status_badge_class }}">{{ sys.get_status_display }}</span></td>
                     <td class="table-actions text-right">
                         <a href="{% url 'assets:asset_building_system_detail' sys.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
