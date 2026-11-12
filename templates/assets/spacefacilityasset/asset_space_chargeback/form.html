@@ -17,11 +17,11 @@
     <div class="page-actions">
         {% if is_edit and chargeback %}
         <a href="{% url 'assets:asset_space_chargeback_detail' chargeback.pk %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Chargeback
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back to Chargeback
         </a>
         {% else %}
         <a href="{% url 'assets:asset_space_chargeback_list' %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back to List
         </a>
         {% endif %}
     </div>
