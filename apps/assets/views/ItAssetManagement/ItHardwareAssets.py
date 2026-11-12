@@ -51,9 +51,9 @@ _HW_DETAIL_SELECT_RELATED = _HW_LIST_SELECT_RELATED + (
 )
 
 
-def _filter_hardware_queryset(request, base_qs):
+def _filter_hardware_queryset(request, base_qs, select_related=_HW_LIST_SELECT_RELATED):
     """Apply search and dropdown GET filters to an ItHardwareAsset queryset."""
-    qs = base_qs.select_related(*_HW_LIST_SELECT_RELATED)
+    qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
     if search_query:
         qs = qs.filter(
@@ -155,7 +155,7 @@ def it_hardware_asset_list(request):
 def it_hardware_asset_export_csv(request):
     """Export filtered IT hardware assets as a formula-safe CSV."""
     base_qs = assets_scope(ItHardwareAsset.objects.all(), request)
-    qs = _filter_hardware_queryset(request, base_qs)
+    qs = _filter_hardware_queryset(request, base_qs, select_related=("org_unit",))
     headers = [
         "Number",
         "Hostname",
@@ -191,7 +191,7 @@ def it_hardware_asset_export_csv(request):
             hw.get_sanitization_status_display(),
             hw.org_unit.name if hw.org_unit else "",
         ]
-        for hw in qs
+        for hw in qs[:10000].iterator(chunk_size=1000)
     )
     return csv_export_response(filename="it_hardware_assets.csv", headers=headers, rows=rows)
 
