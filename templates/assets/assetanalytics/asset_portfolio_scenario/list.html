@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load asset_analytics_tags %}
 
 {% block title %}What-If Portfolio Scenarios — Asset Analytics & BI — NavERP{% endblock %}
 
@@ -56,7 +57,7 @@
         <div class="stat-icon slate"><i data-lucide="trending-up"></i></div>
         <div class="stat-body">
             <div class="stat-label">Peak Scenario NPV</div>
-            <div class="stat-value">${{ best_npv|floatformat:"2g" }}</div>
+            <div class="stat-value">{% fmt_money best_npv %}</div>
         </div>
     </div>
 </div>
@@ -162,11 +163,11 @@
                         <div class="text-sm font-medium">FY{{ s.base_fiscal_year }} ({{ s.horizon_years }} yrs)</div>
                         <div class="text-xs text-slate-500 dark:text-slate-400">{{ s.scope_org_unit.name|default:"Enterprise-Wide" }}</div>
                     </td>
-                    <td class="text-right font-mono font-semibold">${{ s.simulated_capex_total|floatformat:"2g" }}</td>
-                    <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">${{ s.opex_savings_amount|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono font-semibold">{% fmt_money s.simulated_capex_total s.currency %}</td>
+                    <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money s.opex_savings_amount s.currency %}</td>
                     <td class="text-right font-mono">{{ s.simulated_fci_pct|floatformat:2 }}%</td>
                     <td class="text-right font-mono">
-                        <div>${{ s.net_present_value|floatformat:"2g" }}</div>
+                        <div>{% fmt_money s.net_present_value s.currency %}</div>
                         <div class="text-xs text-slate-500 dark:text-slate-400">BCR: {{ s.benefit_cost_ratio|floatformat:2 }}x</div>
                     </td>
                     <td>
