@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}{{ chargeback.number }} — {{ chargeback.title }} — Space Chargeback — NavERP{% endblock %}
 
@@ -94,14 +93,14 @@
         <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
         <div class="stat-body">
             <div class="stat-label">Net Chargeback Amount</div>
-            <div class="stat-value text-base">{% if chargeback.currency %}{{ chargeback.currency.code }} {% endif %}{{ chargeback.net_chargeback_amount|floatformat:2|intcomma }}</div>
+            <div class="stat-value text-base">{% if chargeback.currency %}{{ chargeback.currency.code }} {% endif %}{{ chargeback.net_chargeback_amount|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon blue"><i data-lucide="maximize-2"></i></div>
         <div class="stat-body">
             <div class="stat-label">Allocated Area</div>
-            <div class="stat-value text-base">{{ chargeback.allocated_area_sqft|floatformat:2|intcomma }} sqft</div>
+            <div class="stat-value text-base">{{ chargeback.allocated_area_sqft|floatformat:2 }} sqft</div>
         </div>
     </div>
     <div class="stat-card">
@@ -137,15 +136,15 @@
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Base Space / Allocation Cost</dt>
-                    <dd class="font-mono">{{ chargeback.base_cost_amount|floatformat:2|intcomma }}</dd>
+                    <dd class="font-mono">{{ chargeback.base_cost_amount|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Shared CAM Recovery</dt>
-                    <dd class="font-mono">{{ chargeback.shared_cam_amount|floatformat:2|intcomma }}</dd>
+                    <dd class="font-mono">{{ chargeback.shared_cam_amount|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Submeter Utility Recovery</dt>
-                    <dd class="font-mono">{{ chargeback.utility_recovery_amount|floatformat:2|intcomma }}</dd>
+                    <dd class="font-mono">{{ chargeback.utility_recovery_amount|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-muted">TI Amortization End Date</dt>
@@ -153,11 +152,11 @@
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Tenant Improvement (TI) Cost</dt>
-                    <dd class="font-mono">{{ chargeback.ti_improvement_cost|floatformat:2|intcomma }}</dd>
+                    <dd class="font-mono">{{ chargeback.ti_improvement_cost|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-muted">TI Allowance Offset</dt>
-                    <dd class="font-mono">{{ chargeback.ti_allowance_offset|floatformat:2|intcomma }}</dd>
+                    <dd class="font-mono">{{ chargeback.ti_allowance_offset|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Facility Space</dt>
@@ -233,7 +232,7 @@
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Approved By</dt>
-                    <dd>{{ chargeback.approved_by.get_full_name|default:chargeback.approved_by.username|default:"—" }}</dd>
+                    <dd>{% if chargeback.approved_by %}{{ chargeback.approved_by.get_full_name|default:chargeback.approved_by.username }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Approved At</dt>
