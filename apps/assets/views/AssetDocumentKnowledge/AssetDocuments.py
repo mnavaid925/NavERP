@@ -20,7 +20,9 @@ from apps.assets.views.AssetDocumentKnowledge._helpers import (
     apply_choice_filter,
     apply_fk_filter,
     csv_export_response,
+    is_asset_document_readable,
     is_tenant_admin_user,
+    readable_asset_document_q,
     serve_protected_attachment,
 )
 from apps.core.decorators import tenant_admin_required
@@ -132,7 +134,9 @@ def _build_document_list_context(request, base_qs, filtered_qs):
 @login_required
 def asset_document_list(request):
     """Controlled asset documentation repository list view."""
-    base_qs = assets_scope(AssetDocument.objects.all(), request)
+    base_qs = assets_scope(AssetDocument.objects.all(), request).filter(
+        readable_asset_document_q(request.user)
+    )
     filtered_qs = _filter_document_queryset(request, base_qs)
     context = _build_document_list_context(request, base_qs, filtered_qs)
     return render(
@@ -145,12 +149,16 @@ def asset_document_list(request):
 @login_required
 def asset_document_change_list(request):
     """Version control, engineering change requests, and review queue view."""
-    base_qs = assets_scope(AssetDocument.objects.all(), request).filter(
-        Q(status__in=["draft", "in_review"])
-        | Q(revision_sequence__gt=1)
-        | Q(supersedes__isnull=False)
-        | Q(checked_out_by__isnull=False)
-        | ~Q(change_type="new_issue")
+    base_qs = (
+        assets_scope(AssetDocument.objects.all(), request)
+        .filter(readable_asset_document_q(request.user))
+        .filter(
+            Q(status__in=["draft", "in_review"])
+            | Q(revision_sequence__gt=1)
+            | Q(supersedes__isnull=False)
+            | Q(checked_out_by__isnull=False)
+            | ~Q(change_type="new_issue")
+        )
     )
     filtered_qs = _filter_document_queryset(request, base_qs)
     context = _build_document_list_context(request, base_qs, filtered_qs)
@@ -164,7 +172,9 @@ def asset_document_change_list(request):
 @login_required
 def asset_document_export_csv(request):
     """Export filtered tenant AssetDocuments as an injection-hardened CSV."""
-    base_qs = assets_scope(AssetDocument.objects.all(), request)
+    base_qs = assets_scope(AssetDocument.objects.all(), request).filter(
+        readable_asset_document_q(request.user)
+    )
     filtered_qs = _filter_document_queryset(request, base_qs)
     headers = [
         "Document #",
@@ -215,6 +225,9 @@ _DOC_LINEAGE_FIELDS = (
     "is_current_revision",
     "change_type",
     "change_request_ref",
+    "access_classification",
+    "owner_id",
+    "reviewer_id",
     "status",
     "effective_date",
     "supersedes_id",
@@ -228,6 +241,9 @@ def asset_document_detail(request, pk):
         request,
         AssetDocument,
         pk,
+        queryset=assets_scope(AssetDocument.objects.all(), request).filter(
+            readable_asset_document_q(request.user)
+        ),
         select_related=(
             "operational_asset",
             "fixed_asset",
@@ -259,10 +275,16 @@ def asset_document_detail(request, pk):
         else:
             nxt = (
                 AssetDocument.objects.filter(tenant=request.tenant, pk=next_id)
+                .filter(readable_asset_document_q(request.user))
                 .only(*_DOC_LINEAGE_FIELDS)
                 .first()
             )
-        if nxt is None or nxt.pk in chain_seen or nxt.tenant_id != request.tenant.pk:
+        if (
+            nxt is None
+            or nxt.pk in chain_seen
+            or nxt.tenant_id != request.tenant.pk
+            or not is_asset_document_readable(nxt, request.user)
+        ):
             break
         chain_seen.add(nxt.pk)
         ancestors.append(nxt)
@@ -275,6 +297,7 @@ def asset_document_detail(request, pk):
             AssetDocument.objects.filter(
                 tenant=request.tenant, supersedes_id__in=frontier_ids
             )
+            .filter(readable_asset_document_q(request.user))
             .only(*_DOC_LINEAGE_FIELDS)
             .order_by("revision_sequence", "pk")
         )
@@ -331,7 +354,9 @@ def asset_document_detail(request, pk):
 def asset_document_create(request):
     """Create a new controlled asset document or draft revision."""
     if request.method == "POST":
-        form = AssetDocumentForm(request.POST, request.FILES, tenant=request.tenant)
+        form = AssetDocumentForm(
+            request.POST, request.FILES, tenant=request.tenant, user=request.user
+        )
         if form.is_valid():
             doc = form.save(commit=False)
             doc.tenant = request.tenant
@@ -348,7 +373,7 @@ def asset_document_create(request):
             messages.success(request, f"Created document {doc.number}.")
             return redirect("assets:asset_document_detail", pk=doc.pk)
     else:
-        form = AssetDocumentForm(tenant=request.tenant)
+        form = AssetDocumentForm(tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -365,7 +390,14 @@ def asset_document_create(request):
 @login_required
 def asset_document_edit(request, pk):
     """Edit an unlocked Draft / In-Review controlled document."""
-    doc = assets_object(request, AssetDocument, pk)
+    doc = assets_object(
+        request,
+        AssetDocument,
+        pk,
+        queryset=assets_scope(AssetDocument.objects.all(), request).filter(
+            readable_asset_document_q(request.user)
+        ),
+    )
     if doc.is_locked:
         messages.warning(
             request,
@@ -389,6 +421,7 @@ def asset_document_edit(request, pk):
             request.FILES,
             instance=doc,
             tenant=request.tenant,
+            user=request.user,
         )
         if form.is_valid():
             updated = form.save(commit=False)
@@ -403,7 +436,7 @@ def asset_document_edit(request, pk):
             messages.success(request, f"Updated document {updated.number}.")
             return redirect("assets:asset_document_detail", pk=updated.pk)
     else:
-        form = AssetDocumentForm(instance=doc, tenant=request.tenant)
+        form = AssetDocumentForm(instance=doc, tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -422,7 +455,14 @@ def asset_document_edit(request, pk):
 @tenant_admin_required
 def asset_document_delete(request, pk):
     """Delete an unlocked Draft / In-Review asset document."""
-    doc = assets_object(request, AssetDocument, pk)
+    doc = assets_object(
+        request,
+        AssetDocument,
+        pk,
+        queryset=assets_scope(AssetDocument.objects.all(), request).filter(
+            readable_asset_document_q(request.user)
+        ),
+    )
     if doc.is_locked:
         messages.error(
             request,
@@ -439,7 +479,14 @@ def asset_document_delete(request, pk):
 @login_required
 def asset_document_download(request, pk):
     """Download the controlled document attachment cleanly as an attachment with nosniff."""
-    doc = assets_object(request, AssetDocument, pk)
+    doc = assets_object(
+        request,
+        AssetDocument,
+        pk,
+        queryset=assets_scope(AssetDocument.objects.all(), request).filter(
+            readable_asset_document_q(request.user)
+        ),
+    )
     return serve_protected_attachment(doc, file_attr="file", original_filename_attr="original_filename")
 
 
@@ -452,7 +499,9 @@ def asset_document_submit_review(request, pk):
             request,
             AssetDocument,
             pk,
-            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+            queryset=assets_scope(AssetDocument.objects.all(), request)
+            .filter(readable_asset_document_q(request.user))
+            .select_for_update(),
         )
         if doc.status != "draft":
             messages.warning(
@@ -477,7 +526,9 @@ def asset_document_approve_release(request, pk):
             request,
             AssetDocument,
             pk,
-            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+            queryset=assets_scope(AssetDocument.objects.all(), request)
+            .filter(readable_asset_document_q(request.user))
+            .select_for_update(),
         )
         if doc.status not in ("draft", "in_review"):
             messages.warning(
@@ -534,7 +585,9 @@ def asset_document_return_to_draft(request, pk):
             request,
             AssetDocument,
             pk,
-            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+            queryset=assets_scope(AssetDocument.objects.all(), request)
+            .filter(readable_asset_document_q(request.user))
+            .select_for_update(),
         )
         if doc.status != "in_review":
             messages.warning(
@@ -558,7 +611,9 @@ def asset_document_checkout(request, pk):
             request,
             AssetDocument,
             pk,
-            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+            queryset=assets_scope(AssetDocument.objects.all(), request)
+            .filter(readable_asset_document_q(request.user))
+            .select_for_update(),
         )
         if doc.is_locked:
             messages.warning(
@@ -592,7 +647,9 @@ def asset_document_checkin(request, pk):
             request,
             AssetDocument,
             pk,
-            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+            queryset=assets_scope(AssetDocument.objects.all(), request)
+            .filter(readable_asset_document_q(request.user))
+            .select_for_update(),
         )
         if doc.checked_out_by_id is None:
             messages.info(request, f"Document {doc.number} is not currently checked out.")
@@ -622,7 +679,9 @@ def asset_document_create_revision(request, pk):
             request,
             AssetDocument,
             pk,
-            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+            queryset=assets_scope(AssetDocument.objects.all(), request)
+            .filter(readable_asset_document_q(request.user))
+            .select_for_update(),
         )
         if source.status == "archived":
             messages.warning(
@@ -694,7 +753,9 @@ def asset_document_archive(request, pk):
             request,
             AssetDocument,
             pk,
-            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+            queryset=assets_scope(AssetDocument.objects.all(), request)
+            .filter(readable_asset_document_q(request.user))
+            .select_for_update(),
         )
         if doc.status == "archived":
             messages.info(request, f"Document {doc.number} is already archived.")
