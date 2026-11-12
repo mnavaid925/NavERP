@@ -875,6 +875,7 @@ __all__ = [
     "mapping_edit",
     "mapping_delete",
     "verify_spatial_sync",
+    # 11.14 Asset Analytics & Business Intelligence
     "asset_lifecycle_cost_analysis_list",
     "asset_lifecycle_cost_analysis_detail",
     "asset_lifecycle_cost_analysis_create",
