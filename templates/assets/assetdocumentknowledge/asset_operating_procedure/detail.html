@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}{{ procedure.number }} — {{ procedure.title }} — SOP &amp; Procedure — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_operating_procedure_list' %}">SOP &amp; Procedure Management</a>
+            <span>/</span>
+            <span>{{ procedure.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ procedure.number }} — {{ procedure.title }}</h1>
+            <span class="badge {{ procedure.status_badge_class }}">{{ procedure.get_status_display }}</span>
+            <span class="badge {{ procedure.safety_badge_class }}">{{ procedure.get_safety_level_display }}</span>
+            {% if procedure.loto_required %}
+            <span class="badge badge-red">LOTO Mandatory</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_operating_procedure_print' procedure.pk %}" class="btn btn-outline">
+            <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print Bench Sheet
+        </a>
+        {% if procedure.attachment %}
+        <a href="{% url 'assets:asset_operating_procedure_download' procedure.pk %}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Download Attachment
+        </a>
+        {% endif %}
+
+        {% if procedure.status == "draft" %}
+        <form method="post" action="{% url 'assets:asset_operating_procedure_submit_review' procedure.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Submit for Safety Review
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_activate %}
+        <form method="post" action="{% url 'assets:asset_operating_procedure_activate' procedure.pk %}" class="inline" onsubmit="return confirm('Activate SOP {{ procedure.number|escapejs }}? Active SOPs are locked and supersede previous versions.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Activate SOP
+            </button>
+        </form>
+        {% endif %}
+
+        {% if procedure.status != "retired" %}
+        <form method="post" action="{% url 'assets:asset_operating_procedure_clone_revision' procedure.pk %}" class="inline" onsubmit="return confirm('Clone {{ procedure.number|escapejs }} into a new draft revision?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="copy-plus" class="w-4 h-4 me-1"></i> Clone Revision
+            </button>
+        </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_operating_procedure_retire' procedure.pk %}" class="inline" onsubmit="return confirm('Retire SOP {{ procedure.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Retire
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if can_edit %}
+        <a href="{% url 'assets:asset_operating_procedure_edit' procedure.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_operating_procedure_delete' procedure.pk %}" class="inline" onsubmit="return confirm('Delete SOP {{ procedure.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        <a href="{% url 'assets:asset_operating_procedure_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="list-ordered"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Procedure Steps</div>
+            <div class="stat-value">{{ procedure.step_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">LOTO Isolation Points</div>
+            <div class="stat-value">{{ procedure.isolation_point_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="timer"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Estimated Duration</div>
+            <div class="stat-value">{{ procedure.estimated_duration_minutes }} min</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="calendar-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Next Periodic Review</div>
+            <div class="stat-value text-base">{% if procedure.next_review_date %}{{ procedure.next_review_date|date:"Y-m-d" }}{% else %}Unscheduled{% endif %}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Metadata & Warnings -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title">Procedure Scope &amp; Safety Governance</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>SOP Number</dt><dd class="font-mono">{{ procedure.number }}</dd></div>
+                <div class="detail-item"><dt>Revision</dt><dd>{{ procedure.revision_label }}</dd></div>
+                <div class="detail-item"><dt>Procedure Type</dt><dd>{{ procedure.get_procedure_type_display }}</dd></div>
+                <div class="detail-item"><dt>Required Qualification</dt><dd class="font-mono">{{ procedure.required_qualification_code|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Required PPE</dt><dd>{{ procedure.required_ppe|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Operational Asset</dt><dd>{{ procedure.operational_asset|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Asset Category / Model</dt><dd>{{ procedure.asset_category|default:"—" }}{% if procedure.asset_model %} · {{ procedure.asset_model }}{% endif %}</dd></div>
+                <div class="detail-item"><dt>Primary Manual / Doc</dt><dd>{% if procedure.primary_document %}<a href="{% url 'assets:asset_document_detail' procedure.primary_document.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">{{ procedure.primary_document }}</a>{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Maintenance Schedule</dt><dd>{{ procedure.maintenance_schedule|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Compliance Framework</dt><dd>{{ procedure.compliance_framework|default:"—" }}</dd></div>
+            </dl>
+
+            {% if procedure.purpose_scope %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Purpose &amp; Operational Scope</h3>
+                <p class="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{{ procedure.purpose_scope }}</p>
+            </div>
+            {% endif %}
+
+            {% if procedure.hazard_warnings %}
+            <div class="mt-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                <h3 class="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">Hazard Warnings</h3>
+                <p class="text-sm text-red-700 dark:text-red-300 whitespace-pre-line">{{ procedure.hazard_warnings }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Approval &amp; Review Cadence</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>Author</dt><dd>{{ procedure.author|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Safety Reviewer</dt><dd>{{ procedure.safety_reviewer|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Approved By</dt><dd>{{ procedure.approved_by|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Approved At</dt><dd>{% if procedure.approved_at %}{{ procedure.approved_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Effective Date</dt><dd>{% if procedure.effective_date %}{{ procedure.effective_date|date:"Y-m-d" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Review Cycle</dt><dd>{{ procedure.review_cycle_months }} months</dd></div>
+                <div class="detail-item"><dt>Org Unit</dt><dd>{{ procedure.org_unit|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Attachment</dt><dd>{% if procedure.attachment %}{{ procedure.original_filename|default:"Attached" }}{% else %}None{% endif %}</dd></div>
+            </dl>
+            {% if procedure.review_notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Safety Review Notes</h3>
+                <p class="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{{ procedure.review_notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- LOTO Isolation Matrix -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">LOTO Energy Isolation Matrix</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Energy Source</th>
+                    <th>Tag ID</th>
+                    <th>Isolation Point</th>
+                    <th>Lockout Device</th>
+                    <th>Zero-Energy Verification</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for point in procedure.loto_isolation_points %}
+                <tr>
+                    <td class="font-medium">{{ point.energy_source|default:"—" }}</td>
+                    <td class="font-mono text-xs">{{ point.tag_id|default:"—" }}</td>
+                    <td>{{ point.isolation_point|default:"—" }}</td>
+                    <td>{{ point.lock_device|default:"—" }}</td>
+                    <td>{{ point.verification_step|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-sm text-slate-500 dark:text-slate-400 py-4">No LOTO isolation points recorded for this procedure.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Step-by-Step Procedure -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Step-by-Step Execution Checklist</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Step</th>
+                    <th>Title</th>
+                    <th>Instruction</th>
+                    <th>Expected Reading / Tolerance</th>
+                    <th>Sign-off</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for step in procedure.procedure_steps %}
+                <tr>
+                    <td class="font-mono">{{ step.step_no|default:forloop.counter }}</td>
+                    <td class="font-medium">{{ step.title|default:"—" }}</td>
+                    <td class="text-sm">{{ step.instruction|default:"—" }}</td>
+                    <td class="text-sm font-mono">{{ step.expected_reading|default:"—" }}</td>
+                    <td>
+                        {% if step.is_mandatory_signoff %}
+                        <span class="badge badge-amber">Mandatory</span>
+                        {% else %}
+                        <span class="badge badge-slate">Standard</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-sm text-slate-500 dark:text-slate-400 py-4">No structured procedure steps defined yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Certified Operators & Linked Knowledge -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Certified &amp; Qualified Operators</h2>
+        </div>
+        <div class="card-body">
+            {% for cert in certified_operators %}
+            <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+                <div>
+                    <a href="{% url 'assets:asset_operator_certification_detail' cert.pk %}" class="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">{{ cert.number }} — {{ cert.operator_display_name }}</a>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">
+                        {{ cert.get_proficiency_level_display }} · {% if cert.sop_acknowledged %}SOP Acknowledged{% else %}Pending SOP Ack{% endif %}
+                    </div>
+                </div>
+                <span class="badge {{ cert.status_badge_class }}">{{ cert.get_status_display }}</span>
+            </div>
+            {% empty %}
+            <p class="text-sm text-slate-500 dark:text-slate-400">No operator certifications linked to this SOP yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Revision Lineage &amp; Related Lessons Learned</h2>
+        </div>
+        <div class="card-body">
+            <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Revision History</h3>
+            {% for rev in revision_history %}
+            <div class="flex items-center justify-between py-1.5 text-sm">
+                <a href="{% url 'assets:asset_operating_procedure_detail' rev.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ rev.number }} ({{ rev.revision_label }})</a>
+                <span class="badge {{ rev.status_badge_class }}">{{ rev.get_status_display }}</span>
+            </div>
+            {% endfor %}
+
+            {% if linked_articles %}
+            <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mt-4 mb-2">Recommended By KB Articles</h3>
+            {% for art in linked_articles %}
+            <div class="flex items-center justify-between py-1.5 text-sm">
+                <a href="{% url 'assets:asset_knowledge_article_detail' art.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ art.number }} — {{ art.title }}</a>
+                <span class="badge {{ art.status_badge_class }}">{{ art.get_status_display }}</span>
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
