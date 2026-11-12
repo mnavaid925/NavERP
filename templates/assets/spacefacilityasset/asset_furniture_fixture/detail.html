@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ fixture.number }} — {{ fixture.name }} — FF&amp;E — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_furniture_fixture_list' %}">Furniture &amp; Fixture Tracking</a>
+            <span>/</span>
+            <span>{{ fixture.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ fixture.number }} — {{ fixture.name }}</h1>
+            <span class="badge {{ fixture.condition_badge_class }}">{{ fixture.get_condition_grade_display }}</span>
+            <span class="badge {{ fixture.move_status_badge_class }}">{{ fixture.get_move_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if can_complete_move %}
+        <form method="post" action="{% url 'assets:asset_furniture_fixture_request_move' fixture.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Request Move
+            </button>
+        </form>
+        <form method="post" action="{% url 'assets:asset_furniture_fixture_schedule_reconfig' fixture.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="calendar-clock" class="w-4 h-4 me-1"></i> Schedule Reconfig
+            </button>
+        </form>
+        <form method="post" action="{% url 'assets:asset_furniture_fixture_complete_move' fixture.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-square" class="w-4 h-4 me-1"></i> Complete Relocation
+            </button>
+        </form>
+        {% endif %}
+
+        {% if not fixture.is_locked %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_furniture_fixture_retire' fixture.pk %}" class="inline" onsubmit="return confirm('Retire and lock FF&amp;E item {{ fixture.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Retire
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if can_edit %}
+        <a href="{% url 'assets:asset_furniture_fixture_edit' fixture.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if can_delete %}
+        <form method="post" action="{% url 'assets:asset_furniture_fixture_delete' fixture.pk %}" class="inline" onsubmit="return confirm('Delete FF&amp;E item {{ fixture.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_furniture_fixture_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="map-pin"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Current Space</div>
+            <div class="stat-value text-base">{{ fixture.facility_space.code }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="hash"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Quantity Deployed</div>
+            <div class="stat-value">{{ fixture.quantity }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Replacement Value</div>
+            <div class="stat-value text-base">{{ fixture.total_replacement_value|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="truck"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Estimated Move Cost</div>
+            <div class="stat-value text-base">{{ fixture.estimated_move_cost|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">FF&amp;E Specifications &amp; Custody</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-xs text-muted">Category</dt>
+                    <dd class="font-medium">{{ fixture.get_ffe_category_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Asset Tag / RFID</dt>
+                    <dd class="font-mono">{{ fixture.asset_tag_code|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Manufacturer &amp; SKU</dt>
+                    <dd>{{ fixture.manufacturer|default:"—" }} {% if fixture.model_sku %}/ {{ fixture.model_sku }}{% endif %}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Finish / Material</dt>
+                    <dd>{{ fixture.finish_material|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Unit Replacement Cost</dt>
+                    <dd class="font-mono">{{ fixture.unit_replacement_cost|floatformat:2|intcomma }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Floor Pin Coordinates</dt>
+                    <dd class="font-mono">
+                        {% if fixture.pin_x_pct is not None and fixture.pin_y_pct is not None %}
+                        ({{ fixture.pin_x_pct }}%, {{ fixture.pin_y_pct }}%)
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Assigned Org Unit</dt>
+                    <dd>{{ fixture.assigned_org_unit.name|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Custodian Party</dt>
+                    <dd>{{ fixture.custodian_party.name|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Operational SCM Asset</dt>
+                    <dd>{{ fixture.operational_asset|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Fixed Asset Link</dt>
+                    <dd>{{ fixture.fixed_asset|default:"—" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">IMAC Relocation &amp; Space Reconfiguration</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-xs text-muted">Current Space</dt>
+                    <dd>
+                        <a href="{% url 'assets:asset_facility_space_detail' fixture.facility_space.pk %}" class="text-blue-600 hover:underline font-medium">
+                            {{ fixture.facility_space.code }} — {{ fixture.facility_space.name }}
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Target Destination Space</dt>
+                    <dd>
+                        {% if fixture.target_space %}
+                        <a href="{% url 'assets:asset_facility_space_detail' fixture.target_space.pk %}" class="text-blue-600 hover:underline font-medium">
+                            {{ fixture.target_space.code }} — {{ fixture.target_space.name }}
+                        </a>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">IMAC Batch Ref</dt>
+                    <dd class="font-mono">{{ fixture.reconfiguration_batch_ref|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Move Coordinator</dt>
+                    <dd>{{ fixture.move_coordinator.get_full_name|default:fixture.move_coordinator.username|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Scheduled Move Date</dt>
+                    <dd>{{ fixture.move_scheduled_date|date:"Y-m-d"|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Completed At</dt>
+                    <dd>{{ fixture.move_completed_at|date:"Y-m-d H:i"|default:"—" }}</dd>
+                </div>
+                <div class="col-span-2">
+                    <dt class="text-xs text-muted">Generated Asset Movement Log</dt>
+                    <dd class="font-mono">
+                        {% if fixture.movement_log %}
+                        {{ fixture.movement_log.number }} — {{ fixture.movement_log.title }} ({{ fixture.movement_log.get_status_display }})
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+            </dl>
+            {% if fixture.move_notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 text-sm">
+                <div class="text-xs text-muted mb-1">Move &amp; Installation Notes</div>
+                <div class="whitespace-pre-line">{{ fixture.move_notes }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
