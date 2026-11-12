@@ -176,8 +176,8 @@
         selectEl.addEventListener('change', update);
         update();
     }
-    syncSide('source', '{{ form.source_ci_type.id_for_label }}');
-    syncSide('target', '{{ form.target_ci_type.id_for_label }}');
+    syncSide('source', '{{ form.source_ci_type.id_for_label|escapejs }}');
+    syncSide('target', '{{ form.target_ci_type.id_for_label|escapejs }}');
 })();
 </script>
 {% endblock %}
