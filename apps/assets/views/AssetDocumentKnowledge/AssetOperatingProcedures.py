@@ -162,7 +162,7 @@ def _build_procedure_detail_context(request, proc):
 def asset_operating_procedure_list(request):
     """SOP, PM protocol, and LOTO checklist list view."""
     today = timezone.localdate()
-    base_qs = assets_scope(AssetOperatingProcedure, request)
+    base_qs = assets_scope(AssetOperatingProcedure.objects.all(), request)
     filtered_qs = _filter_procedure_queryset(request, base_qs)
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -197,7 +197,7 @@ def asset_operating_procedure_list(request):
 @login_required
 def asset_operating_procedure_export_csv(request):
     """Export filtered tenant SOPs & LOTO checklists as a hardened CSV download."""
-    base_qs = assets_scope(AssetOperatingProcedure, request)
+    base_qs = assets_scope(AssetOperatingProcedure.objects.all(), request)
     filtered_qs = _filter_procedure_queryset(request, base_qs)
     headers = [
         "SOP #",
@@ -241,7 +241,10 @@ def asset_operating_procedure_export_csv(request):
 def asset_operating_procedure_detail(request, pk):
     """Controlled SOP detail view showing LOTO isolation matrix, steps, and qualified operators."""
     proc = assets_object(
-        AssetOperatingProcedure.objects.select_related(
+        request,
+        AssetOperatingProcedure,
+        pk,
+        select_related=(
             "operational_asset",
             "asset_category",
             "asset_model",
@@ -254,8 +257,6 @@ def asset_operating_procedure_detail(request, pk):
             "approved_by",
             "supersedes",
         ),
-        request,
-        pk,
     )
     context = _build_procedure_detail_context(request, proc)
     return render(
@@ -269,7 +270,10 @@ def asset_operating_procedure_detail(request, pk):
 def asset_operating_procedure_print(request, pk):
     """Print-ready shop-floor SOP & LOTO bench sheet view."""
     proc = assets_object(
-        AssetOperatingProcedure.objects.select_related(
+        request,
+        AssetOperatingProcedure,
+        pk,
+        select_related=(
             "operational_asset",
             "asset_category",
             "asset_model",
@@ -278,8 +282,6 @@ def asset_operating_procedure_print(request, pk):
             "author",
             "approved_by",
         ),
-        request,
-        pk,
     )
     context = _build_procedure_detail_context(request, proc)
     return render(
@@ -323,7 +325,7 @@ def asset_operating_procedure_create(request):
 @login_required
 def asset_operating_procedure_edit(request, pk):
     """Edit an unlocked Draft or Under Safety Review SOP."""
-    proc = assets_object(AssetOperatingProcedure, request, pk)
+    proc = assets_object(request, AssetOperatingProcedure, pk)
     if proc.is_locked:
         messages.warning(
             request,
@@ -363,7 +365,7 @@ def asset_operating_procedure_edit(request, pk):
 @tenant_admin_required
 def asset_operating_procedure_delete(request, pk):
     """Delete an unlocked Draft / Under Safety Review SOP."""
-    proc = assets_object(AssetOperatingProcedure, request, pk)
+    proc = assets_object(request, AssetOperatingProcedure, pk)
     if proc.is_locked:
         messages.error(
             request,
@@ -380,7 +382,7 @@ def asset_operating_procedure_delete(request, pk):
 @login_required
 def asset_operating_procedure_download(request, pk):
     """Download the SOP supplementary attachment safely with nosniff."""
-    proc = assets_object(AssetOperatingProcedure, request, pk)
+    proc = assets_object(request, AssetOperatingProcedure, pk)
     return serve_protected_attachment(
         proc, file_attr="attachment", original_filename_attr="original_filename"
     )
@@ -392,7 +394,12 @@ def asset_operating_procedure_submit_review(request, pk):
     """Submit a Draft SOP for safety / EHS review."""
     with transaction.atomic():
         proc = assets_object(
-            AssetOperatingProcedure.objects.select_for_update(), request, pk
+            request,
+            AssetOperatingProcedure,
+            pk,
+            queryset=AssetOperatingProcedure.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if proc.status != "draft":
             messages.warning(
@@ -414,7 +421,12 @@ def asset_operating_procedure_activate(request, pk):
     """Activate a reviewed SOP and supersede any predecessor version."""
     with transaction.atomic():
         proc = assets_object(
-            AssetOperatingProcedure.objects.select_for_update(), request, pk
+            request,
+            AssetOperatingProcedure,
+            pk,
+            queryset=AssetOperatingProcedure.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if proc.status not in AssetOperatingProcedure.EDITABLE_STATUSES:
             messages.warning(
@@ -463,7 +475,12 @@ def asset_operating_procedure_clone_revision(request, pk):
     """Clone an SOP into a new Draft revision superseding the source SOP."""
     with transaction.atomic():
         source = assets_object(
-            AssetOperatingProcedure.objects.select_for_update(), request, pk
+            request,
+            AssetOperatingProcedure,
+            pk,
+            queryset=AssetOperatingProcedure.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if source.status == "retired":
             messages.warning(
@@ -520,7 +537,12 @@ def asset_operating_procedure_retire(request, pk):
     """Retire a controlled operating procedure."""
     with transaction.atomic():
         proc = assets_object(
-            AssetOperatingProcedure.objects.select_for_update(), request, pk
+            request,
+            AssetOperatingProcedure,
+            pk,
+            queryset=AssetOperatingProcedure.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if proc.status == "retired":
             messages.info(request, f"SOP {proc.number} is already retired.")
