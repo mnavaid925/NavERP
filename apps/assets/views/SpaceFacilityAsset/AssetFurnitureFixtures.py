@@ -179,11 +179,11 @@ def asset_furniture_fixture_create(request):
                 fixture.tenant = tenant
                 fixture.save()
                 write_audit_log(
-                    request,
-                    "AssetFurnitureFixture",
-                    fixture.pk,
+                    request.user,
+                    fixture,
                     "create",
-                    f"Created FF&E item {fixture.number} ({fixture.name})",
+                    changes={"number": fixture.number, "category": fixture.ffe_category},
+                    tenant=tenant,
                 )
             messages.success(request, f"Furniture / fixture {fixture.number} created.")
             return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
@@ -254,11 +254,11 @@ def asset_furniture_fixture_edit(request, pk):
             with transaction.atomic():
                 fixture = form.save()
                 write_audit_log(
-                    request,
-                    "AssetFurnitureFixture",
-                    fixture.pk,
+                    request.user,
+                    fixture,
                     "update",
-                    f"Updated FF&E item {fixture.number}",
+                    changes={"number": fixture.number, "category": fixture.ffe_category},
+                    tenant=tenant,
                 )
             messages.success(request, f"Furniture / fixture {fixture.number} updated.")
             return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
@@ -288,14 +288,14 @@ def asset_furniture_fixture_delete(request, pk):
     number = fixture.number
     try:
         with transaction.atomic():
-            fixture.delete()
             write_audit_log(
-                request,
-                "AssetFurnitureFixture",
-                pk,
+                request.user,
+                fixture,
                 "delete",
-                f"Deleted FF&E item {number}",
+                changes={"number": number, "category": fixture.ffe_category},
+                tenant=getattr(request, "tenant", None),
             )
+            fixture.delete()
     except ProtectedError:
         messages.error(request, f"Cannot delete {number} because linked records depend on it.")
         return redirect("assets:asset_furniture_fixture_detail", pk=pk)
@@ -321,11 +321,11 @@ def asset_furniture_fixture_request_move(request, pk):
         fixture.move_status = "move_requested"
         fixture.save(update_fields=["move_status", "updated_at"])
         write_audit_log(
-            request,
-            "AssetFurnitureFixture",
-            fixture.pk,
+            request.user,
+            fixture,
             "req_move",
-            f"Requested IMAC move for {fixture.number} -> {fixture.target_space.code}",
+            changes={"number": fixture.number, "target_space": fixture.target_space.code},
+            tenant=fixture.tenant,
         )
     messages.success(request, f"IMAC move requested for {fixture.number}.")
     return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
@@ -349,11 +349,11 @@ def asset_furniture_fixture_schedule_reconfig(request, pk):
         fixture.move_status = "scheduled_reconfig"
         fixture.save(update_fields=["move_status", "updated_at"])
         write_audit_log(
-            request,
-            "AssetFurnitureFixture",
-            fixture.pk,
+            request.user,
+            fixture,
             "reconfig",
-            f"Scheduled IMAC reconfiguration for {fixture.number}",
+            changes={"number": fixture.number, "batch": fixture.reconfiguration_batch_ref},
+            tenant=fixture.tenant,
         )
     messages.success(request, f"Reconfiguration scheduled for {fixture.number}.")
     return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
@@ -426,11 +426,11 @@ def asset_furniture_fixture_complete_move(request, pk):
             ]
         )
         write_audit_log(
-            request,
-            "AssetFurnitureFixture",
-            fixture.pk,
+            request.user,
+            fixture,
             "relocate",
-            f"Completed relocation of {fixture.number} from {origin_code} to {dest_code}",
+            changes={"number": fixture.number, "from": origin_code, "to": dest_code},
+            tenant=fixture.tenant,
         )
     messages.success(request, f"Moved {fixture.number} from {origin_code} to {dest_code}.")
     return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
@@ -452,11 +452,11 @@ def asset_furniture_fixture_retire(request, pk):
         fixture.move_status = "retired"
         fixture.save(update_fields=["move_status", "updated_at"])
         write_audit_log(
-            request,
-            "AssetFurnitureFixture",
-            fixture.pk,
+            request.user,
+            fixture,
             "retire",
-            f"Retired FF&E item {fixture.number}",
+            changes={"number": fixture.number, "move_status": "retired"},
+            tenant=fixture.tenant,
         )
     messages.warning(request, f"FF&E item {fixture.number} retired and locked.")
     return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
