@@ -244,6 +244,11 @@ class AssetKnowledgeArticle(TenantNumbered):
             models.Index(fields=["tenant", "severity"], name="idx_akba_ten_sev"),
             models.Index(fields=["tenant", "rca_methodology"], name="idx_akba_ten_rca"),
             models.Index(fields=["tenant", "operational_asset"], name="idx_akba_ten_ast"),
+            models.Index(
+                fields=["tenant", "-published_at", "-updated_at"],
+                name="idx_akba_ten_pub_upd",
+            ),
+            models.Index(fields=["tenant", "failure_mode"], name="idx_akba_ten_fm"),
         ]
 
     def __str__(self):
