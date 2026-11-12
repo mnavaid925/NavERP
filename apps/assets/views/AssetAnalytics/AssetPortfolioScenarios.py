@@ -226,7 +226,13 @@ def asset_portfolio_scenario_simulate(request, pk):
         return redirect("assets:asset_portfolio_scenario_detail", pk=scenario.pk)
     with transaction.atomic():
         scenario.run_simulation(save=True)
-        write_audit_log(request.user, scenario, "simulate", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            scenario,
+            "update",
+            changes={"action": "simulate", "status": scenario.status},
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"Simulation completed for '{scenario.number}': Simulated CapEx ${scenario.simulated_capex_total:,.2f}, NPV ${scenario.net_present_value:,.2f}.",
@@ -257,7 +263,13 @@ def asset_portfolio_scenario_transition(request, pk):
     with transaction.atomic():
         scenario.status = target_status
         scenario.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, scenario, "update", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            scenario,
+            "update",
+            changes={"action": "transition", "status": scenario.status},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Scenario '{scenario.number}' transitioned to '{scenario.get_status_display()}'.")
     return redirect("assets:asset_portfolio_scenario_detail", pk=scenario.pk)
 
