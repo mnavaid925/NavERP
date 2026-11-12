@@ -20,12 +20,12 @@ def parse_pos_int(raw_value):
 
 
 def apply_choice_filter(qs, request, param_name, field_name=None, allowed_values=None):
-    """Apply an exact GET choice filter to queryset when non-empty and valid."""
+    """Apply an exact GET choice filter cleanly while ignoring unrecognized choice values."""
     val = request.GET.get(param_name, "").strip()
     if not val:
         return qs
     if allowed_values is not None and val not in allowed_values:
-        return qs.none()
+        return qs
     return qs.filter(**{field_name or param_name: val})
 
 
