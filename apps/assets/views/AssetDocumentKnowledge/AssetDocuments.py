@@ -361,16 +361,12 @@ def asset_document_detail(request, pk):
         reverse=True,
     )
 
-    linked_procedures = (
-        doc.operating_procedures.filter(tenant=request.tenant).order_by("-updated_at")
-        if hasattr(doc, "operating_procedures")
-        else AssetDocument.objects.none()
-    )
-    linked_articles = (
-        doc.knowledge_articles.filter(tenant=request.tenant).order_by("-updated_at")
-        if hasattr(doc, "knowledge_articles")
-        else AssetDocument.objects.none()
-    )
+    linked_procedures = doc.operating_procedures.filter(
+        tenant=request.tenant
+    ).order_by("-updated_at")
+    linked_articles = doc.knowledge_articles.filter(
+        tenant=request.tenant
+    ).order_by("-updated_at")
 
     is_admin = is_tenant_admin_user(request.user)
     checkout_ok = doc.checked_out_by_id in (None, request.user.id) or is_admin
