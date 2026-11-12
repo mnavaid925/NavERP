@@ -206,6 +206,21 @@ def asset_document_export_csv(request):
     )
 
 
+_DOC_LINEAGE_FIELDS = (
+    "id",
+    "tenant_id",
+    "number",
+    "revision_label",
+    "revision_sequence",
+    "is_current_revision",
+    "change_type",
+    "change_request_ref",
+    "status",
+    "effective_date",
+    "supersedes_id",
+)
+
+
 @login_required
 def asset_document_detail(request, pk):
     """Controlled document detail view with revision chain, checkout state, and cross-links."""
@@ -228,33 +243,51 @@ def asset_document_detail(request, pk):
             "reviewer",
             "approved_by",
             "checked_out_by",
-            "supersedes",
+            "supersedes__supersedes__supersedes__supersedes",
         ),
     )
 
     chain_seen = {doc.pk}
     ancestors = []
-    cur = doc.supersedes
-    while cur is not None and len(ancestors) < 25:
-        if cur.pk in chain_seen or cur.tenant_id != request.tenant.pk:
+    cur = doc
+    for _ in range(25):
+        next_id = cur.supersedes_id
+        if not next_id or next_id in chain_seen:
             break
-        chain_seen.add(cur.pk)
-        ancestors.append(cur)
-        cur = cur.supersedes
-
-    descendants = []
-    frontier = doc
-    while len(descendants) < 25:
-        nxt = (
-            frontier.superseded_by_revisions.filter(tenant=request.tenant)
-            .order_by("revision_sequence", "pk")
-            .first()
-        )
-        if nxt is None or nxt.pk in chain_seen:
+        if "supersedes" in cur._state.fields_cache:
+            nxt = cur._state.fields_cache["supersedes"]
+        else:
+            nxt = (
+                AssetDocument.objects.filter(tenant=request.tenant, pk=next_id)
+                .only(*_DOC_LINEAGE_FIELDS)
+                .first()
+            )
+        if nxt is None or nxt.pk in chain_seen or nxt.tenant_id != request.tenant.pk:
             break
         chain_seen.add(nxt.pk)
-        descendants.append(nxt)
-        frontier = nxt
+        ancestors.append(nxt)
+        cur = nxt
+
+    descendants = []
+    frontier_ids = [doc.pk]
+    while frontier_ids and len(descendants) < 25:
+        children = list(
+            AssetDocument.objects.filter(
+                tenant=request.tenant, supersedes_id__in=frontier_ids
+            )
+            .only(*_DOC_LINEAGE_FIELDS)
+            .order_by("revision_sequence", "pk")
+        )
+        next_frontier = []
+        for child in children:
+            if child.pk in chain_seen:
+                continue
+            chain_seen.add(child.pk)
+            descendants.append(child)
+            next_frontier.append(child.pk)
+            if len(descendants) >= 25:
+                break
+        frontier_ids = next_frontier
 
     revision_history = list(reversed(ancestors)) + [doc] + descendants
     revision_history.sort(
