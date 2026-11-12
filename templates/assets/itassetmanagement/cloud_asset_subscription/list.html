@@ -143,7 +143,7 @@
                     <th>SSO &amp; Governance</th>
                     <th>Renewal</th>
                     <th>Status</th>
-                    <th></th>
+                    <th class="th-actions">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -184,8 +184,25 @@
                         {{ item.renewal_date|date:"Y-m-d"|default:"—" }}
                     </td>
                     <td><span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span></td>
-                    <td class="text-right whitespace-nowrap">
-                        <a href="{% url 'assets:cloud_asset_subscription_detail' item.pk %}" class="btn btn-outline btn-sm">View</a>
+                    <td class="table-actions">
+                        <a href="{% url 'assets:cloud_asset_subscription_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if not item.is_locked %}
+                            {% if item.status != "suspended" or request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'assets:cloud_asset_subscription_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% endif %}
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'assets:cloud_asset_subscription_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete cloud asset {{ item.number|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger text-danger" title="Delete" aria-label="Delete {{ item.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
