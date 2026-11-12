@@ -150,7 +150,7 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Asset &amp; Governance Linkages</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Asset &amp; Governance Linkages</h2>
         </div>
         <div class="card-body">
             <dl class="detail-grid">
@@ -190,7 +190,7 @@
                     <dt>Linked Requisition</dt>
                     <dd>
                         {% if plan.linked_requisition %}
-                        <a href="{% url 'assets:asset_requisition_detail' plan.linked_requisition.pk %}" class="text-blue-600 hover:underline font-mono">
+                        <a href="{% url 'assets:asset_requisition_detail' plan.linked_requisition.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline font-mono">
                             {{ plan.linked_requisition.number }}
                         </a>
                         {% else %}—{% endif %}
@@ -200,7 +200,7 @@
                     <dt>Lifecycle Study</dt>
                     <dd>
                         {% if plan.lifecycle_analysis %}
-                        <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' plan.lifecycle_analysis.pk %}" class="text-blue-600 hover:underline font-mono">
+                        <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' plan.lifecycle_analysis.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline font-mono">
                             {{ plan.lifecycle_analysis.number }}
                         </a>
                         {% else %}—{% endif %}
@@ -212,7 +212,7 @@
 
     <div class="card lg:col-span-2">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Scoring Breakdown &amp; Capital Economics</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Scoring Breakdown &amp; Capital Economics</h2>
         </div>
         <div class="card-body">
             <dl class="detail-grid mb-4">
@@ -246,15 +246,15 @@
                 </div>
                 <div class="detail-item">
                     <dt>Estimated Salvage Recovery</dt>
-                    <dd class="font-mono text-emerald-700">${{ plan.estimated_salvage_recovery|floatformat:"2g" }}</dd>
+                    <dd class="font-mono text-emerald-700 dark:text-emerald-400">${{ plan.estimated_salvage_recovery|floatformat:"2g" }}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Net Capital Requirement</dt>
-                    <dd class="font-mono font-bold text-blue-900">${{ plan.net_capital_requirement|floatformat:"2g" }}</dd>
+                    <dd class="font-mono font-bold text-blue-900 dark:text-blue-200">${{ plan.net_capital_requirement|floatformat:"2g" }}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>1-Year Deferral Penalty Cost</dt>
-                    <dd class="font-mono text-red-700">${{ plan.deferral_penalty_cost|floatformat:"2g" }}</dd>
+                    <dd class="font-mono text-red-700 dark:text-red-400">${{ plan.deferral_penalty_cost|floatformat:"2g" }}</dd>
                 </div>
             </dl>
         </div>
@@ -264,10 +264,10 @@
 {% if plan.notes %}
 <div class="card">
     <div class="card-header">
-        <h2 class="text-base font-semibold text-slate-800">Planning Justification &amp; Notes</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Planning Justification &amp; Notes</h2>
     </div>
     <div class="card-body">
-        <p class="text-sm text-slate-700 whitespace-pre-line">{{ plan.notes }}</p>
+        <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ plan.notes }}</p>
     </div>
 </div>
 {% endif %}
