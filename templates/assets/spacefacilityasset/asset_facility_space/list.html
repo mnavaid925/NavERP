@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Floor Plan &amp; Space Mapping — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Space &amp; Facility Asset Management</span>
+            <span>/</span>
+            <span>Floor Plan &amp; Space Mapping</span>
+        </div>
+        <h1 class="page-title">Floor Plan &amp; Space Mapping</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_facility_space_export_csv' %}?q={{ request.GET.q|urlencode }}&space_level={{ request.GET.space_level|urlencode }}&space_category={{ request.GET.space_category|urlencode }}&occupancy_status={{ request.GET.occupancy_status|urlencode }}&status={{ request.GET.status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&parent={{ request.GET.parent|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_facility_space_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Space
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="building-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Spaces</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active / Usable SqFt</div>
+            <div class="stat-value">{{ active_count }} &middot; {{ total_usable_sqft|floatformat:0 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="gauge"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Underutilized</div>
+            <div class="stat-value">{{ underutilized_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="door-open"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Vacant Spaces</div>
+            <div class="stat-value">{{ vacant_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div>
+                <label for="afsp-filter-q" class="sr-only">Search spaces</label>
+                <input id="afsp-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, code, name, CAD/BIM..." class="form-input" />
+            </div>
+            <div>
+                <label for="afsp-filter-level" class="sr-only">Space Level</label>
+                <select id="afsp-filter-level" name="space_level" class="form-select">
+                    <option value="">All Levels</option>
+                    {% for val, label in level_choices %}
+                    <option value="{{ val }}" {% if request.GET.space_level == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afsp-filter-category" class="sr-only">Space Category</label>
+                <select id="afsp-filter-category" name="space_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if request.GET.space_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afsp-filter-occupancy" class="sr-only">Occupancy</label>
+                <select id="afsp-filter-occupancy" name="occupancy_status" class="form-select">
+                    <option value="">All Occupancy</option>
+                    {% for val, label in occupancy_choices %}
+                    <option value="{{ val }}" {% if request.GET.occupancy_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afsp-filter-status" class="sr-only">Status</label>
+                <select id="afsp-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afsp-filter-parent" class="sr-only">Parent Space</label>
+                <select id="afsp-filter-parent" name="parent" class="form-select">
+                    <option value="">All Parent Spaces</option>
+                    {% for p in parent_spaces %}
+                    <option value="{{ p.pk }}" {% if request.GET.parent == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="afsp-filter-org" class="sr-only">Org Unit</label>
+                <select id="afsp-filter-org" name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{% url 'assets:asset_facility_space_list' %}" class="btn btn-outline">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Space #</th>
+                    <th>Code &amp; Name</th>
+                    <th>Level / Category</th>
+                    <th>Parent</th>
+                    <th>Usable SqFt</th>
+                    <th>Utilization</th>
+                    <th>Occupancy</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in spaces %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'assets:asset_facility_space_detail' s.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ s.number }}</a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800 dark:text-slate-100">{{ s.code }} — {{ s.name }}</div>
+                        {% if s.cad_layer_ref or s.bim_level_ref %}
+                        <div class="text-xs text-muted">{{ s.cad_layer_ref }}{% if s.cad_layer_ref and s.bim_level_ref %} &middot; {% endif %}{{ s.bim_level_ref }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ s.level_badge_class }}">{{ s.get_space_level_display }}</span>
+                        <div class="text-xs text-muted mt-1">{{ s.get_space_category_display }}</div>
+                    </td>
+                    <td class="text-xs">{% if s.parent %}{{ s.parent.code }}{% else %}—{% endif %}</td>
+                    <td class="text-xs font-mono">{{ s.usable_area_sqft|floatformat:0 }} sqft</td>
+                    <td class="text-xs font-mono">{{ s.current_headcount }}/{{ s.design_seat_capacity }} ({{ s.utilization_pct|floatformat:0 }}%)</td>
+                    <td><span class="badge {{ s.occupancy_badge_class }}">{{ s.get_occupancy_status_display }}</span></td>
+                    <td><span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span></td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'assets:asset_facility_space_detail' s.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                        {% if not s.is_locked %}
+                        <a href="{% url 'assets:asset_facility_space_edit' s.pk %}" class="btn btn-icon btn-outline" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+                        <form method="post" action="{% url 'assets:asset_facility_space_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete facility space {{ s.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="building-2" class="w-8 h-8 mx-auto mb-2 text-muted"></i>
+                            <p class="font-medium">No facility spaces found</p>
+                            <p class="text-xs text-muted mt-1">Create a building, floor, wing, or room record to map floor plans and occupancy.</p>
+                            <a href="{% url 'assets:asset_facility_space_create' %}" class="btn btn-primary mt-3">New Space</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="text-xs text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&space_level={{ request.GET.space_level|urlencode }}&space_category={{ request.GET.space_category|urlencode }}&occupancy_status={{ request.GET.occupancy_status|urlencode }}&status={{ request.GET.status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&parent={{ request.GET.parent|urlencode }}" class="btn btn-outline">Previous</a>
+            {% else %}
+            <span class="btn btn-outline opacity-50 pointer-events-none">Previous</span>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&space_level={{ request.GET.space_level|urlencode }}&space_category={{ request.GET.space_category|urlencode }}&occupancy_status={{ request.GET.occupancy_status|urlencode }}&status={{ request.GET.status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&parent={{ request.GET.parent|urlencode }}" class="btn btn-outline">Next</a>
+            {% else %}
+            <span class="btn btn-outline opacity-50 pointer-events-none">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
