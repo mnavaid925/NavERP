@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification, and document & knowledge management — controlled engineering document repository & revision/MOC queue, LOTO-enabled SOP bench sheets, operator training/qualification matrix with expiry alerts, and 5-Why / Fishbone 6M RCA knowledge base). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.15, 11.16), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, asset analytics & BI — Asset Lifecycle Cost Analysis TCO/EAC (`ALCC-`), Replacement Planning & FCI Forecasting (`ARPL-`), What-if Portfolio Scenarios (`AWIF-`), Executive KPI Scorecards (`AKPI-`), and computed Portfolio Dashboard & Scenario Comparison, integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification, and document & knowledge management — controlled engineering document repository & revision/MOC queue, LOTO-enabled SOP bench sheets, operator training/qualification matrix with expiry alerts, and 5-Why / Fishbone 6M RCA knowledge base). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.14, 11.15, 11.16), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -29,6 +29,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.11 Compliance & Regulatory Management**: Asset compliance frameworks, regulatory audits, operating permits & environmental licenses, and safety/compliance incident tracking.
 - **11.12 Asset Risk Management**: Enterprise asset risk register with 5x5 inherent/residual scoring (`[ARK-]`), business continuity and redundancy failover plans with drill tracking (`[ABC-]`), OT/IoT/SCADA cybersecurity profiles with Purdue network zoning and CVE/CVSS scoring (`[ACS-]`), and risk mitigation / geopolitical dual-sourcing contingency actions with verification (`[ARMA-]`).
 - **11.13 Mobile Asset Management**: Digital mobile inspection checklists & offline sync capture (`[MINS-]`), field technician work orders with dispatch/arrival/sign-off tracking (`[MFWO-]`), barcode/QR/RFID mobile scan capture logs (`[ASCN-]`), and GPS perimeter/geofence security alerts (`[AGEO-]`).
+- **11.14 Asset Analytics & Business Intelligence**: Lifecycle Cost Analysis TCO/EAC (`[ALCC-]`), Replacement Planning & FCI Forecasting (`[ARPL-]`), What-if Portfolio Scenario Modeling (`[AWIF-]`), Executive Reporting & KPI Scorecards (`[AKPI-]`), plus computed Portfolio Performance Dashboard & multi-scenario comparison workbench.
 - **11.15 Integration & API Hub**: ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 secret rotation & SSRF defense (`[AICN-]`), IoT/SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation (`[ATMS-]`), GL sync & reconciliation batches posting balanced `JournalEntry` rows (`[AGLS-]`), and GIS/LRS spatial coordinate & drift verification (`[AGIS-]`).
 - **11.16 Document & Knowledge Management**: Controlled engineering manuals/drawings repository with revision chains, checkout/check-in locks, access-classification tiers, and protected attachment downloads (`[ADOC-]`), controlled SOP & LOTO isolation procedures with printable shop-floor bench sheets (`[ASOP-]`), operator qualification & training certifications with bulk expiry refresh and `is_operator_certified(...)` resolver (`[AOCT-]`), and 5-Why / Fishbone 6M RCA & lessons-learned knowledge base (`[AKBA-]`).
 
@@ -102,6 +103,12 @@ apps/assets/
       FieldWorkOrders.py                      <- FieldWorkOrder [MFWO-]
       AssetScanLogs.py                        <- AssetScanLog [ASCN-]
       AssetGeofenceEvents.py                  <- AssetGeofenceEvent [AGEO-]
+    AssetAnalytics/                           <- Sub-module 11.14 models
+      _validators.py                          <- Shared validate_tenant_fks helper
+      AssetLifecycleCostAnalyses.py           <- AssetLifecycleCostAnalysis [ALCC-]
+      AssetReplacementPlans.py                <- AssetReplacementPlan [ARPL-]
+      AssetPortfolioScenarios.py              <- AssetPortfolioScenario [AWIF-]
+      AssetExecutiveScorecards.py             <- AssetExecutiveScorecard [AKPI-]
     IntegrationApiHub/                        <- Sub-module 11.15 models
       _validators.py                          <- Shared validate_tenant_fks & validate_json_object helpers
       AssetIntegrationConnectors.py           <- AssetIntegrationConnector [AICN-] (SSRF URL guard + SHA-256 secrets)
@@ -177,6 +184,12 @@ apps/assets/
       FieldWorkOrders.py                      <- FieldWorkOrderForm
       AssetScanLogs.py                        <- AssetScanLogForm
       AssetGeofenceEvents.py                  <- AssetGeofenceEventForm
+    AssetAnalytics/                           <- Sub-module 11.14 forms
+      _helpers.py                             <- Shared JSON object/parameter cleaning & reject_foreign wrapper
+      AssetLifecycleCostAnalyses.py           <- AssetLifecycleCostAnalysisForm
+      AssetReplacementPlans.py                <- AssetReplacementPlanForm
+      AssetPortfolioScenarios.py              <- AssetPortfolioScenarioForm
+      AssetExecutiveScorecards.py             <- AssetExecutiveScorecardForm
     IntegrationApiHub/                        <- Sub-module 11.15 forms
       AssetIntegrationConnectors.py           <- AssetIntegrationConnectorForm
       AssetTelemetryStreams.py                <- AssetTelemetryStreamForm
@@ -252,6 +265,13 @@ apps/assets/
       FieldWorkOrders.py                      <- Field Work Order CRUD (arrival/completed/signed timestamps + defer)
       AssetScanLogs.py                        <- Barcode/QR/RFID Scan Log CRUD
       AssetGeofenceEvents.py                  <- GPS Perimeter Breach & Geofence Event CRUD (auto acknowledged_by/at)
+    AssetAnalytics/                           <- Sub-module 11.14 views
+      _helpers.py                             <- Shared parse_pos_int, apply_choice_filter (ignores invalid GET params per L11), csv_export_response
+      AssetLifecycleCostAnalyses.py           <- LCC CRUD + CSV export + populate_from_ledger + transition
+      AssetReplacementPlans.py                <- Replacement Plan CRUD + CSV export + recalculate + transition
+      AssetPortfolioScenarios.py              <- Portfolio Scenario CRUD + CSV export + simulate + transition
+      AssetExecutiveScorecards.py             <- Executive Scorecard CRUD + CSV export + compute + publish/approve/archive
+      PortfolioDashboards.py                  <- Computed portfolio_dashboard, portfolio_dashboard_export_csv, scenario_compare
     IntegrationApiHub/                        <- Sub-module 11.15 views
       _common.py                              <- Shared parse_pos_int, verified_connector_initial, is_tenant_admin_user helpers
       AssetIntegrationConnectors.py           <- Connector CRUD (admin create/edit/delete) + test_connection + rotate_secret
@@ -326,6 +346,12 @@ apps/assets/
       FieldWorkOrders.py
       AssetScanLogs.py
       AssetGeofenceEvents.py
+    AssetAnalytics/                           <- Sub-module 11.14 URL route definitions
+      AssetLifecycleCostAnalyses.py
+      AssetReplacementPlans.py
+      AssetPortfolioScenarios.py
+      AssetExecutiveScorecards.py
+      PortfolioDashboards.py
     IntegrationApiHub/                        <- Sub-module 11.15 URL route definitions
       AssetIntegrationConnectors.py
       AssetTelemetryStreams.py
@@ -337,8 +363,10 @@ apps/assets/
       AssetOperatorCertifications.py
       AssetKnowledgeArticles.py
     __init__.py                               <- Root URL router concatenating all packages
+  templatetags/
+    asset_analytics_tags.py                   <- fmt_money tag for dynamic currency prefix + leading-sign formatting
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.13, 11.15–11.16)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.16)
   tests/
     conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies, disposal, mobile)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
@@ -389,6 +417,10 @@ apps/assets/
     test_mobile_asset_forms.py                <- 11.13 Form tenant scoping, reject_foreign (incl. user FKs), system exclusions
     test_mobile_asset_views.py                <- 11.13 View contracts, filters, timestamps, pagination, audit logs
     test_mobile_asset_security.py             <- 11.13 IDOR (404), CSRF (403), XSS escaping, method safety (405), mass assignment
+    test_assetanalytics_models.py             <- 11.14 Model invariants, ALCC/ARPL/AWIF/AKPI sequences, TCO/EAC/FCI/ROI math, clean()
+    test_assetanalytics_forms.py              <- 11.14 Form exclusions, global Currency, reject_foreign, numeric & JSON bounds
+    test_assetanalytics_views.py              <- 11.14 CRUD, filters, CSV exports, computed portfolio_dashboard & scenario_compare, query budgets
+    test_assetanalytics_security.py           <- 11.14 Anon (302), IDOR (404), RBAC/SoD (403), CSRF (403), lock guards, CSV/XSS hardening
     test_integration_api_hub_models.py        <- 11.15 Model invariants, AICN/ATMS/AGLS/AGIS sequences, SSRF, JSON, clean()
     test_integration_api_hub_forms.py         <- 11.15 Form .none() fallback, reject_foreign, exclusions, O(1) dropdowns
     test_integration_api_hub_views.py         <- 11.15 Views, overview KPIs, 11.7/11.5 telemetry, balanced JE reconciliation
@@ -936,6 +968,52 @@ Templates under `templates/assets/mobileassetmanagement/{mobile_asset_inspection
   - `assets:asset_geofence_event_edit`: `/assets/mobile/geofence/<pk>/edit/`
   - `assets:asset_geofence_event_delete`: `/assets/mobile/geofence/<pk>/delete/` [POST]
 
+### 11.14 Asset Analytics & Business Intelligence
+Templates under `templates/assets/assetanalytics/{asset_lifecycle_cost_analysis,asset_replacement_plan,asset_portfolio_scenario,asset_executive_scorecard}/{list,detail,form}.html` plus `templates/assets/assetanalytics/portfolio_dashboard/{dashboard,scenario_compare}.html`. Uses `{% load asset_analytics_tags %}` (`fmt_money`) for dynamic currency prefix and leading-sign formatting (`-$1,234.56`). Seeder method `_seed_tenant_11_14(tenant)` in `seed_assets.py` creates demo Lifecycle Cost Analyses (`ALCC-`), Replacement Plans (`ARPL-`), What-If Portfolio Scenarios (`AWIF-`), and Executive Scorecards (`AKPI-`). Migrations: `0020_assetlifecyclecostanalysis_assetportfolioscenario_and_more` and `0021_assetexecutivescorecard_idx_akpi_ten_org_and_more`.
+
+- **Lifecycle Cost Analyses (`AssetLifecycleCostAnalysis` [ALCC-]):** Reuses `scm.Asset`, `accounting.FixedAsset`, `AssetCategory`, `accounting.Currency` (global — no tenant filter), `User`; computes total CAPEX/OPEX/disposal cost, total lifecycle TCO, annualized EAC, and NPV; supports ledger auto-population (`populate_from_ledger`) from maintenance logs (`11.5`), depreciation (`11.4`), downtime (`11.6`), and energy cost (`11.6`) plus lock-enforced state transitions (`draft` -> `finalized` / `archived`).
+  - `assets:asset_lifecycle_cost_analysis_list`: `/assets/analytics/lifecycle-cost/`
+  - `assets:asset_lifecycle_cost_analysis_create`: `/assets/analytics/lifecycle-cost/create/`
+  - `assets:asset_lifecycle_cost_analysis_export_csv`: `/assets/analytics/lifecycle-cost/export-csv/`
+  - `assets:asset_lifecycle_cost_analysis_detail`: `/assets/analytics/lifecycle-cost/<pk>/`
+  - `assets:asset_lifecycle_cost_analysis_edit`: `/assets/analytics/lifecycle-cost/<pk>/edit/`
+  - `assets:asset_lifecycle_cost_analysis_delete`: `/assets/analytics/lifecycle-cost/<pk>/delete/` [POST]
+  - `assets:asset_lifecycle_cost_analysis_populate`: `/assets/analytics/lifecycle-cost/<pk>/populate/` [POST]
+  - `assets:asset_lifecycle_cost_analysis_transition`: `/assets/analytics/lifecycle-cost/<pk>/transition/` [POST]
+- **Replacement Plans (`AssetReplacementPlan` [ARPL-]):** Reuses `scm.Asset`, `accounting.FixedAsset`, `AssetCategory`, `core.OrgUnit`, `accounting.Currency` (global), `User`; computes Facility Condition Index (`FCI`), remaining useful life percentage, priority replacement score (`0–100`), urgency band, and annual renewal capex; row-locked `recalculate` refreshes metrics from current operational & maintenance records.
+  - `assets:asset_replacement_plan_list`: `/assets/analytics/replacement-plans/`
+  - `assets:asset_replacement_plan_create`: `/assets/analytics/replacement-plans/create/`
+  - `assets:asset_replacement_plan_export_csv`: `/assets/analytics/replacement-plans/export-csv/`
+  - `assets:asset_replacement_plan_detail`: `/assets/analytics/replacement-plans/<pk>/`
+  - `assets:asset_replacement_plan_edit`: `/assets/analytics/replacement-plans/<pk>/edit/`
+  - `assets:asset_replacement_plan_delete`: `/assets/analytics/replacement-plans/<pk>/delete/` [POST]
+  - `assets:asset_replacement_plan_recalculate`: `/assets/analytics/replacement-plans/<pk>/recalculate/` [POST]
+  - `assets:asset_replacement_plan_transition`: `/assets/analytics/replacement-plans/<pk>/transition/` [POST]
+- **Portfolio Scenarios (`AssetPortfolioScenario` [AWIF-]):** Reuses `core.OrgUnit`, `AssetCategory`, `accounting.Currency` (global), `User` (with optional `baseline_scenario` self-FK scoped to tenant); models capex constraint, inflation, discount rate, opex escalation, and target availability uplift via `run_simulation` to output projected capex/opex/NPV/ROI/savings deltas vs. baseline.
+  - `assets:asset_portfolio_scenario_list`: `/assets/analytics/scenarios/`
+  - `assets:asset_portfolio_scenario_create`: `/assets/analytics/scenarios/create/`
+  - `assets:asset_portfolio_scenario_export_csv`: `/assets/analytics/scenarios/export-csv/`
+  - `assets:asset_portfolio_scenario_detail`: `/assets/analytics/scenarios/<pk>/`
+  - `assets:asset_portfolio_scenario_edit`: `/assets/analytics/scenarios/<pk>/edit/`
+  - `assets:asset_portfolio_scenario_delete`: `/assets/analytics/scenarios/<pk>/delete/` [POST]
+  - `assets:asset_portfolio_scenario_simulate`: `/assets/analytics/scenarios/<pk>/simulate/` [POST]
+  - `assets:asset_portfolio_scenario_transition`: `/assets/analytics/scenarios/<pk>/transition/` [POST]
+- **Executive Scorecards (`AssetExecutiveScorecard` [AKPI-]):** Reuses `core.OrgUnit`, `AssetCategory`, `accounting.Currency` (global), `User`; aggregates portfolio count, replacement value, NBV, annualized TCO, ROI %, availability/OEE/utilization %, FCI %, capex backlog, and depreciation variance via `compute_from_portfolio`, enforcing Segregation of Duties (`approved_by != submitted_by`) on admin-gated `approve`.
+  - `assets:asset_executive_scorecard_list`: `/assets/analytics/scorecards/`
+  - `assets:asset_executive_scorecard_create`: `/assets/analytics/scorecards/create/`
+  - `assets:asset_executive_scorecard_export_csv`: `/assets/analytics/scorecards/export-csv/`
+  - `assets:asset_executive_scorecard_detail`: `/assets/analytics/scorecards/<pk>/`
+  - `assets:asset_executive_scorecard_edit`: `/assets/analytics/scorecards/<pk>/edit/`
+  - `assets:asset_executive_scorecard_delete`: `/assets/analytics/scorecards/<pk>/delete/` [POST]
+  - `assets:asset_executive_scorecard_compute`: `/assets/analytics/scorecards/<pk>/compute/` [POST]
+  - `assets:asset_executive_scorecard_publish`: `/assets/analytics/scorecards/<pk>/publish/` [POST]
+  - `assets:asset_executive_scorecard_approve`: `/assets/analytics/scorecards/<pk>/approve/` [POST, Admin + SoD]
+  - `assets:asset_executive_scorecard_archive`: `/assets/analytics/scorecards/<pk>/archive/` [POST, Admin]
+- **Computed Portfolio BI Views (NO extra model):** Live portfolio KPI synthesis, aging/FCI/TCO charts, CSV export, and side-by-side baseline vs. candidate scenario delta comparison.
+  - `assets:portfolio_dashboard`: `/assets/analytics/dashboard/`
+  - `assets:portfolio_dashboard_export_csv`: `/assets/analytics/dashboard/export-csv/`
+  - `assets:scenario_compare`: `/assets/analytics/scenarios/compare/`
+
 ### 11.15 Integration & API Hub
 Templates under `templates/assets/integrationapihub/{asset_integration_connector,asset_telemetry_stream,asset_gl_sync_batch,asset_gis_mapping}/{list,detail,form}.html`. Seeder method `_seed_tenant_11_15(tenant)` in `seed_assets.py` creates demo Integration Connectors (`AICN-`), Telemetry Streams (`ATMS-`), GL Sync Batches (`AGLS-`), and GIS Mappings (`AGIS-`). Migrations: `0018_assetintegrationconnector_assetglsyncbatch_and_more` and `0019_alter_assetgismapping_drift_status_and_more`.
 
@@ -1061,7 +1139,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (2,393 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, 375 tests for 11.15, and 110 tests for 11.16).
+Unfiltered run on SQLite in-memory test database (2,684 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, 291 tests for 11.14, 375 tests for 11.15, and 110 tests for 11.16).
 
 ---
 
@@ -1079,6 +1157,7 @@ Unfiltered run on SQLite in-memory test database (2,393 passing tests in full `a
 - `11.11`: Compliance & Regulatory Management (`assets:asset_compliance_framework_list`)
 - `11.12`: Risk Identification & Assessment (`assets:asset_risk_register_list`), Business Continuity Planning (`assets:asset_business_continuity_plan_list`), Cybersecurity for Connected Assets (`assets:asset_cybersecurity_profile_list`), Geopolitical & Supply Chain Risk / Risk Mitigation & Contingency (`assets:asset_risk_mitigation_action_list`)
 - `11.13`: Mobile Inspection & Data Capture (`assets:mobile_asset_inspection_list`), Field Technician Work Orders (`assets:field_work_order_list`), Barcode/RFID Scanning (`assets:asset_scan_log_list`), GPS & Geofencing (`assets:asset_geofence_event_list`), Offline Synchronization (`assets:mobile_asset_inspection_list`)
+- `11.14`: Asset Lifecycle Cost Analysis (LCC) (`assets:asset_lifecycle_cost_analysis_list`), Replacement Planning & Forecasting (`assets:asset_replacement_plan_list`), Portfolio Performance Dashboards (`assets:portfolio_dashboard`), What-if Scenario Modeling (`assets:asset_portfolio_scenario_list`), Executive Reporting & KPIs (`assets:asset_executive_scorecard_list`), Scenario Comparison (`assets:scenario_compare`)
 - `11.15`: ERP Integration (`assets:asset_integration_connector_list?connector_category=erp_procurement`), IoT & SCADA Systems (`assets:asset_telemetry_stream_list`), CMMS/EAM Connectivity (`assets:asset_integration_connector_list?connector_category=cmms_eam`), Financial Systems & General Ledger (`assets:asset_gl_sync_batch_list`), GIS & Mapping Tools (`assets:asset_gis_mapping_list`), Integration Connectors (`assets:asset_integration_connector_list`)
 - `11.16`: Asset Documentation Repository (`assets:asset_document_list`), Version Control & Change Management (`assets:asset_document_change_list`), SOP & Procedure Management (`assets:asset_operating_procedure_list`), Training & Certification Records (`assets:asset_operator_certification_list`), Lessons Learned & Failure Analysis (`assets:asset_knowledge_article_list`)
 
