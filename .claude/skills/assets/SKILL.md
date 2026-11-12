@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, and integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.15), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification, and document & knowledge management — controlled engineering document repository & revision/MOC queue, LOTO-enabled SOP bench sheets, operator training/qualification matrix with expiry alerts, and 5-Why / Fishbone 6M RCA knowledge base). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.15, 11.16), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -30,6 +30,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.12 Asset Risk Management**: Enterprise asset risk register with 5x5 inherent/residual scoring (`[ARK-]`), business continuity and redundancy failover plans with drill tracking (`[ABC-]`), OT/IoT/SCADA cybersecurity profiles with Purdue network zoning and CVE/CVSS scoring (`[ACS-]`), and risk mitigation / geopolitical dual-sourcing contingency actions with verification (`[ARMA-]`).
 - **11.13 Mobile Asset Management**: Digital mobile inspection checklists & offline sync capture (`[MINS-]`), field technician work orders with dispatch/arrival/sign-off tracking (`[MFWO-]`), barcode/QR/RFID mobile scan capture logs (`[ASCN-]`), and GPS perimeter/geofence security alerts (`[AGEO-]`).
 - **11.15 Integration & API Hub**: ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 secret rotation & SSRF defense (`[AICN-]`), IoT/SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation (`[ATMS-]`), GL sync & reconciliation batches posting balanced `JournalEntry` rows (`[AGLS-]`), and GIS/LRS spatial coordinate & drift verification (`[AGIS-]`).
+- **11.16 Document & Knowledge Management**: Controlled engineering manuals/drawings repository with revision chains, checkout/check-in locks, access-classification tiers, and protected attachment downloads (`[ADOC-]`), controlled SOP & LOTO isolation procedures with printable shop-floor bench sheets (`[ASOP-]`), operator qualification & training certifications with bulk expiry refresh and `is_operator_certified(...)` resolver (`[AOCT-]`), and 5-Why / Fishbone 6M RCA & lessons-learned knowledge base (`[AKBA-]`).
 
 ---
 
@@ -107,6 +108,12 @@ apps/assets/
       AssetTelemetryStreams.py                <- AssetTelemetryStream [ATMS-]
       AssetGlSyncBatches.py                   <- AssetGlSyncBatch [AGLS-]
       AssetGisMappings.py                     <- AssetGisMapping [AGIS-]
+    AssetDocumentKnowledge/                   <- Sub-module 11.16 models
+      _validators.py                          <- Shared validate_tenant_fks, checksum, supersedes-cycle, JSON & access-tier helpers
+      AssetDocuments.py                       <- AssetDocument [ADOC-]
+      AssetOperatingProcedures.py             <- AssetOperatingProcedure [ASOP-]
+      AssetOperatorCertifications.py          <- AssetOperatorCertification [AOCT-] & is_operator_certified
+      AssetKnowledgeArticles.py               <- AssetKnowledgeArticle [AKBA-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -175,6 +182,12 @@ apps/assets/
       AssetTelemetryStreams.py                <- AssetTelemetryStreamForm
       AssetGlSyncBatches.py                   <- AssetGlSyncBatchForm
       AssetGisMappings.py                     <- AssetGisMappingForm
+    AssetDocumentKnowledge/                   <- Sub-module 11.16 forms
+      _helpers.py                             <- validate_safe_doc_upload (ALLOWED_DOC_EXTENSIONS, MAX_UPLOAD_BYTES) & JSON cleaners
+      AssetDocuments.py                       <- AssetDocumentForm
+      AssetOperatingProcedures.py             <- AssetOperatingProcedureForm
+      AssetOperatorCertifications.py          <- AssetOperatorCertificationForm
+      AssetKnowledgeArticles.py               <- AssetKnowledgeArticleForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -245,6 +258,12 @@ apps/assets/
       AssetTelemetryStreams.py                <- Stream CRUD + ingest_sample_reading (11.7 reading + 11.5 CBM escalation)
       AssetGlSyncBatches.py                   <- GL Batch CRUD (posted lock) + execute_reconcile_batch (atomic balanced JournalEntry)
       AssetGisMappings.py                     <- GIS Mapping CRUD + verify_spatial_sync
+    AssetDocumentKnowledge/                   <- Sub-module 11.16 views
+      _helpers.py                             <- parse_pos_int, apply_choice/fk_filter, readable_asset_document_q, serve_protected_attachment, csv_export_response
+      AssetDocuments.py                       <- Repository & change-queue CRUD, download, checkout/checkin, submit_review, approve_release, create_revision, archive
+      AssetOperatingProcedures.py             <- SOP CRUD, download, print bench sheet, submit_review, activate, clone_revision, retire
+      AssetOperatorCertifications.py          <- Certification CRUD, download, refresh_alerts (bulk_update), verify_activate, acknowledge_sop, renew, revoke
+      AssetKnowledgeArticles.py               <- KB CRUD, download, submit_review, publish, mark_helpful, retire
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -312,9 +331,14 @@ apps/assets/
       AssetTelemetryStreams.py
       AssetGlSyncBatches.py
       AssetGisMappings.py
+    AssetDocumentKnowledge/                   <- Sub-module 11.16 URL route definitions
+      AssetDocuments.py
+      AssetOperatingProcedures.py
+      AssetOperatorCertifications.py
+      AssetKnowledgeArticles.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.13, 11.15)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.13, 11.15–11.16)
   tests/
     conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies, disposal, mobile)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
@@ -369,6 +393,10 @@ apps/assets/
     test_integration_api_hub_forms.py         <- 11.15 Form .none() fallback, reject_foreign, exclusions, O(1) dropdowns
     test_integration_api_hub_views.py         <- 11.15 Views, overview KPIs, 11.7/11.5 telemetry, balanced JE reconciliation
     test_integration_api_hub_security.py      <- 11.15 IDOR (404), @tenant_admin_required (403), CSRF, SSRF, 100-user scale
+    test_asset_document_knowledge_models.py   <- 11.16 Model invariants, ADOC/ASOP/AOCT/AKBA sequences, metadata, expiry, is_operator_certified
+    test_asset_document_knowledge_forms.py    <- 11.16 Form exclusions, FileInput, reject_foreign, access-tier dropdowns, JSON & upload bounds
+    test_asset_document_knowledge_views.py    <- 11.16 CRUD, change queue, CSV scope, print sheet, workflows, query-budget bounds
+    test_asset_document_knowledge_security.py <- 11.16 Anon/IDOR (404), RBAC (403), access tiers, checkout locks, XSS/CSV/file hardening
 ```
 
 ---
@@ -941,6 +969,64 @@ Templates under `templates/assets/integrationapihub/{asset_integration_connector
   - `assets:asset_gis_mapping_delete`: `/assets/integration/gis-mappings/<pk>/delete/` [POST, Admin]
   - `assets:asset_gis_mapping_verify_sync`: `/assets/integration/gis-mappings/<pk>/verify/` [POST]
 
+### 11.16 Document & Knowledge Management
+Templates under `templates/assets/assetdocumentknowledge/{asset_document,asset_operating_procedure,asset_operator_certification,asset_knowledge_article}/` (`list`, `detail`, `form`, plus `asset_document/changes.html` and printable `asset_operating_procedure/print.html`). Seeder method `_seed_tenant_11_16(tenant)` in `seed_assets.py` creates demo Controlled Documents (`ADOC-`), Operating/LOTO Procedures (`ASOP-`), Operator Certifications (`AOCT-`), and Knowledge Base Articles (`AKBA-`). Migrations: `0022_assetdocument_assetoperatingprocedure_and_more` and `0023_assetdocument_idx_adoc_ten_upd_and_more`.
+
+- **Controlled Documents (`AssetDocument` [ADOC-]):** Reuses `scm.Asset`, `accounting.FixedAsset`, `AssetModel`, `AssetCategory`, `AssetSpecificationTemplate`, `AssetWarranty`, `AssetComplianceFramework`, `core.Party`, `core.OrgUnit`, `core.Document`, `User`; enforces `readable_asset_document_q` (`restricted_eng` / `confidential` restricted to tenant admin, `owner`, or `reviewer`), self-referential `supersedes` cycle protection, checkout locks, atomic `approve_release` supersession, protected attachment downloads (`Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`), and 0-byte-safe SHA-256 metadata sync.
+  - `assets:asset_document_list`: `/assets/documents/`
+  - `assets:asset_document_change_list`: `/assets/documents/changes/`
+  - `assets:asset_document_create`: `/assets/documents/create/`
+  - `assets:asset_document_export_csv`: `/assets/documents/export-csv/` (supports `?scope=changes`)
+  - `assets:asset_document_detail`: `/assets/documents/<pk>/`
+  - `assets:asset_document_edit`: `/assets/documents/<pk>/edit/`
+  - `assets:asset_document_delete`: `/assets/documents/<pk>/delete/` [POST, Admin]
+  - `assets:asset_document_download`: `/assets/documents/<pk>/download/`
+  - `assets:asset_document_submit_review`: `/assets/documents/<pk>/submit-review/` [POST]
+  - `assets:asset_document_approve_release`: `/assets/documents/<pk>/approve-release/` [POST, Admin]
+  - `assets:asset_document_return_to_draft`: `/assets/documents/<pk>/return-to-draft/` [POST, Admin]
+  - `assets:asset_document_checkout`: `/assets/documents/<pk>/checkout/` [POST]
+  - `assets:asset_document_checkin`: `/assets/documents/<pk>/checkin/` [POST]
+  - `assets:asset_document_create_revision`: `/assets/documents/<pk>/create-revision/` [POST]
+  - `assets:asset_document_archive`: `/assets/documents/<pk>/archive/` [POST, Admin]
+- **SOP & LOTO Procedures (`AssetOperatingProcedure` [ASOP-]):** Reuses `scm.Asset`, `AssetCategory`, `AssetModel`, `AssetMaintenanceSchedule`, `AssetComplianceFramework`, `AssetDocument`, `core.OrgUnit`, `User`; validates structured JSON `loto_isolation_points` and `procedure_steps`, enforces revision lineage, and renders a print-optimized `@media print` LOTO bench sheet.
+  - `assets:asset_operating_procedure_list`: `/assets/procedures/`
+  - `assets:asset_operating_procedure_create`: `/assets/procedures/create/`
+  - `assets:asset_operating_procedure_export_csv`: `/assets/procedures/export-csv/`
+  - `assets:asset_operating_procedure_detail`: `/assets/procedures/<pk>/`
+  - `assets:asset_operating_procedure_print`: `/assets/procedures/<pk>/print/`
+  - `assets:asset_operating_procedure_edit`: `/assets/procedures/<pk>/edit/`
+  - `assets:asset_operating_procedure_delete`: `/assets/procedures/<pk>/delete/` [POST, Admin]
+  - `assets:asset_operating_procedure_download`: `/assets/procedures/<pk>/download/`
+  - `assets:asset_operating_procedure_submit_review`: `/assets/procedures/<pk>/submit-review/` [POST]
+  - `assets:asset_operating_procedure_activate`: `/assets/procedures/<pk>/activate/` [POST, Admin]
+  - `assets:asset_operating_procedure_clone_revision`: `/assets/procedures/<pk>/clone-revision/` [POST]
+  - `assets:asset_operating_procedure_retire`: `/assets/procedures/<pk>/retire/` [POST, Admin]
+- **Operator Certifications (`AssetOperatorCertification` [AOCT-]):** Reuses `core.Party`, `core.OrgUnit`, `User`, `hrm.EmployeeProfile`, `hrm.TrainingCertificate`, `scm.Asset`, `AssetCategory`, `AssetModel`, `AssetOperatingProcedure`, `AssetComplianceFramework`; provides `sync_expiry_status()`, bulk `refresh_alerts` via `bulk_update`, and `is_operator_certified(...)` (resolving both explicit `asset_category` FKs and `scm.Asset.category` names/codes). Edit is gated to `@tenant_admin_required` alongside verification, renewal, and revocation.
+  - `assets:asset_operator_certification_list`: `/assets/certifications/`
+  - `assets:asset_operator_certification_create`: `/assets/certifications/create/`
+  - `assets:asset_operator_certification_refresh_alerts`: `/assets/certifications/refresh-alerts/` [POST, Admin]
+  - `assets:asset_operator_certification_export_csv`: `/assets/certifications/export-csv/`
+  - `assets:asset_operator_certification_detail`: `/assets/certifications/<pk>/`
+  - `assets:asset_operator_certification_edit`: `/assets/certifications/<pk>/edit/` [Admin]
+  - `assets:asset_operator_certification_delete`: `/assets/certifications/<pk>/delete/` [POST, Admin]
+  - `assets:asset_operator_certification_download`: `/assets/certifications/<pk>/download/`
+  - `assets:asset_operator_certification_verify_activate`: `/assets/certifications/<pk>/verify-activate/` [POST, Admin]
+  - `assets:asset_operator_certification_acknowledge_sop`: `/assets/certifications/<pk>/acknowledge-sop/` [POST]
+  - `assets:asset_operator_certification_renew`: `/assets/certifications/<pk>/renew/` [POST, Admin]
+  - `assets:asset_operator_certification_revoke`: `/assets/certifications/<pk>/revoke/` [POST, Admin]
+- **Knowledge Base & Failure RCA (`AssetKnowledgeArticle` [AKBA-]):** Reuses `scm.Asset`, `accounting.FixedAsset`, `AssetCategory`, `AssetModel`, `AssetFailureMode`, `AssetMaintenanceRequest`, `AssetMaintenanceLog`, `AssetIncidentReport`, `AssetComplianceIncident`, `AssetDocument`, `AssetOperatingProcedure`, `core.OrgUnit`, `User`; validates `five_whys` and Fishbone 6M `contributing_factors`, tracks atomic `view_count` / `helpful_votes` via `F()`, and protects attachment downloads.
+  - `assets:asset_knowledge_article_list`: `/assets/knowledge-base/`
+  - `assets:asset_knowledge_article_create`: `/assets/knowledge-base/create/`
+  - `assets:asset_knowledge_article_export_csv`: `/assets/knowledge-base/export-csv/`
+  - `assets:asset_knowledge_article_detail`: `/assets/knowledge-base/<pk>/`
+  - `assets:asset_knowledge_article_edit`: `/assets/knowledge-base/<pk>/edit/`
+  - `assets:asset_knowledge_article_delete`: `/assets/knowledge-base/<pk>/delete/` [POST, Admin]
+  - `assets:asset_knowledge_article_download`: `/assets/knowledge-base/<pk>/download/`
+  - `assets:asset_knowledge_article_submit_review`: `/assets/knowledge-base/<pk>/submit-review/` [POST]
+  - `assets:asset_knowledge_article_publish`: `/assets/knowledge-base/<pk>/publish/` [POST, Admin]
+  - `assets:asset_knowledge_article_mark_helpful`: `/assets/knowledge-base/<pk>/mark-helpful/` [POST]
+  - `assets:asset_knowledge_article_retire`: `/assets/knowledge-base/<pk>/retire/` [POST, Admin]
+
 ---
 
 ## Conventions & Gotchas
@@ -957,7 +1043,7 @@ Templates under `templates/assets/integrationapihub/{asset_integration_connector
    - Badges: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`.
    - Component classes: `.table-wrap`, `.text-brand`, `.empty-state`, `.pagination`.
 5. **RBAC & Privilege Separation**:
-   - Audit variance reconciliation, write-off authorizations, and 11.15 connector writes / secret rotation / GL batch execution / IntegrationApiHub deletes require `@tenant_admin_required`. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+   - Audit variance reconciliation, write-off authorizations, 11.15 connector writes / secret rotation / GL batch execution / IntegrationApiHub deletes, and 11.16 controlled release/activation/publishing/retire/delete actions plus `AssetOperatorCertification` edits, verifications, renewals, revocations, and bulk `refresh_alerts` require `@tenant_admin_required`. Controlled `AssetDocument` `restricted_eng` / `confidential` rows enforce `readable_asset_document_q(user)` across lists, CSVs, downloads, forms, and detail views. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}` (or `can_manage`).
 6. **Filter-Preserving Pagination**:
    - All filter parameters (`?q=`, `?status=`, `?type=`, `?location=`, `?asset=`) are strictly preserved in pagination links.
 
@@ -975,7 +1061,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (2,283 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, and 375 tests for 11.15).
+Unfiltered run on SQLite in-memory test database (2,393 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, 375 tests for 11.15, and 110 tests for 11.16).
 
 ---
 
@@ -994,4 +1080,5 @@ Unfiltered run on SQLite in-memory test database (2,283 passing tests in full `a
 - `11.12`: Risk Identification & Assessment (`assets:asset_risk_register_list`), Business Continuity Planning (`assets:asset_business_continuity_plan_list`), Cybersecurity for Connected Assets (`assets:asset_cybersecurity_profile_list`), Geopolitical & Supply Chain Risk / Risk Mitigation & Contingency (`assets:asset_risk_mitigation_action_list`)
 - `11.13`: Mobile Inspection & Data Capture (`assets:mobile_asset_inspection_list`), Field Technician Work Orders (`assets:field_work_order_list`), Barcode/RFID Scanning (`assets:asset_scan_log_list`), GPS & Geofencing (`assets:asset_geofence_event_list`), Offline Synchronization (`assets:mobile_asset_inspection_list`)
 - `11.15`: ERP Integration (`assets:asset_integration_connector_list?connector_category=erp_procurement`), IoT & SCADA Systems (`assets:asset_telemetry_stream_list`), CMMS/EAM Connectivity (`assets:asset_integration_connector_list?connector_category=cmms_eam`), Financial Systems & General Ledger (`assets:asset_gl_sync_batch_list`), GIS & Mapping Tools (`assets:asset_gis_mapping_list`), Integration Connectors (`assets:asset_integration_connector_list`)
+- `11.16`: Asset Documentation Repository (`assets:asset_document_list`), Version Control & Change Management (`assets:asset_document_change_list`), SOP & Procedure Management (`assets:asset_operating_procedure_list`), Training & Certification Records (`assets:asset_operator_certification_list`), Lessons Learned & Failure Analysis (`assets:asset_knowledge_article_list`)
 
