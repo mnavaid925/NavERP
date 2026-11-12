@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ space.number }}{% else %}New Facility Space{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_facility_space_list' %}">Floor Plan &amp; Space Mapping</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ space.number }}{% else %}New Space{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and space %}
+        <a href="{% url 'assets:asset_facility_space_detail' space.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Space
+        </a>
+        {% else %}
+        <a href="{% url 'assets:asset_facility_space_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Space Identity &amp; Hierarchy</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.code.id_for_label }}">Space Code <span class="req">*</span></label>
+                    {{ form.code }}
+                    {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Space Name <span class="req">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.space_level.id_for_label }}">Hierarchy Level</label>
+                    {{ form.space_level }}
+                    {% if form.space_level.errors %}<div class="form-error">{{ form.space_level.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.space_category.id_for_label }}">Space Category</label>
+                    {{ form.space_category }}
+                    {% if form.space_category.errors %}<div class="form-error">{{ form.space_category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.parent.id_for_label }}">Parent Space</label>
+                    {{ form.parent }}
+                    {% if form.parent.errors %}<div class="form-error">{{ form.parent.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scm_location.id_for_label }}">SCM Location</label>
+                    {{ form.scm_location }}
+                    {% if form.scm_location.errors %}<div class="form-error">{{ form.scm_location.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.space_steward.id_for_label }}">Space Steward</label>
+                    {{ form.space_steward }}
+                    {% if form.space_steward.errors %}<div class="form-error">{{ form.space_steward.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">BOMA Area Metrics &amp; Utilization</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gross_area_sqft.id_for_label }}">Gross Area (SqFt)</label>
+                    {{ form.gross_area_sqft }}
+                    {% if form.gross_area_sqft.errors %}<div class="form-error">{{ form.gross_area_sqft.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.rentable_area_sqft.id_for_label }}">Rentable Area (SqFt)</label>
+                    {{ form.rentable_area_sqft }}
+                    {% if form.rentable_area_sqft.errors %}<div class="form-error">{{ form.rentable_area_sqft.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.usable_area_sqft.id_for_label }}">Usable Area (SqFt)</label>
+                    {{ form.usable_area_sqft }}
+                    {% if form.usable_area_sqft.errors %}<div class="form-error">{{ form.usable_area_sqft.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.common_area_sqft.id_for_label }}">Common Area (SqFt)</label>
+                    {{ form.common_area_sqft }}
+                    {% if form.common_area_sqft.errors %}<div class="form-error">{{ form.common_area_sqft.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.annual_rate_per_sqft.id_for_label }}">Annual Rate / SqFt</label>
+                    {{ form.annual_rate_per_sqft }}
+                    {% if form.annual_rate_per_sqft.errors %}<div class="form-error">{{ form.annual_rate_per_sqft.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.design_seat_capacity.id_for_label }}">Design Seat Capacity</label>
+                    {{ form.design_seat_capacity }}
+                    {% if form.design_seat_capacity.errors %}<div class="form-error">{{ form.design_seat_capacity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.current_headcount.id_for_label }}">Current Headcount</label>
+                    {{ form.current_headcount }}
+                    {% if form.current_headcount.errors %}<div class="form-error">{{ form.current_headcount.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">CAD / BIM Integration &amp; Floor Plan</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.cad_layer_ref.id_for_label }}">CAD Layer Ref</label>
+                    {{ form.cad_layer_ref }}
+                    {% if form.cad_layer_ref.errors %}<div class="form-error">{{ form.cad_layer_ref.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.bim_guid.id_for_label }}">BIM GUID</label>
+                    {{ form.bim_guid }}
+                    {% if form.bim_guid.errors %}<div class="form-error">{{ form.bim_guid.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.bim_level_ref.id_for_label }}">BIM Level Ref</label>
+                    {{ form.bim_level_ref }}
+                    {% if form.bim_level_ref.errors %}<div class="form-error">{{ form.bim_level_ref.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.drawing_revision.id_for_label }}">Drawing Revision</label>
+                    {{ form.drawing_revision }}
+                    {% if form.drawing_revision.errors %}<div class="form-error">{{ form.drawing_revision.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.floor_plan_document.id_for_label }}">Controlled Drawing (11.16)</label>
+                    {{ form.floor_plan_document }}
+                    {% if form.floor_plan_document.errors %}<div class="form-error">{{ form.floor_plan_document.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gis_mapping.id_for_label }}">GIS Spatial Mapping (11.15)</label>
+                    {{ form.gis_mapping }}
+                    {% if form.gis_mapping.errors %}<div class="form-error">{{ form.gis_mapping.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.floor_plan_image.id_for_label }}">Floor Plan Attachment (PDF, Image, Office &le; 20 MB)</label>
+                    {{ form.floor_plan_image }}
+                    {% if is_edit and space and space.floor_plan_image %}
+                    <p class="text-xs text-muted mt-1">
+                        Current file: <a href="{% url 'assets:asset_facility_space_floor_plan_download' space.pk %}" class="text-blue-600 underline">{{ space.original_floor_plan_name|default:"Download existing floor plan" }}</a>
+                    </p>
+                    {% endif %}
+                    {% if form.floor_plan_image.errors %}<div class="form-error">{{ form.floor_plan_image.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <a href="{% url 'assets:asset_facility_space_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Facility Space{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
