@@ -77,8 +77,13 @@ from apps.assets.models import (
     AssetBuildingSystem,
     AssetFurnitureFixture,
     AssetSpaceChargeback,
+    CloudAssetSubscription,
+    CmdbRelationship,
+    ItHardwareAsset,
+    SoftwareLicense,
 )
 from apps.core.models import OrgUnit, Party, Tenant
+from apps.core.models.Monitoring import ServiceComponent
 from apps.scm.models import Asset, Location, PurchaseOrder
 
 User = get_user_model()
@@ -97,6 +102,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            CmdbRelationship.objects.all().delete()
+            CloudAssetSubscription.objects.all().delete()
+            SoftwareLicense.objects.all().delete()
+            ItHardwareAsset.objects.all().delete()
             AssetSpaceChargeback.objects.all().delete()
             AssetFurnitureFixture.objects.all().delete()
             AssetBuildingSystem.objects.all().delete()
@@ -184,6 +193,7 @@ class Command(BaseCommand):
             self._seed_tenant_11_15(tenant)
             self._seed_tenant_11_16(tenant)
             self._seed_tenant_11_17(tenant)
+            self._seed_tenant_11_18(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -5225,4 +5235,580 @@ class Command(BaseCommand):
         self.stdout.write(
             f"[{tenant.name}] 11.17 Seeding complete (6 spaces, 6 building systems, 4 FF&E items, 4 space chargebacks)."
         )
+
+    def _seed_tenant_11_18(self, tenant):
+        if ItHardwareAsset.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.18 ITAM data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.18 IT Asset Management (ITAM)...")
+
+        user = User.objects.filter(tenant=tenant).first()
+        currency = Currency.objects.filter(is_active=True).first()
+        org_unit_1 = OrgUnit.objects.filter(tenant=tenant).first()
+        org_unit_2 = OrgUnit.objects.filter(tenant=tenant).last() or org_unit_1
+        vendor = (
+            Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).first()
+            or Party.objects.filter(tenant=tenant).first()
+        )
+        gl_exp = (
+            GLAccount.objects.filter(tenant=tenant, account_type="expense").first()
+            or GLAccount.objects.filter(tenant=tenant).first()
+        )
+        po = PurchaseOrder.objects.filter(tenant=tenant).first()
+        svc_contract = AssetServiceContract.objects.filter(tenant=tenant).first()
+        scm_asset = Asset.objects.filter(tenant=tenant).first()
+        svc_comp = ServiceComponent.objects.filter(tenant=tenant).first()
+
+        now = timezone.now()
+        today = now.date()
+
+        with transaction.atomic():
+            # 1. IT Hardware Assets (5 varied lifecycle states & refresh horizons)
+            hw_app = ItHardwareAsset.objects.create(
+                tenant=tenant,
+                hostname="prod-erp-app-01",
+                fqdn="prod-erp-app-01.internal.acme.local",
+                device_class="server_physical",
+                serial_number="DL-R750-98412",
+                asset_tag_code="IT-SRV-001",
+                manufacturer="Dell Technologies",
+                model_name="PowerEdge R750",
+                mac_address="00:1B:44:11:3A:B7",
+                ip_address="10.20.14.11",
+                operating_system="Ubuntu LTS",
+                os_version="24.04",
+                cpu_spec="2x Intel Xeon Gold 6430",
+                ram_gb=256,
+                storage_gb=3840,
+                bios_firmware_version="v2.1.4",
+                rack_unit_ref="DC1-R04-U12",
+                environment="production",
+                criticality="tier_1_mission_critical",
+                mdm_enrolled=False,
+                mdm_platform="none",
+                disk_encryption_status="luks_encrypted",
+                commissioned_date=today - timezone.timedelta(days=540),
+                assigned_date=today - timezone.timedelta(days=540),
+                vendor_eos_date=today + timezone.timedelta(days=540),
+                vendor_eol_date=today + timezone.timedelta(days=900),
+                refresh_cycle_months=48,
+                refresh_due_date=today + timezone.timedelta(days=900),
+                estimated_refresh_cost=Decimal("14500.00"),
+                currency=currency,
+                status="deployed",
+                operational_asset=scm_asset,
+                org_unit=org_unit_1,
+                vendor_party=vendor,
+                owner=user,
+                notes="Primary ERP application cluster node 1.",
+            )
+
+            hw_db = ItHardwareAsset.objects.create(
+                tenant=tenant,
+                hostname="prod-db-replica-01",
+                fqdn="prod-db-replica-01.internal.acme.local",
+                device_class="server_virtual",
+                serial_number="VM-SQL-44108",
+                asset_tag_code="IT-VM-002",
+                manufacturer="VMware",
+                model_name="vSphere 8 Virtual Appliance",
+                mac_address="00:50:56:88:1C:04",
+                ip_address="10.20.18.22",
+                operating_system="Red Hat Enterprise Linux",
+                os_version="9.3",
+                cpu_spec="32 vCPU",
+                ram_gb=128,
+                storage_gb=8192,
+                rack_unit_ref="DC1-CL02",
+                environment="production",
+                criticality="tier_1_mission_critical",
+                mdm_enrolled=False,
+                mdm_platform="none",
+                disk_encryption_status="luks_encrypted",
+                commissioned_date=today - timezone.timedelta(days=1100),
+                vendor_eos_date=today + timezone.timedelta(days=20),
+                vendor_eol_date=today + timezone.timedelta(days=75),
+                refresh_cycle_months=36,
+                refresh_due_date=today + timezone.timedelta(days=60),
+                estimated_refresh_cost=Decimal("9800.00"),
+                currency=currency,
+                status="deployed",
+                org_unit=org_unit_1,
+                owner=user,
+                notes="Approaching 90-day refresh window; scheduled migration to vSphere 9 / NVMe cluster.",
+            )
+
+            hw_fw = ItHardwareAsset.objects.create(
+                tenant=tenant,
+                hostname="core-fw-edge-01",
+                fqdn="core-fw-edge-01.net.acme.local",
+                device_class="network_switch_router",
+                serial_number="PAN-440-77301",
+                asset_tag_code="IT-NET-003",
+                manufacturer="Palo Alto Networks",
+                model_name="PA-1410 Next-Gen Firewall",
+                ip_address="10.0.1.1",
+                operating_system="PAN-OS",
+                os_version="11.1.2",
+                rack_unit_ref="DC1-R01-U01",
+                environment="production",
+                criticality="tier_1_mission_critical",
+                disk_encryption_status="exempt_network_gear",
+                commissioned_date=today - timezone.timedelta(days=1500),
+                vendor_eos_date=today - timezone.timedelta(days=90),
+                vendor_eol_date=today - timezone.timedelta(days=15),
+                refresh_cycle_months=48,
+                refresh_due_date=today - timezone.timedelta(days=15),
+                estimated_refresh_cost=Decimal("18200.00"),
+                currency=currency,
+                status="pending_refresh",
+                org_unit=org_unit_2,
+                vendor_party=vendor,
+                owner=user,
+                notes="Past vendor EOL — prioritized on IT Refresh & EOL Workbench.",
+            )
+
+            hw_laptop = ItHardwareAsset.objects.create(
+                tenant=tenant,
+                hostname="ws-eng-m3-042",
+                fqdn="ws-eng-m3-042.corp.acme.local",
+                device_class="laptop",
+                serial_number="C02Z91K8MD6R",
+                asset_tag_code="IT-LTP-042",
+                manufacturer="Apple",
+                model_name="MacBook Pro 16 M3 Pro",
+                mac_address="A4:83:E7:42:99:1A",
+                operating_system="macOS",
+                os_version="14.6",
+                cpu_spec="Apple M3 Pro 12-core",
+                ram_gb=36,
+                storage_gb=1024,
+                environment="workstation",
+                criticality="tier_3_operational",
+                mdm_enrolled=True,
+                mdm_platform="jamf_pro",
+                mdm_device_id="JAMF-99412",
+                disk_encryption_status="filevault_enabled",
+                last_seen_checkin=now - timezone.timedelta(hours=3),
+                commissioned_date=today - timezone.timedelta(days=200),
+                assigned_date=today - timezone.timedelta(days=195),
+                vendor_eos_date=today + timezone.timedelta(days=1100),
+                vendor_eol_date=today + timezone.timedelta(days=1460),
+                refresh_cycle_months=36,
+                refresh_due_date=today + timezone.timedelta(days=900),
+                estimated_refresh_cost=Decimal("2850.00"),
+                currency=currency,
+                status="deployed",
+                org_unit=org_unit_2,
+                owner=user,
+                notes="MDM-managed engineering workstation.",
+            )
+
+            hw_san = ItHardwareAsset.objects.create(
+                tenant=tenant,
+                hostname="legacy-san-02",
+                fqdn="legacy-san-02.dc1.acme.local",
+                device_class="storage_san_nas",
+                serial_number="NTAP-FAS-33019",
+                asset_tag_code="IT-SAN-002",
+                manufacturer="NetApp",
+                model_name="FAS2720 Hybrid Array",
+                ip_address="10.20.90.5",
+                operating_system="ONTAP",
+                os_version="9.12P4",
+                rack_unit_ref="DC1-R08-U20",
+                environment="disaster_recovery",
+                criticality="tier_2_business_important",
+                disk_encryption_status="luks_encrypted",
+                commissioned_date=today - timezone.timedelta(days=1825),
+                vendor_eos_date=today - timezone.timedelta(days=120),
+                vendor_eol_date=today - timezone.timedelta(days=30),
+                refresh_cycle_months=60,
+                refresh_due_date=today - timezone.timedelta(days=30),
+                estimated_refresh_cost=Decimal("24000.00"),
+                currency=currency,
+                sanitization_required=True,
+                sanitization_method="nist_purge_cryptographic_erase",
+                sanitization_status="pending_wipe",
+                status="pending_refresh",
+                org_unit=org_unit_1,
+                owner=user,
+                notes="Queued for NIST SP 800-88 cryptographic erase prior to ITAD disposition.",
+            )
+
+            # 2. Software Licenses (4 ELP scenarios: compliant, true_up_required, surplus_reclaimable, expiring)
+            sw_m365 = SoftwareLicense.objects.create(
+                tenant=tenant,
+                software_name="Microsoft 365 E5 Enterprise",
+                publisher_name="Microsoft",
+                product_sku="M365-E5-UNATT",
+                version_edition="Enterprise E5",
+                software_category="productivity_suite",
+                license_type="subscription_term",
+                license_metric="per_user",
+                agreement_number="EA-MSFT-2026-01",
+                license_key_ref="MS365-****-9X2K",
+                entitled_quantity=120,
+                allocated_quantity=114,
+                active_used_quantity=110,
+                reclaimable_inactive_count=0,
+                unit_license_cost=Decimal("684.00"),
+                total_annual_spend=Decimal("82080.00"),
+                currency=currency,
+                effective_date=today - timezone.timedelta(days=180),
+                renewal_date=today + timezone.timedelta(days=185),
+                vendor_eol_date=today + timezone.timedelta(days=730),
+                auto_renew=True,
+                status="active_compliant",
+                last_reconciled_at=now,
+                publisher_party=vendor,
+                org_unit=org_unit_1,
+                gl_expense_account=gl_exp,
+                purchase_order=po,
+                service_contract=svc_contract,
+                license_owner=user,
+                notes="Primary identity and office productivity entitlement.",
+            )
+
+            sw_oracle = SoftwareLicense.objects.create(
+                tenant=tenant,
+                software_name="Oracle Database Enterprise Edition",
+                publisher_name="Oracle",
+                product_sku="ORCL-DBEE-PROC",
+                version_edition="23ai",
+                software_category="database_data",
+                license_type="enterprise_agreement",
+                license_metric="per_core",
+                agreement_number="OMA-ORCL-8821",
+                license_key_ref="ORCL-****-4P9M",
+                entitled_quantity=16,
+                allocated_quantity=20,
+                active_used_quantity=20,
+                reclaimable_inactive_count=0,
+                unit_license_cost=Decimal("4750.00"),
+                total_annual_spend=Decimal("76000.00"),
+                currency=currency,
+                effective_date=today - timezone.timedelta(days=300),
+                renewal_date=today + timezone.timedelta(days=65),
+                vendor_eol_date=today + timezone.timedelta(days=1095),
+                auto_renew=False,
+                status="true_up_required",
+                last_reconciled_at=now,
+                org_unit=org_unit_1,
+                license_owner=user,
+                notes="4 extra cores active on failover node; true-up review scheduled.",
+            )
+
+            sw_jb = SoftwareLicense.objects.create(
+                tenant=tenant,
+                software_name="JetBrains All Products Pack",
+                publisher_name="JetBrains",
+                product_sku="JB-ALL-ORG",
+                version_edition="2026.1",
+                software_category="developer_devops",
+                license_type="named_user",
+                license_metric="per_user",
+                agreement_number="JB-INV-55201",
+                license_key_ref="JBRN-****-7T1L",
+                entitled_quantity=50,
+                allocated_quantity=44,
+                active_used_quantity=32,
+                reclaimable_inactive_count=9,
+                unit_license_cost=Decimal("289.00"),
+                total_annual_spend=Decimal("14450.00"),
+                currency=currency,
+                effective_date=today - timezone.timedelta(days=290),
+                renewal_date=today + timezone.timedelta(days=45),
+                vendor_eol_date=today + timezone.timedelta(days=500),
+                auto_renew=True,
+                status="surplus_reclaimable",
+                last_reconciled_at=now,
+                org_unit=org_unit_2,
+                license_owner=user,
+                notes="9 seats inactive >30 days eligible for license harvesting.",
+            )
+
+            SoftwareLicense.objects.create(
+                tenant=tenant,
+                software_name="Autodesk AutoCAD LT Commercial",
+                publisher_name="Autodesk",
+                product_sku="ADSK-ACDLT-26",
+                version_edition="2026",
+                software_category="cad_engineering",
+                license_type="concurrent_floating",
+                license_metric="per_user",
+                agreement_number="ADSK-90122",
+                license_key_ref="ADSK-****-8Q3N",
+                entitled_quantity=12,
+                allocated_quantity=10,
+                active_used_quantity=9,
+                reclaimable_inactive_count=1,
+                unit_license_cost=Decimal("495.00"),
+                total_annual_spend=Decimal("5940.00"),
+                currency=currency,
+                effective_date=today - timezone.timedelta(days=340),
+                renewal_date=today + timezone.timedelta(days=25),
+                vendor_eol_date=today + timezone.timedelta(days=400),
+                auto_renew=False,
+                status="active_compliant",
+                last_reconciled_at=now,
+                org_unit=org_unit_2,
+                license_owner=user,
+                notes="Upcoming renewal cliff inside 30 days.",
+            )
+
+            # 3. Cloud Assets & SaaS Subscriptions (4 FinOps / Shadow IT scenarios)
+            cl_aws = CloudAssetSubscription.objects.create(
+                tenant=tenant,
+                name="AWS Production EKS & RDS Reserved Cluster",
+                asset_kind="reserved_instance",
+                provider="aws",
+                external_account_id="aws-acct-10482910",
+                cloud_resource_id="arn:aws:eks:us-east-1:10482910:cluster/naverp-prod",
+                cloud_region="us-east-1",
+                environment="production",
+                resource_tags={"env": "prod", "cost_center": "CC-INFRA", "owner": "platform-ops"},
+                billing_cadence="monthly",
+                commitment_term="1yr_reserved",
+                monthly_recurring_cost=Decimal("6420.00"),
+                annual_contract_value=Decimal("77040.00"),
+                currency=currency,
+                provisioned_seats=0,
+                active_seats_30d=0,
+                sso_status="sso_enforced",
+                approval_status="sanctioned",
+                renewal_date=today + timezone.timedelta(days=140),
+                cancellation_notice_days=30,
+                auto_renew=True,
+                status="active",
+                last_finops_sync_at=now,
+                org_unit=org_unit_1,
+                vendor_party=vendor,
+                gl_expense_account=gl_exp,
+                business_owner=user,
+                technical_owner=user,
+                notes="Core AWS Kubernetes + multi-AZ Postgres commitment.",
+            )
+
+            cl_dd = CloudAssetSubscription.objects.create(
+                tenant=tenant,
+                name="Datadog Enterprise APM & Log Analytics",
+                asset_kind="saas_application",
+                provider="datadog",
+                external_account_id="dd-org-acme-01",
+                cloud_resource_id="https://app.datadoghq.com/org/acme",
+                cloud_region="us1",
+                environment="corporate_saas",
+                resource_tags={"env": "prod", "cost_center": "CC-SRE", "owner": "sre-team"},
+                billing_cadence="annual",
+                commitment_term="annual_contract",
+                monthly_recurring_cost=Decimal("2250.00"),
+                annual_contract_value=Decimal("27000.00"),
+                currency=currency,
+                provisioned_seats=40,
+                active_seats_30d=34,
+                sso_status="sso_enforced",
+                approval_status="sanctioned",
+                renewal_date=today + timezone.timedelta(days=20),
+                cancellation_notice_days=45,
+                auto_renew=True,
+                status="expiring_soon",
+                last_finops_sync_at=now,
+                org_unit=org_unit_1,
+                business_owner=user,
+                technical_owner=user,
+                notes="Annual renewal notice deadline within 30 days.",
+            )
+
+            CloudAssetSubscription.objects.create(
+                tenant=tenant,
+                name="Uncategorized Kanban Cloud Workspace",
+                asset_kind="saas_application",
+                provider="other_saas",
+                external_account_id="card-expense-8812",
+                cloud_region="global",
+                environment="corporate_saas",
+                resource_tags={},
+                billing_cadence="monthly",
+                commitment_term="monthly_flex",
+                monthly_recurring_cost=Decimal("490.00"),
+                annual_contract_value=Decimal("5880.00"),
+                currency=currency,
+                provisioned_seats=28,
+                active_seats_30d=19,
+                sso_status="shadow_it_unapproved",
+                approval_status="shadow_it_flagged",
+                renewal_date=today + timezone.timedelta(days=12),
+                cancellation_notice_days=7,
+                auto_renew=True,
+                status="shadow_flagged",
+                last_finops_sync_at=now,
+                org_unit=org_unit_2,
+                business_owner=user,
+                notes="Detected via corporate expense ledger without SAML SSO.",
+            )
+
+            CloudAssetSubscription.objects.create(
+                tenant=tenant,
+                name="Snowflake Enterprise Analytics Warehouse",
+                asset_kind="paas_database",
+                provider="other_saas",
+                external_account_id="sf-acme-us-east",
+                cloud_region="us-east-1",
+                environment="production",
+                resource_tags={"env": "prod", "cost_center": "CC-DATA"},
+                billing_cadence="monthly",
+                commitment_term="monthly_flex",
+                monthly_recurring_cost=Decimal("3100.00"),
+                annual_contract_value=Decimal("37200.00"),
+                currency=currency,
+                provisioned_seats=60,
+                active_seats_30d=18,
+                sso_status="sso_optional",
+                approval_status="consolidation_target",
+                renewal_date=today + timezone.timedelta(days=110),
+                cancellation_notice_days=30,
+                auto_renew=False,
+                status="underutilized",
+                last_finops_sync_at=now,
+                org_unit=org_unit_2,
+                business_owner=user,
+                technical_owner=user,
+                notes="30% 30-day active reader ratio — candidate for seat right-sizing.",
+            )
+
+            # 4. CMDB Dependency Edges (multi-hop graph spanning HW, SW, Cloud, Service, SCM)
+            if svc_comp is not None:
+                CmdbRelationship.objects.create(
+                    tenant=tenant,
+                    source_ci_type="service_component",
+                    source_service=svc_comp,
+                    relationship_type="hosted_in",
+                    target_ci_type="cloud_asset",
+                    target_cloud=cl_aws,
+                    environment="production",
+                    criticality="tier_1_mission_critical",
+                    impact_severity="hard_outage",
+                    is_single_point_of_failure=False,
+                    verified_on=today,
+                    verified_by=user,
+                    status="active",
+                    owner=user,
+                    blast_radius_notes="Core customer service hosted on AWS production EKS cluster.",
+                )
+
+            CmdbRelationship.objects.create(
+                tenant=tenant,
+                source_ci_type="cloud_asset",
+                source_cloud=cl_dd,
+                relationship_type="integrates_with",
+                target_ci_type="cloud_asset",
+                target_cloud=cl_aws,
+                environment="production",
+                criticality="tier_2_business_important",
+                impact_severity="degraded_performance",
+                is_single_point_of_failure=False,
+                verified_on=today,
+                verified_by=user,
+                status="active",
+                owner=user,
+                blast_radius_notes="Datadog agents stream telemetry from EKS prod cluster.",
+            )
+
+            CmdbRelationship.objects.create(
+                tenant=tenant,
+                source_ci_type="it_hardware",
+                source_hardware=hw_app,
+                relationship_type="depends_on",
+                target_ci_type="it_hardware",
+                target_hardware=hw_db,
+                environment="production",
+                criticality="tier_1_mission_critical",
+                impact_severity="hard_outage",
+                is_single_point_of_failure=True,
+                verified_on=today,
+                verified_by=user,
+                status="active",
+                owner=user,
+                blast_radius_notes="SPOF: ERP application tier relies directly on database host.",
+            )
+
+            CmdbRelationship.objects.create(
+                tenant=tenant,
+                source_ci_type="it_hardware",
+                source_hardware=hw_db,
+                relationship_type="licensed_by",
+                target_ci_type="software_license",
+                target_software=sw_oracle,
+                environment="production",
+                criticality="tier_1_mission_critical",
+                impact_severity="informational",
+                is_single_point_of_failure=False,
+                verified_on=today,
+                verified_by=user,
+                status="active",
+                owner=user,
+                blast_radius_notes="Oracle DB core allocation bound to database host.",
+            )
+
+            CmdbRelationship.objects.create(
+                tenant=tenant,
+                source_ci_type="it_hardware",
+                source_hardware=hw_app,
+                relationship_type="connects_to",
+                target_ci_type="it_hardware",
+                target_hardware=hw_fw,
+                environment="production",
+                criticality="tier_1_mission_critical",
+                impact_severity="hard_outage",
+                is_single_point_of_failure=True,
+                verified_on=today,
+                verified_by=user,
+                status="active",
+                owner=user,
+                blast_radius_notes="Ingress/egress traffic passes through edge firewall pending refresh.",
+            )
+
+            if scm_asset is not None:
+                CmdbRelationship.objects.create(
+                    tenant=tenant,
+                    source_ci_type="it_hardware",
+                    source_hardware=hw_san,
+                    relationship_type="backed_up_by",
+                    target_ci_type="operational_asset",
+                    target_asset=scm_asset,
+                    environment="dr_failover",
+                    criticality="tier_2_business_important",
+                    impact_severity="failover_available",
+                    is_single_point_of_failure=False,
+                    verified_on=today,
+                    verified_by=user,
+                    status="deprecated",
+                    owner=user,
+                    blast_radius_notes="Legacy storage array scheduled for NIST wipe & decommission.",
+                )
+
+            CmdbRelationship.objects.create(
+                tenant=tenant,
+                source_ci_type="it_hardware",
+                source_hardware=hw_laptop,
+                relationship_type="licensed_by",
+                target_ci_type="software_license",
+                target_software=sw_m365,
+                environment="shared_infra",
+                criticality="tier_3_operational",
+                impact_severity="informational",
+                is_single_point_of_failure=False,
+                verified_on=today,
+                verified_by=user,
+                status="active",
+                owner=user,
+                blast_radius_notes="Managed endpoint allocated M365 E5 productivity suite.",
+            )
+
+        self.stdout.write(
+            f"[{tenant.name}] 11.18 ITAM Seeding complete (5 hardware assets, 4 software licenses, 4 cloud/SaaS subscriptions, CMDB topology edges)."
+        )
+
 
