@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}{{ license_obj.number }} — {{ license_obj.software_name }} — Software Licenses — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:software_license_list' %}">Software Licenses</a>
+            <span>/</span>
+            <span>{{ license_obj.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ license_obj.number }} — {{ license_obj.software_name }}</h1>
+            <span class="badge {{ license_obj.status_badge_class }}">{{ license_obj.get_status_display }}</span>
+            {% if license_obj.auto_renew %}
+            <span class="badge badge-info">Auto-Renew</span>
+            {% endif %}
+            {% if license_obj.is_eol_expired %}
+            <span class="badge badge-red">Vendor EOL Passed</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:cmdb_impact_analysis' %}?ci=software_license:{{ license_obj.pk }}" class="btn btn-outline">
+            <i data-lucide="network" class="w-4 h-4 me-1"></i> Impact Analysis
+        </a>
+
+        {% if not license_obj.is_locked %}
+            <form method="post" action="{% url 'assets:software_license_sync_compliance' license_obj.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Sync ELP
+                </button>
+            </form>
+
+            {% if license_obj.reclaimable_inactive_count > 0 %}
+            <form method="post" action="{% url 'assets:software_license_reclaim_inactive' license_obj.pk %}" class="inline" onsubmit="return confirm('Reclaim {{ license_obj.reclaimable_inactive_count }} inactive seat(s) from {{ license_obj.number|escapejs }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Reclaim Inactive ({{ license_obj.reclaimable_inactive_count }})</button>
+            </form>
+            {% endif %}
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                {% if license_obj.is_under_licensed %}
+                <form method="post" action="{% url 'assets:software_license_record_true_up' license_obj.pk %}" class="inline" onsubmit="return confirm('Record license true-up for {{ license_obj.number|escapejs }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline">Record True-Up</button>
+                </form>
+                {% endif %}
+            {% endif %}
+
+            <form method="post" action="{% url 'assets:software_license_renew_term' license_obj.pk %}" class="inline" onsubmit="return confirm('Extend renewal date by 12 months for {{ license_obj.number|escapejs }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Renew +12 mo</button>
+            </form>
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                {% if license_obj.status != "audit_hold" %}
+                <form method="post" action="{% url 'assets:software_license_place_audit_hold' license_obj.pk %}" class="inline" onsubmit="return confirm('Place {{ license_obj.number|escapejs }} under Audit Hold?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline">Audit Hold</button>
+                </form>
+                {% endif %}
+                <form method="post" action="{% url 'assets:software_license_retire' license_obj.pk %}" class="inline" onsubmit="return confirm('Retire {{ license_obj.number|escapejs }}? Retired licenses become locked.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline">Retire</button>
+                </form>
+            {% endif %}
+
+            <a href="{% url 'assets:software_license_edit' license_obj.pk %}" class="btn btn-outline">
+                <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+            </a>
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'assets:software_license_delete' license_obj.pk %}" class="inline" onsubmit="return confirm('Delete software license {{ license_obj.number|escapejs }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">
+                    <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+                </button>
+            </form>
+            {% endif %}
+        {% endif %}
+
+        <a href="{% url 'assets:software_license_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Summary KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="key-round"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Entitled / Allocated</div>
+            <div class="stat-value">{{ license_obj.entitled_quantity }} / {{ license_obj.allocated_quantity }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ license_obj.get_license_metric_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if license_obj.is_under_licensed %}red{% elif license_obj.compliance_delta == 0 %}amber{% else %}green{% endif %}">
+            <i data-lucide="scale"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-label">ELP Compliance Delta</div>
+            <div class="stat-value {% if license_obj.is_under_licensed %}text-red-600{% endif %}">
+                {% if license_obj.compliance_delta > 0 %}+{% endif %}{{ license_obj.compliance_delta }}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">
+                {% if license_obj.is_under_licensed %}
+                Est. true-up: {{ license_obj.estimated_true_up_cost|floatformat:2 }}
+                {% else %}
+                Utilization: {{ license_obj.utilization_pct }}%
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="scissors"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Harvesting Opportunity</div>
+            <div class="stat-value">{{ license_obj.reclaimable_inactive_count }}</div>
+            <div class="text-xs text-slate-400 mt-1">
+                Est. savings: {% if license_obj.currency %}{{ license_obj.currency.code }} {% endif %}{{ license_obj.reclaim_savings_potential|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Annual Spend</div>
+            <div class="stat-value">
+                {% if license_obj.currency %}{{ license_obj.currency.code }} {% endif %}{{ license_obj.total_annual_spend|floatformat:2 }}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">Unit cost: {{ license_obj.unit_license_cost|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Entitlement & Governance Details -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Publisher, Contract &amp; Seat Telemetry</h2></div>
+        <div class="card-body">
+            <dl class="detail-grid !grid-cols-1">
+                <div class="detail-item"><dt>Publisher</dt><dd>{{ license_obj.publisher_name }}</dd></div>
+                <div class="detail-item"><dt>Category / Model</dt><dd>{{ license_obj.get_software_category_display }} · {{ license_obj.get_license_type_display }}</dd></div>
+                <div class="detail-item"><dt>SKU / Edition</dt><dd class="font-mono text-xs">{{ license_obj.product_sku|default:"—" }} {% if license_obj.version_edition %}({{ license_obj.version_edition }}){% endif %}</dd></div>
+                <div class="detail-item"><dt>Agreement Number</dt><dd class="font-mono text-xs">{{ license_obj.agreement_number|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Masked Key Ref</dt><dd class="font-mono text-xs">{{ license_obj.license_key_ref|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Active Telemetry Seats</dt><dd>{{ license_obj.active_used_quantity }} active / {{ license_obj.allocated_quantity }} allocated</dd></div>
+                <div class="detail-item"><dt>Org Unit</dt><dd>{{ license_obj.org_unit|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Publisher / Reseller Party</dt><dd>{{ license_obj.publisher_party|default:"—" }} / {{ license_obj.reseller_party|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>License Owner</dt><dd>{% if license_obj.license_owner %}{{ license_obj.license_owner.get_full_name|default:license_obj.license_owner.username }}{% else %}—{% endif %}</dd></div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Renewal Schedule, EOL &amp; Spine Links</h2></div>
+        <div class="card-body">
+            <dl class="detail-grid !grid-cols-1">
+                <div class="detail-item"><dt>Effective / Renewal Date</dt><dd>{{ license_obj.effective_date|date:"Y-m-d"|default:"—" }} / {{ license_obj.renewal_date|date:"Y-m-d"|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Vendor EOL Date</dt><dd>{{ license_obj.vendor_eol_date|date:"Y-m-d"|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Auto-Renew</dt><dd>{% if license_obj.auto_renew %}Enabled{% else %}Manual Renewal{% endif %}</dd></div>
+                <div class="detail-item"><dt>Last Reconciled At</dt><dd>{% if license_obj.last_reconciled_at %}{{ license_obj.last_reconciled_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Retired At</dt><dd>{% if license_obj.retired_at %}{{ license_obj.retired_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>GL Expense Account</dt><dd>{{ license_obj.gl_expense_account|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Purchase Order</dt><dd>{{ license_obj.purchase_order|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Service Contract</dt><dd>{{ license_obj.service_contract|default:"—" }}</dd></div>
+            </dl>
+            {% if license_obj.notes %}
+            <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300">
+                <div class="text-xs font-semibold uppercase text-slate-400 mb-1">SAM &amp; Audit Notes</div>
+                {{ license_obj.notes|linebreaksbr }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- CMDB Relationships Panel -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Upstream Dependencies (Outbound CMDB Edges)</h2>
+            <a href="{% url 'assets:cmdb_relationship_create' %}" class="btn btn-outline btn-sm">Add Edge</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Edge #</th><th>Relation</th><th>Target CI</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for edge in outbound_edges %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td>{{ edge.get_relationship_type_display }}</td>
+                        <td class="text-sm">{{ edge.target_label }}</td>
+                        <td><span class="badge {{ edge.status_badge_class }}">{{ edge.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-sm text-slate-400 py-4">No outbound CMDB dependencies recorded.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Downstream Dependents (Inbound CMDB Edges)</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Edge #</th><th>Dependent CI</th><th>Relation</th><th>Criticality</th></tr></thead>
+                <tbody>
+                    {% for edge in inbound_edges %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td class="text-sm">{{ edge.source_label }}</td>
+                        <td>{{ edge.get_relationship_type_display }}</td>
+                        <td><span class="badge {{ edge.criticality_badge_class }}">{{ edge.get_criticality_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-sm text-slate-400 py-4">No downstream dependents recorded.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
