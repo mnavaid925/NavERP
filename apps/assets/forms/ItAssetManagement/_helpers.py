@@ -2,6 +2,8 @@
 
 from django.core.exceptions import ValidationError
 
+from apps.assets.models.ItAssetManagement._validators import validate_masked_key_ref  # noqa: F401
+
 
 def scope_tenant_querysets(form, tenant_field_models):
     """Scope every tenant-owned and user FK queryset strictly to ``form.tenant``."""
@@ -29,15 +31,3 @@ def normalize_json_dict_value(value):
     if not isinstance(value, dict):
         raise ValidationError("Resource tags must be a valid JSON object (e.g. {\"env\": \"prod\"}).")
     return value
-
-
-def validate_masked_key_ref(value):
-    """Require masked/reference-only strings so raw activation keys are not stored."""
-    raw = (value or "").strip()
-    if not raw:
-        return ""
-    if len(raw) >= 16 and "*" not in raw and "x" not in raw.lower() and "-" in raw and raw.replace("-", "").isalnum():
-        raise ValidationError(
-            "Enter a masked license key reference only (e.g. MS365-****-9X2K), not a raw unmasked activation key."
-        )
-    return raw
