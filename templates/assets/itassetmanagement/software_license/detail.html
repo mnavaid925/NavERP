@@ -29,6 +29,7 @@
         </a>
 
         {% if not license_obj.is_locked %}
+            {% if license_obj.status != "audit_hold" or request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'assets:software_license_sync_compliance' license_obj.pk %}" class="inline">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-primary">
@@ -42,6 +43,7 @@
                 <button type="submit" class="btn btn-outline">Reclaim Inactive ({{ license_obj.reclaimable_inactive_count }})</button>
             </form>
             {% endif %}
+            {% endif %}
 
             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                 {% if license_obj.is_under_licensed %}
@@ -52,10 +54,12 @@
                 {% endif %}
             {% endif %}
 
+            {% if license_obj.status != "audit_hold" or request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'assets:software_license_renew_term' license_obj.pk %}" class="inline" onsubmit="return confirm('Extend renewal date by 12 months for {{ license_obj.number|escapejs }}?');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-outline">Renew +12 mo</button>
             </form>
+            {% endif %}
 
             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                 {% if license_obj.status != "audit_hold" %}
@@ -70,9 +74,11 @@
                 </form>
             {% endif %}
 
+            {% if license_obj.status != "audit_hold" or request.user.is_superuser or request.user.is_tenant_admin %}
             <a href="{% url 'assets:software_license_edit' license_obj.pk %}" class="btn btn-outline">
                 <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
             </a>
+            {% endif %}
 
             {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'assets:software_license_delete' license_obj.pk %}" class="inline" onsubmit="return confirm('Delete software license {{ license_obj.number|escapejs }}?');">
