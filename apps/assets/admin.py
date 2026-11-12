@@ -69,6 +69,10 @@ from apps.assets.models import (
     AssetBuildingSystem,
     AssetFurnitureFixture,
     AssetSpaceChargeback,
+    CloudAssetSubscription,
+    CmdbRelationship,
+    ItHardwareAsset,
+    SoftwareLicense,
 )
 
 
@@ -1002,4 +1006,166 @@ class AssetSpaceChargebackAdmin(admin.ModelAdmin):
         if obj is not None and (obj.is_locked or obj.journal_entry_id is not None):
             return False
         return super().has_delete_permission(request, obj=obj)
+
+
+@admin.register(ItHardwareAsset)
+class ItHardwareAssetAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "hostname",
+        "device_class",
+        "environment",
+        "criticality",
+        "refresh_due_date",
+        "vendor_eol_date",
+        "sanitization_status",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "org_unit", "currency", "owner")
+    list_filter = ("tenant", "status", "device_class", "environment", "sanitization_status")
+    search_fields = ("number", "hostname", "fqdn", "serial_number", "asset_tag_code", "ip_address")
+    readonly_fields = (
+        "number",
+        "status",
+        "last_seen_checkin",
+        "sanitization_verified_by",
+        "sanitized_at",
+        "retired_at",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
+
+@admin.register(SoftwareLicense)
+class SoftwareLicenseAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "software_name",
+        "publisher_name",
+        "license_type",
+        "entitled_quantity",
+        "allocated_quantity",
+        "renewal_date",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "org_unit", "currency", "license_owner")
+    list_filter = ("tenant", "status", "software_category", "license_type", "license_metric")
+    search_fields = ("number", "software_name", "publisher_name", "product_sku", "agreement_number")
+    readonly_fields = (
+        "number",
+        "status",
+        "last_reconciled_at",
+        "retired_at",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
+
+@admin.register(CloudAssetSubscription)
+class CloudAssetSubscriptionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "name",
+        "provider",
+        "asset_kind",
+        "monthly_recurring_cost",
+        "approval_status",
+        "sso_status",
+        "renewal_date",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "org_unit", "currency", "business_owner")
+    list_filter = ("tenant", "status", "provider", "asset_kind", "approval_status", "sso_status")
+    search_fields = ("number", "name", "external_account_id", "cloud_resource_id", "cloud_region")
+    readonly_fields = (
+        "number",
+        "status",
+        "last_finops_sync_at",
+        "decommissioned_at",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
+
+@admin.register(CmdbRelationship)
+class CmdbRelationshipAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "source_ci_type",
+        "relationship_type",
+        "target_ci_type",
+        "environment",
+        "criticality",
+        "is_single_point_of_failure",
+        "status",
+        "tenant",
+    )
+    list_select_related = (
+        "tenant",
+        "source_hardware",
+        "source_software",
+        "source_cloud",
+        "source_service",
+        "source_asset",
+        "target_hardware",
+        "target_software",
+        "target_cloud",
+        "target_service",
+        "target_asset",
+    )
+    list_filter = ("tenant", "status", "relationship_type", "environment", "criticality", "is_single_point_of_failure")
+    search_fields = ("number", "blast_radius_notes")
+    readonly_fields = (
+        "number",
+        "status",
+        "verified_on",
+        "verified_by",
+        "severed_at",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
 
