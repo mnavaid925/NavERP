@@ -215,9 +215,11 @@
                             </a>
                             {% endif %}
                             {% if not item.is_locked %}
+                            {% if not item.checked_out_by_id or item.checked_out_by_id == request.user.id or request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_document_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
                                 <i data-lucide="pencil"></i>
                             </a>
+                            {% endif %}
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'assets:asset_document_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete document {{ item.number|escapejs }}?');">
                                 {% csrf_token %}
