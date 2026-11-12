@@ -4,10 +4,40 @@ import hashlib
 import os
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Q
 
 FISHBONE_6M_KEYS = frozenset(
     {"machine", "method", "material", "manpower", "measurement", "environment"}
 )
+OPEN_CLASSIFICATIONS = ("public_floor", "internal_tech")
+
+
+def readable_asset_document_q(user, prefix=""):
+    """Build a Q filter restricting restricted_eng/confidential AssetDocuments to owner/reviewer/admins."""
+    if user is None:
+        return Q(**{f"{prefix}access_classification__in": OPEN_CLASSIFICATIONS})
+    if not getattr(user, "is_authenticated", False):
+        return Q(pk__in=[])
+    if getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False):
+        return Q()
+    return (
+        Q(**{f"{prefix}access_classification__in": OPEN_CLASSIFICATIONS})
+        | Q(**{f"{prefix}owner_id": user.id})
+        | Q(**{f"{prefix}reviewer_id": user.id})
+    )
+
+
+def is_asset_document_readable(doc, user):
+    """Return True if ``user`` is permitted to access ``doc`` under its access_classification."""
+    if doc is None:
+        return False
+    if doc.access_classification in OPEN_CLASSIFICATIONS:
+        return True
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False) or getattr(user, "is_tenant_admin", False):
+        return True
+    return doc.owner_id == user.id or doc.reviewer_id == user.id
 
 
 def add_field_error(errors, field_name, message):
