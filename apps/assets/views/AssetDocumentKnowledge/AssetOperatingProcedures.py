@@ -354,6 +354,9 @@ def asset_operating_procedure_print(request, pk):
 @login_required
 def asset_operating_procedure_create(request):
     """Create a new Draft Operating Procedure / LOTO protocol."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating an SOP.")
+        return redirect("assets:asset_operating_procedure_list")
     if request.method == "POST":
         form = AssetOperatingProcedureForm(
             request.POST, request.FILES, tenant=request.tenant, user=request.user
