@@ -113,7 +113,7 @@
         <div class="stat-icon orange"><i data-lucide="calendar-check"></i></div>
         <div class="stat-body">
             <div class="stat-label">Next Periodic Review</div>
-            <div class="stat-value text-base">{% if procedure.next_review_date %}{{ procedure.next_review_date|date:"Y-m-d" }}{% else %}Unscheduled{% endif %}</div>
+            <div class="stat-value !text-base">{% if procedure.next_review_date %}{{ procedure.next_review_date|date:"Y-m-d" }}{% else %}Unscheduled{% endif %}</div>
         </div>
     </div>
 </div>
