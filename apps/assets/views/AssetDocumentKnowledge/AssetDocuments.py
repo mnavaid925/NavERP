@@ -43,19 +43,20 @@ def _next_revision_label(current_label, next_seq):
     return f"Rev {next_seq}"
 
 
-def _filter_document_queryset(request, base_qs):
+_DOC_LIST_SELECT_RELATED = (
+    "operational_asset",
+    "asset_category",
+    "checked_out_by",
+    "supersedes",
+)
+_DOC_EXPORT_SELECT_RELATED = ("operational_asset",)
+
+
+def _filter_document_queryset(
+    request, base_qs, select_related=_DOC_LIST_SELECT_RELATED
+):
     """Apply search and dropdown GET filters to an AssetDocument queryset."""
-    qs = base_qs.select_related(
-        "operational_asset",
-        "asset_category",
-        "org_unit",
-        "owner",
-        "reviewer",
-        "approved_by",
-        "checked_out_by",
-        "vendor_party",
-        "supersedes",
-    )
+    qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
     if search_query:
         qs = qs.filter(
@@ -149,7 +150,9 @@ def asset_document_list(request):
     base_qs = assets_scope(AssetDocument.objects.all(), request).filter(
         readable_asset_document_q(request.user)
     )
-    filtered_qs = _filter_document_queryset(request, base_qs)
+    filtered_qs = _filter_document_queryset(request, base_qs).defer(
+        "spec_delta_notes", "review_notes", "description"
+    )
     context = _build_document_list_context(request, base_qs, filtered_qs)
     return render(
         request,
@@ -175,7 +178,9 @@ def asset_document_change_list(request):
         .filter(readable_asset_document_q(request.user))
         .filter(_CHANGE_QUEUE_Q)
     )
-    filtered_qs = _filter_document_queryset(request, base_qs)
+    filtered_qs = _filter_document_queryset(request, base_qs).defer(
+        "spec_delta_notes", "review_notes", "description"
+    )
     context = _build_document_list_context(request, base_qs, filtered_qs)
     return render(
         request,
@@ -192,7 +197,28 @@ def asset_document_export_csv(request):
     )
     if request.GET.get("scope", "").strip() == "changes":
         base_qs = base_qs.filter(_CHANGE_QUEUE_Q)
-    filtered_qs = _filter_document_queryset(request, base_qs)
+    filtered_qs = (
+        _filter_document_queryset(
+            request, base_qs, select_related=_DOC_EXPORT_SELECT_RELATED
+        )
+        .only(
+            "id",
+            "number",
+            "title",
+            "document_class",
+            "access_classification",
+            "revision_label",
+            "is_current_revision",
+            "change_type",
+            "change_request_ref",
+            "status",
+            "effective_date",
+            "expiry_date",
+            "file_checksum",
+            "operational_asset",
+        )[:10000]
+        .iterator(chunk_size=1000)
+    )
     headers = [
         "Document #",
         "Title",
