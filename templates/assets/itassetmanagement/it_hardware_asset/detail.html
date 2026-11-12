@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}{{ hardware.number }} — {{ hardware.hostname }} — IT Hardware — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:it_hardware_asset_list' %}">IT Hardware Assets</a>
+            <span>/</span>
+            <span>{{ hardware.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ hardware.number }} — {{ hardware.hostname }}</h1>
+            <span class="badge {{ hardware.status_badge_class }}">{{ hardware.get_status_display }}</span>
+            <span class="badge {{ hardware.criticality_badge_class }}">{{ hardware.get_criticality_display }}</span>
+            <span class="badge {{ hardware.refresh_priority_badge_class }}">{{ hardware.refresh_priority_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:cmdb_impact_analysis' %}?ci=it_hardware:{{ hardware.pk }}" class="btn btn-outline">
+            <i data-lucide="network" class="w-4 h-4 me-1"></i> Impact Analysis
+        </a>
+
+        {% if not hardware.is_locked %}
+            {% if hardware.status != "deployed" %}
+            <form method="post" action="{% url 'assets:it_hardware_asset_deploy' hardware.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="play-circle" class="w-4 h-4 me-1"></i> Deploy
+                </button>
+            </form>
+            {% endif %}
+            {% if hardware.status != "staged_in_stock" %}
+            <form method="post" action="{% url 'assets:it_hardware_asset_move_to_stock' hardware.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Move to Stock</button>
+            </form>
+            {% endif %}
+            {% if hardware.status != "in_repair" %}
+            <form method="post" action="{% url 'assets:it_hardware_asset_send_to_repair' hardware.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Send to Repair</button>
+            </form>
+            {% endif %}
+            {% if hardware.status != "loaner_pool" %}
+            <form method="post" action="{% url 'assets:it_hardware_asset_move_to_loaner' hardware.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Loaner Pool</button>
+            </form>
+            {% endif %}
+            {% if hardware.status != "pending_refresh" %}
+            <form method="post" action="{% url 'assets:it_hardware_asset_flag_for_refresh' hardware.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Flag Refresh</button>
+            </form>
+            {% endif %}
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            {% if hardware.sanitization_status == "pending_wipe" %}
+            <form method="post" action="{% url 'assets:it_hardware_asset_mark_sanitized' hardware.pk %}" class="inline" onsubmit="return confirm('Verify NIST SP 800-88 sanitization for {{ hardware.number|escapejs }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Verify NIST Wipe</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'assets:it_hardware_asset_retire' hardware.pk %}" class="inline" onsubmit="return confirm('Retire {{ hardware.number|escapejs }}? Sanitized &amp; retired records become locked.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Retire</button>
+            </form>
+            {% endif %}
+
+            <a href="{% url 'assets:it_hardware_asset_edit' hardware.pk %}" class="btn btn-outline">
+                <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+            </a>
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'assets:it_hardware_asset_delete' hardware.pk %}" class="inline" onsubmit="return confirm('Delete IT hardware asset {{ hardware.number|escapejs }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">
+                    <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+                </button>
+            </form>
+            {% endif %}
+        {% endif %}
+
+        <a href="{% url 'assets:it_hardware_asset_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Summary KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="cpu"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Device Class</div>
+            <div class="stat-value !text-base">{{ hardware.get_device_class_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="lock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Disk Encryption</div>
+            <div class="stat-value !text-base">{{ hardware.get_disk_encryption_status_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="calendar-x-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Vendor EOL / Refresh</div>
+            <div class="stat-value !text-base">
+                {% if hardware.vendor_eol_date %}{{ hardware.vendor_eol_date|date:"Y-m-d" }}{% elif hardware.refresh_due_date %}{{ hardware.refresh_due_date|date:"Y-m-d" }}{% else %}Not Set{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">NIST 800-88 Sanitization</div>
+            <div class="stat-value !text-base">{{ hardware.get_sanitization_status_display }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title">Hardware Specifications &amp; Network Identity</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>Hostname</dt><dd>{{ hardware.hostname }}</dd></div>
+                <div class="detail-item"><dt>FQDN</dt><dd class="font-mono text-xs">{{ hardware.fqdn|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Manufacturer / Model</dt><dd>{{ hardware.manufacturer|default:"—" }} {{ hardware.model_name }}</dd></div>
+                <div class="detail-item"><dt>Serial Number</dt><dd class="font-mono text-xs">{{ hardware.serial_number|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>IT Asset Tag</dt><dd class="font-mono text-xs">{{ hardware.asset_tag_code|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Environment</dt><dd>{{ hardware.get_environment_display }}</dd></div>
+                <div class="detail-item"><dt>Operating System</dt><dd>{{ hardware.operating_system|default:"—" }} {{ hardware.os_version }}</dd></div>
+                <div class="detail-item"><dt>IP / MAC Address</dt><dd class="font-mono text-xs">{{ hardware.ip_address|default:"—" }} / {{ hardware.mac_address|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>CPU / RAM / Storage</dt><dd>{{ hardware.cpu_spec|default:"—" }}{% if hardware.ram_gb %} · {{ hardware.ram_gb }} GB RAM{% endif %}{% if hardware.storage_gb %} · {{ hardware.storage_gb }} GB{% endif %}</dd></div>
+                <div class="detail-item"><dt>BIOS / Firmware</dt><dd class="font-mono text-xs">{{ hardware.bios_firmware_version|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Rack / U Location</dt><dd>{{ hardware.rack_unit_ref|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>MDM Enrollment</dt><dd>{% if hardware.mdm_enrolled %}Enrolled ({{ hardware.mdm_platform|default:"MDM" }} · {{ hardware.mdm_device_id|default:"—" }}){% else %}Not Enrolled{% endif %}</dd></div>
+                <div class="detail-item"><dt>Last Check-In</dt><dd>{% if hardware.last_seen_checkin %}{{ hardware.last_seen_checkin|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Assigned Employee</dt><dd>{% if hardware.employee_profile %}{{ hardware.employee_profile }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Custodian Party</dt><dd>{% if hardware.custodian_party %}{{ hardware.custodian_party.name }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Org Unit / Location</dt><dd>{% if hardware.org_unit %}{{ hardware.org_unit.name }}{% else %}—{% endif %} / {% if hardware.location %}{{ hardware.location }}{% else %}—{% endif %}</dd></div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">EOL, Refresh &amp; Sanitization</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid !grid-cols-1">
+                <div class="detail-item"><dt>Commissioned / Assigned</dt><dd>{{ hardware.commissioned_date|date:"Y-m-d"|default:"—" }} / {{ hardware.assigned_date|date:"Y-m-d"|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Vendor EOS / EOL</dt><dd>{{ hardware.vendor_eos_date|date:"Y-m-d"|default:"—" }} / {{ hardware.vendor_eol_date|date:"Y-m-d"|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Refresh Cycle / Due</dt><dd>{{ hardware.refresh_cycle_months }} mo · {{ hardware.refresh_due_date|date:"Y-m-d"|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Est. Refresh Budget</dt><dd>{% if hardware.currency %}{{ hardware.currency.code }} {% endif %}{{ hardware.estimated_refresh_cost|floatformat:2 }}</dd></div>
+                <div class="detail-item"><dt>Sanitization Method</dt><dd>{{ hardware.get_sanitization_method_display }}</dd></div>
+                <div class="detail-item"><dt>Sanitization Certificate</dt><dd class="font-mono text-xs">{{ hardware.sanitization_certificate_ref|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Sanitized By / At</dt><dd>{% if hardware.sanitization_verified_by %}{{ hardware.sanitization_verified_by.get_full_name|default:hardware.sanitization_verified_by.username }}{% else %}—{% endif %}{% if hardware.sanitized_at %} ({{ hardware.sanitized_at|date:"Y-m-d H:i" }}){% endif %}</dd></div>
+                <div class="detail-item"><dt>Owner</dt><dd>{% if hardware.owner %}{{ hardware.owner.get_full_name|default:hardware.owner.username }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Linked Spine Records</dt><dd class="text-xs">
+                    {% if hardware.operational_asset %}SCM: {{ hardware.operational_asset }}<br>{% endif %}
+                    {% if hardware.fixed_asset %}FA: {{ hardware.fixed_asset }}<br>{% endif %}
+                    {% if hardware.warranty %}Warranty: {{ hardware.warranty }}<br>{% endif %}
+                    {% if hardware.replacement_plan %}Refresh Plan: {{ hardware.replacement_plan }}<br>{% endif %}
+                    {% if hardware.disposal_request %}Disposal: {{ hardware.disposal_request }}{% endif %}
+                    {% if not hardware.operational_asset and not hardware.fixed_asset and not hardware.warranty and not hardware.replacement_plan and not hardware.disposal_request %}—{% endif %}
+                </dd></div>
+            </dl>
+            {% if hardware.notes %}
+            <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300">
+                <div class="text-xs font-semibold uppercase text-slate-400 mb-1">Lifecycle Notes</div>
+                {{ hardware.notes|linebreaksbr }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- CMDB Relationships Panel -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Upstream Dependencies (Outbound CMDB Edges)</h2>
+            <a href="{% url 'assets:cmdb_relationship_create' %}" class="btn btn-outline btn-sm">Add Edge</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Edge #</th><th>Relation</th><th>Target CI</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for edge in outbound_edges %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td>{{ edge.get_relationship_type_display }}</td>
+                        <td class="text-sm">{{ edge.target_label }}</td>
+                        <td><span class="badge {{ edge.status_badge_class }}">{{ edge.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-sm text-slate-400 py-4">No outbound CMDB dependencies recorded.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Downstream Dependents (Inbound CMDB Edges)</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Edge #</th><th>Dependent CI</th><th>Relation</th><th>Criticality</th></tr></thead>
+                <tbody>
+                    {% for edge in inbound_edges %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td class="text-sm">{{ edge.source_label }}</td>
+                        <td>{{ edge.get_relationship_type_display }}</td>
+                        <td><span class="badge {{ edge.criticality_badge_class }}">{{ edge.get_criticality_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-sm text-slate-400 py-4">No downstream dependents recorded.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
