@@ -14,7 +14,8 @@ from apps.assets.forms.ItAssetManagement.CmdbRelationships import CmdbRelationsh
 from apps.assets.models.ItAssetManagement.CmdbRelationships import CmdbRelationship
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.ItAssetManagement._helpers import (
-    CMDB_REL_SELECT_RELATED,
+    CMDB_REL_DETAIL_SELECT_RELATED,
+    CMDB_REL_EDGE_SELECT_RELATED,
     PAGE_SIZE,
     apply_choice_filter,
     csv_export_response,
@@ -23,7 +24,7 @@ from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
-def _filter_cmdb_queryset(request, base_qs, select_related=CMDB_REL_SELECT_RELATED):
+def _filter_cmdb_queryset(request, base_qs, select_related=CMDB_REL_EDGE_SELECT_RELATED):
     """Apply search and dropdown GET filters to a CmdbRelationship queryset."""
     qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
@@ -137,7 +138,7 @@ def cmdb_relationship_list(request):
 def cmdb_relationship_export_csv(request):
     """Export filtered CMDB dependency edges as a formula-safe CSV."""
     base_qs = assets_scope(CmdbRelationship.objects.all(), request)
-    qs = _filter_cmdb_queryset(request, base_qs, select_related=CMDB_REL_SELECT_RELATED[:10])
+    qs = _filter_cmdb_queryset(request, base_qs, select_related=CMDB_REL_EDGE_SELECT_RELATED)
     headers = [
         "Edge #",
         "Source Type",
@@ -219,20 +220,20 @@ def cmdb_relationship_detail(request, pk):
         request,
         CmdbRelationship,
         pk,
-        select_related=CMDB_REL_SELECT_RELATED,
+        select_related=CMDB_REL_DETAIL_SELECT_RELATED,
     )
     related_source_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant)
         .filter(_matching_ci_filter("source", relationship.source_ci_key))
         .exclude(pk=relationship.pk)
-        .select_related(*CMDB_REL_SELECT_RELATED)
+        .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
         .order_by("-updated_at")
     )
     related_target_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant)
         .filter(_matching_ci_filter("target", relationship.target_ci_key))
         .exclude(pk=relationship.pk)
-        .select_related(*CMDB_REL_SELECT_RELATED)
+        .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
         .order_by("-updated_at")
     )
     return render(
