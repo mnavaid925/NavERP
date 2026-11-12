@@ -207,12 +207,12 @@ def software_license_detail(request, pk):
     outbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, source_software=license_obj)
         .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
-        .order_by("-updated_at")
+        .order_by("-updated_at")[:50]
     )
     inbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, target_software=license_obj)
         .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
-        .order_by("-updated_at")
+        .order_by("-updated_at")[:50]
     )
     return render(
         request,
