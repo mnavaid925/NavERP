@@ -5305,8 +5305,9 @@ class Command(BaseCommand):
 
         user = User.objects.filter(tenant=tenant).first()
         currency = Currency.objects.filter(is_active=True).first()
-        org_unit_1 = OrgUnit.objects.filter(tenant=tenant).first()
-        org_unit_2 = OrgUnit.objects.filter(tenant=tenant).last() or org_unit_1
+        org_units = list(OrgUnit.objects.filter(tenant=tenant).order_by("id"))
+        org_unit_1 = org_units[0] if org_units else None
+        org_unit_2 = org_units[-1] if org_units else None
         vendor = (
             Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).first()
             or Party.objects.filter(tenant=tenant).first()
