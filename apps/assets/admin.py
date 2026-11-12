@@ -61,6 +61,10 @@ from apps.assets.models import (
     AssetLifecycleCostAnalysis,
     AssetPortfolioScenario,
     AssetReplacementPlan,
+    AssetDocument,
+    AssetOperatingProcedure,
+    AssetOperatorCertification,
+    AssetKnowledgeArticle,
 )
 
 
@@ -727,10 +731,114 @@ class AssetGisMappingAdmin(admin.ModelAdmin):
     )
 
 
+@admin.register(AssetDocument)
+class AssetDocumentAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "document_class",
+        "revision_label",
+        "is_current_revision",
+        "status",
+        "expiry_date",
+        "tenant",
+    )
+    list_select_related = ("tenant", "operational_asset", "asset_category", "owner")
+    list_filter = ("tenant", "status", "document_class", "access_classification", "is_current_revision")
+    search_fields = ("number", "title", "tag_code", "manufacturer_ref", "change_request_ref")
+    readonly_fields = (
+        "number",
+        "revision_sequence",
+        "is_current_revision",
+        "original_filename",
+        "file_size_bytes",
+        "file_checksum",
+        "checked_out_by",
+        "checked_out_at",
+        "approved_by",
+        "approved_at",
+        "created_at",
+        "updated_at",
+    )
 
 
+@admin.register(AssetOperatingProcedure)
+class AssetOperatingProcedureAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "procedure_type",
+        "safety_level",
+        "loto_required",
+        "revision_label",
+        "status",
+        "next_review_date",
+        "tenant",
+    )
+    list_select_related = ("tenant", "operational_asset", "asset_category", "author")
+    list_filter = ("tenant", "status", "procedure_type", "safety_level", "loto_required")
+    search_fields = ("number", "title", "required_qualification_code", "required_ppe")
+    readonly_fields = (
+        "number",
+        "original_filename",
+        "file_checksum",
+        "approved_by",
+        "approved_at",
+        "created_at",
+        "updated_at",
+    )
 
 
+@admin.register(AssetOperatorCertification)
+class AssetOperatorCertificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "qualification_type",
+        "proficiency_level",
+        "status",
+        "sop_acknowledged",
+        "expires_on",
+        "tenant",
+    )
+    list_select_related = ("tenant", "operator_party", "operator_user", "operational_asset")
+    list_filter = ("tenant", "status", "qualification_type", "proficiency_level", "sop_acknowledged")
+    search_fields = ("number", "title", "qualification_code", "certificate_reference", "issuing_authority")
+    readonly_fields = (
+        "number",
+        "original_filename",
+        "file_checksum",
+        "sop_acknowledged",
+        "sop_acknowledged_at",
+        "created_at",
+        "updated_at",
+    )
 
 
+@admin.register(AssetKnowledgeArticle)
+class AssetKnowledgeArticleAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "article_type",
+        "rca_methodology",
+        "severity",
+        "status",
+        "helpful_votes",
+        "view_count",
+        "tenant",
+    )
+    list_select_related = ("tenant", "operational_asset", "failure_mode", "author")
+    list_filter = ("tenant", "status", "article_type", "rca_methodology", "severity")
+    search_fields = ("number", "title", "tags", "symptom_problem", "root_cause_summary")
+    readonly_fields = (
+        "number",
+        "original_filename",
+        "file_checksum",
+        "helpful_votes",
+        "view_count",
+        "published_at",
+        "created_at",
+        "updated_at",
+    )
 
