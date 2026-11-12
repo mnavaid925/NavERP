@@ -146,19 +146,22 @@ def asset_document_list(request):
     )
 
 
+_CHANGE_QUEUE_Q = (
+    Q(status__in=["draft", "in_review"])
+    | Q(revision_sequence__gt=1)
+    | Q(supersedes__isnull=False)
+    | Q(checked_out_by__isnull=False)
+    | ~Q(change_type="new_issue")
+)
+
+
 @login_required
 def asset_document_change_list(request):
     """Version control, engineering change requests, and review queue view."""
     base_qs = (
         assets_scope(AssetDocument.objects.all(), request)
         .filter(readable_asset_document_q(request.user))
-        .filter(
-            Q(status__in=["draft", "in_review"])
-            | Q(revision_sequence__gt=1)
-            | Q(supersedes__isnull=False)
-            | Q(checked_out_by__isnull=False)
-            | ~Q(change_type="new_issue")
-        )
+        .filter(_CHANGE_QUEUE_Q)
     )
     filtered_qs = _filter_document_queryset(request, base_qs)
     context = _build_document_list_context(request, base_qs, filtered_qs)
@@ -175,6 +178,8 @@ def asset_document_export_csv(request):
     base_qs = assets_scope(AssetDocument.objects.all(), request).filter(
         readable_asset_document_q(request.user)
     )
+    if request.GET.get("scope", "").strip() == "changes":
+        base_qs = base_qs.filter(_CHANGE_QUEUE_Q)
     filtered_qs = _filter_document_queryset(request, base_qs)
     headers = [
         "Document #",
