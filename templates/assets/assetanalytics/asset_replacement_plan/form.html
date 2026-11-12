@@ -29,7 +29,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div class="form-group md:col-span-2">
-                    <label class="form-label" for="{{ form.title.id_for_label }}">Plan Title *</label>
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Plan Title <span class="req">*</span></label>
                     {{ form.title }}
                     {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
                 </div>
@@ -104,28 +104,28 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.remaining_useful_life_months.id_for_label }}">Remaining Useful Life (Months) *</label>
+                    <label class="form-label" for="{{ form.remaining_useful_life_months.id_for_label }}">Remaining Useful Life (Months) <span class="req">*</span></label>
                     {{ form.remaining_useful_life_months }}
                     {% if form.remaining_useful_life_months.errors %}<div class="form-error">{{ form.remaining_useful_life_months.errors }}</div>{% endif %}
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.planned_replacement_year.id_for_label }}">Planned Replacement Year *</label>
+                    <label class="form-label" for="{{ form.planned_replacement_year.id_for_label }}">Planned Replacement Year <span class="req">*</span></label>
                     {{ form.planned_replacement_year }}
                     {% if form.planned_replacement_year.errors %}<div class="form-error">{{ form.planned_replacement_year.errors }}</div>{% endif %}
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.planned_quarter.id_for_label }}">Planned Quarter *</label>
+                    <label class="form-label" for="{{ form.planned_quarter.id_for_label }}">Planned Quarter <span class="req">*</span></label>
                     {{ form.planned_quarter }}
                     {% if form.planned_quarter.errors %}<div class="form-error">{{ form.planned_quarter.errors }}</div>{% endif %}
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.replacement_strategy.id_for_label }}">Replacement Strategy *</label>
+                    <label class="form-label" for="{{ form.replacement_strategy.id_for_label }}">Replacement Strategy <span class="req">*</span></label>
                     {{ form.replacement_strategy }}
                     {% if form.replacement_strategy.errors %}<div class="form-error">{{ form.replacement_strategy.errors }}</div>{% endif %}
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.funding_status.id_for_label }}">Funding Status *</label>
+                    <label class="form-label" for="{{ form.funding_status.id_for_label }}">Funding Status <span class="req">*</span></label>
                     {{ form.funding_status }}
                     {% if form.funding_status.errors %}<div class="form-error">{{ form.funding_status.errors }}</div>{% endif %}
                 </div>
@@ -135,17 +135,17 @@
                 <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100 uppercase tracking-wider mb-3">Risk Priority &amp; Capital Economics</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="form-group">
-                        <label class="form-label" for="{{ form.condition_score.id_for_label }}">Condition Score (0–100) *</label>
+                        <label class="form-label" for="{{ form.condition_score.id_for_label }}">Condition Score (0–100) <span class="req">*</span></label>
                         {{ form.condition_score }}
                         {% if form.condition_score.errors %}<div class="form-error">{{ form.condition_score.errors }}</div>{% endif %}
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="{{ form.criticality_weight.id_for_label }}">Criticality Weight (1–10) *</label>
+                        <label class="form-label" for="{{ form.criticality_weight.id_for_label }}">Criticality Weight (1–10) <span class="req">*</span></label>
                         {{ form.criticality_weight }}
                         {% if form.criticality_weight.errors %}<div class="form-error">{{ form.criticality_weight.errors }}</div>{% endif %}
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="{{ form.failure_risk_score.id_for_label }}">Failure Risk Score (0–100) *</label>
+                        <label class="form-label" for="{{ form.failure_risk_score.id_for_label }}">Failure Risk Score (0–100) <span class="req">*</span></label>
                         {{ form.failure_risk_score }}
                         {% if form.failure_risk_score.errors %}<div class="form-error">{{ form.failure_risk_score.errors }}</div>{% endif %}
                     </div>
