@@ -389,6 +389,20 @@ def is_operator_certified(
             scope_q = scope_q | Q(
                 operational_asset__isnull=True, asset_category=asset_cat
             )
+        else:
+            cat_name = (getattr(operational_asset, "category", "") or "").strip()
+            if cat_name:
+                scope_q = (
+                    scope_q
+                    | Q(
+                        operational_asset__isnull=True,
+                        asset_category__name__iexact=cat_name,
+                    )
+                    | Q(
+                        operational_asset__isnull=True,
+                        asset_category__code__iexact=cat_name,
+                    )
+                )
         qs = qs.filter(scope_q)
     elif asset_category is not None:
         qs = qs.filter(
