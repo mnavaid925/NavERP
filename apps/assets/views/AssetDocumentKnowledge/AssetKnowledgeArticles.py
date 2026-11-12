@@ -33,24 +33,22 @@ from apps.core.utils import write_audit_log
 from apps.scm.models.AssetManagement.Assets import Asset
 
 
-def _filter_article_queryset(request, base_qs):
+_KB_LIST_SELECT_RELATED = (
+    "operational_asset",
+    "asset_category",
+    "failure_mode",
+)
+_KB_EXPORT_SELECT_RELATED = (
+    "operational_asset",
+    "failure_mode",
+)
+
+
+def _filter_article_queryset(
+    request, base_qs, select_related=_KB_LIST_SELECT_RELATED
+):
     """Apply search and dropdown GET filters to an AssetKnowledgeArticle queryset."""
-    qs = base_qs.select_related(
-        "operational_asset",
-        "fixed_asset",
-        "asset_category",
-        "asset_model",
-        "failure_mode",
-        "maintenance_request",
-        "maintenance_log",
-        "incident_report",
-        "compliance_incident",
-        "related_document",
-        "recommended_procedure",
-        "org_unit",
-        "author",
-        "reviewed_by",
-    )
+    qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
     if search_query:
         qs = qs.filter(
@@ -94,7 +92,14 @@ def _filter_article_queryset(request, base_qs):
 def asset_knowledge_article_list(request):
     """Knowledge base, lessons learned, and RCA catalog list view."""
     base_qs = assets_scope(AssetKnowledgeArticle.objects.all(), request)
-    filtered_qs = _filter_article_queryset(request, base_qs)
+    filtered_qs = _filter_article_queryset(request, base_qs).defer(
+        "symptom_problem",
+        "root_cause_summary",
+        "five_whys",
+        "contributing_factors",
+        "remedy_corrective_action",
+        "preventive_lessons",
+    )
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
@@ -137,7 +142,27 @@ def asset_knowledge_article_list(request):
 def asset_knowledge_article_export_csv(request):
     """Export filtered tenant Knowledge Articles & RCAs as a hardened CSV download."""
     base_qs = assets_scope(AssetKnowledgeArticle.objects.all(), request)
-    filtered_qs = _filter_article_queryset(request, base_qs)
+    filtered_qs = (
+        _filter_article_queryset(
+            request, base_qs, select_related=_KB_EXPORT_SELECT_RELATED
+        )
+        .only(
+            "id",
+            "number",
+            "title",
+            "article_type",
+            "rca_methodology",
+            "severity",
+            "status",
+            "downtime_hours_impacted",
+            "recurrence_count",
+            "helpful_votes",
+            "tags",
+            "operational_asset",
+            "failure_mode",
+        )[:10000]
+        .iterator(chunk_size=1000)
+    )
     headers = [
         "Article #",
         "Title",
