@@ -141,6 +141,10 @@ class AssetKnowledgeArticleForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
         scope_tenant_querysets(self, self._TENANT_FIELDS)
+        if self.tenant is not None and "incident_report" in self.fields:
+            self.fields["incident_report"].queryset = self.fields[
+                "incident_report"
+            ].queryset.select_related("asset")
 
     def clean_attachment(self):
         return validate_safe_doc_upload(self.cleaned_data.get("attachment"))
