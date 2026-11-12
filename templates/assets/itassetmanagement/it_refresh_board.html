@@ -175,7 +175,7 @@
                     <td><span class="badge {{ hw.status_badge_class }}">{{ hw.get_status_display }}</span></td>
                     <td class="text-sm">{{ hw.get_sanitization_method_display }}</td>
                     <td class="text-sm">{{ hw.get_disk_encryption_status_display }}</td>
-                    <td class="text-right"><a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="btn btn-outline btn-sm">Verify Wipe</a></td>
+                    <td class="text-end"><a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="btn btn-outline btn-sm">Verify Wipe</a></td>
                 </tr>
                 {% empty %}
                 <tr><td colspan="6" class="text-center py-4 text-slate-400">No hardware devices awaiting media sanitization verification.</td></tr>
