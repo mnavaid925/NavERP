@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ chargeback.number }} — {{ chargeback.title }} — Space Chargeback — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_space_chargeback_list' %}">Tenant &amp; Occupancy Coordination</a>
+            <span>/</span>
+            <span>{{ chargeback.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ chargeback.number }} — {{ chargeback.title }}</h1>
+            <span class="badge {{ chargeback.status_badge_class }}">{{ chargeback.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if chargeback.status == "draft" or chargeback.status == "disputed" %}
+        <form method="post" action="{% url 'assets:asset_space_chargeback_submit_approval' chargeback.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Submit for Approval
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_approve %}
+        <form method="post" action="{% url 'assets:asset_space_chargeback_approve' chargeback.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Approve
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_post_gl %}
+        <form method="post" action="{% url 'assets:asset_space_chargeback_post_gl' chargeback.pk %}" class="inline" onsubmit="return confirm('Post {{ chargeback.number|escapejs }} to Accounting General Ledger?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="book-check" class="w-4 h-4 me-1"></i> Post to GL
+            </button>
+        </form>
+        {% endif %}
+
+        {% if not chargeback.journal_entry %}
+        {% if chargeback.status == "pending_approval" or chargeback.status == "approved" %}
+        <form method="post" action="{% url 'assets:asset_space_chargeback_dispute' chargeback.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="alert-octagon" class="w-4 h-4 me-1"></i> Flag Disputed
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if chargeback.status == "posted_to_gl" or chargeback.status == "invoiced" or chargeback.status == "approved" or chargeback.status == "disputed" %}
+        <form method="post" action="{% url 'assets:asset_space_chargeback_close' chargeback.pk %}" class="inline" onsubmit="return confirm('Close space chargeback {{ chargeback.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Close
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if can_edit %}
+        <a href="{% url 'assets:asset_space_chargeback_edit' chargeback.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if can_delete %}
+        <form method="post" action="{% url 'assets:asset_space_chargeback_delete' chargeback.pk %}" class="inline" onsubmit="return confirm('Delete space chargeback {{ chargeback.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_space_chargeback_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Net Chargeback Amount</div>
+            <div class="stat-value text-base">{% if chargeback.currency %}{{ chargeback.currency.code }} {% endif %}{{ chargeback.net_chargeback_amount|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="maximize-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Allocated Area</div>
+            <div class="stat-value text-base">{{ chargeback.allocated_area_sqft|floatformat:2|intcomma }} sqft</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="percent"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Allocation Share</div>
+            <div class="stat-value">{{ chargeback.allocation_share_pct }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="calendar-range"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Billing Period</div>
+            <div class="stat-value text-sm">{{ chargeback.period_start|date:"Y-m-d" }} &rarr; {{ chargeback.period_end|date:"Y-m-d" }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Cost Allocation, Utilities &amp; Leasehold TI Breakdown</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-xs text-muted">Coordination Type</dt>
+                    <dd class="font-medium">{{ chargeback.get_coordination_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Allocation Basis</dt>
+                    <dd class="font-medium">{{ chargeback.get_allocation_basis_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Base Space / Allocation Cost</dt>
+                    <dd class="font-mono">{{ chargeback.base_cost_amount|floatformat:2|intcomma }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Shared CAM Recovery</dt>
+                    <dd class="font-mono">{{ chargeback.shared_cam_amount|floatformat:2|intcomma }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Submeter Utility Recovery</dt>
+                    <dd class="font-mono">{{ chargeback.utility_recovery_amount|floatformat:2|intcomma }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">TI Amortization End Date</dt>
+                    <dd>{{ chargeback.amortization_end_date|date:"Y-m-d"|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Tenant Improvement (TI) Cost</dt>
+                    <dd class="font-mono">{{ chargeback.ti_improvement_cost|floatformat:2|intcomma }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">TI Allowance Offset</dt>
+                    <dd class="font-mono">{{ chargeback.ti_allowance_offset|floatformat:2|intcomma }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Facility Space</dt>
+                    <dd>
+                        <a href="{% url 'assets:asset_facility_space_detail' chargeback.facility_space.pk %}" class="text-blue-600 hover:underline font-medium">
+                            {{ chargeback.facility_space.code }} — {{ chargeback.facility_space.name }}
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Shared Building System</dt>
+                    <dd>
+                        {% if chargeback.shared_building_system %}
+                        <a href="{% url 'assets:asset_building_system_detail' chargeback.shared_building_system.pk %}" class="text-blue-600 hover:underline">
+                            {{ chargeback.shared_building_system.number }} — {{ chargeback.shared_building_system.name }}
+                        </a>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Accounting GL &amp; Occupant Coordination</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-xs text-muted">Charged Org Unit</dt>
+                    <dd>{{ chargeback.charged_org_unit.name|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Occupant / Tenant Party</dt>
+                    <dd>{{ chargeback.occupant_party.name|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Lease Contract</dt>
+                    <dd>{{ chargeback.lease_contract|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Fixed Asset</dt>
+                    <dd>{{ chargeback.fixed_asset|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Fiscal Period</dt>
+                    <dd>{{ chargeback.fiscal_period|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Currency</dt>
+                    <dd class="font-mono">{{ chargeback.currency.code|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Expense / Debit GL Account</dt>
+                    <dd class="font-mono text-xs">{{ chargeback.expense_gl_account|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Recovery / Credit GL Account</dt>
+                    <dd class="font-mono text-xs">{{ chargeback.recovery_gl_account|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Posted GL Journal Entry</dt>
+                    <dd class="font-mono">
+                        {% if chargeback.journal_entry %}
+                        <span class="badge badge-green">{{ chargeback.journal_entry.number }} ({{ chargeback.journal_entry.get_status_display }})</span>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Linked AR Invoice</dt>
+                    <dd class="font-mono">{{ chargeback.ar_invoice|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Approved By</dt>
+                    <dd>{{ chargeback.approved_by.get_full_name|default:chargeback.approved_by.username|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted">Approved At</dt>
+                    <dd>{{ chargeback.approved_at|date:"Y-m-d H:i"|default:"—" }}</dd>
+                </div>
+            </dl>
+            {% if chargeback.notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 text-sm">
+                <div class="text-xs text-muted mb-1">Coordination Notes</div>
+                <div class="whitespace-pre-line">{{ chargeback.notes }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
