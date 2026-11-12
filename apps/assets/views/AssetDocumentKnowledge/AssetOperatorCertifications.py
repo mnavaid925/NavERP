@@ -42,22 +42,27 @@ def _add_one_year(base_date):
     return date(target_year, base_date.month, day)
 
 
-def _filter_certification_queryset(request, base_qs):
+_CERT_LIST_SELECT_RELATED = (
+    "operator_party",
+    "operator_user",
+    "employee_profile__party",
+    "operational_asset",
+    "asset_category",
+    "operating_procedure",
+)
+_CERT_EXPORT_SELECT_RELATED = (
+    "operator_party",
+    "operator_user",
+    "employee_profile__party",
+    "operating_procedure",
+)
+
+
+def _filter_certification_queryset(
+    request, base_qs, select_related=_CERT_LIST_SELECT_RELATED
+):
     """Apply search and dropdown GET filters to AssetOperatorCertification queryset."""
-    qs = base_qs.select_related(
-        "operator_party",
-        "operator_user",
-        "employee_profile__party",
-        "hrm_certificate",
-        "issuing_party",
-        "assessor",
-        "operational_asset",
-        "asset_category",
-        "asset_model",
-        "operating_procedure",
-        "compliance_framework",
-        "org_unit",
-    )
+    qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
     if search_query:
         qs = qs.filter(
@@ -102,7 +107,7 @@ def _filter_certification_queryset(request, base_qs):
 def asset_operator_certification_list(request):
     """Operator qualification, LOTO competency, and expiry tracking list view."""
     base_qs = assets_scope(AssetOperatorCertification.objects.all(), request)
-    filtered_qs = _filter_certification_queryset(request, base_qs)
+    filtered_qs = _filter_certification_queryset(request, base_qs).defer("notes")
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
@@ -143,7 +148,29 @@ def asset_operator_certification_list(request):
 def asset_operator_certification_export_csv(request):
     """Export filtered tenant operator certifications as a hardened CSV download."""
     base_qs = assets_scope(AssetOperatorCertification.objects.all(), request)
-    filtered_qs = _filter_certification_queryset(request, base_qs)
+    filtered_qs = (
+        _filter_certification_queryset(
+            request, base_qs, select_related=_CERT_EXPORT_SELECT_RELATED
+        )
+        .only(
+            "id",
+            "number",
+            "title",
+            "qualification_code",
+            "qualification_type",
+            "proficiency_level",
+            "sop_acknowledged",
+            "issued_date",
+            "expires_on",
+            "status",
+            "operator_party",
+            "operator_user",
+            "employee_profile",
+            "employee_profile__party",
+            "operating_procedure",
+        )[:10000]
+        .iterator(chunk_size=1000)
+    )
     headers = [
         "Cert #",
         "Title",
