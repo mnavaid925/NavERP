@@ -407,8 +407,7 @@ class ItHardwareAsset(TenantNumbered):
 
     def clean(self):
         super().clean()
-        validate_tenant_fks(self, self._TENANT_FK_FIELDS)
-        errors = {}
+        errors = validate_tenant_fks(self, self._TENANT_FK_FIELDS)
         if self.refresh_cycle_months is not None and self.refresh_cycle_months < 1:
             add_field_error(errors, "refresh_cycle_months", "Refresh cycle must be at least 1 month.")
         if self.estimated_refresh_cost is not None and self.estimated_refresh_cost < 0:
