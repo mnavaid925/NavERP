@@ -280,7 +280,12 @@ def it_hardware_asset_detail(request, pk):
 @login_required
 def it_hardware_asset_edit(request, pk):
     """Edit an unlocked IT hardware asset."""
-    hardware = assets_object(request, ItHardwareAsset, pk)
+    hardware = assets_object(
+        request,
+        ItHardwareAsset,
+        pk,
+        select_related=("sanitization_verified_by",),
+    )
     if hardware.is_locked:
         messages.warning(
             request,
