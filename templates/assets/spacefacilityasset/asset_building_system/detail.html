@@ -21,6 +21,7 @@
         </div>
     </div>
     <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if not system.is_locked %}
         <form method="post" action="{% url 'assets:asset_building_system_evaluate_comfort' system.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline">
@@ -28,7 +29,6 @@
             </button>
         </form>
 
-        {% if not system.is_locked %}
         <form method="post" action="{% url 'assets:asset_building_system_record_inspection' system.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline">
@@ -82,7 +82,7 @@
         {% endif %}
 
         <a href="{% url 'assets:asset_building_system_list' %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back
         </a>
     </div>
 </div>
@@ -92,14 +92,14 @@
         <div class="stat-icon blue"><i data-lucide="thermometer"></i></div>
         <div class="stat-body">
             <div class="stat-label">Setpoint vs Measured</div>
-            <div class="stat-value">{{ system.setpoint_temp_c|default:"—" }}&deg;C / {{ system.measured_temp_c|default:"—" }}&deg;C</div>
+            <div class="stat-value">{{ system.setpoint_temp_c|default_if_none:"—" }}&deg;C / {{ system.measured_temp_c|default_if_none:"—" }}&deg;C</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="droplets"></i></div>
         <div class="stat-body">
             <div class="stat-label">Humidity Target / Actual</div>
-            <div class="stat-value">{{ system.target_humidity_pct|default:"—" }}% / {{ system.measured_humidity_pct|default:"—" }}%</div>
+            <div class="stat-value">{{ system.target_humidity_pct|default_if_none:"—" }}% / {{ system.measured_humidity_pct|default_if_none:"—" }}%</div>
         </div>
     </div>
     <div class="stat-card">
@@ -133,8 +133,8 @@
             <div class="detail-item"><dt>Serial Number</dt><dd class="font-mono">{{ system.serial_number|default:"—" }}</dd></div>
             <div class="detail-item"><dt>Load / Voltage Rating</dt><dd class="font-mono">{{ system.load_or_voltage_rating|default:"—" }}</dd></div>
             <div class="detail-item"><dt>ASHRAE / NFPA Code</dt><dd class="font-mono">{{ system.ashrae_nfpa_code_ref|default:"—" }}</dd></div>
-            <div class="detail-item"><dt>Served Area / Capacity</dt><dd class="font-mono">{{ system.served_area_sqft|default:"—" }} sqft / {{ system.design_capacity_btu_kw|default:"—" }}</dd></div>
-            <div class="detail-item"><dt>Airflow / Refrigerant</dt><dd>{{ system.airflow_cfm|default:"—" }} CFM / {{ system.refrigerant_type|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Served Area / Capacity</dt><dd class="font-mono">{{ system.served_area_sqft|default_if_none:"—" }} sqft / {{ system.design_capacity_btu_kw|default_if_none:"—" }}</dd></div>
+            <div class="detail-item"><dt>Airflow / Refrigerant</dt><dd>{{ system.airflow_cfm|default_if_none:"—" }} CFM / {{ system.refrigerant_type|default:"—" }}</dd></div>
             <div class="detail-item"><dt>Efficiency Rating</dt><dd>{{ system.energy_efficiency_rating|default:"—" }}</dd></div>
             <div class="detail-item"><dt>Service Vendor</dt><dd>{% if system.service_vendor %}{{ system.service_vendor.name }}{% else %}—{% endif %}</dd></div>
             <div class="detail-item"><dt>Last Inspection</dt><dd>{{ system.last_statutory_inspection_date|date:"Y-m-d"|default:"—" }}</dd></div>
@@ -146,19 +146,19 @@
             <div class="detail-item"><dt>Fixed Asset</dt><dd>{% if system.fixed_asset %}{{ system.fixed_asset }}{% else %}—{% endif %}</dd></div>
             <div class="detail-item">
                 <dt>Energy Reading (11.6)</dt>
-                <dd>{% if system.latest_energy_reading %}<a href="{% url 'assets:asset_energy_reading_detail' system.latest_energy_reading.pk %}" class="text-blue-600 hover:underline">{{ system.latest_energy_reading.number }}</a>{% else %}—{% endif %}</dd>
+                <dd>{% if system.latest_energy_reading %}<a href="{% url 'assets:asset_energy_reading_detail' system.latest_energy_reading.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ system.latest_energy_reading.number }}</a>{% else %}—{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>PM Schedule (11.5)</dt>
-                <dd>{% if system.maintenance_schedule %}<a href="{% url 'assets:asset_maintenance_schedule_detail' system.maintenance_schedule.pk %}" class="text-blue-600 hover:underline">{{ system.maintenance_schedule.number }}</a>{% else %}—{% endif %}</dd>
+                <dd>{% if system.maintenance_schedule %}<a href="{% url 'assets:asset_maintenance_schedule_detail' system.maintenance_schedule.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ system.maintenance_schedule.number }}</a>{% else %}—{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>Operating Permit (11.11)</dt>
-                <dd>{% if system.operating_permit %}<a href="{% url 'assets:asset_permit_license_detail' system.operating_permit.pk %}" class="text-blue-600 hover:underline">{{ system.operating_permit.number }}</a>{% else %}—{% endif %}</dd>
+                <dd>{% if system.operating_permit %}<a href="{% url 'assets:asset_permit_license_detail' system.operating_permit.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ system.operating_permit.number }}</a>{% else %}—{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>Schematic Document (11.16)</dt>
-                <dd>{% if system.schematic_document %}<a href="{% url 'assets:asset_document_detail' system.schematic_document.pk %}" class="text-blue-600 hover:underline">{{ system.schematic_document.number }}</a>{% else %}—{% endif %}</dd>
+                <dd>{% if system.schematic_document %}{% if can_view_schematic_document %}<a href="{% url 'assets:asset_document_detail' system.schematic_document.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ system.schematic_document.number }}</a>{% else %}<span class="text-muted">Restricted Document</span>{% endif %}{% else %}—{% endif %}</dd>
             </div>
         </dl>
         {% if system.notes %}
@@ -178,7 +178,7 @@
             <tbody>
                 {% for cb in linked_chargebacks %}
                 <tr>
-                    <td class="font-mono text-xs"><a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="text-blue-600 hover:underline">{{ cb.number }}</a></td>
+                    <td class="font-mono text-xs"><a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ cb.number }}</a></td>
                     <td class="text-sm">{{ cb.title }}</td>
                     <td class="text-xs">{% if cb.charged_org_unit %}{{ cb.charged_org_unit.name }}{% elif cb.occupant_party %}{{ cb.occupant_party.name }}{% else %}—{% endif %}</td>
                     <td class="text-xs font-mono">${{ cb.net_chargeback_amount|floatformat:2 }}</td>
