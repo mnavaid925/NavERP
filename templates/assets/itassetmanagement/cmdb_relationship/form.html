@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ relationship.number }}{% else %}New CMDB Dependency Edge{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:cmdb_relationship_list' %}">CMDB Registry</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ relationship.number }}{% else %}New Dependency Edge{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and relationship %}
+        <a href="{% url 'assets:cmdb_relationship_detail' relationship.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Edge
+        </a>
+        {% else %}
+        <a href="{% url 'assets:cmdb_relationship_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to CMDB Registry
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="p-4 rounded-lg border border-slate-200 dark:border-slate-700 space-y-4">
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Source Configuration Item (Dependent)</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.source_ci_type.id_for_label }}">Source CI Type <span class="req">*</span></label>
+                        {{ form.source_ci_type }}
+                        {% if form.source_ci_type.errors %}<div class="form-error">{{ form.source_ci_type.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="source" data-ci-type="it_hardware">
+                        <label class="form-label" for="{{ form.source_hardware.id_for_label }}">Source IT Hardware</label>
+                        {{ form.source_hardware }}
+                        {% if form.source_hardware.errors %}<div class="form-error">{{ form.source_hardware.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="source" data-ci-type="software_license">
+                        <label class="form-label" for="{{ form.source_software.id_for_label }}">Source Software License</label>
+                        {{ form.source_software }}
+                        {% if form.source_software.errors %}<div class="form-error">{{ form.source_software.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="source" data-ci-type="cloud_asset">
+                        <label class="form-label" for="{{ form.source_cloud.id_for_label }}">Source Cloud / SaaS Asset</label>
+                        {{ form.source_cloud }}
+                        {% if form.source_cloud.errors %}<div class="form-error">{{ form.source_cloud.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="source" data-ci-type="service_component">
+                        <label class="form-label" for="{{ form.source_service.id_for_label }}">Source Service Component</label>
+                        {{ form.source_service }}
+                        {% if form.source_service.errors %}<div class="form-error">{{ form.source_service.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="source" data-ci-type="operational_asset">
+                        <label class="form-label" for="{{ form.source_asset.id_for_label }}">Source Operational Asset (SCM)</label>
+                        {{ form.source_asset }}
+                        {% if form.source_asset.errors %}<div class="form-error">{{ form.source_asset.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-lg border border-slate-200 dark:border-slate-700 space-y-4">
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Target Configuration Item (Provider / Upstream)</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.target_ci_type.id_for_label }}">Target CI Type <span class="req">*</span></label>
+                        {{ form.target_ci_type }}
+                        {% if form.target_ci_type.errors %}<div class="form-error">{{ form.target_ci_type.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="target" data-ci-type="it_hardware">
+                        <label class="form-label" for="{{ form.target_hardware.id_for_label }}">Target IT Hardware</label>
+                        {{ form.target_hardware }}
+                        {% if form.target_hardware.errors %}<div class="form-error">{{ form.target_hardware.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="target" data-ci-type="software_license">
+                        <label class="form-label" for="{{ form.target_software.id_for_label }}">Target Software License</label>
+                        {{ form.target_software }}
+                        {% if form.target_software.errors %}<div class="form-error">{{ form.target_software.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="target" data-ci-type="cloud_asset">
+                        <label class="form-label" for="{{ form.target_cloud.id_for_label }}">Target Cloud / SaaS Asset</label>
+                        {{ form.target_cloud }}
+                        {% if form.target_cloud.errors %}<div class="form-error">{{ form.target_cloud.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="target" data-ci-type="service_component">
+                        <label class="form-label" for="{{ form.target_service.id_for_label }}">Target Service Component</label>
+                        {{ form.target_service }}
+                        {% if form.target_service.errors %}<div class="form-error">{{ form.target_service.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group" data-side="target" data-ci-type="operational_asset">
+                        <label class="form-label" for="{{ form.target_asset.id_for_label }}">Target Operational Asset (SCM)</label>
+                        {{ form.target_asset }}
+                        {% if form.target_asset.errors %}<div class="form-error">{{ form.target_asset.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Relationship Semantics &amp; Blast-Radius Classification</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.relationship_type.id_for_label }}">Relationship Type <span class="req">*</span></label>
+                    {{ form.relationship_type }}
+                    {% if form.relationship_type.errors %}<div class="form-error">{{ form.relationship_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.environment.id_for_label }}">Environment <span class="req">*</span></label>
+                    {{ form.environment }}
+                    {% if form.environment.errors %}<div class="form-error">{{ form.environment.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.criticality.id_for_label }}">Criticality Tier <span class="req">*</span></label>
+                    {{ form.criticality }}
+                    {% if form.criticality.errors %}<div class="form-error">{{ form.criticality.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.impact_severity.id_for_label }}">Impact Severity <span class="req">*</span></label>
+                    {{ form.impact_severity }}
+                    {% if form.impact_severity.errors %}<div class="form-error">{{ form.impact_severity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Edge Owner</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group flex items-end pb-2">
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                        {{ form.is_single_point_of_failure }} <span>Single Point of Failure (SPOF)</span>
+                    </label>
+                    {% if form.is_single_point_of_failure.errors %}<div class="form-error">{{ form.is_single_point_of_failure.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.blast_radius_notes.id_for_label }}">Blast Radius Notes</label>
+                    {{ form.blast_radius_notes }}
+                    {% if form.blast_radius_notes.errors %}<div class="form-error">{{ form.blast_radius_notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and relationship %}
+                <a href="{% url 'assets:cmdb_relationship_detail' relationship.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:cmdb_relationship_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Dependency Edge{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    function syncSide(side, selectId) {
+        var selectEl = document.getElementById(selectId);
+        if (!selectEl) return;
+        function update() {
+            var chosen = selectEl.value;
+            document.querySelectorAll('[data-side="' + side + '"]').forEach(function (group) {
+                group.style.display = group.getAttribute('data-ci-type') === chosen ? '' : 'none';
+            });
+        }
+        selectEl.addEventListener('change', update);
+        update();
+    }
+    syncSide('source', '{{ form.source_ci_type.id_for_label }}');
+    syncSide('target', '{{ form.target_ci_type.id_for_label }}');
+})();
+</script>
+{% endblock %}
