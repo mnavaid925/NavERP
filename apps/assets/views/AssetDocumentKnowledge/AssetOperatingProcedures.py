@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -201,17 +201,24 @@ def asset_operating_procedure_list(request):
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
+    kpis = base_qs.aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(status="active")),
+        loto_count=Count("id", filter=Q(loto_required=True)),
+        overdue_review_count=Count(
+            "id", filter=Q(status="active", next_review_date__lt=today)
+        ),
+    )
+
     context = {
         "procedures": page_obj,
         "paginator": paginator,
         "page_obj": page_obj,
         "is_paginated": page_obj.has_other_pages(),
-        "total_count": base_qs.count(),
-        "active_count": base_qs.filter(status="active").count(),
-        "loto_count": base_qs.filter(loto_required=True).count(),
-        "overdue_review_count": base_qs.filter(
-            status="active", next_review_date__lt=today
-        ).count(),
+        "total_count": kpis["total_count"] or 0,
+        "active_count": kpis["active_count"] or 0,
+        "loto_count": kpis["loto_count"] or 0,
+        "overdue_review_count": kpis["overdue_review_count"] or 0,
         "type_choices": AssetOperatingProcedure.PROCEDURE_TYPE_CHOICES,
         "safety_choices": AssetOperatingProcedure.SAFETY_LEVEL_CHOICES,
         "status_choices": AssetOperatingProcedure.STATUS_CHOICES,
