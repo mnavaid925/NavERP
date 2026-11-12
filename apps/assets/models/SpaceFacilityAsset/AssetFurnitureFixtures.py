@@ -190,6 +190,7 @@ class AssetFurnitureFixture(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "move_status"], name="idx_affe_ten_mstat"),
             models.Index(fields=["tenant", "ffe_category"], name="idx_affe_ten_cat"),
+            models.Index(fields=["tenant", "condition_grade"], name="idx_affe_ten_cond"),
             models.Index(fields=["tenant", "facility_space"], name="idx_affe_ten_spc"),
             models.Index(fields=["tenant", "reconfiguration_batch_ref"], name="idx_affe_ten_batch"),
         ]
