@@ -16,7 +16,7 @@ from apps.assets.models.ItAssetManagement.CmdbRelationships import CmdbRelations
 from apps.assets.models.ItAssetManagement.SoftwareLicenses import SoftwareLicense
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.ItAssetManagement._helpers import (
-    CMDB_REL_SELECT_RELATED,
+    CMDB_REL_EDGE_SELECT_RELATED,
     PAGE_SIZE,
     apply_choice_filter,
     apply_fk_filter,
@@ -28,13 +28,13 @@ from apps.core.models.OrgUnit import OrgUnit
 from apps.core.utils import write_audit_log
 
 _SW_LIST_SELECT_RELATED = (
-    "org_unit",
     "currency",
-    "publisher_party",
-    "license_owner",
 )
 
 _SW_DETAIL_SELECT_RELATED = _SW_LIST_SELECT_RELATED + (
+    "org_unit",
+    "publisher_party",
+    "license_owner",
     "reseller_party",
     "gl_expense_account",
     "purchase_order__vendor",
@@ -206,12 +206,12 @@ def software_license_detail(request, pk):
     )
     outbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, source_software=license_obj)
-        .select_related(*CMDB_REL_SELECT_RELATED)
+        .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
         .order_by("-updated_at")
     )
     inbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, target_software=license_obj)
-        .select_related(*CMDB_REL_SELECT_RELATED)
+        .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
         .order_by("-updated_at")
     )
     return render(
