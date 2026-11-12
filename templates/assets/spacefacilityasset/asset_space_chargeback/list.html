@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}Tenant &amp; Occupancy Coordination — Assets &amp; Fleet — NavERP{% endblock %}
 
@@ -51,7 +50,7 @@
         <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
         <div class="stat-body">
             <div class="stat-label">Active Net Recovery</div>
-            <div class="stat-value text-base">{{ total_net_chargeback|floatformat:2|intcomma }}</div>
+            <div class="stat-value text-base">{{ total_net_chargeback|floatformat:2 }}</div>
         </div>
     </div>
 </div>
@@ -154,7 +153,7 @@
                         {{ cb.period_start|date:"Y-m-d" }} &rarr; {{ cb.period_end|date:"Y-m-d" }}
                     </td>
                     <td class="font-mono text-xs font-semibold">
-                        {% if cb.currency %}{{ cb.currency.code }} {% endif %}{{ cb.net_chargeback_amount|floatformat:2|intcomma }}
+                        {% if cb.currency %}{{ cb.currency.code }} {% endif %}{{ cb.net_chargeback_amount|floatformat:2 }}
                     </td>
                     <td class="font-mono text-xs">
                         {% if cb.journal_entry %}
