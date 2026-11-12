@@ -157,7 +157,7 @@
                 <div class="detail-item"><dt>Cloud Resource / ARN</dt><dd class="font-mono text-xs break-all">{{ cloud_asset.cloud_resource_id|default:"—" }}</dd></div>
                 <div class="detail-item"><dt>Org Unit / Vendor</dt><dd>{{ cloud_asset.org_unit|default:"—" }} / {{ cloud_asset.vendor_party|default:"—" }}</dd></div>
                 <div class="detail-item"><dt>GL Expense Account</dt><dd>{{ cloud_asset.gl_expense_account|default:"—" }}</dd></div>
-                <div class="detail-item"><dt>Resource Tags (JSON)</dt><dd class="font-mono text-xs">{% if cloud_asset.resource_tags %}{{ cloud_asset.resource_tags }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Resource Tags</dt><dd>{% if cloud_asset.resource_tags %}<div class="flex flex-wrap gap-1">{% for k, v in cloud_asset.resource_tags.items %}<span class="badge badge-slate font-mono text-xs">{{ k }}={{ v }}</span>{% endfor %}</div>{% else %}—{% endif %}</dd></div>
             </dl>
         </div>
     </div>
