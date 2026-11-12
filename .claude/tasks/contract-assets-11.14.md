@@ -355,7 +355,7 @@ All forms inherit `(TenantUniqueMixin, TenantModelForm)`.
 
 ## 4. Templates Contract
 
-All templates extend `"base.html"`, use valid `theme.css` classes, `|stringformat:"d"` for FK `<option selected>`, color-named badges (`badge-*` only from `theme.css`), pagination preserving query params, and CSRF tokens on all POST forms:
+All templates extend `"base.html"`, load `asset_analytics_tags` (`apps/assets/templatetags/asset_analytics_tags.py`, providing `{% fmt_money %}` for dynamic currency symbols and leading-sign negative formatting `-$1,234.56`), use valid `theme.css` classes (`btn btn-icon`, `.pagination`, `badge-*` only from `theme.css`), `dark:*` dark-mode pairs, `|stringformat:"d"` for FK `<option selected>`, `<label class="sr-only">` filter accessibility, and CSRF tokens on all POST forms:
 1. `templates/assets/assetanalytics/asset_lifecycle_cost_analysis/{list,detail,form}.html`
 2. `templates/assets/assetanalytics/asset_replacement_plan/{list,detail,form}.html`
 3. `templates/assets/assetanalytics/asset_portfolio_scenario/{list,detail,form}.html`
