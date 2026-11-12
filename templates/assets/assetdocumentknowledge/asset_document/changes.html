@@ -174,9 +174,11 @@
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not item.is_locked %}
+                            {% if not item.checked_out_by_id or item.checked_out_by_id == request.user.id or request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_document_edit' item.pk %}" class="btn btn-icon" title="Edit Revision" aria-label="Edit {{ item.number }}">
                                 <i data-lucide="pencil"></i>
                             </a>
+                            {% endif %}
                             {% endif %}
                         </div>
                     </td>
