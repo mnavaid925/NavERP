@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ article.number }}{% else %}New Knowledge Article / RCA{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_knowledge_article_list' %}">Lessons Learned &amp; Failure Analysis</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ article.number }}{% else %}New Article / RCA{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and article %}
+        <a href="{% url 'assets:asset_knowledge_article_detail' article.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Article
+        </a>
+        {% else %}
+        <a href="{% url 'assets:asset_knowledge_article_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Knowledge Base
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Article Classification &amp; Impact</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Article / Incident Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.article_type.id_for_label }}">Article Type *</label>
+                    {{ form.article_type }}
+                    {% if form.article_type.errors %}<div class="form-error">{{ form.article_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.rca_methodology.id_for_label }}">RCA Methodology *</label>
+                    {{ form.rca_methodology }}
+                    {% if form.rca_methodology.errors %}<div class="form-error">{{ form.rca_methodology.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.severity.id_for_label }}">Severity *</label>
+                    {{ form.severity }}
+                    {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.incident_occurred_on.id_for_label }}">Incident Date</label>
+                    {{ form.incident_occurred_on }}
+                    {% if form.incident_occurred_on.errors %}<div class="form-error">{{ form.incident_occurred_on.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.downtime_hours_impacted.id_for_label }}">Downtime Impacted (Hours) *</label>
+                    {{ form.downtime_hours_impacted }}
+                    {% if form.downtime_hours_impacted.errors %}<div class="form-error">{{ form.downtime_hours_impacted.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.recurrence_count.id_for_label }}">Observed Recurrences *</label>
+                    {{ form.recurrence_count }}
+                    {% if form.recurrence_count.errors %}<div class="form-error">{{ form.recurrence_count.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.tags.id_for_label }}">Searchable Keywords / Tags (Comma-Separated)</label>
+                    {{ form.tags }}
+                    {% if form.tags.errors %}<div class="form-error">{{ form.tags.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Root Cause Analysis &amp; Lessons Learned</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.symptom_problem.id_for_label }}">Symptom &amp; Problem Statement *</label>
+                    {{ form.symptom_problem }}
+                    {% if form.symptom_problem.errors %}<div class="form-error">{{ form.symptom_problem.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.root_cause_summary.id_for_label }}">Confirmed Root Cause Summary</label>
+                    {{ form.root_cause_summary }}
+                    {% if form.root_cause_summary.errors %}<div class="form-error">{{ form.root_cause_summary.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.five_whys.id_for_label }}">5-Why Investigation Chain (JSON Array)</label>
+                    {{ form.five_whys }}
+                    {% if form.five_whys.errors %}<div class="form-error">{{ form.five_whys.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.contributing_factors.id_for_label }}">Fishbone / Ishikawa 6M Contributing Factors (JSON Object)</label>
+                    {{ form.contributing_factors }}
+                    {% if form.contributing_factors.errors %}<div class="form-error">{{ form.contributing_factors.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.remedy_corrective_action.id_for_label }}">Remedy &amp; Corrective Action</label>
+                    {{ form.remedy_corrective_action }}
+                    {% if form.remedy_corrective_action.errors %}<div class="form-error">{{ form.remedy_corrective_action.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.preventive_lessons.id_for_label }}">Preventive Lessons Learned</label>
+                    {{ form.preventive_lessons }}
+                    {% if form.preventive_lessons.errors %}<div class="form-error">{{ form.preventive_lessons.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.attachment.id_for_label }}">Supporting Photo / Spectrum / RCA Report</label>
+                    {{ form.attachment }}
+                    {% if is_edit and article and article.attachment %}
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Current attachment:
+                        <a href="{% url 'assets:asset_knowledge_article_download' article.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">
+                            {{ article.original_filename|default:"Download existing attachment" }}
+                        </a>
+                    </p>
+                    {% endif %}
+                    {% if form.attachment.errors %}<div class="form-error">{{ form.attachment.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Linked Asset, Failure Mode, Work Orders &amp; SOPs</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_category.id_for_label }}">Asset Category</label>
+                    {{ form.asset_category }}
+                    {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_model.id_for_label }}">Asset Model</label>
+                    {{ form.asset_model }}
+                    {% if form.asset_model.errors %}<div class="form-error">{{ form.asset_model.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.failure_mode.id_for_label }}">Failure Mode (FMEA)</label>
+                    {{ form.failure_mode }}
+                    {% if form.failure_mode.errors %}<div class="form-error">{{ form.failure_mode.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.maintenance_request.id_for_label }}">Maintenance Request</label>
+                    {{ form.maintenance_request }}
+                    {% if form.maintenance_request.errors %}<div class="form-error">{{ form.maintenance_request.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.maintenance_log.id_for_label }}">Maintenance Log</label>
+                    {{ form.maintenance_log }}
+                    {% if form.maintenance_log.errors %}<div class="form-error">{{ form.maintenance_log.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.incident_report.id_for_label }}">Field Incident Report</label>
+                    {{ form.incident_report }}
+                    {% if form.incident_report.errors %}<div class="form-error">{{ form.incident_report.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.compliance_incident.id_for_label }}">Compliance Incident</label>
+                    {{ form.compliance_incident }}
+                    {% if form.compliance_incident.errors %}<div class="form-error">{{ form.compliance_incident.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.related_document.id_for_label }}">Related Controlled Document</label>
+                    {{ form.related_document }}
+                    {% if form.related_document.errors %}<div class="form-error">{{ form.related_document.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.recommended_procedure.id_for_label }}">Recommended SOP / LOTO</label>
+                    {{ form.recommended_procedure }}
+                    {% if form.recommended_procedure.errors %}<div class="form-error">{{ form.recommended_procedure.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and article %}
+                <a href="{% url 'assets:asset_knowledge_article_detail' article.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_knowledge_article_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Knowledge Article{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
