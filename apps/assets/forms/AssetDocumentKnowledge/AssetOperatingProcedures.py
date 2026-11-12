@@ -14,6 +14,9 @@ from apps.assets.models.AssetClassification.AssetModels import AssetModel
 from apps.assets.models.AssetCompliance.AssetComplianceFrameworks import (
     AssetComplianceFramework,
 )
+from apps.assets.models.AssetDocumentKnowledge._validators import (
+    readable_asset_document_q,
+)
 from apps.assets.models.AssetDocumentKnowledge.AssetDocuments import AssetDocument
 from apps.assets.models.AssetDocumentKnowledge.AssetOperatingProcedures import (
     AssetOperatingProcedure,
@@ -122,9 +125,14 @@ class AssetOperatingProcedureForm(TenantUniqueMixin, TenantModelForm):
             ),
         }
 
-    def __init__(self, *args, tenant=None, **kwargs):
+    def __init__(self, *args, tenant=None, user=None, **kwargs):
+        self.user = user
         super().__init__(*args, tenant=tenant, **kwargs)
         scope_tenant_querysets(self, self._TENANT_FIELDS)
+        if "primary_document" in self.fields and self.tenant is not None:
+            self.fields["primary_document"].queryset = self.fields[
+                "primary_document"
+            ].queryset.filter(readable_asset_document_q(self.user))
         if "safety_reviewer" in self.fields and self.tenant is not None:
             self.fields["safety_reviewer"].queryset = self.fields[
                 "safety_reviewer"
