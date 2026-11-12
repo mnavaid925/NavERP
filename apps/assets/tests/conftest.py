@@ -76,6 +76,10 @@ from apps.assets.models import (
     SoftwareLicense,
     CloudAssetSubscription,
     CmdbRelationship,
+    AssetFacilitySpace,
+    AssetBuildingSystem,
+    AssetFurnitureFixture,
+    AssetSpaceChargeback,
 )
 
 
@@ -4249,3 +4253,447 @@ def cmdb_relationship_b(
     rel.full_clean()
     rel.save()
     return rel
+
+
+# ===== 11.17 SpaceFacilityAsset =====
+
+
+@pytest.fixture
+def sfa_member_client_a(db, member_user):
+    from django.test import Client
+    c = Client()
+    c.force_login(member_user)
+    return c
+
+
+@pytest.fixture
+def sfa_space_building_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    location_a,
+    integration_gis_mapping_a,
+    adk_document_a,
+    admin_user,
+):
+    space = AssetFacilitySpace(
+        tenant=tenant_a,
+        code="SFA-BLDG-A",
+        name="Acme North Tower A",
+        space_level="building",
+        space_category="office_workspace",
+        org_unit=org_unit_a,
+        scm_location=location_a,
+        gis_mapping=integration_gis_mapping_a,
+        floor_plan_document=adk_document_a,
+        space_steward=admin_user,
+        gross_area_sqft=Decimal("20000.00"),
+        rentable_area_sqft=Decimal("18000.00"),
+        usable_area_sqft=Decimal("16000.00"),
+        common_area_sqft=Decimal("2000.00"),
+        annual_rate_per_sqft=Decimal("40.00"),
+        design_seat_capacity=120,
+        current_headcount=96,
+        cad_layer_ref="A-BLDG-N",
+        bim_guid="1117-bldg-a-001",
+        bim_level_ref="Campus Tower A",
+        drawing_revision="Rev A",
+        status="active",
+        notes="Primary corporate office building for 11.17 tests.",
+    )
+    space.full_clean()
+    space.save()
+    return space
+
+
+@pytest.fixture
+def sfa_space_floor_a(
+    db,
+    tenant_a,
+    sfa_space_building_a,
+    org_unit_a,
+    location_a,
+    adk_document_a,
+    admin_user,
+):
+    space = AssetFacilitySpace(
+        tenant=tenant_a,
+        code="SFA-F02-A",
+        name="Acme Floor 02 Engineering Suite",
+        space_level="floor",
+        space_category="office_workspace",
+        parent=sfa_space_building_a,
+        org_unit=org_unit_a,
+        scm_location=location_a,
+        floor_plan_document=adk_document_a,
+        space_steward=admin_user,
+        gross_area_sqft=Decimal("8000.00"),
+        rentable_area_sqft=Decimal("7200.00"),
+        usable_area_sqft=Decimal("6400.00"),
+        common_area_sqft=Decimal("800.00"),
+        annual_rate_per_sqft=Decimal("42.00"),
+        design_seat_capacity=60,
+        current_headcount=45,
+        cad_layer_ref="A-F02-ENG",
+        bim_level_ref="Level 02",
+        drawing_revision="Rev B",
+        status="active",
+    )
+    space.full_clean()
+    space.save()
+    return space
+
+
+@pytest.fixture
+def sfa_space_b(
+    db,
+    tenant_b,
+    org_unit_b,
+    location_b,
+    adk_document_b,
+    admin_b,
+):
+    space = AssetFacilitySpace(
+        tenant=tenant_b,
+        code="SFA-GLX-01",
+        name="Globex East Hub",
+        space_level="building",
+        space_category="office_workspace",
+        org_unit=org_unit_b,
+        scm_location=location_b,
+        floor_plan_document=adk_document_b,
+        space_steward=admin_b,
+        gross_area_sqft=Decimal("10000.00"),
+        rentable_area_sqft=Decimal("9000.00"),
+        usable_area_sqft=Decimal("8000.00"),
+        common_area_sqft=Decimal("1000.00"),
+        annual_rate_per_sqft=Decimal("35.00"),
+        design_seat_capacity=50,
+        current_headcount=40,
+        status="active",
+    )
+    space.full_clean()
+    space.save()
+    return space
+
+
+@pytest.fixture
+def sfa_building_system_hvac_a(
+    db,
+    tenant_a,
+    sfa_space_floor_a,
+    operational_asset_a,
+    fixed_asset_a,
+    energy_reading_a,
+    maintenance_schedule_a,
+    permit_license_a,
+    adk_document_a,
+    vendor_party_a,
+    org_unit_a,
+):
+    today = timezone.localdate()
+    sys_obj = AssetBuildingSystem(
+        tenant=tenant_a,
+        name="Rooftop AHU-11.17",
+        system_domain="hvac_climate",
+        subsystem_type="ahu_air_handler",
+        facility_space=sfa_space_floor_a,
+        pin_x_pct=Decimal("25.00"),
+        pin_y_pct=Decimal("40.00"),
+        manufacturer="Trane",
+        model_number="CSAA-100",
+        serial_number="TRN-SFA-01",
+        load_or_voltage_rating="480V / 3-Phase",
+        ashrae_nfpa_code_ref="ASHRAE 90.1",
+        served_area_sqft=Decimal("6400.00"),
+        design_capacity_btu_kw=Decimal("320.00"),
+        setpoint_temp_c=Decimal("22.00"),
+        measured_temp_c=Decimal("22.30"),
+        target_humidity_pct=Decimal("45.00"),
+        measured_humidity_pct=Decimal("46.00"),
+        airflow_cfm=Decimal("12000.00"),
+        condition_grade="good",
+        criticality_tier="tier_2_mission_crit",
+        remaining_useful_life_years=12,
+        replacement_cost_estimate=Decimal("95000.00"),
+        last_statutory_inspection_date=today - timedelta(days=30),
+        next_inspection_due_date=today + timedelta(days=150),
+        status="operational",
+        operational_asset=operational_asset_a,
+        fixed_asset=fixed_asset_a,
+        latest_energy_reading=energy_reading_a,
+        maintenance_schedule=maintenance_schedule_a,
+        operating_permit=permit_license_a,
+        schematic_document=adk_document_a,
+        service_vendor=vendor_party_a,
+        org_unit=org_unit_a,
+    )
+    sys_obj.full_clean()
+    sys_obj.save()
+    return sys_obj
+
+
+@pytest.fixture
+def sfa_building_system_infra_a(
+    db,
+    tenant_a,
+    sfa_space_building_a,
+    org_unit_a,
+    vendor_party_a,
+    permit_license_a,
+):
+    today = timezone.localdate()
+    sys_obj = AssetBuildingSystem(
+        tenant=tenant_a,
+        name="Main Switchgear MDB-11.17",
+        system_domain="electrical_power",
+        subsystem_type="switchgear_panel",
+        facility_space=sfa_space_building_a,
+        pin_x_pct=Decimal("15.00"),
+        pin_y_pct=Decimal("70.00"),
+        manufacturer="Schneider",
+        model_number="QED-4000",
+        serial_number="SCH-SFA-99",
+        load_or_voltage_rating="480Y/277V 4000A",
+        ashrae_nfpa_code_ref="NFPA 70E",
+        served_area_sqft=Decimal("20000.00"),
+        design_capacity_btu_kw=Decimal("1800.00"),
+        condition_grade="excellent",
+        criticality_tier="tier_1_life_safety",
+        remaining_useful_life_years=20,
+        replacement_cost_estimate=Decimal("220000.00"),
+        last_statutory_inspection_date=today - timedelta(days=60),
+        next_inspection_due_date=today + timedelta(days=300),
+        status="operational",
+        operating_permit=permit_license_a,
+        service_vendor=vendor_party_a,
+        org_unit=org_unit_a,
+    )
+    sys_obj.full_clean()
+    sys_obj.save()
+    return sys_obj
+
+
+@pytest.fixture
+def sfa_building_system_b(
+    db,
+    tenant_b,
+    sfa_space_b,
+    org_unit_b,
+    vendor_party_b,
+):
+    today = timezone.localdate()
+    sys_obj = AssetBuildingSystem(
+        tenant=tenant_b,
+        name="Globex Switchgear B",
+        system_domain="electrical_power",
+        subsystem_type="switchgear_panel",
+        facility_space=sfa_space_b,
+        manufacturer="Eaton",
+        model_number="PRL-200",
+        serial_number="ETN-GLX-01",
+        condition_grade="good",
+        criticality_tier="tier_1_life_safety",
+        status="operational",
+        last_statutory_inspection_date=today - timedelta(days=15),
+        next_inspection_due_date=today + timedelta(days=180),
+        service_vendor=vendor_party_b,
+        org_unit=org_unit_b,
+    )
+    sys_obj.full_clean()
+    sys_obj.save()
+    return sys_obj
+
+
+@pytest.fixture
+def sfa_furniture_a(
+    db,
+    tenant_a,
+    sfa_space_floor_a,
+    vendor_party_a,
+    org_unit_a,
+    operational_asset_a,
+    admin_user,
+):
+    ffe = AssetFurnitureFixture(
+        tenant=tenant_a,
+        name="Sit-Stand Workstation Pod A",
+        ffe_category="workstation_desk",
+        asset_tag_code="SFA-FFE-A01",
+        manufacturer="Herman Miller",
+        model_sku="HM-RENEW-6P",
+        finish_material="Natural Oak",
+        facility_space=sfa_space_floor_a,
+        custodian_party=vendor_party_a,
+        assigned_org_unit=org_unit_a,
+        operational_asset=operational_asset_a,
+        move_coordinator=admin_user,
+        quantity=6,
+        unit_replacement_cost=Decimal("1500.00"),
+        pin_x_pct=Decimal("30.00"),
+        pin_y_pct=Decimal("50.00"),
+        condition_grade="good",
+        move_status="in_place",
+    )
+    ffe.full_clean()
+    ffe.save()
+    return ffe
+
+
+@pytest.fixture
+def sfa_furniture_b(
+    db,
+    tenant_b,
+    sfa_space_b,
+    vendor_party_b,
+    org_unit_b,
+    admin_b,
+):
+    ffe = AssetFurnitureFixture(
+        tenant=tenant_b,
+        name="Globex Boardroom Table B",
+        ffe_category="conference_table",
+        asset_tag_code="SFA-FFE-B01",
+        manufacturer="Steelcase",
+        facility_space=sfa_space_b,
+        custodian_party=vendor_party_b,
+        assigned_org_unit=org_unit_b,
+        move_coordinator=admin_b,
+        quantity=1,
+        unit_replacement_cost=Decimal("9000.00"),
+        condition_grade="good",
+        move_status="in_place",
+    )
+    ffe.full_clean()
+    ffe.save()
+    return ffe
+
+
+@pytest.fixture
+def sfa_chargeback_draft_a(
+    db,
+    tenant_a,
+    sfa_space_floor_a,
+    sfa_building_system_hvac_a,
+    lease_contract_a,
+    fixed_asset_a,
+    org_unit_a,
+    vendor_party_a,
+    currency_usd,
+    integration_open_fiscal_period_a,
+    expense_account_a,
+    accum_account_a,
+):
+    today = timezone.localdate()
+    cb = AssetSpaceChargeback(
+        tenant=tenant_a,
+        title="Monthly Engineering Floor Chargeback",
+        coordination_type="space_chargeback",
+        allocation_basis="usable_sqft",
+        facility_space=sfa_space_floor_a,
+        shared_building_system=sfa_building_system_hvac_a,
+        lease_contract=lease_contract_a,
+        fixed_asset=fixed_asset_a,
+        charged_org_unit=org_unit_a,
+        occupant_party=vendor_party_a,
+        currency=currency_usd,
+        fiscal_period=integration_open_fiscal_period_a,
+        expense_gl_account=expense_account_a,
+        recovery_gl_account=accum_account_a,
+        period_start=today.replace(day=1),
+        period_end=today,
+        allocated_area_sqft=Decimal("6400.00"),
+        allocation_share_pct=Decimal("40.00"),
+        base_cost_amount=Decimal("5000.00"),
+        shared_cam_amount=Decimal("1000.00"),
+        utility_recovery_amount=Decimal("500.00"),
+        ti_improvement_cost=Decimal("400.00"),
+        ti_allowance_offset=Decimal("150.00"),
+        status="draft",
+    )
+    cb.full_clean()
+    cb.save()
+    return cb
+
+
+@pytest.fixture
+def sfa_chargeback_approved_a(
+    db,
+    tenant_a,
+    sfa_space_floor_a,
+    sfa_building_system_infra_a,
+    org_unit_a,
+    vendor_party_a,
+    currency_usd,
+    integration_open_fiscal_period_a,
+    expense_account_a,
+    accum_account_a,
+    admin_user,
+):
+    today = timezone.localdate()
+    cb = AssetSpaceChargeback(
+        tenant=tenant_a,
+        title="Approved Switchgear Recovery Chargeback",
+        coordination_type="cam_utility_recovery",
+        allocation_basis="usable_sqft",
+        facility_space=sfa_space_floor_a,
+        shared_building_system=sfa_building_system_infra_a,
+        charged_org_unit=org_unit_a,
+        occupant_party=vendor_party_a,
+        currency=currency_usd,
+        fiscal_period=integration_open_fiscal_period_a,
+        expense_gl_account=expense_account_a,
+        recovery_gl_account=accum_account_a,
+        period_start=today.replace(day=1),
+        period_end=today,
+        allocated_area_sqft=Decimal("6400.00"),
+        allocation_share_pct=Decimal("25.00"),
+        base_cost_amount=Decimal("2000.00"),
+        shared_cam_amount=Decimal("500.00"),
+        utility_recovery_amount=Decimal("250.00"),
+        ti_improvement_cost=Decimal("0.00"),
+        ti_allowance_offset=Decimal("0.00"),
+        status="approved",
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+    )
+    cb.full_clean()
+    cb.save()
+    return cb
+
+
+@pytest.fixture
+def sfa_chargeback_b(
+    db,
+    tenant_b,
+    sfa_space_b,
+    sfa_building_system_b,
+    org_unit_b,
+    vendor_party_b,
+    currency_usd,
+    integration_open_fiscal_period_b,
+    expense_account_b,
+    accum_account_b,
+):
+    today = timezone.localdate()
+    cb = AssetSpaceChargeback(
+        tenant=tenant_b,
+        title="Globex Hub Chargeback",
+        coordination_type="space_chargeback",
+        allocation_basis="usable_sqft",
+        facility_space=sfa_space_b,
+        shared_building_system=sfa_building_system_b,
+        charged_org_unit=org_unit_b,
+        occupant_party=vendor_party_b,
+        currency=currency_usd,
+        fiscal_period=integration_open_fiscal_period_b,
+        expense_gl_account=expense_account_b,
+        recovery_gl_account=accum_account_b,
+        period_start=today.replace(day=1),
+        period_end=today,
+        base_cost_amount=Decimal("3000.00"),
+        status="draft",
+    )
+    cb.full_clean()
+    cb.save()
+    return cb
