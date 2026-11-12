@@ -1,8 +1,12 @@
 """Shared validation helpers for Module 11.17 Space & Facility Asset Management models."""
 
 from decimal import Decimal
+import os
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.files.uploadedfile import UploadedFile
+
+from apps.core.forms._common import ALLOWED_DOC_EXTENSIONS, MAX_UPLOAD_BYTES
 
 
 def add_field_error(errors, field_name, message):
@@ -92,3 +96,32 @@ def validate_pct_range(value, errors, field_name, label, low=Decimal("0.00"), hi
     """Ensure a percentage/pin-coordinate value is within [low, high] when populated."""
     if value is not None and (value < low or value > high):
         add_field_error(errors, field_name, f"{label} must be between {low} and {high}.")
+
+
+def validate_safe_floor_plan_upload(uploaded_file):
+    """Validate uploaded floor plans against NavERP's allowed extension allowlist (no SVG) and 20 MB cap."""
+    if not uploaded_file:
+        return uploaded_file
+    raw_file = getattr(uploaded_file, "_file", None) if not isinstance(uploaded_file, UploadedFile) else uploaded_file
+    is_new_upload = (
+        isinstance(uploaded_file, UploadedFile)
+        or isinstance(raw_file, UploadedFile)
+        or not getattr(uploaded_file, "_committed", True)
+    )
+    if not is_new_upload:
+        return uploaded_file
+    target = raw_file if isinstance(raw_file, UploadedFile) else uploaded_file
+    filename = os.path.basename(str(getattr(target, "name", "") or getattr(uploaded_file, "name", "") or ""))
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_DOC_EXTENSIONS:
+        allowed_display = ", ".join(sorted(ALLOWED_DOC_EXTENSIONS))
+        raise ValidationError(
+            f"Unsupported file extension '{ext or '(none)'}'. Allowed formats: {allowed_display}."
+        )
+    file_size = getattr(target, "size", None)
+    if file_size is None:
+        file_size = getattr(uploaded_file, "size", 0) or 0
+    if file_size > MAX_UPLOAD_BYTES:
+        max_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise ValidationError(f"Uploaded file exceeds maximum allowed size of {max_mb} MB.")
+    return uploaded_file
