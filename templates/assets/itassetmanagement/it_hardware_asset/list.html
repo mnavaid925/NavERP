@@ -148,7 +148,7 @@
                     <th>Refresh / EOL</th>
                     <th>Sanitization</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="th-actions">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -204,7 +204,7 @@
                         {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <form method="post" action="{% url 'assets:it_hardware_asset_delete' hw.pk %}" class="inline" onsubmit="return confirm('Delete IT hardware asset {{ hw.number|escapejs }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-danger" title="Delete" aria-label="Delete {{ hw.number }}">
+                            <button type="submit" class="btn btn-icon danger text-danger" title="Delete" aria-label="Delete {{ hw.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
@@ -232,9 +232,7 @@
 
     {% if page_obj.has_other_pages %}
     <div class="pagination">
-        <div class="text-xs text-slate-500">
-            Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }}
-        </div>
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }}</span>
         <div class="flex items-center gap-2">
             {% if page_obj.has_previous %}
             <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&device_class={{ request.GET.device_class|urlencode }}&environment={{ request.GET.environment|urlencode }}&disk_encryption_status={{ request.GET.disk_encryption_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&eol_state={{ request.GET.eol_state|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
