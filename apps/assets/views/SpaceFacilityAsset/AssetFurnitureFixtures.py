@@ -88,7 +88,7 @@ def asset_furniture_fixture_list(request):
     )
     org_units = (
         assets_scope(OrgUnit.objects.all(), request)
-        .only("id", "code", "name")
+        .only("id", "name")
         .order_by("name")
     )
 
@@ -242,7 +242,7 @@ def asset_furniture_fixture_detail(request, pk):
 @login_required
 def asset_furniture_fixture_edit(request, pk):
     """Edit FF&E record when not retired."""
-    fixture = assets_object(AssetFurnitureFixture, pk, request)
+    fixture = assets_object(request, AssetFurnitureFixture, pk)
     if fixture.is_locked:
         messages.error(request, f"Retired FF&E item {fixture.number} cannot be edited.")
         return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
@@ -281,7 +281,7 @@ def asset_furniture_fixture_edit(request, pk):
 @require_POST
 def asset_furniture_fixture_delete(request, pk):
     """Delete an unlocked FF&E item."""
-    fixture = assets_object(AssetFurnitureFixture, pk, request)
+    fixture = assets_object(request, AssetFurnitureFixture, pk)
     if fixture.is_locked:
         messages.error(request, f"Retired FF&E item {fixture.number} cannot be deleted.")
         return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
