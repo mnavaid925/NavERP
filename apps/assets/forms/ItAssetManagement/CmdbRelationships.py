@@ -69,6 +69,22 @@ class CmdbRelationshipForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         scope_tenant_querysets(self, self._TENANT_FIELDS)
+        if self.tenant is not None:
+            self._share_ci_choices()
+
+    def _share_ci_choices(self):
+        """Evaluate each CI queryset once and share widget choices across source/target pairs."""
+        for suffix in ("hardware", "software", "cloud", "service", "asset"):
+            src_field = self.fields.get(f"source_{suffix}")
+            tgt_field = self.fields.get(f"target_{suffix}")
+            if src_field is None or tgt_field is None:
+                continue
+            rows = list(src_field.queryset)
+            empty_choice = [("", src_field.empty_label)] if src_field.empty_label is not None else []
+            option_choices = [(obj.pk, src_field.label_from_instance(obj)) for obj in rows]
+            shared_choices = empty_choice + option_choices
+            src_field.widget.choices = shared_choices
+            tgt_field.widget.choices = shared_choices
 
     def _normalize_side(self, cleaned, prefix, ci_type):
         expected_suffix = CmdbRelationship.CI_FIELD_BY_TYPE.get(ci_type)
