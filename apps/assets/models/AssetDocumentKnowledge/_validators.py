@@ -102,7 +102,11 @@ def validate_supersedes_chain(instance, errors, field_name="supersedes", max_dep
         next_id = getattr(current, f"{field_name}_id", None)
         if next_id is None:
             return
-        current = type(instance).objects.filter(pk=next_id).only("pk", f"{field_name}_id").first()
+        qs = type(instance).objects.filter(pk=next_id)
+        tenant_id = getattr(instance, "tenant_id", None)
+        if tenant_id is not None:
+            qs = qs.filter(tenant_id=tenant_id)
+        current = qs.only("pk", f"{field_name}_id").first()
         depth += 1
 
     if current is not None:
