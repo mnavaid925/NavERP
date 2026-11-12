@@ -101,7 +101,7 @@ def _filter_certification_queryset(request, base_qs):
 @login_required
 def asset_operator_certification_list(request):
     """Operator qualification, LOTO competency, and expiry tracking list view."""
-    base_qs = assets_scope(AssetOperatorCertification, request)
+    base_qs = assets_scope(AssetOperatorCertification.objects.all(), request)
     filtered_qs = _filter_certification_queryset(request, base_qs)
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -134,7 +134,7 @@ def asset_operator_certification_list(request):
 @login_required
 def asset_operator_certification_export_csv(request):
     """Export filtered tenant operator certifications as a hardened CSV download."""
-    base_qs = assets_scope(AssetOperatorCertification, request)
+    base_qs = assets_scope(AssetOperatorCertification.objects.all(), request)
     filtered_qs = _filter_certification_queryset(request, base_qs)
     headers = [
         "Cert #",
@@ -176,7 +176,10 @@ def asset_operator_certification_export_csv(request):
 def asset_operator_certification_detail(request, pk):
     """Operator certification detail view showing verification, SOP sign-off, and renewal state."""
     cert = assets_object(
-        AssetOperatorCertification.objects.select_related(
+        request,
+        AssetOperatorCertification,
+        pk,
+        select_related=(
             "org_unit",
             "operator_party",
             "operator_user",
@@ -190,8 +193,6 @@ def asset_operator_certification_detail(request, pk):
             "operating_procedure",
             "compliance_framework",
         ),
-        request,
-        pk,
     )
     is_admin = is_tenant_admin_user(request.user)
     context = {
@@ -248,7 +249,7 @@ def asset_operator_certification_create(request):
 @login_required
 def asset_operator_certification_edit(request, pk):
     """Edit an editable (non-revoked/non-expired) operator certification."""
-    cert = assets_object(AssetOperatorCertification, request, pk)
+    cert = assets_object(request, AssetOperatorCertification, pk)
     if cert.status not in AssetOperatorCertification.EDITABLE_STATUSES:
         messages.warning(
             request,
@@ -291,7 +292,7 @@ def asset_operator_certification_edit(request, pk):
 @tenant_admin_required
 def asset_operator_certification_delete(request, pk):
     """Delete a pending or non-revoked certification record."""
-    cert = assets_object(AssetOperatorCertification, request, pk)
+    cert = assets_object(request, AssetOperatorCertification, pk)
     if cert.status == "revoked":
         messages.error(
             request,
@@ -308,7 +309,7 @@ def asset_operator_certification_delete(request, pk):
 @login_required
 def asset_operator_certification_download(request, pk):
     """Download the uploaded certificate PDF/image safely as an attachment with nosniff."""
-    cert = assets_object(AssetOperatorCertification, request, pk)
+    cert = assets_object(request, AssetOperatorCertification, pk)
     return serve_protected_attachment(
         cert,
         file_attr="certificate_file",
@@ -323,7 +324,12 @@ def asset_operator_certification_verify_activate(request, pk):
     """Verify and activate a Pending certification based on its expiry date."""
     with transaction.atomic():
         cert = assets_object(
-            AssetOperatorCertification.objects.select_for_update(), request, pk
+            request,
+            AssetOperatorCertification,
+            pk,
+            queryset=AssetOperatorCertification.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if cert.status != "pending":
             messages.warning(
@@ -351,7 +357,12 @@ def asset_operator_certification_acknowledge_sop(request, pk):
     """Record operator or admin SOP read & comprehension acknowledgment."""
     with transaction.atomic():
         cert = assets_object(
-            AssetOperatorCertification.objects.select_for_update(), request, pk
+            request,
+            AssetOperatorCertification,
+            pk,
+            queryset=AssetOperatorCertification.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if cert.status == "revoked":
             messages.error(
@@ -392,7 +403,12 @@ def asset_operator_certification_renew(request, pk):
     today = timezone.localdate()
     with transaction.atomic():
         cert = assets_object(
-            AssetOperatorCertification.objects.select_for_update(), request, pk
+            request,
+            AssetOperatorCertification,
+            pk,
+            queryset=AssetOperatorCertification.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if cert.status not in ("active", "expiring_soon", "expired"):
             messages.warning(
@@ -429,7 +445,12 @@ def asset_operator_certification_revoke(request, pk):
     """Revoke an operator certification immediately for safety or compliance holds."""
     with transaction.atomic():
         cert = assets_object(
-            AssetOperatorCertification.objects.select_for_update(), request, pk
+            request,
+            AssetOperatorCertification,
+            pk,
+            queryset=AssetOperatorCertification.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if cert.status == "revoked":
             messages.info(request, f"Certification {cert.number} is already revoked.")
