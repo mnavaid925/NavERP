@@ -12,6 +12,16 @@ from apps.assets.models.AssetProcurement.AssetAcquisitionReceipts import AssetAc
 from apps.assets.models.AssetProcurement.AssetCapitalizations import AssetCapitalization
 from apps.assets.models.AssetProcurement.AssetRequisitions import AssetRequisition
 from apps.assets.models.AssetProcurement.AssetTags import AssetTag
+from apps.assets.models.AssetDocumentKnowledge.AssetDocuments import AssetDocument
+from apps.assets.models.AssetDocumentKnowledge.AssetKnowledgeArticles import (
+    AssetKnowledgeArticle,
+)
+from apps.assets.models.AssetDocumentKnowledge.AssetOperatingProcedures import (
+    AssetOperatingProcedure,
+)
+from apps.assets.models.AssetDocumentKnowledge.AssetOperatorCertifications import (
+    AssetOperatorCertification,
+)
 from apps.assets.models.IntegrationApiHub.AssetGisMappings import AssetGisMapping
 from apps.assets.models.IntegrationApiHub.AssetGlSyncBatches import AssetGlSyncBatch
 from apps.assets.models.IntegrationApiHub.AssetIntegrationConnectors import AssetIntegrationConnector
@@ -84,6 +94,23 @@ def overview(request):
         drifted=Count("id", filter=Q(drift_status__in=["location_drift", "attribute_drift"])),
     )
 
+    doc_agg = assets_scope(AssetDocument.objects.all(), request).aggregate(
+        total=Count("id"),
+        approved=Count("id", filter=Q(status="approved", is_current_revision=True)),
+    )
+    sop_agg = assets_scope(AssetOperatingProcedure.objects.all(), request).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+    )
+    cert_agg = assets_scope(AssetOperatorCertification.objects.all(), request).aggregate(
+        total=Count("id"),
+        expiring=Count("id", filter=Q(status__in=["expiring_soon", "expired"])),
+    )
+    kb_agg = assets_scope(AssetKnowledgeArticle.objects.all(), request).aggregate(
+        total=Count("id"),
+        published=Count("id", filter=Q(status="published")),
+    )
+
     kpis = {
         "total_requisitions": req_agg["total"],
         "pending_approval_reqs": req_agg["pending_approval"],
@@ -110,6 +137,14 @@ def overview(request):
         "posted_gl_batches": gl_batch_agg["posted"],
         "total_gis_mappings": gis_agg["total"],
         "drifted_gis_mappings": gis_agg["drifted"],
+        "total_documents": doc_agg["total"],
+        "approved_documents": doc_agg["approved"],
+        "total_procedures": sop_agg["total"],
+        "active_procedures": sop_agg["active"],
+        "total_certifications": cert_agg["total"],
+        "expiring_certifications": cert_agg["expiring"],
+        "total_kb_articles": kb_agg["total"],
+        "published_kb_articles": kb_agg["published"],
     }
 
     recent_requisitions = req_qs.select_related("currency", "proposed_vendor").order_by("-created_at")[:5]
