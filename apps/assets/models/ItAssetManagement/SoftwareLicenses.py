@@ -201,8 +201,10 @@ class SoftwareLicense(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "software_name"], name="idx_itsw_ten_name"),
             models.Index(fields=["tenant", "status"], name="idx_itsw_ten_stat"),
             models.Index(fields=["tenant", "software_category"], name="idx_itsw_ten_cat"),
+            models.Index(fields=["tenant", "license_type"], name="idx_itsw_ten_ltype"),
             models.Index(fields=["tenant", "renewal_date"], name="idx_itsw_ten_ren"),
             models.Index(fields=["tenant", "vendor_eol_date"], name="idx_itsw_ten_eol"),
         ]
