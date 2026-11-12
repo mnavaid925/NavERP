@@ -222,7 +222,13 @@ def asset_executive_scorecard_compute(request, pk):
     try:
         with transaction.atomic():
             scorecard.compute_from_live_portfolio(save=True)
-            write_audit_log(request.user, scorecard, "compute", tenant=request.tenant)
+            write_audit_log(
+                request.user,
+                scorecard,
+                "update",
+                changes={"action": "compute", "status": scorecard.status},
+                tenant=request.tenant,
+            )
         messages.success(
             request,
             f"Computed live portfolio KPIs and RAG status ({scorecard.get_rag_status_display()}) for '{scorecard.number}'.",
@@ -243,7 +249,13 @@ def asset_executive_scorecard_publish(request, pk):
     with transaction.atomic():
         scorecard.status = "published"
         scorecard.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, scorecard, "publish", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            scorecard,
+            "update",
+            changes={"action": "publish", "status": scorecard.status},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Scorecard '{scorecard.number}' published and snapshot locked.")
     return redirect("assets:asset_executive_scorecard_detail", pk=scorecard.pk)
 
@@ -266,7 +278,13 @@ def asset_executive_scorecard_approve(request, pk):
         scorecard.status = "board_approved"
         scorecard.approved_by = request.user
         scorecard.save(update_fields=["status", "approved_by", "updated_at"])
-        write_audit_log(request.user, scorecard, "approve", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            scorecard,
+            "update",
+            changes={"action": "approve", "status": scorecard.status},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Scorecard '{scorecard.number}' marked as Board Approved.")
     return redirect("assets:asset_executive_scorecard_detail", pk=scorecard.pk)
 
@@ -282,7 +300,13 @@ def asset_executive_scorecard_archive(request, pk):
     with transaction.atomic():
         scorecard.status = "archived"
         scorecard.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, scorecard, "archive", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            scorecard,
+            "update",
+            changes={"action": "archive", "status": scorecard.status},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Scorecard '{scorecard.number}' archived.")
     return redirect("assets:asset_executive_scorecard_detail", pk=scorecard.pk)
 
