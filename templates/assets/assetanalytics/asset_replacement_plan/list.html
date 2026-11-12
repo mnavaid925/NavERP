@@ -174,36 +174,36 @@
                 {% for p in plans %}
                 <tr>
                     <td>
-                        <a href="{% url 'assets:asset_replacement_plan_detail' p.pk %}" class="font-medium text-blue-600 hover:underline">
+                        <a href="{% url 'assets:asset_replacement_plan_detail' p.pk %}" class="font-medium text-blue-600 dark:text-blue-400 hover:underline">
                             {{ p.number }}
                         </a>
-                        <div class="text-xs text-slate-500">{{ p.title|truncatechars:42 }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ p.title|truncatechars:42 }}</div>
                     </td>
                     <td>
                         {% if p.operational_asset %}
                         <div class="text-sm font-medium">{{ p.operational_asset.name }}</div>
-                        <div class="text-xs text-slate-500 font-mono">{{ p.operational_asset.code }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ p.operational_asset.code }}</div>
                         {% elif p.fixed_asset %}
                         <div class="text-sm font-medium">{{ p.fixed_asset.name }}</div>
-                        <div class="text-xs text-slate-500 font-mono">{{ p.fixed_asset.number }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ p.fixed_asset.number }}</div>
                         {% elif p.asset_category %}
                         <div class="text-sm font-medium">{{ p.asset_category.name }}</div>
                         {% else %}
-                        <span class="text-slate-400">—</span>
+                        <span class="text-slate-400 dark:text-slate-500">—</span>
                         {% endif %}
                     </td>
                     <td>
                         <div class="font-medium">{{ p.planned_replacement_year }} {{ p.get_planned_quarter_display|slice:":2" }}</div>
-                        <div class="text-xs text-slate-500">RUL: {{ p.remaining_useful_life_months }} mo</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">RUL: {{ p.remaining_useful_life_months }} mo</div>
                     </td>
                     <td>
                         <span class="badge {{ p.priority_band_badge_class }}">{{ p.get_priority_band_display }}</span>
-                        <div class="text-xs text-slate-500">Score: {{ p.priority_score|floatformat:1 }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">Score: {{ p.priority_score|floatformat:1 }}</div>
                     </td>
                     <td class="text-right font-mono">{{ p.fci_ratio_pct|floatformat:1 }}%</td>
-                    <td class="text-right font-mono font-semibold text-slate-900">
+                    <td class="text-right font-mono font-semibold text-slate-900 dark:text-slate-100">
                         ${{ p.inflation_adjusted_cost|floatformat:"2g" }}
-                        <div class="text-xs font-normal text-slate-500">Base: ${{ p.estimated_replacement_cost|floatformat:"0g" }}</div>
+                        <div class="text-xs font-normal text-slate-500 dark:text-slate-400">Base: ${{ p.estimated_replacement_cost|floatformat:"0g" }}</div>
                     </td>
                     <td>
                         <span class="badge {{ p.funding_status_badge_class }}">{{ p.get_funding_status_display }}</span>
@@ -236,9 +236,9 @@
                 <tr>
                     <td colspan="9">
                         <div class="empty-state">
-                            <i data-lucide="calendar-range" class="w-12 h-12 text-slate-400 mb-3"></i>
-                            <h3 class="text-base font-semibold text-slate-800">No Asset Replacement Plans Found</h3>
-                            <p class="text-sm text-slate-500 mb-4">Plan capital replacements with risk-weighted priority scoring and multi-year inflation forecasting.</p>
+                            <i data-lucide="calendar-range" class="w-12 h-12 text-slate-400 dark:text-slate-500 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">No Asset Replacement Plans Found</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Plan capital replacements with risk-weighted priority scoring and multi-year inflation forecasting.</p>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_replacement_plan_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Replacement Plan
