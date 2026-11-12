@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load asset_analytics_tags %}
 
 {% block title %}Scenario Comparison Matrix — Asset Analytics & BI — NavERP{% endblock %}
 
@@ -102,31 +103,31 @@
                 <tr>
                     <td class="font-medium">Simulated CapEx Total</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono font-semibold">${{ s.simulated_capex_total|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono font-semibold">{% fmt_money s.simulated_capex_total s.currency %}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td class="font-medium">CapEx Variance vs. Baseline</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono">${{ s.capex_variance_amount|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono">{% fmt_money s.capex_variance_amount s.currency %}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td class="font-medium">Simulated Maint OpEx</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono">${{ s.simulated_opex_maintenance|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono">{% fmt_money s.simulated_opex_maintenance s.currency %}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td class="font-medium">OpEx Savings Amount</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">${{ s.opex_savings_amount|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money s.opex_savings_amount s.currency %}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td class="font-medium">Simulated Deferred Backlog</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono">${{ s.simulated_deferred_backlog|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono">{% fmt_money s.simulated_deferred_backlog s.currency %}</td>
                     {% endfor %}
                 </tr>
                 <tr>
@@ -144,13 +145,13 @@
                 <tr>
                     <td class="font-medium">Simulated Risk Exposure</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono">${{ s.simulated_risk_exposure|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono">{% fmt_money s.simulated_risk_exposure s.currency %}</td>
                     {% endfor %}
                 </tr>
                 <tr class="bg-blue-50 dark:bg-blue-950/50 font-semibold">
                     <td>Net Present Value (NPV)</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono text-blue-900 dark:text-blue-200">${{ s.net_present_value|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono text-blue-900 dark:text-blue-200">{% fmt_money s.net_present_value s.currency %}</td>
                     {% endfor %}
                 </tr>
                 <tr>
