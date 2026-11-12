@@ -203,10 +203,12 @@
                                 <i data-lucide="download"></i>
                             </a>
                             {% endif %}
+                            {% if can_manage %}
                             {% if item.status == "pending" or item.status == "active" or item.status == "expiring_soon" %}
                             <a href="{% url 'assets:asset_operator_certification_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
                                 <i data-lucide="pencil"></i>
                             </a>
+                            {% endif %}
                             {% endif %}
                             {% if item.status != "revoked" %}
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
