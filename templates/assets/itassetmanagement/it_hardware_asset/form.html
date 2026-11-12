@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ hardware.number }}{% else %}New IT Hardware Asset{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:it_hardware_asset_list' %}">IT Hardware Assets</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ hardware.number }}{% else %}New Hardware Asset{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and hardware %}
+        <a href="{% url 'assets:it_hardware_asset_detail' hardware.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Asset
+        </a>
+        {% else %}
+        <a href="{% url 'assets:it_hardware_asset_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Hardware Register
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Hardware Identity &amp; Specifications</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.hostname.id_for_label }}">Hostname <span class="req">*</span></label>
+                    {{ form.hostname }}
+                    {% if form.hostname.errors %}<div class="form-error">{{ form.hostname.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.fqdn.id_for_label }}">FQDN</label>
+                    {{ form.fqdn }}
+                    {% if form.fqdn.errors %}<div class="form-error">{{ form.fqdn.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.device_class.id_for_label }}">Device Class <span class="req">*</span></label>
+                    {{ form.device_class }}
+                    {% if form.device_class.errors %}<div class="form-error">{{ form.device_class.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.environment.id_for_label }}">Environment <span class="req">*</span></label>
+                    {{ form.environment }}
+                    {% if form.environment.errors %}<div class="form-error">{{ form.environment.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.criticality.id_for_label }}">Criticality <span class="req">*</span></label>
+                    {{ form.criticality }}
+                    {% if form.criticality.errors %}<div class="form-error">{{ form.criticality.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.serial_number.id_for_label }}">Serial Number</label>
+                    {{ form.serial_number }}
+                    {% if form.serial_number.errors %}<div class="form-error">{{ form.serial_number.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_tag_code.id_for_label }}">IT Asset Tag Code</label>
+                    {{ form.asset_tag_code }}
+                    {% if form.asset_tag_code.errors %}<div class="form-error">{{ form.asset_tag_code.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.rack_unit_ref.id_for_label }}">Rack / Unit Reference</label>
+                    {{ form.rack_unit_ref }}
+                    {% if form.rack_unit_ref.errors %}<div class="form-error">{{ form.rack_unit_ref.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.manufacturer.id_for_label }}">Manufacturer</label>
+                    {{ form.manufacturer }}
+                    {% if form.manufacturer.errors %}<div class="form-error">{{ form.manufacturer.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.model_name.id_for_label }}">Model Name</label>
+                    {{ form.model_name }}
+                    {% if form.model_name.errors %}<div class="form-error">{{ form.model_name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.bios_firmware_version.id_for_label }}">BIOS / Firmware Version</label>
+                    {{ form.bios_firmware_version }}
+                    {% if form.bios_firmware_version.errors %}<div class="form-error">{{ form.bios_firmware_version.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operating_system.id_for_label }}">Operating System</label>
+                    {{ form.operating_system }}
+                    {% if form.operating_system.errors %}<div class="form-error">{{ form.operating_system.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.os_version.id_for_label }}">OS Version</label>
+                    {{ form.os_version }}
+                    {% if form.os_version.errors %}<div class="form-error">{{ form.os_version.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.cpu_spec.id_for_label }}">CPU Spec</label>
+                    {{ form.cpu_spec }}
+                    {% if form.cpu_spec.errors %}<div class="form-error">{{ form.cpu_spec.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ram_gb.id_for_label }}">RAM (GB)</label>
+                    {{ form.ram_gb }}
+                    {% if form.ram_gb.errors %}<div class="form-error">{{ form.ram_gb.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.storage_gb.id_for_label }}">Storage (GB)</label>
+                    {{ form.storage_gb }}
+                    {% if form.storage_gb.errors %}<div class="form-error">{{ form.storage_gb.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ip_address.id_for_label }}">IP Address</label>
+                    {{ form.ip_address }}
+                    {% if form.ip_address.errors %}<div class="form-error">{{ form.ip_address.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.mac_address.id_for_label }}">MAC Address</label>
+                    {{ form.mac_address }}
+                    {% if form.mac_address.errors %}<div class="form-error">{{ form.mac_address.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">MDM &amp; Endpoint Security</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="form-group flex items-center gap-2 pt-6">
+                    {{ form.mdm_enrolled }}
+                    <label class="form-label !mb-0" for="{{ form.mdm_enrolled.id_for_label }}">MDM Enrolled</label>
+                    {% if form.mdm_enrolled.errors %}<div class="form-error">{{ form.mdm_enrolled.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.mdm_platform.id_for_label }}">MDM Platform</label>
+                    {{ form.mdm_platform }}
+                    {% if form.mdm_platform.errors %}<div class="form-error">{{ form.mdm_platform.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.mdm_device_id.id_for_label }}">MDM Device ID</label>
+                    {{ form.mdm_device_id }}
+                    {% if form.mdm_device_id.errors %}<div class="form-error">{{ form.mdm_device_id.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.disk_encryption_status.id_for_label }}">Disk Encryption</label>
+                    {{ form.disk_encryption_status }}
+                    {% if form.disk_encryption_status.errors %}<div class="form-error">{{ form.disk_encryption_status.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">EOL, Refresh Cycle &amp; NIST SP 800-88 Sanitization</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.commissioned_date.id_for_label }}">Commissioned Date</label>
+                    {{ form.commissioned_date }}
+                    {% if form.commissioned_date.errors %}<div class="form-error">{{ form.commissioned_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.assigned_date.id_for_label }}">Assigned Date</label>
+                    {{ form.assigned_date }}
+                    {% if form.assigned_date.errors %}<div class="form-error">{{ form.assigned_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vendor_eos_date.id_for_label }}">Vendor EOS Date</label>
+                    {{ form.vendor_eos_date }}
+                    {% if form.vendor_eos_date.errors %}<div class="form-error">{{ form.vendor_eos_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vendor_eol_date.id_for_label }}">Vendor EOL Date</label>
+                    {{ form.vendor_eol_date }}
+                    {% if form.vendor_eol_date.errors %}<div class="form-error">{{ form.vendor_eol_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.refresh_cycle_months.id_for_label }}">Refresh Cycle (Months)</label>
+                    {{ form.refresh_cycle_months }}
+                    {% if form.refresh_cycle_months.errors %}<div class="form-error">{{ form.refresh_cycle_months.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.refresh_due_date.id_for_label }}">Refresh Due Date</label>
+                    {{ form.refresh_due_date }}
+                    {% if form.refresh_due_date.errors %}<div class="form-error">{{ form.refresh_due_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.estimated_refresh_cost.id_for_label }}">Est. Refresh Cost</label>
+                    {{ form.estimated_refresh_cost }}
+                    {% if form.estimated_refresh_cost.errors %}<div class="form-error">{{ form.estimated_refresh_cost.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group flex items-center gap-2 pt-6">
+                    {{ form.sanitization_required }}
+                    <label class="form-label !mb-0" for="{{ form.sanitization_required.id_for_label }}">Sanitization Required</label>
+                    {% if form.sanitization_required.errors %}<div class="form-error">{{ form.sanitization_required.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sanitization_method.id_for_label }}">NIST Wipe Method</label>
+                    {{ form.sanitization_method }}
+                    {% if form.sanitization_method.errors %}<div class="form-error">{{ form.sanitization_method.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sanitization_status.id_for_label }}">Sanitization Status</label>
+                    {{ form.sanitization_status }}
+                    {% if form.sanitization_status.errors %}<div class="form-error">{{ form.sanitization_status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sanitization_date.id_for_label }}">Sanitization Date</label>
+                    {{ form.sanitization_date }}
+                    {% if form.sanitization_date.errors %}<div class="form-error">{{ form.sanitization_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.sanitization_certificate_ref.id_for_label }}">Sanitization Certificate Ref</label>
+                    {{ form.sanitization_certificate_ref }}
+                    {% if form.sanitization_certificate_ref.errors %}<div class="form-error">{{ form.sanitization_certificate_ref.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Custodianship &amp; Spine Links</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.employee_profile.id_for_label }}">Assigned Employee</label>
+                    {{ form.employee_profile }}
+                    {% if form.employee_profile.errors %}<div class="form-error">{{ form.employee_profile.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.custodian_party.id_for_label }}">Custodian Party</label>
+                    {{ form.custodian_party }}
+                    {% if form.custodian_party.errors %}<div class="form-error">{{ form.custodian_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.location.id_for_label }}">Location</label>
+                    {{ form.location }}
+                    {% if form.location.errors %}<div class="form-error">{{ form.location.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vendor_party.id_for_label }}">Vendor / OEM</label>
+                    {{ form.vendor_party }}
+                    {% if form.vendor_party.errors %}<div class="form-error">{{ form.vendor_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">IT Owner</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">SCM Operational Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset (GL)</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_category.id_for_label }}">Asset Category</label>
+                    {{ form.asset_category }}
+                    {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_model.id_for_label }}">Asset Model</label>
+                    {{ form.asset_model }}
+                    {% if form.asset_model.errors %}<div class="form-error">{{ form.asset_model.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.warranty.id_for_label }}">Warranty</label>
+                    {{ form.warranty }}
+                    {% if form.warranty.errors %}<div class="form-error">{{ form.warranty.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.requisition.id_for_label }}">Asset Requisition</label>
+                    {{ form.requisition }}
+                    {% if form.requisition.errors %}<div class="form-error">{{ form.requisition.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.replacement_plan.id_for_label }}">Replacement Plan</label>
+                    {{ form.replacement_plan }}
+                    {% if form.replacement_plan.errors %}<div class="form-error">{{ form.replacement_plan.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.disposal_request.id_for_label }}">Disposal Request</label>
+                    {{ form.disposal_request }}
+                    {% if form.disposal_request.errors %}<div class="form-error">{{ form.disposal_request.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scrap_salvage.id_for_label }}">Scrap &amp; Salvage</label>
+                    {{ form.scrap_salvage }}
+                    {% if form.scrap_salvage.errors %}<div class="form-error">{{ form.scrap_salvage.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and hardware %}
+                <a href="{% url 'assets:it_hardware_asset_detail' hardware.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:it_hardware_asset_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Hardware Asset{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
