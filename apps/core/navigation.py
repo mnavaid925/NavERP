@@ -3368,6 +3368,15 @@ LIVE_LINKS = {
         "Infrastructure Asset Management": "assets:asset_infrastructure_board",
         "Tenant & Occupancy Coordination": "assets:asset_space_chargeback_list",
     },
+    "11.18": {
+        "Hardware Lifecycle Management": "assets:it_hardware_asset_list",
+        "Software License Management": "assets:software_license_list",
+        "Cloud Asset & Subscription Tracking": "assets:cloud_asset_subscription_list",
+        "Configuration Management Database (CMDB)": "assets:cmdb_relationship_list",
+        "End-of-Life & Refresh Cycles": "assets:it_refresh_board",
+        # Extra live leaf
+        "CMDB Impact Analysis": "assets:cmdb_impact_analysis",
+    },
 
 
 
