@@ -4150,9 +4150,9 @@ class Command(BaseCommand):
         user = User.objects.filter(tenant=tenant).order_by("pk").first()
         org_unit = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
         party = Party.objects.filter(tenant=tenant).order_by("pk").first()
-        assets_qs = Asset.objects.filter(tenant=tenant).order_by("pk")
-        op1 = assets_qs.first()
-        op2 = assets_qs[1] if assets_qs.count() > 1 else op1
+        asset_pair = list(Asset.objects.filter(tenant=tenant).order_by("pk")[:2])
+        op1 = asset_pair[0] if asset_pair else None
+        op2 = asset_pair[1] if len(asset_pair) > 1 else op1
         fixed_asset = FixedAsset.objects.filter(tenant=tenant).order_by("pk").first()
         category = AssetCategory.objects.filter(tenant=tenant).order_by("pk").first()
         model_obj = AssetModel.objects.filter(tenant=tenant).order_by("pk").first()
