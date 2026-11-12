@@ -138,15 +138,15 @@
                 </div>
                 <div class="detail-item">
                     <dt>Scope Org Unit</dt>
-                    <dd>{{ scenario.scope_org_unit.name|default:"Enterprise-Wide" }}</dd>
+                    <dd>{% if scenario.scope_org_unit %}{{ scenario.scope_org_unit.name }}{% else %}Enterprise-Wide{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Scope Category</dt>
-                    <dd>{{ scenario.scope_category.name|default:"All Categories" }}</dd>
+                    <dd>{% if scenario.scope_category %}{{ scenario.scope_category.name }}{% else %}All Categories{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Currency</dt>
-                    <dd>{{ scenario.currency.code|default:"Default" }}</dd>
+                    <dd>{% if scenario.currency %}{{ scenario.currency.code }}{% else %}Default{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Annual CapEx Limit</dt>
@@ -170,7 +170,7 @@
                 </div>
                 <div class="detail-item">
                     <dt>Owner</dt>
-                    <dd>{{ scenario.owner.get_full_name|default:scenario.owner|default:"—" }}</dd>
+                    <dd>{% if scenario.owner %}{{ scenario.owner.get_full_name|default:scenario.owner.username }}{% else %}—{% endif %}</dd>
                 </div>
             </dl>
         </div>
