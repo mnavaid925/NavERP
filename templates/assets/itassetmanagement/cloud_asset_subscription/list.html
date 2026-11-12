@@ -196,17 +196,20 @@
             </tbody>
         </table>
     </div>
-    {% if paginator.num_pages > 1 %}
-    <div class="card-footer flex items-center justify-between text-sm text-slate-500">
-        <div>Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</div>
-        <div class="flex items-center gap-2">
-            {% if page_obj.has_previous %}
-            <a class="btn btn-outline btn-sm" href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&asset_kind={{ request.GET.asset_kind|urlencode }}&provider={{ request.GET.provider|urlencode }}&approval_status={{ request.GET.approval_status|urlencode }}&sso_status={{ request.GET.sso_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}">Previous</a>
-            {% endif %}
-            {% if page_obj.has_next %}
-            <a class="btn btn-outline btn-sm" href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&asset_kind={{ request.GET.asset_kind|urlencode }}&provider={{ request.GET.provider|urlencode }}&approval_status={{ request.GET.approval_status|urlencode }}&sso_status={{ request.GET.sso_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}">Next</a>
-            {% endif %}
-        </div>
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }}</span>
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&asset_kind={{ request.GET.asset_kind|urlencode }}&provider={{ request.GET.provider|urlencode }}&approval_status={{ request.GET.approval_status|urlencode }}&sso_status={{ request.GET.sso_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}">Previous</a>
+        {% else %}
+        <span class="page disabled">Previous</span>
+        {% endif %}
+        <span class="page active">{{ page_obj.number }} / {{ paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&asset_kind={{ request.GET.asset_kind|urlencode }}&provider={{ request.GET.provider|urlencode }}&approval_status={{ request.GET.approval_status|urlencode }}&sso_status={{ request.GET.sso_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
     </div>
     {% endif %}
 </div>
