@@ -97,7 +97,7 @@ def asset_space_chargeback_list(request):
     )
     org_units = (
         assets_scope(OrgUnit.objects.all(), request)
-        .only("id", "code", "name")
+        .only("id", "name")
         .order_by("name")
     )
 
@@ -275,7 +275,7 @@ def asset_space_chargeback_detail(request, pk):
 @login_required
 def asset_space_chargeback_edit(request, pk):
     """Edit a draft or disputed space chargeback."""
-    chargeback = assets_object(AssetSpaceChargeback, pk, request)
+    chargeback = assets_object(request, AssetSpaceChargeback, pk)
     if not chargeback.can_edit or chargeback.journal_entry_id is not None:
         messages.error(
             request,
@@ -320,7 +320,7 @@ def asset_space_chargeback_edit(request, pk):
 @require_POST
 def asset_space_chargeback_delete(request, pk):
     """Delete an unposted draft or disputed space chargeback."""
-    chargeback = assets_object(AssetSpaceChargeback, pk, request)
+    chargeback = assets_object(request, AssetSpaceChargeback, pk)
     if not chargeback.can_edit or chargeback.journal_entry_id is not None:
         messages.error(
             request,
