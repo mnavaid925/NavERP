@@ -189,7 +189,7 @@ def asset_knowledge_article_detail(request, pk):
             "failure_mode",
             "maintenance_request",
             "maintenance_log",
-            "incident_report",
+            "incident_report__asset",
             "compliance_incident",
             "related_document",
             "recommended_procedure",
