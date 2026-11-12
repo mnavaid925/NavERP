@@ -252,6 +252,9 @@ def asset_operator_certification_detail(request, pk):
 @login_required
 def asset_operator_certification_create(request):
     """Register a new operator training/competency certification in Pending Verification."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating a certification.")
+        return redirect("assets:asset_operator_certification_list")
     if request.method == "POST":
         form = AssetOperatorCertificationForm(
             request.POST, request.FILES, tenant=request.tenant
@@ -505,6 +508,9 @@ def asset_operator_certification_revoke(request, pk):
 @tenant_admin_required
 def asset_operator_certification_refresh_alerts(request):
     """Recompute active / expiring_soon / expired statuses across all tenant certifications."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before refreshing certification alerts.")
+        return redirect("assets:asset_operator_certification_list")
     today = timezone.localdate()
     now = timezone.now()
     changed_certs = []
