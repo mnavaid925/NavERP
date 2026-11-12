@@ -90,6 +90,13 @@ from apps.assets.models.AssetAnalytics import (
     AssetPortfolioScenario,
     AssetReplacementPlan,
 )
+from apps.assets.models.AssetDocumentKnowledge import (
+    AssetDocument,
+    AssetKnowledgeArticle,
+    AssetOperatingProcedure,
+    AssetOperatorCertification,
+    is_operator_certified,
+)
 
 __all__ = [
     "TenantOwned",
@@ -154,4 +161,9 @@ __all__ = [
     "AssetReplacementPlan",
     "AssetPortfolioScenario",
     "AssetExecutiveScorecard",
+    "AssetDocument",
+    "AssetOperatingProcedure",
+    "AssetOperatorCertification",
+    "AssetKnowledgeArticle",
+    "is_operator_certified",
 ]
