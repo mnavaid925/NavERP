@@ -94,6 +94,7 @@ class AssetKnowledgeArticleForm(TenantUniqueMixin, TenantModelForm):
                     "placeholder": "e.g. Chiller Compressor Bearing Spalling — 5-Why & Lubrication Fix",
                 }
             ),
+            "attachment": forms.FileInput(attrs={"class": "form-input"}),
             "symptom_problem": forms.Textarea(
                 attrs={
                     "rows": 3,
