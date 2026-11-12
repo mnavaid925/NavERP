@@ -29,12 +29,12 @@
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div class="form-group md:col-span-2">
-                    <label class="form-label" for="{{ form.title.id_for_label }}">Analysis Title *</label>
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Analysis Title <span class="req">*</span></label>
                     {{ form.title }}
                     {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.analysis_date.id_for_label }}">Analysis Date *</label>
+                    <label class="form-label" for="{{ form.analysis_date.id_for_label }}">Analysis Date <span class="req">*</span></label>
                     {{ form.analysis_date }}
                     {% if form.analysis_date.errors %}<div class="form-error">{{ form.analysis_date.errors }}</div>{% endif %}
                 </div>
@@ -72,7 +72,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.lifecycle_stage.id_for_label }}">Lifecycle Stage *</label>
+                    <label class="form-label" for="{{ form.lifecycle_stage.id_for_label }}">Lifecycle Stage <span class="req">*</span></label>
                     {{ form.lifecycle_stage }}
                     {% if form.lifecycle_stage.errors %}<div class="form-error">{{ form.lifecycle_stage.errors }}</div>{% endif %}
                 </div>
@@ -83,12 +83,12 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.analysis_horizon_years.id_for_label }}">Horizon (Years) *</label>
+                    <label class="form-label" for="{{ form.analysis_horizon_years.id_for_label }}">Horizon (Years) <span class="req">*</span></label>
                     {{ form.analysis_horizon_years }}
                     {% if form.analysis_horizon_years.errors %}<div class="form-error">{{ form.analysis_horizon_years.errors }}</div>{% endif %}
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.discount_rate_pct.id_for_label }}">Discount Rate (%) *</label>
+                    <label class="form-label" for="{{ form.discount_rate_pct.id_for_label }}">Discount Rate (%) <span class="req">*</span></label>
                     {{ form.discount_rate_pct }}
                     {% if form.discount_rate_pct.errors %}<div class="form-error">{{ form.discount_rate_pct.errors }}</div>{% endif %}
                 </div>
