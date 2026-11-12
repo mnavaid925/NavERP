@@ -17,6 +17,9 @@ from apps.assets.models.AssetClassification.AssetModels import AssetModel
 from apps.assets.models.AssetCompliance.AssetComplianceIncidents import (
     AssetComplianceIncident,
 )
+from apps.assets.models.AssetDocumentKnowledge._validators import (
+    readable_asset_document_q,
+)
 from apps.assets.models.AssetDocumentKnowledge.AssetDocuments import AssetDocument
 from apps.assets.models.AssetDocumentKnowledge.AssetKnowledgeArticles import (
     AssetKnowledgeArticle,
@@ -138,9 +141,14 @@ class AssetKnowledgeArticleForm(TenantUniqueMixin, TenantModelForm):
             ),
         }
 
-    def __init__(self, *args, tenant=None, **kwargs):
+    def __init__(self, *args, tenant=None, user=None, **kwargs):
+        self.user = user
         super().__init__(*args, tenant=tenant, **kwargs)
         scope_tenant_querysets(self, self._TENANT_FIELDS)
+        if "related_document" in self.fields and self.tenant is not None:
+            self.fields["related_document"].queryset = self.fields[
+                "related_document"
+            ].queryset.filter(readable_asset_document_q(self.user))
         if self.tenant is not None and "incident_report" in self.fields:
             self.fields["incident_report"].queryset = self.fields[
                 "incident_report"
