@@ -46,6 +46,16 @@ class AssetReplacementPlanForm(TenantUniqueMixin, TenantModelForm):
         "planner": User,
     }
 
+    _SELECT_RELATED = {
+        "fixed_asset": ("location", "custodian"),
+        "operational_asset": ("org_unit", "location", "fixed_asset"),
+        "asset_model": ("category", "manufacturer"),
+        "condition_assessment": ("operational_asset", "fixed_asset", "asset_category"),
+        "lifecycle_analysis": ("operational_asset", "fixed_asset", "asset_category"),
+        "capital_budget": ("fiscal_period",),
+        "linked_requisition": ("currency", "target_org_unit"),
+    }
+
     _MONETARY_FIELDS = (
         "current_replacement_value",
         "deferred_maintenance_cost",
@@ -129,6 +139,7 @@ class AssetReplacementPlanForm(TenantUniqueMixin, TenantModelForm):
             self,
             self._TENANT_FIELDS,
             global_querysets={"currency": Currency.objects.filter(is_active=True)},
+            select_related_map=self._SELECT_RELATED,
         )
 
     def clean(self):
