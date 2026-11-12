@@ -110,6 +110,7 @@
                 </select>
             </div>
             <div class="flex items-center gap-2">
+                <label for="asop-filter-loto" class="sr-only">LOTO Filter</label>
                 <select id="asop-filter-loto" name="loto_only" class="form-select" aria-label="LOTO Filter">
                     <option value="">All LOTO</option>
                     <option value="1" {% if request.GET.loto_only == "1" %}selected{% endif %}>LOTO Only</option>
@@ -139,7 +140,7 @@
                     <th>Asset / Scope</th>
                     <th>Next Review</th>
                     <th>Status</th>
-                    <th class="text-end">Actions</th>
+                    <th class="th-actions !text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -187,7 +188,7 @@
                         <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
                     </td>
                     <td class="text-end whitespace-nowrap">
-                        <div class="flex items-center justify-end gap-1">
+                        <div class="table-actions">
                             <a href="{% url 'assets:asset_operating_procedure_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
                                 <i data-lucide="eye"></i>
                             </a>
