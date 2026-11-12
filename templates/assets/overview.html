@@ -235,29 +235,29 @@
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
     <a href="{% url 'assets:asset_document_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-s-4 border-s-blue-500">
         <div class="flex items-center justify-between">
-            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-blue-600">Document Repository</span>
-            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-blue-600 rtl:rotate-180"></i>
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400">Document Repository</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-blue-600 dark:group-hover:text-blue-400 rtl:rotate-180"></i>
         </div>
         <p class="text-xs text-muted mt-1">{{ kpis.approved_documents }}/{{ kpis.total_documents }} approved &middot; drawings &amp; certs</p>
     </a>
     <a href="{% url 'assets:asset_operating_procedure_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-s-4 border-s-emerald-500">
         <div class="flex items-center justify-between">
-            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600">SOPs &amp; LOTO Checklists</span>
-            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-emerald-600 rtl:rotate-180"></i>
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">SOPs &amp; LOTO Checklists</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-emerald-600 dark:group-hover:text-emerald-400 rtl:rotate-180"></i>
         </div>
         <p class="text-xs text-muted mt-1">{{ kpis.active_procedures }}/{{ kpis.total_procedures }} active &middot; isolation matrices</p>
     </a>
     <a href="{% url 'assets:asset_operator_certification_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-s-4 border-s-amber-500">
         <div class="flex items-center justify-between">
-            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-amber-600">Operator Certifications</span>
-            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-amber-600 rtl:rotate-180"></i>
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400">Operator Certifications</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-amber-600 dark:group-hover:text-amber-400 rtl:rotate-180"></i>
         </div>
         <p class="text-xs text-muted mt-1">{{ kpis.expiring_certifications }}/{{ kpis.total_certifications }} renewal alerts &middot; qualifications</p>
     </a>
     <a href="{% url 'assets:asset_knowledge_article_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-s-4 border-s-purple-500">
         <div class="flex items-center justify-between">
-            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-purple-600">Lessons Learned &amp; RCA</span>
-            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-purple-600 rtl:rotate-180"></i>
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-purple-600 dark:group-hover:text-purple-400">Lessons Learned &amp; RCA</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-muted group-hover:text-purple-600 dark:group-hover:text-purple-400 rtl:rotate-180"></i>
         </div>
         <p class="text-xs text-muted mt-1">{{ kpis.published_kb_articles }}/{{ kpis.total_kb_articles }} published &middot; 5-Why &amp; Fishbone</p>
     </a>
