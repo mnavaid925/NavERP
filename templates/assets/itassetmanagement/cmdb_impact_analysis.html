@@ -103,11 +103,11 @@
                     <tr>
                         <td class="font-mono text-xs">+{{ node.hop }}</td>
                         <td class="text-sm font-medium">
-                            <a href="{% url 'assets:cmdb_impact_analysis' %}?ci={{ node.ci_token|urlencode }}&environment={{ selected_environment|urlencode }}" class="text-indigo-600 hover:underline">{{ node.ci_label }}</a>
+                            <a href="{% url 'assets:cmdb_impact_analysis' %}?ci={{ node.ci_token|urlencode }}&environment={{ selected_environment|urlencode }}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ node.ci_label }}</a>
                         </td>
                         <td class="text-sm">{{ node.relationship_label }}{% if node.is_spof %} <span class="badge badge-red">SPOF</span>{% endif %}</td>
                         <td><span class="badge {{ node.criticality_badge_class }}">{{ node.criticality_label }}</span></td>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' node.edge.pk %}" class="text-indigo-600 hover:underline">{{ node.edge.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' node.edge.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ node.edge.number }}</a></td>
                     </tr>
                     {% empty %}
                     <tr><td colspan="5" class="text-center py-6 text-slate-400">No upstream dependencies found for this CI.</td></tr>
@@ -127,11 +127,11 @@
                     <tr>
                         <td class="font-mono text-xs">+{{ node.hop }}</td>
                         <td class="text-sm font-medium">
-                            <a href="{% url 'assets:cmdb_impact_analysis' %}?ci={{ node.ci_token|urlencode }}&environment={{ selected_environment|urlencode }}" class="text-indigo-600 hover:underline">{{ node.ci_label }}</a>
+                            <a href="{% url 'assets:cmdb_impact_analysis' %}?ci={{ node.ci_token|urlencode }}&environment={{ selected_environment|urlencode }}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ node.ci_label }}</a>
                         </td>
                         <td class="text-sm">{{ node.impact_label }}{% if node.is_spof %} <span class="badge badge-red">SPOF</span>{% endif %}</td>
                         <td><span class="badge {{ node.criticality_badge_class }}">{{ node.criticality_label }}</span></td>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' node.edge.pk %}" class="text-indigo-600 hover:underline">{{ node.edge.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' node.edge.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ node.edge.number }}</a></td>
                     </tr>
                     {% empty %}
                     <tr><td colspan="5" class="text-center py-6 text-slate-400">No downstream dependents affected by this CI.</td></tr>
@@ -151,7 +151,7 @@
             <tbody>
                 {% for edge in spof_edges %}
                 <tr>
-                    <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ edge.number }}</a></td>
+                    <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">{{ edge.number }}</a></td>
                     <td class="text-sm">{{ edge.source_label }}</td>
                     <td class="text-sm">{{ edge.get_relationship_type_display }}</td>
                     <td class="text-sm font-medium">{{ edge.target_label }}</td>
