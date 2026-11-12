@@ -118,7 +118,7 @@
         <div class="stat-icon blue"><i data-lucide="layers"></i></div>
         <div class="stat-body">
             <div class="stat-label">Document Class</div>
-            <div class="stat-value text-base">{{ document.get_document_class_display }}</div>
+            <div class="stat-value !text-base">{{ document.get_document_class_display }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -132,7 +132,7 @@
         <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
         <div class="stat-body">
             <div class="stat-label">Validity / Expiry</div>
-            <div class="stat-value text-base">
+            <div class="stat-value !text-base">
                 {% if document.expiry_date %}{{ document.expiry_date|date:"Y-m-d" }}{% else %}No Expiry{% endif %}
             </div>
         </div>
@@ -141,7 +141,7 @@
         <div class="stat-icon purple"><i data-lucide="shield-check"></i></div>
         <div class="stat-body">
             <div class="stat-label">File Integrity (SHA-256)</div>
-            <div class="stat-value text-sm font-mono">{{ document.short_checksum|default:"No File" }}</div>
+            <div class="stat-value !text-sm font-mono">{{ document.short_checksum|default:"No File" }}</div>
         </div>
     </div>
 </div>
