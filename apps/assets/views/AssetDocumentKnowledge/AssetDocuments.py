@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -102,22 +102,34 @@ def _build_document_list_context(request, base_qs, filtered_qs):
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
+    kpis = base_qs.aggregate(
+        total_count=Count("id"),
+        approved_count=Count(
+            "id", filter=Q(status="approved", is_current_revision=True)
+        ),
+        in_review_count=Count("id", filter=Q(status="in_review")),
+        expiring_soon_count=Count(
+            "id",
+            filter=Q(
+                expiry_date__gte=today,
+                expiry_date__lte=today + timedelta(days=30),
+            ),
+        ),
+        checked_out_count=Count("id", filter=Q(checked_out_by__isnull=False)),
+        draft_count=Count("id", filter=Q(status="draft")),
+    )
+
     return {
         "documents": page_obj,
         "paginator": paginator,
         "page_obj": page_obj,
         "is_paginated": page_obj.has_other_pages(),
-        "total_count": base_qs.count(),
-        "approved_count": base_qs.filter(
-            status="approved", is_current_revision=True
-        ).count(),
-        "in_review_count": base_qs.filter(status="in_review").count(),
-        "expiring_soon_count": base_qs.filter(
-            expiry_date__gte=today,
-            expiry_date__lte=today + timedelta(days=30),
-        ).count(),
-        "checked_out_count": base_qs.filter(checked_out_by__isnull=False).count(),
-        "draft_count": base_qs.filter(status="draft").count(),
+        "total_count": kpis["total_count"] or 0,
+        "approved_count": kpis["approved_count"] or 0,
+        "in_review_count": kpis["in_review_count"] or 0,
+        "expiring_soon_count": kpis["expiring_soon_count"] or 0,
+        "checked_out_count": kpis["checked_out_count"] or 0,
+        "draft_count": kpis["draft_count"] or 0,
         "class_choices": AssetDocument.DOCUMENT_CLASS_CHOICES,
         "classification_choices": AssetDocument.ACCESS_CLASSIFICATION_CHOICES,
         "change_type_choices": AssetDocument.CHANGE_TYPE_CHOICES,
