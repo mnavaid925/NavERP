@@ -2,6 +2,7 @@
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q, Sum
@@ -20,6 +21,7 @@ from apps.assets.views.ItAssetManagement._helpers import (
     apply_choice_filter,
     apply_fk_filter,
     csv_export_response,
+    is_tenant_admin_user,
 )
 from apps.core.decorators import tenant_admin_required
 from apps.core.models.OrgUnit import OrgUnit
@@ -229,6 +231,8 @@ def software_license_edit(request, pk):
             f"Software License {license_obj.number} is retired and cannot be edited.",
         )
         return redirect("assets:software_license_detail", pk=license_obj.pk)
+    if license_obj.status == "audit_hold" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while license is on Audit Hold.")
 
     if request.method == "POST":
         form = SoftwareLicenseForm(request.POST, instance=license_obj, tenant=request.tenant)
@@ -283,8 +287,10 @@ def software_license_sync_compliance(request, pk):
     if license_obj.is_locked:
         messages.warning(request, f"Software License {license_obj.number} is retired.")
         return redirect("assets:software_license_detail", pk=license_obj.pk)
+    if license_obj.status == "audit_hold" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while license is on Audit Hold.")
     with transaction.atomic():
-        if license_obj.status == "audit_hold":
+        if license_obj.status == "audit_hold" and is_tenant_admin_user(request.user):
             license_obj.status = "draft"
         license_obj.status = license_obj.compute_compliance_status()
         license_obj.last_reconciled_at = timezone.now()
@@ -305,6 +311,8 @@ def software_license_reclaim_inactive(request, pk):
     if license_obj.is_locked:
         messages.warning(request, f"Software License {license_obj.number} is retired.")
         return redirect("assets:software_license_detail", pk=license_obj.pk)
+    if license_obj.status == "audit_hold" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while license is on Audit Hold.")
     harvested = int(license_obj.reclaimable_inactive_count or 0)
     if harvested <= 0:
         messages.info(request, f"No inactive seats flagged for reclamation on {license_obj.number}.")
@@ -368,6 +376,8 @@ def software_license_renew_term(request, pk):
     if license_obj.is_locked:
         messages.warning(request, f"Software License {license_obj.number} is retired.")
         return redirect("assets:software_license_detail", pk=license_obj.pk)
+    if license_obj.status == "audit_hold" and not is_tenant_admin_user(request.user):
+        raise PermissionDenied("Tenant administrator access required while license is on Audit Hold.")
     today = timezone.now().date()
     base_date = max(license_obj.renewal_date, today) if license_obj.renewal_date else today
     with transaction.atomic():
