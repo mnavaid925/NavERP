@@ -184,7 +184,7 @@
                         {% for yr in capex_forecast_years %}
                         <tr>
                             <td class="font-medium">
-                                <a href="{% url 'assets:asset_replacement_plan_list' %}?planned_replacement_year={{ yr.year }}" class="text-blue-600 dark:text-blue-400 hover:underline">
+                                <a href="{% url 'assets:asset_replacement_plan_list' %}?planned_replacement_year={{ yr.year }}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.location %}&location={{ request.GET.location|urlencode }}{% endif %}" class="text-blue-600 dark:text-blue-400 hover:underline">
                                     FY{{ yr.year }}
                                 </a>
                             </td>
