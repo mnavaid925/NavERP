@@ -115,6 +115,14 @@ class AssetOperatorCertificationForm(TenantUniqueMixin, TenantModelForm):
                     self.fields[user_field].queryset = self.fields[
                         user_field
                     ].queryset.order_by("username")
+            if "employee_profile" in self.fields:
+                self.fields["employee_profile"].queryset = self.fields[
+                    "employee_profile"
+                ].queryset.select_related("party")
+            if "hrm_certificate" in self.fields:
+                self.fields["hrm_certificate"].queryset = self.fields[
+                    "hrm_certificate"
+                ].queryset.select_related("employee__party")
 
     def clean_certificate_file(self):
         return validate_safe_doc_upload(self.cleaned_data.get("certificate_file"))
