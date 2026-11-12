@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ system.number }}{% else %}New Building System{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_building_system_list' %}">HVAC &amp; Building Systems</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ system.number }}{% else %}New Building System{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and system %}
+        <a href="{% url 'assets:asset_building_system_detail' system.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to System
+        </a>
+        {% else %}
+        <a href="{% url 'assets:asset_building_system_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">System Classification &amp; Spatial Placement</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">System Name <span class="req">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.facility_space.id_for_label }}">Facility Space <span class="req">*</span></label>
+                    {{ form.facility_space }}
+                    {% if form.facility_space.errors %}<div class="form-error">{{ form.facility_space.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.system_domain.id_for_label }}">System Domain</label>
+                    {{ form.system_domain }}
+                    {% if form.system_domain.errors %}<div class="form-error">{{ form.system_domain.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.subsystem_type.id_for_label }}">Subsystem Type</label>
+                    {{ form.subsystem_type }}
+                    {% if form.subsystem_type.errors %}<div class="form-error">{{ form.subsystem_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="form-label" for="{{ form.pin_x_pct.id_for_label }}">Pin X (%)</label>
+                        {{ form.pin_x_pct }}
+                        {% if form.pin_x_pct.errors %}<div class="form-error">{{ form.pin_x_pct.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ form.pin_y_pct.id_for_label }}">Pin Y (%)</label>
+                        {{ form.pin_y_pct }}
+                        {% if form.pin_y_pct.errors %}<div class="form-error">{{ form.pin_y_pct.errors }}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.manufacturer.id_for_label }}">Manufacturer</label>
+                    {{ form.manufacturer }}
+                    {% if form.manufacturer.errors %}<div class="form-error">{{ form.manufacturer.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.model_number.id_for_label }}">Model Number</label>
+                    {{ form.model_number }}
+                    {% if form.model_number.errors %}<div class="form-error">{{ form.model_number.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.serial_number.id_for_label }}">Serial Number</label>
+                    {{ form.serial_number }}
+                    {% if form.serial_number.errors %}<div class="form-error">{{ form.serial_number.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.load_or_voltage_rating.id_for_label }}">Load / Voltage Rating</label>
+                    {{ form.load_or_voltage_rating }}
+                    {% if form.load_or_voltage_rating.errors %}<div class="form-error">{{ form.load_or_voltage_rating.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ashrae_nfpa_code_ref.id_for_label }}">ASHRAE / NFPA Code Ref</label>
+                    {{ form.ashrae_nfpa_code_ref }}
+                    {% if form.ashrae_nfpa_code_ref.errors %}<div class="form-error">{{ form.ashrae_nfpa_code_ref.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">HVAC Comfort Optimization &amp; Capacity</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.served_area_sqft.id_for_label }}">Served Area (SqFt)</label>
+                    {{ form.served_area_sqft }}
+                    {% if form.served_area_sqft.errors %}<div class="form-error">{{ form.served_area_sqft.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.design_capacity_btu_kw.id_for_label }}">Capacity (BTU/kW)</label>
+                    {{ form.design_capacity_btu_kw }}
+                    {% if form.design_capacity_btu_kw.errors %}<div class="form-error">{{ form.design_capacity_btu_kw.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.airflow_cfm.id_for_label }}">Airflow (CFM)</label>
+                    {{ form.airflow_cfm }}
+                    {% if form.airflow_cfm.errors %}<div class="form-error">{{ form.airflow_cfm.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.refrigerant_type.id_for_label }}">Refrigerant Type</label>
+                    {{ form.refrigerant_type }}
+                    {% if form.refrigerant_type.errors %}<div class="form-error">{{ form.refrigerant_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.setpoint_temp_c.id_for_label }}">Setpoint Temp (&deg;C)</label>
+                    {{ form.setpoint_temp_c }}
+                    {% if form.setpoint_temp_c.errors %}<div class="form-error">{{ form.setpoint_temp_c.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.measured_temp_c.id_for_label }}">Measured Temp (&deg;C)</label>
+                    {{ form.measured_temp_c }}
+                    {% if form.measured_temp_c.errors %}<div class="form-error">{{ form.measured_temp_c.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_humidity_pct.id_for_label }}">Target Humidity (%)</label>
+                    {{ form.target_humidity_pct }}
+                    {% if form.target_humidity_pct.errors %}<div class="form-error">{{ form.target_humidity_pct.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.measured_humidity_pct.id_for_label }}">Measured Humidity (%)</label>
+                    {{ form.measured_humidity_pct }}
+                    {% if form.measured_humidity_pct.errors %}<div class="form-error">{{ form.measured_humidity_pct.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.energy_efficiency_rating.id_for_label }}">Efficiency Rating</label>
+                    {{ form.energy_efficiency_rating }}
+                    {% if form.energy_efficiency_rating.errors %}<div class="form-error">{{ form.energy_efficiency_rating.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">FCA Condition, Statutory Inspections &amp; Spine Links</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.condition_grade.id_for_label }}">Condition Grade</label>
+                    {{ form.condition_grade }}
+                    {% if form.condition_grade.errors %}<div class="form-error">{{ form.condition_grade.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.criticality_tier.id_for_label }}">Criticality Tier</label>
+                    {{ form.criticality_tier }}
+                    {% if form.criticality_tier.errors %}<div class="form-error">{{ form.criticality_tier.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.remaining_useful_life_years.id_for_label }}">Remaining Useful Life (Yrs)</label>
+                    {{ form.remaining_useful_life_years }}
+                    {% if form.remaining_useful_life_years.errors %}<div class="form-error">{{ form.remaining_useful_life_years.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.replacement_cost_estimate.id_for_label }}">Replacement Cost Estimate</label>
+                    {{ form.replacement_cost_estimate }}
+                    {% if form.replacement_cost_estimate.errors %}<div class="form-error">{{ form.replacement_cost_estimate.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.last_statutory_inspection_date.id_for_label }}">Last Statutory Inspection</label>
+                    {{ form.last_statutory_inspection_date }}
+                    {% if form.last_statutory_inspection_date.errors %}<div class="form-error">{{ form.last_statutory_inspection_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.next_inspection_due_date.id_for_label }}">Next Inspection Due</label>
+                    {{ form.next_inspection_due_date }}
+                    {% if form.next_inspection_due_date.errors %}<div class="form-error">{{ form.next_inspection_due_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.service_vendor.id_for_label }}">Service Vendor</label>
+                    {{ form.service_vendor }}
+                    {% if form.service_vendor.errors %}<div class="form-error">{{ form.service_vendor.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset (SCM)</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset (GL)</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.latest_energy_reading.id_for_label }}">Energy Reading (11.6)</label>
+                    {{ form.latest_energy_reading }}
+                    {% if form.latest_energy_reading.errors %}<div class="form-error">{{ form.latest_energy_reading.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.maintenance_schedule.id_for_label }}">PM Schedule (11.5)</label>
+                    {{ form.maintenance_schedule }}
+                    {% if form.maintenance_schedule.errors %}<div class="form-error">{{ form.maintenance_schedule.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operating_permit.id_for_label }}">Operating Permit (11.11)</label>
+                    {{ form.operating_permit }}
+                    {% if form.operating_permit.errors %}<div class="form-error">{{ form.operating_permit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.schematic_document.id_for_label }}">Schematic Document (11.16)</label>
+                    {{ form.schematic_document }}
+                    {% if form.schematic_document.errors %}<div class="form-error">{{ form.schematic_document.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <a href="{% url 'assets:asset_building_system_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Building System{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
