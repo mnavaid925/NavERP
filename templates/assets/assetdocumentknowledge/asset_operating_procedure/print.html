@@ -2,6 +2,23 @@
 
 {% block title %}Print SOP Bench Sheet — {{ procedure.number }} — NavERP{% endblock %}
 
+{% block extra_css %}
+<style>
+@media print {
+    .sidebar, .topbar, .breadcrumb, .page-actions, .footer, .customizer {
+        display: none !important;
+    }
+    .main {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    body {
+        background: #ffffff !important;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <div>
