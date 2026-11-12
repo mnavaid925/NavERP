@@ -207,7 +207,16 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="9" class="text-center py-8 text-slate-400">No cloud assets or SaaS subscriptions match the active filters.</td>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="cloud"></i>
+                            <h3>No Cloud Assets or SaaS Subscriptions found</h3>
+                            <p>Track SaaS entitlements, cloud IaaS/PaaS commitments, FinOps wasted spend, and Shadow IT governance.</p>
+                            <a href="{% url 'assets:cloud_asset_subscription_create' %}" class="btn btn-primary mt-2">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register Cloud / SaaS Asset
+                            </a>
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
