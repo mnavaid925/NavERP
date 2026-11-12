@@ -202,47 +202,47 @@
                     <thead>
                         <tr>
                             <th>Portfolio Indicator</th>
-                            <th class="text-right">Baseline (BAU)</th>
-                            <th class="text-right">Simulated Outcome</th>
-                            <th class="text-right">Delta / Variance</th>
+                            <th class="text-end">Baseline (BAU)</th>
+                            <th class="text-end">Simulated Outcome</th>
+                            <th class="text-end">Delta / Variance</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td>Cumulative Capital Expenditure (CapEx)</td>
-                            <td class="text-right font-mono">{% fmt_money scenario.baseline_capex_total scenario.currency %}</td>
-                            <td class="text-right font-mono font-semibold">{% fmt_money scenario.simulated_capex_total scenario.currency %}</td>
-                            <td class="text-right font-mono">{% fmt_money scenario.capex_variance_amount scenario.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money scenario.baseline_capex_total scenario.currency %}</td>
+                            <td class="text-end font-mono font-semibold">{% fmt_money scenario.simulated_capex_total scenario.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money scenario.capex_variance_amount scenario.currency %}</td>
                         </tr>
                         <tr>
                             <td>Maintenance Operating Spend (OpEx)</td>
-                            <td class="text-right font-mono">{% fmt_money scenario.baseline_opex_maintenance scenario.currency %}</td>
-                            <td class="text-right font-mono font-semibold">{% fmt_money scenario.simulated_opex_maintenance scenario.currency %}</td>
-                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money scenario.opex_savings_amount scenario.currency %} saved</td>
+                            <td class="text-end font-mono">{% fmt_money scenario.baseline_opex_maintenance scenario.currency %}</td>
+                            <td class="text-end font-mono font-semibold">{% fmt_money scenario.simulated_opex_maintenance scenario.currency %}</td>
+                            <td class="text-end font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money scenario.opex_savings_amount scenario.currency %} saved</td>
                         </tr>
                         <tr>
                             <td>Deferred Maintenance Backlog</td>
-                            <td class="text-right font-mono">{% fmt_money scenario.baseline_deferred_backlog scenario.currency %}</td>
-                            <td class="text-right font-mono font-semibold">{% fmt_money scenario.simulated_deferred_backlog scenario.currency %}</td>
-                            <td class="text-right text-xs text-slate-500 dark:text-slate-400">Backlog impact</td>
+                            <td class="text-end font-mono">{% fmt_money scenario.baseline_deferred_backlog scenario.currency %}</td>
+                            <td class="text-end font-mono font-semibold">{% fmt_money scenario.simulated_deferred_backlog scenario.currency %}</td>
+                            <td class="text-end text-xs text-slate-500 dark:text-slate-400">Backlog impact</td>
                         </tr>
                         <tr>
                             <td>Portfolio Health Score (0–100)</td>
-                            <td class="text-right font-mono">{{ scenario.baseline_avg_health_score|floatformat:2 }}</td>
-                            <td class="text-right font-mono font-semibold">{{ scenario.simulated_avg_health_score|floatformat:2 }}</td>
-                            <td class="text-right text-xs text-slate-500 dark:text-slate-400">Avg asset health</td>
+                            <td class="text-end font-mono">{{ scenario.baseline_avg_health_score|floatformat:2 }}</td>
+                            <td class="text-end font-mono font-semibold">{{ scenario.simulated_avg_health_score|floatformat:2 }}</td>
+                            <td class="text-end text-xs text-slate-500 dark:text-slate-400">Avg asset health</td>
                         </tr>
                         <tr>
                             <td>Portfolio Facility Condition Index (FCI %)</td>
-                            <td class="text-right font-mono">{{ scenario.baseline_fci_pct|floatformat:2 }}%</td>
-                            <td class="text-right font-mono font-semibold">{{ scenario.simulated_fci_pct|floatformat:2 }}%</td>
-                            <td class="text-right text-xs text-slate-500 dark:text-slate-400">Condition index</td>
+                            <td class="text-end font-mono">{{ scenario.baseline_fci_pct|floatformat:2 }}%</td>
+                            <td class="text-end font-mono font-semibold">{{ scenario.simulated_fci_pct|floatformat:2 }}%</td>
+                            <td class="text-end text-xs text-slate-500 dark:text-slate-400">Condition index</td>
                         </tr>
                         <tr>
                             <td>Open Financial Risk Exposure</td>
-                            <td class="text-right font-mono">{% fmt_money scenario.baseline_risk_exposure scenario.currency %}</td>
-                            <td class="text-right font-mono font-semibold">{% fmt_money scenario.simulated_risk_exposure scenario.currency %}</td>
-                            <td class="text-right text-xs text-slate-500 dark:text-slate-400">Risk mitigation</td>
+                            <td class="text-end font-mono">{% fmt_money scenario.baseline_risk_exposure scenario.currency %}</td>
+                            <td class="text-end font-mono font-semibold">{% fmt_money scenario.simulated_risk_exposure scenario.currency %}</td>
+                            <td class="text-end text-xs text-slate-500 dark:text-slate-400">Risk mitigation</td>
                         </tr>
                     </tbody>
                 </table>
