@@ -19,6 +19,7 @@ from apps.assets.views.SpaceFacilityAsset._helpers import (
     apply_choice_filter,
     apply_fk_filter,
     csv_export_response,
+    is_tenant_admin_user,
     parse_pos_int,
 )
 from apps.core.decorators import tenant_admin_required
@@ -31,11 +32,7 @@ def _filtered_fixtures_queryset(request):
     qs = base_qs.select_related(
         "facility_space",
         "target_space",
-        "custodian_party",
         "assigned_org_unit",
-        "move_coordinator",
-        "operational_asset",
-        "movement_log",
     ).defer("move_notes")
 
     q = (request.GET.get("q") or "").strip()
@@ -118,26 +115,25 @@ def asset_furniture_fixture_list(request):
 def asset_furniture_fixture_export_csv(request):
     """Export filtered FF&E & IMAC register as formula-safe CSV."""
     _base, qs, _q = _filtered_fixtures_queryset(request)
-    rows = []
-    for item in qs.order_by("facility_space__code", "name", "-number")[:5000]:
-        rows.append(
-            [
-                item.number,
-                item.name,
-                item.get_ffe_category_display(),
-                item.asset_tag_code,
-                item.facility_space.code if item.facility_space else "",
-                item.target_space.code if item.target_space else "",
-                item.assigned_org_unit.name if item.assigned_org_unit else "",
-                item.quantity,
-                f"{item.unit_replacement_cost:.2f}",
-                f"{item.total_replacement_value:.2f}",
-                item.get_condition_grade_display(),
-                item.get_move_status_display(),
-                item.reconfiguration_batch_ref,
-                item.move_scheduled_date.isoformat() if item.move_scheduled_date else "",
-            ]
-        )
+    rows = (
+        [
+            item.number,
+            item.name,
+            item.get_ffe_category_display(),
+            item.asset_tag_code,
+            item.facility_space.code if item.facility_space else "",
+            item.target_space.code if item.target_space else "",
+            item.assigned_org_unit.name if item.assigned_org_unit else "",
+            item.quantity,
+            f"{item.unit_replacement_cost:.2f}",
+            f"{item.total_replacement_value:.2f}",
+            item.get_condition_grade_display(),
+            item.get_move_status_display(),
+            item.reconfiguration_batch_ref,
+            item.move_scheduled_date.isoformat() if item.move_scheduled_date else "",
+        ]
+        for item in qs.order_by("facility_space__code", "name", "-number").iterator(chunk_size=500)
+    )
     return csv_export_response(
         filename="asset_furniture_fixtures.csv",
         headers=[
@@ -164,6 +160,9 @@ def asset_furniture_fixture_export_csv(request):
 def asset_furniture_fixture_create(request):
     """Create a new FF&E record with optional tenant-scoped ?facility_space= prefill."""
     tenant = getattr(request, "tenant", None)
+    if tenant is None:
+        messages.error(request, "An active tenant workspace is required to create an FF&E item.")
+        return redirect("assets:asset_furniture_fixture_list")
     initial = {}
     space_pk = parse_pos_int(request.GET.get("facility_space"))
     if space_pk is not None and tenant is not None:
@@ -233,7 +232,7 @@ def asset_furniture_fixture_detail(request, pk):
         {
             "fixture": fixture,
             "can_edit": can_edit,
-            "can_delete": can_edit,
+            "can_delete": is_tenant_admin_user(request.user) and can_edit,
             "can_complete_move": can_complete_move,
         },
     )
@@ -242,16 +241,18 @@ def asset_furniture_fixture_detail(request, pk):
 @login_required
 def asset_furniture_fixture_edit(request, pk):
     """Edit FF&E record when not retired."""
-    fixture = assets_object(request, AssetFurnitureFixture, pk)
-    if fixture.is_locked:
-        messages.error(request, f"Retired FF&E item {fixture.number} cannot be edited.")
-        return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
-
     tenant = getattr(request, "tenant", None)
     if request.method == "POST":
-        form = AssetFurnitureFixtureForm(request.POST, instance=fixture, tenant=tenant)
-        if form.is_valid():
-            with transaction.atomic():
+        with transaction.atomic():
+            fixture = get_object_or_404(
+                assets_scope(AssetFurnitureFixture.objects.select_for_update(), request),
+                pk=pk,
+            )
+            if fixture.is_locked:
+                messages.error(request, f"Retired FF&E item {fixture.number} cannot be edited.")
+                return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
+            form = AssetFurnitureFixtureForm(request.POST, instance=fixture, tenant=tenant)
+            if form.is_valid():
                 fixture = form.save()
                 write_audit_log(
                     request.user,
@@ -260,9 +261,13 @@ def asset_furniture_fixture_edit(request, pk):
                     changes={"number": fixture.number, "category": fixture.ffe_category},
                     tenant=tenant,
                 )
-            messages.success(request, f"Furniture / fixture {fixture.number} updated.")
-            return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
+                messages.success(request, f"Furniture / fixture {fixture.number} updated.")
+                return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
     else:
+        fixture = assets_object(request, AssetFurnitureFixture, pk)
+        if fixture.is_locked:
+            messages.error(request, f"Retired FF&E item {fixture.number} cannot be edited.")
+            return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
         form = AssetFurnitureFixtureForm(instance=fixture, tenant=tenant)
 
     return render(
@@ -278,16 +283,21 @@ def asset_furniture_fixture_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_furniture_fixture_delete(request, pk):
-    """Delete an unlocked FF&E item."""
-    fixture = assets_object(request, AssetFurnitureFixture, pk)
-    if fixture.is_locked:
-        messages.error(request, f"Retired FF&E item {fixture.number} cannot be deleted.")
-        return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
-    number = fixture.number
+    """Delete an unlocked FF&E item (tenant admin only)."""
+    number = "FF&E item"
     try:
         with transaction.atomic():
+            fixture = get_object_or_404(
+                assets_scope(AssetFurnitureFixture.objects.select_for_update(), request),
+                pk=pk,
+            )
+            number = fixture.number
+            if fixture.is_locked:
+                messages.error(request, f"Retired FF&E item {fixture.number} cannot be deleted.")
+                return redirect("assets:asset_furniture_fixture_detail", pk=fixture.pk)
             write_audit_log(
                 request.user,
                 fixture,
@@ -351,7 +361,7 @@ def asset_furniture_fixture_schedule_reconfig(request, pk):
         write_audit_log(
             request.user,
             fixture,
-            "reconfig",
+            "sched_mv",
             changes={"number": fixture.number, "batch": fixture.reconfiguration_batch_ref},
             tenant=fixture.tenant,
         )
@@ -428,7 +438,7 @@ def asset_furniture_fixture_complete_move(request, pk):
         write_audit_log(
             request.user,
             fixture,
-            "relocate",
+            "comp_move",
             changes={"number": fixture.number, "from": origin_code, "to": dest_code},
             tenant=fixture.tenant,
         )
