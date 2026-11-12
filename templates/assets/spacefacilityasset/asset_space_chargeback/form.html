@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ chargeback.number }}{% else %}New Space Chargeback{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_space_chargeback_list' %}">Tenant &amp; Occupancy Coordination</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ chargeback.number }}{% else %}New Space Chargeback{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and chargeback %}
+        <a href="{% url 'assets:asset_space_chargeback_detail' chargeback.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Chargeback
+        </a>
+        {% else %}
+        <a href="{% url 'assets:asset_space_chargeback_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Coordination Scope &amp; Period</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Chargeback / Coordination Title <span class="req">*</span></label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.facility_space.id_for_label }}">Facility Space <span class="req">*</span></label>
+                    {{ form.facility_space }}
+                    {% if form.facility_space.errors %}<div class="form-error">{{ form.facility_space.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.coordination_type.id_for_label }}">Coordination Type</label>
+                    {{ form.coordination_type }}
+                    {% if form.coordination_type.errors %}<div class="form-error">{{ form.coordination_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.allocation_basis.id_for_label }}">Allocation Basis</label>
+                    {{ form.allocation_basis }}
+                    {% if form.allocation_basis.errors %}<div class="form-error">{{ form.allocation_basis.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.shared_building_system.id_for_label }}">Shared Building System</label>
+                    {{ form.shared_building_system }}
+                    {% if form.shared_building_system.errors %}<div class="form-error">{{ form.shared_building_system.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start <span class="req">*</span></label>
+                    {{ form.period_start }}
+                    {% if form.period_start.errors %}<div class="form-error">{{ form.period_start.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End <span class="req">*</span></label>
+                    {{ form.period_end }}
+                    {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.amortization_end_date.id_for_label }}">TI Amortization End Date</label>
+                    {{ form.amortization_end_date }}
+                    {% if form.amortization_end_date.errors %}<div class="form-error">{{ form.amortization_end_date.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Cost Allocation, CAM/Utilities &amp; TI Values</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.allocated_area_sqft.id_for_label }}">Allocated Area (SqFt)</label>
+                    {{ form.allocated_area_sqft }}
+                    {% if form.allocated_area_sqft.errors %}<div class="form-error">{{ form.allocated_area_sqft.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.allocation_share_pct.id_for_label }}">Allocation Share (%)</label>
+                    {{ form.allocation_share_pct }}
+                    {% if form.allocation_share_pct.errors %}<div class="form-error">{{ form.allocation_share_pct.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.base_cost_amount.id_for_label }}">Base Cost Amount</label>
+                    {{ form.base_cost_amount }}
+                    {% if form.base_cost_amount.errors %}<div class="form-error">{{ form.base_cost_amount.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.shared_cam_amount.id_for_label }}">Shared CAM Amount</label>
+                    {{ form.shared_cam_amount }}
+                    {% if form.shared_cam_amount.errors %}<div class="form-error">{{ form.shared_cam_amount.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.utility_recovery_amount.id_for_label }}">Utility Recovery Amount</label>
+                    {{ form.utility_recovery_amount }}
+                    {% if form.utility_recovery_amount.errors %}<div class="form-error">{{ form.utility_recovery_amount.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ti_improvement_cost.id_for_label }}">TI Improvement Cost</label>
+                    {{ form.ti_improvement_cost }}
+                    {% if form.ti_improvement_cost.errors %}<div class="form-error">{{ form.ti_improvement_cost.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ti_allowance_offset.id_for_label }}">TI Allowance Offset</label>
+                    {{ form.ti_allowance_offset }}
+                    {% if form.ti_allowance_offset.errors %}<div class="form-error">{{ form.ti_allowance_offset.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Occupant, Lease &amp; Accounting GL Mapping</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.charged_org_unit.id_for_label }}">Charged Org Unit</label>
+                    {{ form.charged_org_unit }}
+                    {% if form.charged_org_unit.errors %}<div class="form-error">{{ form.charged_org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.occupant_party.id_for_label }}">Occupant / Tenant Party</label>
+                    {{ form.occupant_party }}
+                    {% if form.occupant_party.errors %}<div class="form-error">{{ form.occupant_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lease_contract.id_for_label }}">Lease Contract</label>
+                    {{ form.lease_contract }}
+                    {% if form.lease_contract.errors %}<div class="form-error">{{ form.lease_contract.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fiscal_period.id_for_label }}">Fiscal Period</label>
+                    {{ form.fiscal_period }}
+                    {% if form.fiscal_period.errors %}<div class="form-error">{{ form.fiscal_period.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ar_invoice.id_for_label }}">AR Invoice</label>
+                    {{ form.ar_invoice }}
+                    {% if form.ar_invoice.errors %}<div class="form-error">{{ form.ar_invoice.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.expense_gl_account.id_for_label }}">Expense / Debit GL Account</label>
+                    {{ form.expense_gl_account }}
+                    {% if form.expense_gl_account.errors %}<div class="form-error">{{ form.expense_gl_account.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.recovery_gl_account.id_for_label }}">Recovery / Credit GL Account</label>
+                    {{ form.recovery_gl_account }}
+                    {% if form.recovery_gl_account.errors %}<div class="form-error">{{ form.recovery_gl_account.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group mb-6">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Coordination Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and chargeback %}
+                <a href="{% url 'assets:asset_space_chargeback_detail' chargeback.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_space_chargeback_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Space Chargeback
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
