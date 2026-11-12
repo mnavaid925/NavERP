@@ -341,6 +341,7 @@ def _hardware_status_transition(request, pk, target_status, audit_verb, label):
             f"IT Hardware Asset {hardware.number} is already {hardware.get_status_display()}.",
         )
         return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
+    prev_status = hardware.status
     with transaction.atomic():
         hardware.status = target_status
         update_fields = ["status", "updated_at"]
@@ -351,7 +352,13 @@ def _hardware_status_transition(request, pk, target_status, audit_verb, label):
                 hardware.assigned_date = timezone.now().date()
                 update_fields.append("assigned_date")
         hardware.save(update_fields=update_fields)
-        write_audit_log(request.user, hardware, audit_verb, tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            hardware,
+            audit_verb,
+            changes={"status": [prev_status, target_status]},
+            tenant=request.tenant,
+        )
     messages.success(request, f"IT Hardware Asset {hardware.number} moved to {label}.")
     return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
 
@@ -402,6 +409,8 @@ def it_hardware_asset_mark_sanitized(request, pk):
             f"IT Hardware Asset {hardware.number} is {hardware.get_status_display()} and cannot be modified.",
         )
         return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
+    prev_sanitization_status = hardware.sanitization_status
+    prev_sanitization_method = hardware.sanitization_method
     with transaction.atomic():
         if hardware.sanitization_method == "none":
             hardware.sanitization_method = "nist_purge"
@@ -422,7 +431,16 @@ def it_hardware_asset_mark_sanitized(request, pk):
                 "updated_at",
             ]
         )
-        write_audit_log(request.user, hardware, "sanitize", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            hardware,
+            "sanitize",
+            changes={
+                "sanitization_status": [prev_sanitization_status, hardware.sanitization_status],
+                "sanitization_method": [prev_sanitization_method, hardware.sanitization_method],
+            },
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"NIST SP 800-88 sanitization verified for {hardware.number} ({hardware.get_sanitization_status_display()}).",
@@ -451,10 +469,17 @@ def it_hardware_asset_retire(request, pk):
             f"Cannot retire {hardware.number}: NIST SP 800-88 sanitization must be verified first.",
         )
         return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
+    prev_status = hardware.status
     with transaction.atomic():
         hardware.status = "sanitized_retired"
         hardware.retired_at = timezone.now()
         hardware.save(update_fields=["status", "retired_at", "updated_at"])
-        write_audit_log(request.user, hardware, "retire", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            hardware,
+            "retire",
+            changes={"status": [prev_status, "sanitized_retired"]},
+            tenant=request.tenant,
+        )
     messages.success(request, f"IT Hardware Asset {hardware.number} sanitized & retired.")
     return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
