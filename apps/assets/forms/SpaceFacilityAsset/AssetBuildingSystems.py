@@ -8,6 +8,10 @@ from apps.accounting.models import FixedAsset
 from apps.assets.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.assets.forms.SpaceFacilityAsset._helpers import scope_tenant_querysets
 from apps.assets.models.AssetCompliance.AssetPermitLicenses import AssetPermitLicense
+from apps.assets.models.AssetDocumentKnowledge._validators import (
+    is_asset_document_readable,
+    readable_asset_document_q,
+)
 from apps.assets.models.AssetDocumentKnowledge.AssetDocuments import AssetDocument
 from apps.assets.models.AssetMaintenance.AssetMaintenanceSchedules import AssetMaintenanceSchedule
 from apps.assets.models.AssetPerformance.AssetEnergyReadings import AssetEnergyReading
@@ -109,13 +113,29 @@ class AssetBuildingSystemForm(TenantUniqueMixin, TenantModelForm):
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
         super().__init__(*args, **kwargs)
         scope_tenant_querysets(self, self._TENANT_FK_MAP)
+        if "latest_energy_reading" in self.fields and self.tenant is not None:
+            self.fields["latest_energy_reading"].queryset = self.fields[
+                "latest_energy_reading"
+            ].queryset.select_related("fixed_asset", "operational_asset")
+        if "schematic_document" in self.fields and self.tenant is not None:
+            self.fields["schematic_document"].queryset = self.fields[
+                "schematic_document"
+            ].queryset.filter(readable_asset_document_q(self.user))
 
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, list(self._TENANT_FK_MAP.keys()))
+
+        doc = cleaned.get("schematic_document")
+        if doc is not None and not is_asset_document_readable(doc, self.user):
+            self.add_error(
+                "schematic_document",
+                "You do not have permission to reference this restricted document.",
+            )
 
         for fld, label in (
             ("pin_x_pct", "Pin X %"),
