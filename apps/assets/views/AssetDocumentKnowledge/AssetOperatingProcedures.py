@@ -166,14 +166,10 @@ def _build_procedure_detail_context(request, proc):
         proc.operator_certifications.filter(tenant=request.tenant)
         .select_related("operator_party", "operator_user", "employee_profile__party")
         .order_by("expires_on", "number")
-        if hasattr(proc, "operator_certifications")
-        else AssetOperatingProcedure.objects.none()
     )
-    linked_articles = (
-        proc.knowledge_articles.filter(tenant=request.tenant).order_by("-updated_at")
-        if hasattr(proc, "knowledge_articles")
-        else AssetOperatingProcedure.objects.none()
-    )
+    linked_articles = proc.knowledge_articles.filter(
+        tenant=request.tenant
+    ).order_by("-updated_at")
 
     is_admin = is_tenant_admin_user(request.user)
     return {
