@@ -18,7 +18,7 @@
         <a href="{% url 'assets:asset_building_system_list' %}" class="btn btn-outline">
             <i data-lucide="wind" class="w-4 h-4 me-1"></i> All Building Systems
         </a>
-        <a href="{% url 'assets:asset_building_system_export_csv' %}?q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}" class="btn btn-outline">
+        <a href="{% url 'assets:asset_building_system_export_csv' %}?infra_only=1&q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&criticality_tier={{ request.GET.criticality_tier|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}" class="btn btn-outline">
             <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
         </a>
         <a href="{% url 'assets:asset_building_system_create' %}" class="btn btn-primary">
@@ -138,7 +138,7 @@
                     <th>Next Inspection</th>
                     <th>Replacement Cost</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -156,7 +156,7 @@
                     </td>
                     <td class="text-xs">
                         {% if sys.facility_space %}
-                        <div><a href="{% url 'assets:asset_facility_space_detail' sys.facility_space.pk %}" class="text-blue-600 hover:underline">{{ sys.facility_space.code }}</a></div>
+                        <div><a href="{% url 'assets:asset_facility_space_detail' sys.facility_space.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ sys.facility_space.code }}</a></div>
                         {% endif %}
                         {% if sys.operating_permit %}
                         <div class="text-muted">Permit: {{ sys.operating_permit.number }}</div>
@@ -172,10 +172,10 @@
                     </td>
                     <td class="font-mono text-xs">{{ sys.replacement_cost_estimate|floatformat:2 }}</td>
                     <td><span class="badge {{ sys.status_badge_class }}">{{ sys.get_status_display }}</span></td>
-                    <td class="table-actions text-right">
-                        <a href="{% url 'assets:asset_building_system_detail' sys.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                    <td class="table-actions text-end">
+                        <a href="{% url 'assets:asset_building_system_detail' sys.pk %}" class="btn btn-icon" title="View" aria-label="View infrastructure system {{ sys.number }}"><i data-lucide="eye" class="w-4 h-4"></i></a>
                         {% if not sys.is_locked %}
-                        <a href="{% url 'assets:asset_building_system_edit' sys.pk %}" class="btn btn-icon btn-outline" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+                        <a href="{% url 'assets:asset_building_system_edit' sys.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit infrastructure system {{ sys.number }}"><i data-lucide="pencil" class="w-4 h-4"></i></a>
                         {% endif %}
                     </td>
                 </tr>
@@ -197,19 +197,19 @@
 
     {% if is_paginated %}
     <div class="pagination">
-        <div class="text-xs text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</div>
-        <div class="flex items-center gap-2">
-            {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&criticality_tier={{ request.GET.criticality_tier|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}" class="btn btn-outline">Previous</a>
-            {% else %}
-            <span class="btn btn-outline opacity-50 pointer-events-none">Previous</span>
-            {% endif %}
-            {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&criticality_tier={{ request.GET.criticality_tier|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}" class="btn btn-outline">Next</a>
-            {% else %}
-            <span class="btn btn-outline opacity-50 pointer-events-none">Next</span>
-            {% endif %}
-        </div>
+        <span class="muted">Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</span>
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&criticality_tier={{ request.GET.criticality_tier|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&system_domain={{ request.GET.system_domain|urlencode }}&criticality_tier={{ request.GET.criticality_tier|urlencode }}&condition_grade={{ request.GET.condition_grade|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
     </div>
     {% endif %}
 </div>
