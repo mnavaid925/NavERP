@@ -134,7 +134,7 @@ def _build_procedure_detail_context(request, proc):
 
     certified_operators = (
         proc.operator_certifications.filter(tenant=request.tenant)
-        .select_related("operator_party", "operator_user", "employee_profile")
+        .select_related("operator_party", "operator_user", "employee_profile__party")
         .order_by("expires_on", "number")
         if hasattr(proc, "operator_certifications")
         else AssetOperatingProcedure.objects.none()
