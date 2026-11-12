@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration Management Database (CMDB) — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>IT Asset Management (ITAM)</span>
+            <span>/</span>
+            <span>CMDB Dependency Registry</span>
+        </div>
+        <h1 class="page-title">Configuration Management Database (CMDB)</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:cmdb_impact_analysis' %}" class="btn btn-outline">
+            <i data-lucide="network" class="w-4 h-4 me-1"></i> Impact Analysis
+        </a>
+        <a href="{% url 'assets:cmdb_relationship_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&relationship_type={{ request.GET.relationship_type|urlencode }}&source_ci_type={{ request.GET.source_ci_type|urlencode }}&target_ci_type={{ request.GET.target_ci_type|urlencode }}&environment={{ request.GET.environment|urlencode }}&criticality={{ request.GET.criticality|urlencode }}&spof={{ request.GET.spof|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:cmdb_relationship_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Dependency Edge
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="git-fork"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total CMDB Edges</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Dependencies</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active SPOF Risks</div>
+            <div class="stat-value">{{ spof_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Tier-1 Critical Edges</div>
+            <div class="stat-value">{{ tier1_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label for="cmdb-filter-q" class="sr-only">Search CMDB edges</label>
+                <input id="cmdb-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, CI name, blast notes..." class="form-input" />
+            </div>
+            <div>
+                <label for="cmdb-filter-status" class="sr-only">Status</label>
+                <select id="cmdb-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="cmdb-filter-rel" class="sr-only">Relationship Type</label>
+                <select id="cmdb-filter-rel" name="relationship_type" class="form-select">
+                    <option value="">All Relationships</option>
+                    {% for val, label in relationship_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.relationship_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="cmdb-filter-src" class="sr-only">Source CI Type</label>
+                <select id="cmdb-filter-src" name="source_ci_type" class="form-select">
+                    <option value="">All Source CI Types</option>
+                    {% for val, label in ci_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.source_ci_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="cmdb-filter-tgt" class="sr-only">Target CI Type</label>
+                <select id="cmdb-filter-tgt" name="target_ci_type" class="form-select">
+                    <option value="">All Target CI Types</option>
+                    {% for val, label in ci_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.target_ci_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="cmdb-filter-env" class="sr-only">Environment</label>
+                <select id="cmdb-filter-env" name="environment" class="form-select">
+                    <option value="">All Environments</option>
+                    {% for val, label in environment_choices %}
+                    <option value="{{ val }}" {% if request.GET.environment == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="cmdb-filter-crit" class="sr-only">Criticality</label>
+                <select id="cmdb-filter-crit" name="criticality" class="form-select">
+                    <option value="">All Criticality Tiers</option>
+                    {% for val, label in criticality_choices %}
+                    <option value="{{ val }}" {% if request.GET.criticality == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select id="cmdb-filter-spof" name="spof" class="form-select" aria-label="Single Point of Failure">
+                    <option value="">SPOF: Any</option>
+                    <option value="1" {% if request.GET.spof == "1" %}selected{% endif %}>SPOF Only</option>
+                    <option value="0" {% if request.GET.spof == "0" %}selected{% endif %}>Redundant Only</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{% url 'assets:cmdb_relationship_list' %}" class="btn btn-outline">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- CMDB Edges Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Edge #</th>
+                    <th>Source CI (Dependent)</th>
+                    <th>Relationship</th>
+                    <th>Target CI (Provider)</th>
+                    <th>Environment</th>
+                    <th>Criticality &amp; Impact</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rel in relationships %}
+                <tr>
+                    <td class="font-mono text-xs whitespace-nowrap">
+                        <a href="{% url 'assets:cmdb_relationship_detail' rel.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ rel.number }}</a>
+                        {% if rel.is_single_point_of_failure %}
+                        <div><span class="badge badge-red mt-1">SPOF</span></div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100 text-sm">{{ rel.source_label }}</div>
+                        <div class="text-xs text-slate-400">{{ rel.get_source_ci_type_display }}</div>
+                    </td>
+                    <td class="text-sm whitespace-nowrap font-medium text-indigo-700 dark:text-indigo-300">
+                        {{ rel.get_relationship_type_display }}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100 text-sm">{{ rel.target_label }}</div>
+                        <div class="text-xs text-slate-400">{{ rel.get_target_ci_type_display }}</div>
+                    </td>
+                    <td class="text-sm">{{ rel.get_environment_display }}</td>
+                    <td>
+                        <span class="badge {{ rel.criticality_badge_class }}">{{ rel.get_criticality_display }}</span>
+                        <div class="text-xs text-slate-400 mt-1">{{ rel.get_impact_severity_display }}</div>
+                    </td>
+                    <td><span class="badge {{ rel.status_badge_class }}">{{ rel.get_status_display }}</span></td>
+                    <td class="text-right whitespace-nowrap">
+                        <a href="{% url 'assets:cmdb_relationship_detail' rel.pk %}" class="btn btn-outline btn-sm">View</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-8 text-slate-400">No CMDB dependency edges match the active filters.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if paginator.num_pages > 1 %}
+    <div class="card-footer flex items-center justify-between text-sm text-slate-500">
+        <div>Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a class="btn btn-outline btn-sm" href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&relationship_type={{ request.GET.relationship_type|urlencode }}&source_ci_type={{ request.GET.source_ci_type|urlencode }}&target_ci_type={{ request.GET.target_ci_type|urlencode }}&environment={{ request.GET.environment|urlencode }}&criticality={{ request.GET.criticality|urlencode }}&spof={{ request.GET.spof|urlencode }}">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a class="btn btn-outline btn-sm" href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&relationship_type={{ request.GET.relationship_type|urlencode }}&source_ci_type={{ request.GET.source_ci_type|urlencode }}&target_ci_type={{ request.GET.target_ci_type|urlencode }}&environment={{ request.GET.environment|urlencode }}&criticality={{ request.GET.criticality|urlencode }}&spof={{ request.GET.spof|urlencode }}">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
