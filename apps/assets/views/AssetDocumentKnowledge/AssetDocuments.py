@@ -515,6 +515,16 @@ def asset_document_submit_review(request, pk):
                 f"Document {doc.number} must be in Draft status to submit for review.",
             )
             return redirect("assets:asset_document_detail", pk=doc.pk)
+        if (
+            doc.checked_out_by_id is not None
+            and doc.checked_out_by_id != request.user.id
+            and not is_tenant_admin_user(request.user)
+        ):
+            messages.error(
+                request,
+                f"Document {doc.number} is currently checked out by {doc.checked_out_by}.",
+            )
+            return redirect("assets:asset_document_detail", pk=doc.pk)
         doc.status = "in_review"
         doc.save(update_fields=["status", "updated_at"])
         write_audit_log(request.user, doc, "review", tenant=request.tenant)
@@ -540,6 +550,12 @@ def asset_document_approve_release(request, pk):
             messages.warning(
                 request,
                 f"Document {doc.number} cannot be approved from {doc.get_status_display()}.",
+            )
+            return redirect("assets:asset_document_detail", pk=doc.pk)
+        if doc.checked_out_by_id is not None and doc.checked_out_by_id != request.user.id:
+            messages.error(
+                request,
+                f"Document {doc.number} is currently checked out by {doc.checked_out_by}. Check it in before approving.",
             )
             return redirect("assets:asset_document_detail", pk=doc.pk)
 
