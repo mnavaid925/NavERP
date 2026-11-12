@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}CMDB Impact Analysis — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:cmdb_relationship_list' %}">CMDB Registry</a>
+            <span>/</span>
+            <span>Impact Analysis</span>
+        </div>
+        <h1 class="page-title">CMDB Upstream &amp; Blast-Radius Impact Analysis</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:cmdb_relationship_list' %}" class="btn btn-outline">
+            <i data-lucide="git-fork" class="w-4 h-4 me-1"></i> CMDB Registry
+        </a>
+        <a href="{% url 'assets:cmdb_impact_analysis_export_csv' %}?ci={{ selected_ci_token|urlencode }}&environment={{ selected_environment|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="arrow-up-right"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Upstream Dependencies</div>
+            <div class="stat-value">{{ upstream_nodes|length }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="flame"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Downstream Blast Radius</div>
+            <div class="stat-value">{{ downstream_nodes|length }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="git-commit"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Topology Edges</div>
+            <div class="stat-value">{{ total_active_edges }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active SPOF Bottlenecks</div>
+            <div class="stat-value">{{ total_spof_edges }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- CI Selector Form -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div class="md:col-span-2">
+                <label class="form-label" for="cmdb-impact-ci">Select Configuration Item (CI)</label>
+                <select id="cmdb-impact-ci" name="ci" class="form-select">
+                    <option value="">-- Choose CI --</option>
+                    {% for opt in ci_options %}
+                    <option value="{{ opt.token }}" {% if selected_ci_token == opt.token %}selected{% endif %}>{{ opt.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="cmdb-impact-env">Environment Scope</label>
+                <select id="cmdb-impact-env" name="environment" class="form-select">
+                    <option value="">All Environments</option>
+                    {% for val, label in environment_choices %}
+                    <option value="{{ val }}" {% if selected_environment == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary">Analyze Impact</button>
+                <a href="{% url 'assets:cmdb_impact_analysis' %}" class="btn btn-outline">Reset</a>
+            </div>
+        </form>
+        {% if selected_ci_label %}
+        <div class="mt-3 text-sm text-slate-600 dark:text-slate-300">
+            Active focus CI: <strong class="text-slate-900 dark:text-white">{{ selected_ci_label }}</strong>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Upstream vs Downstream Traversals -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Upstream Dependencies (What Focus CI Relies On)</h2></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Hop</th><th>Upstream CI</th><th>Via Relation</th><th>Criticality</th><th>Edge</th></tr></thead>
+                <tbody>
+                    {% for node in upstream_nodes %}
+                    <tr>
+                        <td class="font-mono text-xs">+{{ node.hop }}</td>
+                        <td class="text-sm font-medium">
+                            <a href="{% url 'assets:cmdb_impact_analysis' %}?ci={{ node.ci_token|urlencode }}&environment={{ selected_environment|urlencode }}" class="text-indigo-600 hover:underline">{{ node.ci_label }}</a>
+                        </td>
+                        <td class="text-sm">{{ node.relationship_label }}{% if node.is_spof %} <span class="badge badge-red">SPOF</span>{% endif %}</td>
+                        <td><span class="badge {{ node.criticality_badge_class }}">{{ node.criticality_label }}</span></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' node.edge.pk %}" class="text-indigo-600 hover:underline">{{ node.edge.number }}</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center py-6 text-slate-400">No upstream dependencies found for this CI.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Downstream Blast Radius (Impacted If Focus CI Fails)</h2></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Hop</th><th>Affected Dependent CI</th><th>Impact</th><th>Criticality</th><th>Edge</th></tr></thead>
+                <tbody>
+                    {% for node in downstream_nodes %}
+                    <tr>
+                        <td class="font-mono text-xs">+{{ node.hop }}</td>
+                        <td class="text-sm font-medium">
+                            <a href="{% url 'assets:cmdb_impact_analysis' %}?ci={{ node.ci_token|urlencode }}&environment={{ selected_environment|urlencode }}" class="text-indigo-600 hover:underline">{{ node.ci_label }}</a>
+                        </td>
+                        <td class="text-sm">{{ node.impact_label }}{% if node.is_spof %} <span class="badge badge-red">SPOF</span>{% endif %}</td>
+                        <td><span class="badge {{ node.criticality_badge_class }}">{{ node.criticality_label }}</span></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' node.edge.pk %}" class="text-indigo-600 hover:underline">{{ node.edge.number }}</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center py-6 text-slate-400">No downstream dependents affected by this CI.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Single Points of Failure Register -->
+<div class="card">
+    <div class="card-header"><h2 class="card-title">Active Single Points of Failure (SPOF) Hotspots ({{ spof_edges|length }})</h2></div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Edge #</th><th>Dependent CI</th><th>Relationship</th><th>Single-Point Provider CI</th><th>Impact Severity</th><th>Criticality</th></tr></thead>
+            <tbody>
+                {% for edge in spof_edges %}
+                <tr>
+                    <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ edge.number }}</a></td>
+                    <td class="text-sm">{{ edge.source_label }}</td>
+                    <td class="text-sm">{{ edge.get_relationship_type_display }}</td>
+                    <td class="text-sm font-medium">{{ edge.target_label }}</td>
+                    <td class="text-sm">{{ edge.get_impact_severity_display }}</td>
+                    <td><span class="badge {{ edge.criticality_badge_class }}">{{ edge.get_criticality_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center py-6 text-slate-400">No active Single Points of Failure flagged in this scope.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
