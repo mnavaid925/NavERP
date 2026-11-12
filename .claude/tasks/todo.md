@@ -31061,59 +31061,59 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 - [x] Verify all FK target models exist across `core`, `accounts`, `scm`, `accounting`, `hrm`, `assets` and append checkable Sub-module 11.16 plan to `.claude/tasks/todo.md`
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze pre-build spec/contract in `.claude/tasks/contract-assets-11.16.md` (every model field, `CHOICES` value & `max_length`, `<= 30`-char index/constraint name, `ModelForm.Meta.fields` & explicit exclusions, literal-before-`<int:pk>` URL routes & names, exact view context keys, filter dropdown querysets/choices, badge CSS dicts, and `AuditLog.action` `<= 10`-char verb map)
+- [x] Freeze pre-build spec/contract in `.claude/tasks/contract-assets-11.16.md` (every model field, `CHOICES` value & `max_length`, `<= 30`-char index/constraint name, `ModelForm.Meta.fields` & explicit exclusions, literal-before-`<int:pk>` URL routes & names, exact view context keys, filter dropdown querysets/choices, badge CSS dicts, and `AuditLog.action` `<= 10`-char verb map)
 
 ### Phase 3.2: Scaffold (SKIPPED — `apps/assets/` Already Exists)
 - [x] App `apps/assets` already scaffolded; NO `config/settings.py` or `config/urls.py` edits
 
 ### Phase 3.3: Entity-by-Entity Build (Strictly Serial — NO shared `__init__.py` / `admin.py` / `navigation.py` edits here)
-- [ ] **Shared sub-package helpers**:
-  - [ ] `apps/assets/models/AssetDocumentKnowledge/_validators.py` (`validate_tenant_fks`, `add_field_error`, `file_sha256`, bounded `five_whys` / `contributing_factors` / `procedure_steps` / `loto_isolation_points` JSON validators)
-  - [ ] `apps/assets/forms/AssetDocumentKnowledge/_helpers.py` (`validate_safe_doc_upload` pulling `ALLOWED_DOC_EXTENSIONS` & `MAX_UPLOAD_BYTES` from `apps.core.forms._common`)
-  - [ ] `apps/assets/views/AssetDocumentKnowledge/_helpers.py` (`serve_protected_attachment` with `Content-Disposition: attachment` & `X-Content-Type-Options: nosniff`; `csv_export_response` with formula neutralization)
-- [ ] **Entity 1: `AssetDocument` (`ADOC-`)**
-  - [ ] `apps/assets/models/AssetDocumentKnowledge/AssetDocuments.py`
-  - [ ] `apps/assets/forms/AssetDocumentKnowledge/AssetDocuments.py`
-  - [ ] `apps/assets/views/AssetDocumentKnowledge/AssetDocuments.py` (CRUD + `changes` MOC queue + `export_csv` + `download` + `submit_review` / `approve_release` / `return_to_draft` / `checkout` / `checkin` / `create_revision` / `archive`)
-  - [ ] `apps/assets/urls/AssetDocumentKnowledge/AssetDocuments.py` (literal routes `documents/`, `documents/create/`, `documents/changes/`, `documents/export-csv/` before `documents/<int:pk>/...`)
-  - [ ] `templates/assets/assetdocumentknowledge/asset_document/list.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_document/changes.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_document/detail.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_document/form.html`
-- [ ] **Entity 2: `AssetOperatingProcedure` (`ASOP-`)**
-  - [ ] `apps/assets/models/AssetDocumentKnowledge/AssetOperatingProcedures.py`
-  - [ ] `apps/assets/forms/AssetDocumentKnowledge/AssetOperatingProcedures.py`
-  - [ ] `apps/assets/views/AssetDocumentKnowledge/AssetOperatingProcedures.py` (CRUD + `export_csv` + `print` shop-floor LOTO sheet + `download` + `submit_review` / `activate` / `clone_revision` / `retire`)
-  - [ ] `apps/assets/urls/AssetDocumentKnowledge/AssetOperatingProcedures.py` (literal routes `procedures/`, `procedures/create/`, `procedures/export-csv/` before `procedures/<int:pk>/...`)
-  - [ ] `templates/assets/assetdocumentknowledge/asset_operating_procedure/list.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_operating_procedure/detail.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_operating_procedure/form.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_operating_procedure/print.html`
-- [ ] **Entity 3: `AssetOperatorCertification` (`AOCT-`)**
-  - [ ] `apps/assets/models/AssetDocumentKnowledge/AssetOperatorCertifications.py` (includes `sync_expiry_status()` + `is_operator_certified(...)`)
-  - [ ] `apps/assets/forms/AssetDocumentKnowledge/AssetOperatorCertifications.py`
-  - [ ] `apps/assets/views/AssetDocumentKnowledge/AssetOperatorCertifications.py` (CRUD + `export_csv` + `refresh_alerts` + `download` + `verify_activate` / `acknowledge_sop` / `renew` / `revoke`)
-  - [ ] `apps/assets/urls/AssetDocumentKnowledge/AssetOperatorCertifications.py` (literal routes `certifications/`, `certifications/create/`, `certifications/refresh-alerts/`, `certifications/export-csv/` before `certifications/<int:pk>/...`)
-  - [ ] `templates/assets/assetdocumentknowledge/asset_operator_certification/list.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_operator_certification/detail.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_operator_certification/form.html`
-- [ ] **Entity 4: `AssetKnowledgeArticle` (`AKBA-`)**
-  - [ ] `apps/assets/models/AssetDocumentKnowledge/AssetKnowledgeArticles.py`
-  - [ ] `apps/assets/forms/AssetDocumentKnowledge/AssetKnowledgeArticles.py`
-  - [ ] `apps/assets/views/AssetDocumentKnowledge/AssetKnowledgeArticles.py` (CRUD + `export_csv` + `download` + `submit_review` / `publish` / `mark_helpful` / `retire`)
-  - [ ] `apps/assets/urls/AssetDocumentKnowledge/AssetKnowledgeArticles.py` (literal routes `knowledge-base/`, `knowledge-base/create/`, `knowledge-base/export-csv/` before `knowledge-base/<int:pk>/...`)
-  - [ ] `templates/assets/assetdocumentknowledge/asset_knowledge_article/list.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_knowledge_article/detail.html`
-  - [ ] `templates/assets/assetdocumentknowledge/asset_knowledge_article/form.html`
+- [x] **Shared sub-package helpers**:
+  - [x] `apps/assets/models/AssetDocumentKnowledge/_validators.py` (`validate_tenant_fks`, `add_field_error`, `file_sha256`, bounded `five_whys` / `contributing_factors` / `procedure_steps` / `loto_isolation_points` JSON validators)
+  - [x] `apps/assets/forms/AssetDocumentKnowledge/_helpers.py` (`validate_safe_doc_upload` pulling `ALLOWED_DOC_EXTENSIONS` & `MAX_UPLOAD_BYTES` from `apps.core.forms._common`)
+  - [x] `apps/assets/views/AssetDocumentKnowledge/_helpers.py` (`serve_protected_attachment` with `Content-Disposition: attachment` & `X-Content-Type-Options: nosniff`; `csv_export_response` with formula neutralization)
+- [x] **Entity 1: `AssetDocument` (`ADOC-`)**
+  - [x] `apps/assets/models/AssetDocumentKnowledge/AssetDocuments.py`
+  - [x] `apps/assets/forms/AssetDocumentKnowledge/AssetDocuments.py`
+  - [x] `apps/assets/views/AssetDocumentKnowledge/AssetDocuments.py` (CRUD + `changes` MOC queue + `export_csv` + `download` + `submit_review` / `approve_release` / `return_to_draft` / `checkout` / `checkin` / `create_revision` / `archive`)
+  - [x] `apps/assets/urls/AssetDocumentKnowledge/AssetDocuments.py` (literal routes `documents/`, `documents/create/`, `documents/changes/`, `documents/export-csv/` before `documents/<int:pk>/...`)
+  - [x] `templates/assets/assetdocumentknowledge/asset_document/list.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_document/changes.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_document/detail.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_document/form.html`
+- [x] **Entity 2: `AssetOperatingProcedure` (`ASOP-`)**
+  - [x] `apps/assets/models/AssetDocumentKnowledge/AssetOperatingProcedures.py`
+  - [x] `apps/assets/forms/AssetDocumentKnowledge/AssetOperatingProcedures.py`
+  - [x] `apps/assets/views/AssetDocumentKnowledge/AssetOperatingProcedures.py` (CRUD + `export_csv` + `print` shop-floor LOTO sheet + `download` + `submit_review` / `activate` / `clone_revision` / `retire`)
+  - [x] `apps/assets/urls/AssetDocumentKnowledge/AssetOperatingProcedures.py` (literal routes `procedures/`, `procedures/create/`, `procedures/export-csv/` before `procedures/<int:pk>/...`)
+  - [x] `templates/assets/assetdocumentknowledge/asset_operating_procedure/list.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_operating_procedure/detail.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_operating_procedure/form.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_operating_procedure/print.html`
+- [x] **Entity 3: `AssetOperatorCertification` (`AOCT-`)**
+  - [x] `apps/assets/models/AssetDocumentKnowledge/AssetOperatorCertifications.py` (includes `sync_expiry_status()` + `is_operator_certified(...)`)
+  - [x] `apps/assets/forms/AssetDocumentKnowledge/AssetOperatorCertifications.py`
+  - [x] `apps/assets/views/AssetDocumentKnowledge/AssetOperatorCertifications.py` (CRUD + `export_csv` + `refresh_alerts` + `download` + `verify_activate` / `acknowledge_sop` / `renew` / `revoke`)
+  - [x] `apps/assets/urls/AssetDocumentKnowledge/AssetOperatorCertifications.py` (literal routes `certifications/`, `certifications/create/`, `certifications/refresh-alerts/`, `certifications/export-csv/` before `certifications/<int:pk>/...`)
+  - [x] `templates/assets/assetdocumentknowledge/asset_operator_certification/list.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_operator_certification/detail.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_operator_certification/form.html`
+- [x] **Entity 4: `AssetKnowledgeArticle` (`AKBA-`)**
+  - [x] `apps/assets/models/AssetDocumentKnowledge/AssetKnowledgeArticles.py`
+  - [x] `apps/assets/forms/AssetDocumentKnowledge/AssetKnowledgeArticles.py`
+  - [x] `apps/assets/views/AssetDocumentKnowledge/AssetKnowledgeArticles.py` (CRUD + `export_csv` + `download` + `submit_review` / `publish` / `mark_helpful` / `retire`)
+  - [x] `apps/assets/urls/AssetDocumentKnowledge/AssetKnowledgeArticles.py` (literal routes `knowledge-base/`, `knowledge-base/create/`, `knowledge-base/export-csv/` before `knowledge-base/<int:pk>/...`)
+  - [x] `templates/assets/assetdocumentknowledge/asset_knowledge_article/list.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_knowledge_article/detail.html`
+  - [x] `templates/assets/assetdocumentknowledge/asset_knowledge_article/form.html`
 
 ### Phase 3.4: Integrate & Wire-up (Single-writer, AFTER all entity files exist)
-- [ ] Verify all 19 entity/helper backend files & 14 template files landed on disk before wiring
-- [ ] Create `apps/assets/{models,forms,views,urls}/AssetDocumentKnowledge/__init__.py` re-exports
-- [ ] Surgically append `AssetDocumentKnowledge` re-exports to `apps/assets/{models,forms,views}/__init__.py` and concatenate `+ asset_document_knowledge_urlpatterns` in `apps/assets/urls/__init__.py`
-- [ ] Register `AssetDocument`, `AssetOperatingProcedure`, `AssetOperatorCertification`, `AssetKnowledgeArticle` in `apps/assets/admin.py`
-- [ ] Extend `apps/assets/views/overview.py` & `templates/assets/overview.html` with 11.16 KPI summary metrics & quick navigation cards
-- [ ] Extend `apps/assets/management/commands/seed_assets.py` idempotently (`_seed_tenant_11_16` creating Acme + Beta demo records across all 4 models including revision chains, LOTO SOPs, active/expiring/expired certs, and 5-Why/Fishbone KB articles; safe to run multiple times without `--flush`)
-- [ ] Add `LIVE_LINKS["11.16"]` in `apps/core/navigation.py` using exact `NavERP.md` lines 1835–1839 bullets -> string route names (NO tuples):
+- [x] Verify all 19 entity/helper backend files & 14 template files landed on disk before wiring
+- [x] Create `apps/assets/{models,forms,views,urls}/AssetDocumentKnowledge/__init__.py` re-exports
+- [x] Surgically append `AssetDocumentKnowledge` re-exports to `apps/assets/{models,forms,views}/__init__.py` and concatenate `+ asset_document_knowledge_urlpatterns` in `apps/assets/urls/__init__.py`
+- [x] Register `AssetDocument`, `AssetOperatingProcedure`, `AssetOperatorCertification`, `AssetKnowledgeArticle` in `apps/assets/admin.py`
+- [x] Extend `apps/assets/views/overview.py` & `templates/assets/overview.html` with 11.16 KPI summary metrics & quick navigation cards
+- [x] Extend `apps/assets/management/commands/seed_assets.py` idempotently (`_seed_tenant_11_16` creating Acme + Beta demo records across all 4 models including revision chains, LOTO SOPs, active/expiring/expired certs, and 5-Why/Fishbone KB articles; safe to run multiple times without `--flush`)
+- [x] Add `LIVE_LINKS["11.16"]` in `apps/core/navigation.py` using exact `NavERP.md` lines 1835–1839 bullets -> string route names (NO tuples):
   ```python
   "11.16": {
       "Asset Documentation Repository": "assets:asset_document_list",
@@ -31123,32 +31123,32 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
       "Lessons Learned & Failure Analysis": "assets:asset_knowledge_article_list",
   },
   ```
-- [ ] Run `python manage.py makemigrations assets --dry-run` -> `python manage.py makemigrations assets` (`0022_*`) -> `python manage.py migrate` -> `python manage.py showmigrations assets` -> `python manage.py seed_assets` **x2** -> `python manage.py check`
+- [x] Run `python manage.py makemigrations assets --dry-run` -> `python manage.py makemigrations assets` (`0022_*`) -> `python manage.py migrate` -> `python manage.py showmigrations assets` -> `python manage.py seed_assets` **x2** -> `python manage.py check`
 
 ### Phase 3.5: Verify & Smoke Gate (`qa-smoke-tester`)
-- [ ] Write & execute `temp/smoke_11_16.py` as `admin_acme` (`password`) + isolated throwaway `uuid4` tenant:
-  - [ ] Every list, create, detail, edit, delete, `changes`, `print`, `export-csv`, and protected `download` (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`) returns expected status and non-blank rendered row numbers/titles (L8, L57)
-  - [ ] Exercise all list filters + junk query params (`?operational_asset=abc`, L11) + page 2 pagination (L9)
-  - [ ] Exercise workflow POST actions (`submit_review`, `approve_release` superseding predecessor, `checkout`/`checkin`, `create_revision`, `activate`, `clone_revision`, `verify_activate`, `acknowledge_sop`, `renew`, `refresh_alerts`, `publish`, `mark_helpful`)
-  - [ ] Cross-tenant Beta IDOR returns `404` across all detail/edit/delete/download/action endpoints
-  - [ ] Delete `temp/smoke_11_16.py` when verified clean
+- [x] Write & execute `temp/smoke_11_16.py` as `admin_acme` (`password`) + isolated throwaway `uuid4` tenant:
+  - [x] Every list, create, detail, edit, delete, `changes`, `print`, `export-csv`, and protected `download` (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`) returns expected status and non-blank rendered row numbers/titles (L8, L57)
+  - [x] Exercise all list filters + junk query params (`?operational_asset=abc`, L11) + page 2 pagination (L9)
+  - [x] Exercise workflow POST actions (`submit_review`, `approve_release` superseding predecessor, `checkout`/`checkin`, `create_revision`, `activate`, `clone_revision`, `verify_activate`, `acknowledge_sop`, `renew`, `refresh_alerts`, `publish`, `mark_helpful`)
+  - [x] Cross-tenant Beta IDOR returns `404` across all detail/edit/delete/download/action endpoints
+  - [x] Delete `temp/smoke_11_16.py` when verified clean
 
 ### Phase 4 & Phase 5: Serial Review & Code Fixer
-- [ ] Run 6 serial reviewers (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) scoped to `11.16` changeset (`BASE...HEAD`) and consolidate/dedupe sorted `C#`, `I#`, `M#` findings into `.claude/tasks/review-assets-11.16.md`
-- [ ] Run `code-fixer` agent against `.claude/tasks/review-assets-11.16.md` in ID order (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
+- [x] Run 6 serial reviewers (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) scoped to `11.16` changeset (`BASE...HEAD`) and consolidate/dedupe sorted `C#`, `I#`, `M#` findings into `.claude/tasks/review-assets-11.16.md`
+- [x] Run `code-fixer` agent against `.claude/tasks/review-assets-11.16.md` in ID order (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
 
 ### Phase 6: Tests (Serial)
-- [ ] Pin test contract and append `11.16` fixtures (`_asset_document_knowledge_*` / `asset_document_knowledge_*`) strictly below a marker in `apps/assets/tests/conftest.py` (L59)
-- [ ] Write `apps/assets/tests/test_asset_document_knowledge_models.py` (`ADOC-`/`ASOP-`/`AOCT-`/`AKBA-` auto-numbering, L65 choice lengths, SHA-256 checksums, expiry properties/`sync_expiry_status`/`is_operator_certified`, JSON validators, tenant FK `clean()`)
-- [ ] Write `apps/assets/tests/test_asset_document_knowledge_forms.py` (`reject_foreign`, excluded `editable=False`/system fields, `ALLOWED_DOC_EXTENSIONS` rejecting `.svg`, `MAX_UPLOAD_BYTES`, date & score bounds)
-- [ ] Write `apps/assets/tests/test_asset_document_knowledge_views.py` (CRUD, `changes` queue, `print` sheet, CSV export formula neutralization, protected `download` headers, filter/pagination, atomic supersession, `create_revision`, `acknowledge_sop`, `mark_helpful`, `view_count`, query-invariance N+1 check per L58)
-- [ ] Write `apps/assets/tests/test_asset_document_knowledge_security.py` (unauthenticated redirect, Beta tenant IDOR 404 on CRUD/actions/downloads, `@require_POST` enforcement, draft-only edit/delete lock)
-- [ ] Run full unfiltered `pytest apps/assets/tests/` (never `-k` filtered per L47) and verify 100% green
+- [x] Pin test contract and append `11.16` fixtures (`adk_*`) strictly below a marker in `apps/assets/tests/conftest.py` (L59)
+- [x] Write `apps/assets/tests/test_asset_document_knowledge_models.py` (`ADOC-`/`ASOP-`/`AOCT-`/`AKBA-` auto-numbering, L65 choice lengths, SHA-256 checksums, expiry properties/`sync_expiry_status`/`is_operator_certified`, JSON validators, tenant FK `clean()`)
+- [x] Write `apps/assets/tests/test_asset_document_knowledge_forms.py` (`reject_foreign`, excluded `editable=False`/system fields, `ALLOWED_DOC_EXTENSIONS` rejecting `.svg`, `MAX_UPLOAD_BYTES`, date & score bounds, access-tier dropdown filtering)
+- [x] Write `apps/assets/tests/test_asset_document_knowledge_views.py` (CRUD, `changes` queue, `print` sheet, CSV export formula neutralization & `?scope=changes`, protected `download` headers, filter/pagination, atomic supersession, `create_revision`, `acknowledge_sop`, `mark_helpful`, `view_count`, query-invariance N+1 check per L58)
+- [x] Write `apps/assets/tests/test_asset_document_knowledge_security.py` (unauthenticated redirect, Beta tenant IDOR 404 on CRUD/actions/downloads, `@tenant_admin_required` 403 including certification edits, access-classification gating, checkout locks, `@require_POST` enforcement, file & XSS hardening)
+- [x] Run full unfiltered `pytest apps/assets/tests/` (never `-k` filtered per L47) and verify 100% green
 
 ### Phase 7: Close-out
-- [ ] Update `.claude/skills/assets/SKILL.md` with Sub-module 11.16 models, URLs, templates, and seeder coverage
-- [ ] Mark Sub-module 11.16 complete in `README.md`
-- [ ] Record any deferred/open items in `.agents/tasks/gaps-assets-11.16.md` (or `.claude/tasks/gaps-assets-11.16.md`) and populate `## Review notes` below
+- [x] Update `.claude/skills/assets/SKILL.md` with Sub-module 11.16 models, URLs, templates, and seeder coverage
+- [x] Mark Sub-module 11.16 complete in `README.md`
+- [x] Record any deferred/open items in `.claude/tasks/gaps-assets-11.16.md` and populate `## Review notes` below
 
 ## Later passes / deferred
 1. **Hard work-order dispatch certification gate (`11.5` / `11.13`)**: Enforcing `is_operator_certified(...)` as a blocking validator inside `AssetMaintenanceRequest` and `FieldWorkOrder` assignment views (without altering sibling `11.5`/`11.13` schemas/views in this pass).
@@ -31159,4 +31159,9 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 6. **External EDMS bi-directional webhook/API sync (`11.15` extension)**: Automated sync bridges to Accruent Meridian, OpenText, or SharePoint repositories.
 
 ## Review notes
-_(To be populated after Phase 4–7 close-out; link `.agents/tasks/gaps-assets-11.16.md` or state `**Gaps**: None`.)_
+- **Phases 0–7 Completed** (Base SHA `66c68399b9650309faea01195c456adbc9622c98`):
+  - **Artifacts**: `.claude/tasks/research-assets-11.16.md` (`cbb2fb33`), `.claude/tasks/contract-assets-11.16.md` (`e2b40e33`), `.claude/tasks/review-assets-11.16.md` (`3f136be8`, fixed & updated `859adce7`), `.claude/tasks/gaps-assets-11.16.md`.
+  - **Migrations**: `0022_assetdocument_assetoperatingprocedure_and_more.py` (`1967b944`) and `0023_assetdocument_idx_adoc_ten_upd_and_more.py` (`a73990e7`), applied cleanly (`makemigrations --check --dry-run` reports No changes detected).
+  - **Review & Fixer Pass**: 6 serial passes (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester` report-only, `security-reviewer`) identified 4 Critical, 15 Important, and 13 Minor findings; `code-fixer` resolved all 32 items across 99 single-file commits (0 `[ ] open` remaining).
+  - **Verification**: `manage.py check` exit 0; `manage.py seed_assets` x2 idempotent; full unfiltered `venv\Scripts\python.exe -m pytest -q -W ignore apps/assets/tests/` exited 0 with **2,393** tests passing (`110` new 11.16 tests: `23` models `7f2a07e0`, `40` forms `cdbd101e`, `21` views `9396f436`, `26` security `16b209b4`).
+- **Gaps**: Tracked in [.claude/tasks/gaps-assets-11.16.md](.claude/tasks/gaps-assets-11.16.md) (0 in-scope gaps; 3 cross-module/future-module deferrals + 1 out-of-scope sibling clone note in `11.14` `AssetAnalytics/_helpers.py`).
