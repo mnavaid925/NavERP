@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}{{ space.number }} — {{ space.code }} — Facility Space — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_facility_space_list' %}">Floor Plan &amp; Space Mapping</a>
+            <span>/</span>
+            <span>{{ space.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ space.number }} — {{ space.code }}: {{ space.name }}</h1>
+            <span class="badge {{ space.level_badge_class }}">{{ space.get_space_level_display }}</span>
+            <span class="badge {{ space.occupancy_badge_class }}">{{ space.get_occupancy_status_display }}</span>
+            <span class="badge {{ space.status_badge_class }}">{{ space.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if space.floor_plan_image %}
+        <a href="{% url 'assets:asset_facility_space_floor_plan_download' space.pk %}" class="btn btn-primary">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Download Floor Plan
+        </a>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:asset_facility_space_recalculate_utilization' space.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Recalculate Utilization
+            </button>
+        </form>
+
+        {% if space.status == "active" or space.status == "planned" %}
+        <form method="post" action="{% url 'assets:asset_facility_space_mark_under_renovation' space.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="hammer" class="w-4 h-4 me-1"></i> Mark Renovation
+            </button>
+        </form>
+        {% endif %}
+
+        {% if space.status != "active" %}
+        <form method="post" action="{% url 'assets:asset_facility_space_activate' space.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Activate
+            </button>
+        </form>
+        {% endif %}
+
+        {% if space.status != "decommissioned" %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_facility_space_decommission' space.pk %}" class="inline" onsubmit="return confirm('Decommission space {{ space.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Decommission
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if can_edit %}
+        <a href="{% url 'assets:asset_facility_space_edit' space.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if can_delete %}
+        <form method="post" action="{% url 'assets:asset_facility_space_delete' space.pk %}" class="inline" onsubmit="return confirm('Delete facility space {{ space.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_facility_space_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="ruler"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Usable / Rentable SqFt</div>
+            <div class="stat-value">{{ space.usable_area_sqft|floatformat:0 }} / {{ space.rentable_area_sqft|floatformat:0 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="users"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Headcount / Capacity</div>
+            <div class="stat-value">{{ space.current_headcount }} / {{ space.design_seat_capacity }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="percent"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Utilization</div>
+            <div class="stat-value">{{ space.utilization_pct }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Annual Space Cost</div>
+            <div class="stat-value">${{ space.annual_space_cost|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header"><h2 class="text-sm font-semibold uppercase tracking-wide">Space Hierarchy, BOMA Areas &amp; CAD/BIM</h2></div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>Space Code</dt><dd class="font-mono">{{ space.code }}</dd></div>
+                <div class="detail-item"><dt>Category</dt><dd>{{ space.get_space_category_display }}</dd></div>
+                <div class="detail-item">
+                    <dt>Parent Space</dt>
+                    <dd>{% if space.parent %}<a href="{% url 'assets:asset_facility_space_detail' space.parent.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ space.parent.code }} — {{ space.parent.name }}</a>{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item"><dt>Org Unit</dt><dd>{% if space.org_unit %}{{ space.org_unit.name }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>SCM Location</dt><dd>{% if space.scm_location %}{{ space.scm_location.name }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>GIS Mapping</dt><dd>{% if space.gis_mapping %}{{ space.gis_mapping.number }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Gross Area (SqFt)</dt><dd class="font-mono">{{ space.gross_area_sqft|floatformat:2 }}</dd></div>
+                <div class="detail-item"><dt>Common Area (SqFt)</dt><dd class="font-mono">{{ space.common_area_sqft|floatformat:2 }}</dd></div>
+                <div class="detail-item"><dt>Annual Rate / SqFt</dt><dd class="font-mono">${{ space.annual_rate_per_sqft|floatformat:2 }}</dd></div>
+                <div class="detail-item"><dt>Space Steward</dt><dd>{% if space.space_steward %}{{ space.space_steward.get_full_name|default:space.space_steward.username }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>CAD Layer Ref</dt><dd class="font-mono">{{ space.cad_layer_ref|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>BIM GUID / Level</dt><dd class="font-mono">{{ space.bim_guid|default:"—" }} {% if space.bim_level_ref %}({{ space.bim_level_ref }}){% endif %}</dd></div>
+                <div class="detail-item"><dt>Drawing Revision</dt><dd>{{ space.drawing_revision|default:"—" }}</dd></div>
+                <div class="detail-item">
+                    <dt>Controlled Drawing</dt>
+                    <dd>{% if space.floor_plan_document %}<a href="{% url 'assets:asset_document_detail' space.floor_plan_document.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ space.floor_plan_document.number }} — {{ space.floor_plan_document.title }}</a>{% else %}—{% endif %}</dd>
+                </div>
+            </dl>
+            {% if space.notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <div class="text-xs font-semibold uppercase text-muted mb-1">Notes</div>
+                <p class="text-sm whitespace-pre-line">{{ space.notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="text-sm font-semibold uppercase tracking-wide">Child Spaces ({{ child_spaces|length }})</h2></div>
+        <div class="card-body">
+            {% if child_spaces %}
+            <ul class="space-y-2">
+                {% for child in child_spaces %}
+                <li class="flex items-center justify-between text-sm">
+                    <a href="{% url 'assets:asset_facility_space_detail' child.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ child.code }} — {{ child.name }}</a>
+                    <span class="badge {{ child.level_badge_class }}">{{ child.get_space_level_display }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-xs text-muted">No child spaces attached.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-sm font-semibold uppercase tracking-wide">HVAC &amp; Building Systems ({{ mounted_systems|length }})</h2>
+            <a href="{% url 'assets:asset_building_system_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 hover:underline">+ Add System</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Number</th><th>System</th><th>Domain</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for sys in mounted_systems %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:asset_building_system_detail' sys.pk %}" class="text-blue-600 hover:underline">{{ sys.number }}</a></td>
+                        <td class="text-sm">{{ sys.name }}</td>
+                        <td class="text-xs">{{ sys.get_system_domain_display }}</td>
+                        <td><span class="badge {{ sys.status_badge_class }}">{{ sys.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-xs text-muted text-center py-4">No building systems placed in this space.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-sm font-semibold uppercase tracking-wide">Furniture &amp; Fixtures ({{ placed_ffe|length }})</h2>
+            <a href="{% url 'assets:asset_furniture_fixture_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 hover:underline">+ Add FF&amp;E</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Number</th><th>Item</th><th>Qty</th><th>Move Status</th></tr></thead>
+                <tbody>
+                    {% for ffe in placed_ffe %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:asset_furniture_fixture_detail' ffe.pk %}" class="text-blue-600 hover:underline">{{ ffe.number }}</a></td>
+                        <td class="text-sm">{{ ffe.name }}</td>
+                        <td class="text-xs font-mono">{{ ffe.quantity }}</td>
+                        <td><span class="badge {{ ffe.move_status_badge_class }}">{{ ffe.get_move_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-xs text-muted text-center py-4">No FF&amp;E items assigned to this space.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-sm font-semibold uppercase tracking-wide">Occupancy Chargebacks &amp; Leasehold Improvements ({{ active_chargebacks|length }})</h2>
+        <a href="{% url 'assets:asset_space_chargeback_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 hover:underline">+ New Chargeback</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Net Amount</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for cb in active_chargebacks %}
+                <tr>
+                    <td class="font-mono text-xs"><a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="text-blue-600 hover:underline">{{ cb.number }}</a></td>
+                    <td class="text-sm">{{ cb.title }}</td>
+                    <td class="text-xs">{{ cb.get_coordination_type_display }}</td>
+                    <td class="text-xs font-mono">${{ cb.net_chargeback_amount|floatformat:2 }}</td>
+                    <td><span class="badge {{ cb.status_badge_class }}">{{ cb.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-xs text-muted text-center py-4">No occupancy chargebacks linked to this space.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
