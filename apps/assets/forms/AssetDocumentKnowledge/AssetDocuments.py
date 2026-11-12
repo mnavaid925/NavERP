@@ -134,8 +134,7 @@ class AssetDocumentForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        for field_name in self._TENANT_FIELDS:
-            reject_foreign(self, cleaned, self.tenant, field_name)
+        reject_foreign(self, cleaned, self._TENANT_FIELDS.keys())
         eff = cleaned.get("effective_date")
         exp = cleaned.get("expiry_date")
         if eff and exp and exp < eff:
