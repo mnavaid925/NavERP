@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.assets.forms.SpaceFacilityAsset.AssetBuildingSystems import AssetBuildingSystemForm
+from apps.assets.models.AssetDocumentKnowledge._validators import is_asset_document_readable
 from apps.assets.models.SpaceFacilityAsset.AssetBuildingSystems import AssetBuildingSystem
 from apps.assets.models.SpaceFacilityAsset.AssetFacilitySpaces import AssetFacilitySpace
 from apps.assets.views._common import assets_object, assets_scope
@@ -20,21 +21,24 @@ from apps.assets.views.SpaceFacilityAsset._helpers import (
     apply_choice_filter,
     apply_fk_filter,
     csv_export_response,
+    is_tenant_admin_user,
     parse_pos_int,
 )
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
-def _filtered_systems_queryset(request):
+def _filtered_systems_queryset(request, infra_only=None):
     today = timezone.now().date()
+    if infra_only is None:
+        infra_only = request.GET.get("infra_only") == "1"
+
     base_qs = assets_scope(AssetBuildingSystem.objects.all(), request)
-    qs = base_qs.select_related(
-        "facility_space",
-        "service_vendor",
-        "org_unit",
-        "operating_permit",
-    ).defer("notes")
+    if infra_only:
+        base_qs = base_qs.filter(system_domain__in=AssetBuildingSystem.INFRASTRUCTURE_DOMAINS)
+
+    select_fields = ("facility_space", "operating_permit") if infra_only else ("facility_space",)
+    qs = base_qs.select_related(*select_fields).defer("notes")
 
     q = (request.GET.get("q") or "").strip()
     if q:
@@ -44,13 +48,21 @@ def _filtered_systems_queryset(request):
             | Q(manufacturer__icontains=q)
             | Q(model_number__icontains=q)
             | Q(serial_number__icontains=q)
+            | Q(load_or_voltage_rating__icontains=q)
             | Q(ashrae_nfpa_code_ref__icontains=q)
             | Q(facility_space__code__icontains=q)
         )
 
-    qs = apply_choice_filter(
-        qs, request, "system_domain", allowed_values=dict(AssetBuildingSystem.SYSTEM_DOMAIN_CHOICES)
+    allowed_domains = (
+        {
+            k: v
+            for k, v in AssetBuildingSystem.SYSTEM_DOMAIN_CHOICES
+            if k in AssetBuildingSystem.INFRASTRUCTURE_DOMAINS
+        }
+        if infra_only
+        else dict(AssetBuildingSystem.SYSTEM_DOMAIN_CHOICES)
     )
+    qs = apply_choice_filter(qs, request, "system_domain", allowed_values=allowed_domains)
     qs = apply_choice_filter(
         qs, request, "subsystem_type", allowed_values=dict(AssetBuildingSystem.SUBSYSTEM_TYPE_CHOICES)
     )
@@ -61,16 +73,24 @@ def _filtered_systems_queryset(request):
         qs, request, "condition_grade", allowed_values=dict(AssetBuildingSystem.CONDITION_GRADE_CHOICES)
     )
     qs = apply_choice_filter(
+        qs, request, "criticality_tier", allowed_values=dict(AssetBuildingSystem.CRITICALITY_TIER_CHOICES)
+    )
+    qs = apply_choice_filter(
         qs, request, "status", allowed_values=dict(AssetBuildingSystem.STATUS_CHOICES)
     )
     qs = apply_fk_filter(qs, request, "facility_space")
-    return base_qs, qs.order_by("system_domain", "name", "-number"), q, today
+    order_fields = (
+        ("criticality_tier", "next_inspection_due_date", "-number")
+        if infra_only
+        else ("system_domain", "name", "-number")
+    )
+    return base_qs, qs.order_by(*order_fields), q, today
 
 
 @login_required
 def asset_building_system_list(request):
     """List tenant-scoped HVAC & building systems with comfort-band and inspection KPIs."""
-    base_qs, qs, q, today = _filtered_systems_queryset(request)
+    base_qs, qs, q, today = _filtered_systems_queryset(request, infra_only=False)
 
     kpis = base_qs.aggregate(
         total=Count("id"),
@@ -151,7 +171,12 @@ def asset_building_system_export_csv(request):
         ]
         for s in qs.iterator(chunk_size=500)
     )
-    return csv_export_response(filename="building_systems.csv", headers=headers, rows=rows)
+    filename = (
+        "infrastructure_assets.csv"
+        if request.GET.get("infra_only") == "1"
+        else "building_systems.csv"
+    )
+    return csv_export_response(filename=filename, headers=headers, rows=rows)
 
 
 @login_required
@@ -162,7 +187,7 @@ def asset_building_system_create(request):
         return redirect("assets:asset_building_system_list")
 
     if request.method == "POST":
-        form = AssetBuildingSystemForm(request.POST, tenant=request.tenant)
+        form = AssetBuildingSystemForm(request.POST, tenant=request.tenant, user=request.user)
         if form.is_valid():
             with transaction.atomic():
                 system = form.save(commit=False)
@@ -189,7 +214,7 @@ def asset_building_system_create(request):
             )
             if space is not None:
                 initial["facility_space"] = space.pk
-        form = AssetBuildingSystemForm(tenant=request.tenant, initial=initial)
+        form = AssetBuildingSystemForm(tenant=request.tenant, user=request.user, initial=initial)
 
     return render(
         request,
@@ -235,7 +260,10 @@ def asset_building_system_detail(request, pk):
             "system": system,
             "linked_chargebacks": linked_chargebacks,
             "can_edit": not system.is_locked,
-            "can_delete": not system.is_locked,
+            "can_delete": is_tenant_admin_user(request.user) and not system.is_locked,
+            "can_view_schematic_document": is_asset_document_readable(
+                system.schematic_document, request.user
+            ),
         },
     )
 
@@ -243,18 +271,22 @@ def asset_building_system_detail(request, pk):
 @login_required
 def asset_building_system_edit(request, pk):
     """Edit an active or standby building system."""
-    system = assets_object(request, AssetBuildingSystem, pk)
-    if system.is_locked:
-        messages.error(
-            request,
-            f"Building system {system.number} is decommissioned and locked from editing.",
-        )
-        return redirect("assets:asset_building_system_detail", pk=system.pk)
-
     if request.method == "POST":
-        form = AssetBuildingSystemForm(request.POST, instance=system, tenant=request.tenant)
-        if form.is_valid():
-            with transaction.atomic():
+        with transaction.atomic():
+            system = get_object_or_404(
+                assets_scope(AssetBuildingSystem.objects.select_for_update(), request),
+                pk=pk,
+            )
+            if system.is_locked:
+                messages.error(
+                    request,
+                    f"Building system {system.number} is decommissioned and locked from editing.",
+                )
+                return redirect("assets:asset_building_system_detail", pk=system.pk)
+            form = AssetBuildingSystemForm(
+                request.POST, instance=system, tenant=request.tenant, user=request.user
+            )
+            if form.is_valid():
                 system = form.save()
                 write_audit_log(
                     request.user,
@@ -263,10 +295,17 @@ def asset_building_system_edit(request, pk):
                     changes={"number": system.number, "domain": system.system_domain},
                     tenant=request.tenant,
                 )
-            messages.success(request, f"Building system {system.number} updated.")
-            return redirect("assets:asset_building_system_detail", pk=system.pk)
+                messages.success(request, f"Building system {system.number} updated.")
+                return redirect("assets:asset_building_system_detail", pk=system.pk)
     else:
-        form = AssetBuildingSystemForm(instance=system, tenant=request.tenant)
+        system = assets_object(request, AssetBuildingSystem, pk)
+        if system.is_locked:
+            messages.error(
+                request,
+                f"Building system {system.number} is decommissioned and locked from editing.",
+            )
+            return redirect("assets:asset_building_system_detail", pk=system.pk)
+        form = AssetBuildingSystemForm(instance=system, tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -281,17 +320,21 @@ def asset_building_system_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_building_system_delete(request, pk):
-    """Delete a non-decommissioned building system."""
-    system = assets_object(request, AssetBuildingSystem, pk)
-    if system.is_locked:
-        messages.error(request, f"Cannot delete {system.number}: system is decommissioned.")
-        return redirect("assets:asset_building_system_detail", pk=system.pk)
-
-    label = system.number
+    """Delete a non-decommissioned building system (tenant admin only)."""
+    label = "building system"
     try:
         with transaction.atomic():
+            system = get_object_or_404(
+                assets_scope(AssetBuildingSystem.objects.select_for_update(), request),
+                pk=pk,
+            )
+            label = system.number
+            if system.is_locked:
+                messages.error(request, f"Cannot delete {system.number}: system is decommissioned.")
+                return redirect("assets:asset_building_system_detail", pk=system.pk)
             write_audit_log(
                 request.user,
                 system,
@@ -314,10 +357,12 @@ def asset_building_system_evaluate_comfort(request, pk):
     """Evaluate HVAC comfort band against temperature and humidity setpoints."""
     with transaction.atomic():
         system = get_object_or_404(
-            AssetBuildingSystem.objects.select_for_update(),
+            assets_scope(AssetBuildingSystem.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
+        if system.is_locked:
+            messages.error(request, f"System {system.number} is decommissioned and locked.")
+            return redirect("assets:asset_building_system_detail", pk=system.pk)
         new_comfort = system.compute_comfort_status()
         system.comfort_status = new_comfort
         system.save(update_fields=["comfort_status", "updated_at"])
@@ -341,9 +386,8 @@ def asset_building_system_record_inspection(request, pk):
     """Record a completed statutory inspection today and schedule next annual due date."""
     with transaction.atomic():
         system = get_object_or_404(
-            AssetBuildingSystem.objects.select_for_update(),
+            assets_scope(AssetBuildingSystem.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
         if system.is_locked:
             messages.error(request, f"System {system.number} is decommissioned.")
@@ -372,9 +416,8 @@ def asset_building_system_flag_maintenance(request, pk):
     """Place building system into Under Maintenance status."""
     with transaction.atomic():
         system = get_object_or_404(
-            AssetBuildingSystem.objects.select_for_update(),
+            assets_scope(AssetBuildingSystem.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
         if system.is_locked:
             messages.error(request, f"System {system.number} is decommissioned.")
@@ -398,9 +441,8 @@ def asset_building_system_restore_operational(request, pk):
     """Restore a degraded/maintenance/standby system to Operational."""
     with transaction.atomic():
         system = get_object_or_404(
-            AssetBuildingSystem.objects.select_for_update(),
+            assets_scope(AssetBuildingSystem.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
         if system.status == "decommissioned":
             messages.error(request, f"Decommissioned system {system.number} cannot be restored directly.")
@@ -424,9 +466,8 @@ def asset_building_system_decommission(request, pk):
     """Decommission a building system (admin only)."""
     with transaction.atomic():
         system = get_object_or_404(
-            AssetBuildingSystem.objects.select_for_update(),
+            assets_scope(AssetBuildingSystem.objects.select_for_update(), request),
             pk=pk,
-            tenant=request.tenant,
         )
         if system.status == "decommissioned":
             messages.info(request, f"System {system.number} is already decommissioned.")
