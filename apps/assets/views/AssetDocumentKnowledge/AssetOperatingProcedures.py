@@ -57,19 +57,18 @@ def _next_proc_revision_label(current_label):
     return "Rev 2.0"
 
 
-def _filter_procedure_queryset(request, base_qs):
+_SOP_LIST_SELECT_RELATED = (
+    "operational_asset",
+    "asset_category",
+)
+_SOP_EXPORT_SELECT_RELATED = ("operational_asset",)
+
+
+def _filter_procedure_queryset(
+    request, base_qs, select_related=_SOP_LIST_SELECT_RELATED
+):
     """Apply search and dropdown GET filters to an AssetOperatingProcedure queryset."""
-    qs = base_qs.select_related(
-        "operational_asset",
-        "asset_category",
-        "asset_model",
-        "org_unit",
-        "author",
-        "safety_reviewer",
-        "approved_by",
-        "primary_document",
-        "supersedes",
-    )
+    qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
     if search_query:
         qs = qs.filter(
@@ -197,7 +196,9 @@ def asset_operating_procedure_list(request):
     """SOP, PM protocol, and LOTO checklist list view."""
     today = timezone.localdate()
     base_qs = assets_scope(AssetOperatingProcedure.objects.all(), request)
-    filtered_qs = _filter_procedure_queryset(request, base_qs)
+    filtered_qs = _filter_procedure_queryset(request, base_qs).defer(
+        "purpose_scope", "hazard_warnings", "review_notes"
+    )
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
@@ -239,7 +240,27 @@ def asset_operating_procedure_list(request):
 def asset_operating_procedure_export_csv(request):
     """Export filtered tenant SOPs & LOTO checklists as a hardened CSV download."""
     base_qs = assets_scope(AssetOperatingProcedure.objects.all(), request)
-    filtered_qs = _filter_procedure_queryset(request, base_qs)
+    filtered_qs = (
+        _filter_procedure_queryset(
+            request, base_qs, select_related=_SOP_EXPORT_SELECT_RELATED
+        )
+        .only(
+            "id",
+            "number",
+            "title",
+            "procedure_type",
+            "safety_level",
+            "revision_label",
+            "loto_required",
+            "estimated_duration_minutes",
+            "procedure_steps",
+            "status",
+            "effective_date",
+            "next_review_date",
+            "operational_asset",
+        )[:10000]
+        .iterator(chunk_size=1000)
+    )
     headers = [
         "SOP #",
         "Title",
