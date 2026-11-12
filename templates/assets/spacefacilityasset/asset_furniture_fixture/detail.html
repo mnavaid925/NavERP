@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}{{ fixture.number }} — {{ fixture.name }} — FF&amp;E — NavERP{% endblock %}
 
@@ -92,14 +91,14 @@
         <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
         <div class="stat-body">
             <div class="stat-label">Total Replacement Value</div>
-            <div class="stat-value text-base">{{ fixture.total_replacement_value|floatformat:2|intcomma }}</div>
+            <div class="stat-value text-base">{{ fixture.total_replacement_value|floatformat:2 }}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon orange"><i data-lucide="truck"></i></div>
         <div class="stat-body">
             <div class="stat-label">Estimated Move Cost</div>
-            <div class="stat-value text-base">{{ fixture.estimated_move_cost|floatformat:2|intcomma }}</div>
+            <div class="stat-value text-base">{{ fixture.estimated_move_cost|floatformat:2 }}</div>
         </div>
     </div>
 </div>
@@ -129,7 +128,7 @@
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Unit Replacement Cost</dt>
-                    <dd class="font-mono">{{ fixture.unit_replacement_cost|floatformat:2|intcomma }}</dd>
+                    <dd class="font-mono">{{ fixture.unit_replacement_cost|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Floor Pin Coordinates</dt>
@@ -189,7 +188,7 @@
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Move Coordinator</dt>
-                    <dd>{{ fixture.move_coordinator.get_full_name|default:fixture.move_coordinator.username|default:"—" }}</dd>
+                    <dd>{% if fixture.move_coordinator %}{{ fixture.move_coordinator.get_full_name|default:fixture.move_coordinator.username }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-muted">Scheduled Move Date</dt>
