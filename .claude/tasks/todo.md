@@ -31167,3 +31167,293 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - **Review & Fixer Pass**: 6 serial passes (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester` report-only, `security-reviewer`) identified 4 Critical, 15 Important, and 13 Minor findings; `code-fixer` resolved all 32 items across 99 single-file commits (0 `[ ] open` remaining).
   - **Verification**: `manage.py check` exit 0; `manage.py seed_assets` x2 idempotent; full unfiltered `venv\Scripts\python.exe -m pytest -q -W ignore apps/assets/tests/` exited 0 with **2,393** tests passing (`110` new 11.16 tests: `23` models `7f2a07e0`, `40` forms `cdbd101e`, `21` views `9396f436`, `26` security `16b209b4`).
 - **Gaps**: Tracked in [.claude/tasks/gaps-assets-11.16.md](.claude/tasks/gaps-assets-11.16.md) (0 in-scope gaps; 3 cross-module/future-module deferrals + 1 out-of-scope sibling clone note in `11.14` `AssetAnalytics/_helpers.py`).
+
+---
+
+# Sub-module 11.17: Space & Facility Asset Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.17.md` (2026-11-12)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.16.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: latest leaf on disk is `0023_assetdocument_idx_adoc_ten_upd_and_more.py`, so **11.17 claims `0024_...`** (always run `makemigrations assets --dry-run` first and inspect every model listed per L43/L53).
+> Plan written from `.claude/tasks/research-assets-11.17.md` (Phase 1) and `NavERP.md` lines 1841–1847.
+> **Backend package folder**: `apps/assets/{models,forms,views,urls}/SpaceFacilityAsset/<Entity>.py` (`AssetFacilitySpaces.py`, `AssetBuildingSystems.py`, `AssetFurnitureFixtures.py`, `AssetSpaceChargebacks.py`, plus `InfrastructureBoard.py` in `views/` & `urls/`, and `_validators.py` / `_helpers.py`).
+> **Template folder** *(verified against 11.15 `templates/assets/integrationapihub/` and 11.16 `templates/assets/assetdocumentknowledge/` — lowercase package slug, then snake_case entity folders, with standalone board at sub-module root per CLAUDE.md Rule 6)*: `templates/assets/spacefacilityasset/{asset_facility_space,asset_building_system,asset_furniture_fixture,asset_space_chargeback}/{list,detail,form}.html` + `templates/assets/spacefacilityasset/infrastructure_board.html`.
+
+## Architectural Rulings (verified against spine, `apps/assets`, & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`AFSP`** (`AssetFacilitySpace`), **`AFBS`** (`AssetBuildingSystem`), **`AFFE`** (`AssetFurnitureFixture`), **`AFCB`** (`AssetSpaceChargeback`), all four class names, and URL prefixes (`spaces/`, `building-systems/`, `furniture-fixtures/`, `infrastructure-board/`, `space-chargebacks/`) verified collision-free via ripgrep across `apps/` and `.claude/tasks/contract-*.md`. All four models inherit `TenantNumbered` (`apps/assets/models/_base.py`, which already provides `tenant`, `number`, `created_at`, `updated_at` — do NOT redeclare `tenant`).
+- **Verified FK targets (string references, grep-confirmed across `apps/*/models/` and `apps/accounts/models.py`)**:
+  - `core`: `"core.OrgUnit"`, `"core.Party"` (`tenant` inherited from `TenantNumbered` -> `"core.Tenant"`).
+  - `accounts`: `settings.AUTH_USER_MODEL` (`accounts.User`; has `tenant` FK nullable for superuser — scope form querysets to `tenant=self.tenant` and check with `reject_foreign`).
+  - `scm`: `"scm.Location"`, `"scm.Asset"`.
+  - `accounting` (tenant-owned): `"accounting.FixedAsset"`, `"accounting.FiscalPeriod"`, `"accounting.GLAccount"`, `"accounting.JournalEntry"`, `"accounting.Invoice"`.
+  - `accounting` (**GLOBAL — NO `tenant` FK, L29 / L39**): `"accounting.Currency"` — **MUST NOT** be filtered by `tenant=` in `AssetSpaceChargebackForm.__init__` (use `Currency.objects.filter(is_active=True).order_by("code")` or `all().order_by("code")`) and **MUST NOT** be passed to `reject_foreign(...)` or `validate_tenant_fks(...)` (otherwise valid global currencies fail `"belongs to another workspace"`!).
+  - `assets` siblings: `"assets.AssetGisMapping"`, `"assets.AssetDocument"`, `"assets.AssetEnergyReading"`, `"assets.AssetMaintenanceSchedule"`, `"assets.AssetPermitLicense"`, `"assets.AssetMovementLog"`, `"assets.AssetLeaseContract"`.
+  - Intra-11.17 & self-FKs: `"assets.AssetFacilitySpace"`, `"assets.AssetBuildingSystem"`, `"self"`.
+- **Upload security & protected floor-plan downloads (`L20`, `L53`)**:
+  - Validate `AssetFacilitySpace.floor_plan_image` in `clean_floor_plan_image()` using `ALLOWED_DOC_EXTENSIONS` (excludes `.svg` to prevent stored XSS) and `MAX_UPLOAD_BYTES` (20 MB) imported from `apps.core.forms._common`.
+  - **NEVER** render raw `{{ space.floor_plan_image.url }}` in templates; expose `@login_required` tenant-scoped `asset_facility_space_floor_plan_download` returning `FileResponse(..., as_attachment=True, filename=...)` with `X-Content-Type-Options: nosniff` and CR/LF/path-separator sanitization.
+- **Workflow, derived values, & `*_at` hygiene (`L20`, `L22`, `L49`)**:
+  - Exclude from ALL `ModelForm.Meta.fields` (and set `editable=False` on models): `tenant`, `number`, `created_at`, `updated_at`, workflow-controlled `status` (all 4 models), `AssetFacilitySpace.occupancy_status` (recomputed in `clean()`/`save()` & `recalculate_utilization`), `AssetBuildingSystem.comfort_status` (recomputed in `clean()`/`save()` & `evaluate_comfort_band`), `AssetFurnitureFixture.move_status` / `move_completed_at` / `movement_log`, and `AssetSpaceChargeback.net_chargeback_amount` / `approved_at` / `approved_by` / `journal_entry`.
+  - All forms inherit `(TenantUniqueMixin, TenantModelForm)` (L49), scope every tenant-owned FK queryset in `__init__` to `tenant=self.tenant` (excluding `self.instance.pk` on `AssetFacilitySpace.parent`), and call `reject_foreign(...)` in `clean()`. Every model `clean()` calls `validate_tenant_fks(...)` (skipping global `currency`) plus cycle guard on `AssetFacilitySpace.parent` (`max_depth=25`).
+- **Accounting Ledger Integration (`L29`, atomic double-entry)**:
+  - `AssetSpaceChargeback.post_chargeback` (POST action) runs inside `with transaction.atomic():` using `select_for_update()`: validates `journal_entry is None`, `status == "approved"`, `net_chargeback_amount > Decimal("0.00")`, `fiscal_period` present & `fiscal_period.is_open` & same tenant, `expense_gl_account` & `recovery_gl_account` both present, distinct (`expense_gl_account.pk != recovery_gl_account.pk`), and same tenant. Creates ONE balanced `accounting.JournalEntry` (`entry_type="recurring"`, `status="posted"`, `posted_at=now`) and TWO `JournalLine`s (`Dr expense_gl_account`, `Cr recovery_gl_account`, calling `full_clean()` + `save()` on each line), links `chargeback.journal_entry = je`, and advances `chargeback.status = "posted_to_gl"`. Never creates a second ledger.
+- **Audit logging (`L66` & `varchar(10)` rule)**:
+  - Every mutating view calls `write_audit_log(request.user, obj, action.lower(), changes={...}, tenant=request.tenant)` — NEVER pass `request` first or `instance=`/`description=`. Keep `AuditLog.action <= 10` chars (`"create"`, `"update"`, `"delete"`, `"recalc"`, `"renovate"`, `"activate"`, `"decomm"`, `"comfort"`, `"inspect"`, `"maint"`, `"req_move"`, `"sched_mv"`, `"comp_move"`, `"retire"`, `"submit"`, `"approve"`, `"post_gl"`, `"dispute"`, `"close"`).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**:
+  - Every `CharField(choices=...)` `max_length` verified strictly `>= len(longest_choice_value)` + headroom; every `UniqueConstraint` and `Index` `name` verified `<= 30` chars.
+- **Frontend, Filters, & Views (`L2`, `L9`, `L10`, `L11`, `L33`, `L42`, `L57`, `L58`)**:
+  - Badges ONLY from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`. Stat icons ONLY from `blue`, `green`, `orange`, `purple`, `slate`, `red`.
+  - Detail views use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - List filters parsed BEFORE pagination; integer FK GET params checked with `.isdigit()` (L11); template FK selects compare `|stringformat:"d"`; filter controls carry matching `id=` and `<label for=>`; pagination guards `has_previous` / `has_next` (L9); nullable user FKs guarded with `{% if fk %}` (L10); `.aggregate()` / `.annotate()` aliases never collide with model `@property` names (L57).
+  - Delete & workflow transition routes enforce `@require_POST` (`confirm(...)` uses system `number` with escaped apostrophes per L42). CSV exports neutralize formula prefixes (`=`, `+`, `-`, `@`, `\t`, `\r`, `\n`) and set `X-Content-Type-Options: nosniff`.
+
+---
+
+## Models (from research — 4)
+
+### 1. `AssetFacilitySpace` (`AFSP-`)
+*Maps NavERP bullet: `Floor Plan & Space Mapping`*
+- **File**: `apps/assets/models/SpaceFacilityAsset/AssetFacilitySpaces.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AFSP"`)
+- **Fields & Choices (L65 longest choice value checked)**:
+  - `code`: `CharField(max_length=32)`
+  - `name`: `CharField(max_length=200)`
+  - `space_level`: `CharField(max_length=24, choices=SPACE_LEVEL_CHOICES, default="room")` — `"building"` (8), `"floor"` (5), `"wing_zone"` (9), `"room"` (4), `"mechanical_bay"` (14), `"exterior_pad"` (12) (longest: 14 <= 24)
+  - `space_category`: `CharField(max_length=32, choices=SPACE_CATEGORY_CHOICES, default="office_workspace")` — `"office_workspace"` (16), `"conference_meeting"` (18), `"mechanical_room"` (15), `"electrical_closet"` (17), `"hvac_zone"` (9), `"cleanroom_lab"` (13), `"lobby_common"` (12), `"server_idf_room"` (15), `"warehouse_bay"` (13), `"restroom_utility"` (16) (longest: 18 <= 32)
+  - `parent`: `ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="child_spaces")` (cycle guard in `clean()`)
+  - `gross_area_sqft`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `rentable_area_sqft`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `usable_area_sqft`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `common_area_sqft`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `annual_rate_per_sqft`: `DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `design_seat_capacity`: `PositiveIntegerField(default=0)`
+  - `current_headcount`: `PositiveIntegerField(default=0)`
+  - `occupancy_status`: `CharField(max_length=24, choices=OCCUPANCY_STATUS_CHOICES, default="vacant", editable=False)` — `"occupied"` (8), `"underutilized"` (13), `"vacant"` (6), `"reserved_reconfig"` (17), `"offline"` (7) (longest: 17 <= 24)
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="active", editable=False)` — `"active"` (6), `"planned"` (7), `"under_renovation"` (16), `"decommissioned"` (14) (longest: 16 <= 24)
+  - `cad_layer_ref`: `CharField(max_length=100, blank=True)`
+  - `bim_guid`: `CharField(max_length=64, blank=True)`
+  - `bim_level_ref`: `CharField(max_length=64, blank=True)`
+  - `drawing_revision`: `CharField(max_length=24, blank=True)`
+  - `floor_plan_image`: `FileField(upload_to="assets/space_floor_plans/%Y/%m/", blank=True, null=True)`
+  - `notes`: `TextField(blank=True)`
+  - **Verified FKs**: `org_unit` (`core.OrgUnit`), `scm_location` (`scm.Location`), `gis_mapping` (`assets.AssetGisMapping`), `floor_plan_document` (`assets.AssetDocument`), `space_steward` (`settings.AUTH_USER_MODEL`)
+- **Properties & Methods**:
+  - `@property utilization_pct`: returns rounded `(current_headcount / design_seat_capacity) * 100` (or `Decimal("0.00")` when capacity == 0)
+  - `@property annual_space_cost`: returns `(rentable_area_sqft or usable_area_sqft) * annual_rate_per_sqft`
+  - `compute_occupancy_status()`: maps `status in ("under_renovation", "decommissioned")` -> `"offline"`, `design_seat_capacity == 0` & `current_headcount == 0` -> `"vacant"`, `utilization_pct < 50` (and headcount > 0) -> `"underutilized"`, `current_headcount == 0` -> `"vacant"`, else `"occupied"`.
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_afsp_ten_num_uniq")` (24)
+  - `UniqueConstraint(fields=["tenant", "code"], name="assets_afsp_ten_code_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_afsp_ten_stat")` (17)
+  - `Index(fields=["tenant", "space_level"], name="idx_afsp_ten_lvl")` (16)
+  - `Index(fields=["tenant", "space_category"], name="idx_afsp_ten_cat")` (16)
+  - `Index(fields=["tenant", "occupancy_status"], name="idx_afsp_ten_occ")` (16)
+  - `Index(fields=["tenant", "parent"], name="idx_afsp_ten_par")` (16)
+- **Form (`AssetFacilitySpaceForm`)**:
+  - `Meta.fields`: `code`, `name`, `space_level`, `space_category`, `parent`, `org_unit`, `scm_location`, `gis_mapping`, `floor_plan_document`, `space_steward`, `gross_area_sqft`, `rentable_area_sqft`, `usable_area_sqft`, `common_area_sqft`, `annual_rate_per_sqft`, `design_seat_capacity`, `current_headcount`, `cad_layer_ref`, `bim_guid`, `bim_level_ref`, `drawing_revision`, `floor_plan_image`, `notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `status`, `occupancy_status`, `created_at`, `updated_at`
+  - `clean_floor_plan_image()`: validate extension via `ALLOWED_DOC_EXTENSIONS` (no `.svg`) & size `<= MAX_UPLOAD_BYTES` (20 MB)
+  - `clean()`: `reject_foreign(...)` on all 6 tenant FKs (`parent`, `org_unit`, `scm_location`, `gis_mapping`, `floor_plan_document`, `space_steward`); validate non-negative areas/rate; disallow `parent == self.instance`.
+- **Views, Actions & Context**:
+  - Views: `asset_facility_space_list`, `asset_facility_space_export_csv`, `asset_facility_space_create`, `asset_facility_space_detail`, `asset_facility_space_edit` (blocked if `decommissioned`), `asset_facility_space_delete` (only when `status in ("planned", "active")` with no active child spaces/systems/FF&E/chargebacks, `@require_POST`), `asset_facility_space_floor_plan_download` (protected `FileResponse` attachment), plus POST actions `asset_facility_space_recalculate_utilization`, `asset_facility_space_mark_under_renovation`, `asset_facility_space_activate`, `asset_facility_space_decommission`.
+  - Context keys pinned:
+    - List: `spaces` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `active_count`, `underutilized_count`, `vacant_count`, `total_usable_sqft`, `level_choices`, `category_choices`, `occupancy_choices`, `status_choices`, `org_units`, `parent_spaces`, `search_query`
+    - Detail: `space`, `child_spaces`, `mounted_systems`, `placed_ffe`, `active_chargebacks`, `can_edit`, `can_delete`
+    - Form: `form`, `space` (when editing, else `None`), `is_edit`, `title`
+
+### 2. `AssetBuildingSystem` (`AFBS-`)
+*Maps NavERP bullets: `HVAC & Building Systems` + `Infrastructure Asset Management`*
+- **File**: `apps/assets/models/SpaceFacilityAsset/AssetBuildingSystems.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AFBS"`)
+- **Fields & Choices (L65 longest choice value checked)**:
+  - `name`: `CharField(max_length=200)`
+  - `system_domain`: `CharField(max_length=32, choices=SYSTEM_DOMAIN_CHOICES, default="hvac_climate")` — `"hvac_climate"` (12), `"electrical_power"` (16), `"plumbing_water"` (14), `"elevator_vertical"` (17), `"fire_life_safety"` (16), `"structural_envelope"` (19), `"bms_controls"` (12), `"backup_generation"` (17) (longest: 19 <= 32)
+  - `subsystem_type`: `CharField(max_length=32, choices=SUBSYSTEM_TYPE_CHOICES, default="ahu_air_handler")` — `"ahu_air_handler"` (15), `"chiller_plant"` (13), `"boiler_heating"` (14), `"vav_terminal"` (12), `"rooftop_unit"` (12), `"switchgear_panel"` (16), `"transformer_sub"` (15), `"ups_battery"` (11), `"generator_set"` (13), `"booster_pump"` (12), `"passenger_elevator"` (18), `"freight_elevator"` (16), `"sprinkler_riser"` (15), `"fire_alarm_panel"` (16), `"roof_structural"` (15), `"facade_envelope"` (15) (longest: 18 <= 32)
+  - `pin_x_pct`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)` (0–100)
+  - `pin_y_pct`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)` (0–100)
+  - `manufacturer`: `CharField(max_length=120, blank=True)`
+  - `model_number`: `CharField(max_length=80, blank=True)`
+  - `serial_number`: `CharField(max_length=80, blank=True)`
+  - `load_or_voltage_rating`: `CharField(max_length=80, blank=True)`
+  - `ashrae_nfpa_code_ref`: `CharField(max_length=80, blank=True)`
+  - `served_area_sqft`: `DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)` (>= 0)
+  - `design_capacity_btu_kw`: `DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)` (>= 0)
+  - `refrigerant_type`: `CharField(max_length=40, blank=True)`
+  - `setpoint_temp_c`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)`
+  - `measured_temp_c`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)`
+  - `target_humidity_pct`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)` (0–100)
+  - `measured_humidity_pct`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)` (0–100)
+  - `airflow_cfm`: `DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)` (>= 0)
+  - `energy_efficiency_rating`: `CharField(max_length=40, blank=True)`
+  - `comfort_status`: `CharField(max_length=24, choices=COMFORT_STATUS_CHOICES, default="not_applicable", editable=False)` — `"optimal"` (7), `"drift_warning"` (13), `"out_of_band"` (11), `"offline"` (7), `"not_applicable"` (14) (longest: 14 <= 24)
+  - `condition_grade`: `CharField(max_length=20, choices=CONDITION_GRADE_CHOICES, default="good")` — `"excellent"` (9), `"good"` (4), `"fair"` (4), `"poor"` (4), `"critical"` (8) (longest: 9 <= 20)
+  - `criticality_tier`: `CharField(max_length=28, choices=CRITICALITY_TIER_CHOICES, default="tier_3_operational")` — `"tier_1_life_safety"` (18), `"tier_2_mission_crit"` (19), `"tier_3_operational"` (18), `"tier_4_standard"` (15) (longest: 19 <= 28)
+  - `remaining_useful_life_years`: `PositiveSmallIntegerField(null=True, blank=True)`
+  - `replacement_cost_estimate`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `last_statutory_inspection_date`: `DateField(null=True, blank=True)`
+  - `next_inspection_due_date`: `DateField(null=True, blank=True)`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="operational", editable=False)` — `"operational"` (11), `"degraded"` (8), `"under_maintenance"` (17), `"standby"` (7), `"decommissioned"` (14) (longest: 17 <= 24)
+  - `notes`: `TextField(blank=True)`
+  - **Verified FKs**: `facility_space` (`assets.AssetFacilitySpace`, PROTECT), `operational_asset` (`scm.Asset`), `fixed_asset` (`accounting.FixedAsset`), `latest_energy_reading` (`assets.AssetEnergyReading`), `maintenance_schedule` (`assets.AssetMaintenanceSchedule`), `operating_permit` (`assets.AssetPermitLicense`), `schematic_document` (`assets.AssetDocument`), `service_vendor` (`core.Party`), `org_unit` (`core.OrgUnit`)
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_afbs_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_afbs_ten_stat")` (17)
+  - `Index(fields=["tenant", "system_domain"], name="idx_afbs_ten_dom")` (16)
+  - `Index(fields=["tenant", "comfort_status"], name="idx_afbs_ten_cmf")` (16)
+  - `Index(fields=["tenant", "facility_space"], name="idx_afbs_ten_spc")` (16)
+  - `Index(fields=["tenant", "next_inspection_due_date"], name="idx_afbs_ten_insp")` (17)
+- **Form (`AssetBuildingSystemForm`)**:
+  - `Meta.fields`: `name`, `system_domain`, `subsystem_type`, `facility_space`, `pin_x_pct`, `pin_y_pct`, `manufacturer`, `model_number`, `serial_number`, `load_or_voltage_rating`, `ashrae_nfpa_code_ref`, `served_area_sqft`, `design_capacity_btu_kw`, `refrigerant_type`, `setpoint_temp_c`, `measured_temp_c`, `target_humidity_pct`, `measured_humidity_pct`, `airflow_cfm`, `energy_efficiency_rating`, `condition_grade`, `criticality_tier`, `remaining_useful_life_years`, `replacement_cost_estimate`, `last_statutory_inspection_date`, `next_inspection_due_date`, `operational_asset`, `fixed_asset`, `latest_energy_reading`, `maintenance_schedule`, `operating_permit`, `schematic_document`, `service_vendor`, `org_unit`, `notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `status`, `comfort_status`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(...)` on all 9 tenant FKs; validate `0 <= pin_x_pct/pin_y_pct <= 100`, `0 <= humidity <= 100`, non-negative area/capacity/airflow/replacement cost, and `next_inspection_due_date >= last_statutory_inspection_date` when both set.
+- **Views, Actions & Context**:
+  - `AssetBuildingSystems.py` views: `asset_building_system_list`, `asset_building_system_export_csv`, `asset_building_system_create`, `asset_building_system_detail`, `asset_building_system_edit` (blocked if `decommissioned`), `asset_building_system_delete` (when not `decommissioned` / no active chargebacks, `@require_POST`), plus POST actions `asset_building_system_evaluate_comfort`, `asset_building_system_record_inspection`, `asset_building_system_flag_maintenance`, `asset_building_system_restore_operational`, `asset_building_system_decommission`.
+  - `InfrastructureBoard.py` view: `asset_infrastructure_board` (dedicated Infrastructure Asset Management board showing electrical, plumbing, vertical transport/elevators, fire/life-safety, structural envelope, BMS, and backup generation registers + FCA condition summary & overdue statutory inspection alerts, distinct from HVAC list).
+  - Context keys pinned:
+    - List: `systems` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `operational_count`, `comfort_alert_count`, `overdue_inspection_count`, `domain_choices`, `subsystem_choices`, `comfort_choices`, `condition_choices`, `status_choices`, `spaces`, `search_query`
+    - Infrastructure Board: `systems` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `critical_life_safety_count`, `poor_critical_condition_count`, `overdue_inspection_count`, `total_replacement_exposure`, `domain_choices`, `condition_choices`, `criticality_choices`, `status_choices`, `spaces`, `search_query`
+    - Detail: `system`, `linked_chargebacks`, `is_inspection_overdue`, `can_edit`
+    - Form: `form`, `system` (when editing, else `None`), `is_edit`, `title`
+
+### 3. `AssetFurnitureFixture` (`AFFE-`)
+*Maps NavERP bullet: `Furniture & Fixture Tracking`*
+- **File**: `apps/assets/models/SpaceFacilityAsset/AssetFurnitureFixtures.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AFFE"`)
+- **Fields & Choices (L65 longest choice value checked)**:
+  - `name`: `CharField(max_length=200)`
+  - `ffe_category`: `CharField(max_length=32, choices=FFE_CATEGORY_CHOICES, default="workstation_desk")` — `"workstation_desk"` (16), `"ergonomic_seating"` (17), `"conference_table"` (16), `"modular_partition"` (17), `"storage_cabinet"` (15), `"av_display_fixture"` (18), `"lighting_fixture"` (16), `"lab_casework"` (12), `"reception_millwork"` (18) (longest: 18 <= 32)
+  - `asset_tag_code`: `CharField(max_length=64, blank=True)`
+  - `manufacturer`: `CharField(max_length=120, blank=True)`
+  - `model_sku`: `CharField(max_length=80, blank=True)`
+  - `finish_material`: `CharField(max_length=80, blank=True)`
+  - `quantity`: `PositiveIntegerField(default=1)` (>= 1)
+  - `unit_replacement_cost`: `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `pin_x_pct`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)` (0–100)
+  - `pin_y_pct`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)` (0–100)
+  - `condition_grade`: `CharField(max_length=20, choices=CONDITION_GRADE_CHOICES, default="good")` — `"new"` (3), `"good"` (4), `"fair"` (4), `"worn"` (4), `"damaged"` (7) (longest: 7 <= 20)
+  - `move_status`: `CharField(max_length=28, choices=MOVE_STATUS_CHOICES, default="in_place", editable=False)` — `"in_place"` (8), `"move_requested"` (14), `"scheduled_reconfig"` (18), `"in_transit"` (10), `"relocated"` (9), `"in_storage"` (10), `"retired"` (7) (longest: 18 <= 28)
+  - `reconfiguration_batch_ref`: `CharField(max_length=64, blank=True)`
+  - `move_scheduled_date`: `DateField(null=True, blank=True)`
+  - `move_completed_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `estimated_move_cost`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `move_notes`: `TextField(blank=True)`
+  - **Verified FKs**: `facility_space` (`assets.AssetFacilitySpace`, PROTECT), `target_space` (`assets.AssetFacilitySpace`, SET_NULL, null/blank), `custodian_party` (`core.Party`), `assigned_org_unit` (`core.OrgUnit`), `operational_asset` (`scm.Asset`), `fixed_asset` (`accounting.FixedAsset`), `movement_log` (`assets.AssetMovementLog`, editable=False), `move_coordinator` (`settings.AUTH_USER_MODEL`)
+- **Properties**:
+  - `@property total_replacement_value`: `(quantity or 0) * (unit_replacement_cost or Decimal("0.00"))`
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_affe_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "move_status"], name="idx_affe_ten_mstat")` (18)
+  - `Index(fields=["tenant", "ffe_category"], name="idx_affe_ten_cat")` (16)
+  - `Index(fields=["tenant", "facility_space"], name="idx_affe_ten_spc")` (16)
+  - `Index(fields=["tenant", "reconfiguration_batch_ref"], name="idx_affe_ten_batch")` (18)
+- **Form (`AssetFurnitureFixtureForm`)**:
+  - `Meta.fields`: `name`, `ffe_category`, `asset_tag_code`, `manufacturer`, `model_sku`, `finish_material`, `facility_space`, `target_space`, `custodian_party`, `assigned_org_unit`, `operational_asset`, `fixed_asset`, `move_coordinator`, `quantity`, `unit_replacement_cost`, `pin_x_pct`, `pin_y_pct`, `condition_grade`, `reconfiguration_batch_ref`, `move_scheduled_date`, `estimated_move_cost`, `move_notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `move_status`, `move_completed_at`, `movement_log`, `created_at`, `updated_at`
+  - `clean()`: `reject_foreign(...)` on all 7 editable tenant FKs (`facility_space`, `target_space`, `custodian_party`, `assigned_org_unit`, `operational_asset`, `fixed_asset`, `move_coordinator`); validate `quantity >= 1`, non-negative costs, `0 <= pin_x_pct/pin_y_pct <= 100`, and `target_space != facility_space` when `target_space` is set.
+- **Views, Actions & Context**:
+  - Views: `asset_furniture_fixture_list`, `asset_furniture_fixture_export_csv`, `asset_furniture_fixture_create`, `asset_furniture_fixture_detail`, `asset_furniture_fixture_edit` (blocked if `retired`), `asset_furniture_fixture_delete` (when `move_status in ("in_place", "in_storage")` or admin, `@require_POST`), plus POST MAC workflow actions `asset_furniture_fixture_request_move` (requires `target_space`), `asset_furniture_fixture_schedule_reconfig`, `asset_furniture_fixture_complete_move` (atomically validates `target_space`, shifts `facility_space = target_space`, clears `target_space`, stamps `move_completed_at`, creates linked `AssetMovementLog` if `operational_asset` set), `asset_furniture_fixture_retire`.
+  - Context keys pinned:
+    - List: `fixtures` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `pending_move_count`, `in_place_count`, `total_quantity`, `category_choices`, `condition_choices`, `move_status_choices`, `spaces`, `org_units`, `search_query`
+    - Detail: `fixture`, `can_edit`, `can_complete_move`
+    - Form: `form`, `fixture` (when editing, else `None`), `is_edit`, `title`
+
+### 4. `AssetSpaceChargeback` (`AFCB-`)
+*Maps NavERP bullet: `Tenant & Occupancy Coordination`*
+- **File**: `apps/assets/models/SpaceFacilityAsset/AssetSpaceChargebacks.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AFCB"`)
+- **Fields & Choices (L65 longest choice value checked)**:
+  - `title`: `CharField(max_length=200)`
+  - `coordination_type`: `CharField(max_length=36, choices=COORDINATION_TYPE_CHOICES, default="space_chargeback")` — `"space_chargeback"` (16), `"shared_asset_allocation"` (23), `"cam_utility_recovery"` (20), `"leasehold_improvement"` (21), `"ti_allowance_amortization"` (25) (longest: 25 <= 36)
+  - `allocation_basis`: `CharField(max_length=24, choices=ALLOCATION_BASIS_CHOICES, default="usable_sqft")` — `"usable_sqft"` (11), `"rentable_sqft"` (13), `"headcount"` (9), `"submeter_usage"` (14), `"fixed_split_pct"` (15), `"direct_ti_cost"` (14) (longest: 15 <= 24)
+  - `period_start`: `DateField()`
+  - `period_end`: `DateField()`
+  - `amortization_end_date`: `DateField(null=True, blank=True)`
+  - `allocated_area_sqft`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `allocation_share_pct`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("100.00"))` (0–100)
+  - `base_cost_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `shared_cam_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `utility_recovery_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `ti_improvement_cost`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `ti_allowance_offset`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))` (>= 0)
+  - `net_chargeback_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"), editable=False)` (computed in `clean()` & `save()` as `base_cost_amount + shared_cam_amount + utility_recovery_amount + max(Decimal("0.00"), ti_improvement_cost - ti_allowance_offset)`)
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", editable=False)` — `"draft"` (5), `"pending_approval"` (16), `"approved"` (8), `"posted_to_gl"` (12), `"invoiced"` (8), `"disputed"` (8), `"closed"` (6) (longest: 16 <= 24)
+  - `approved_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `notes`: `TextField(blank=True)`
+  - **Verified FKs**:
+    - Tenant-scoped: `facility_space` (`assets.AssetFacilitySpace`, PROTECT), `shared_building_system` (`assets.AssetBuildingSystem`, SET_NULL, null/blank), `lease_contract` (`assets.AssetLeaseContract`, SET_NULL, null/blank), `fixed_asset` (`accounting.FixedAsset`, SET_NULL, null/blank), `charged_org_unit` (`core.OrgUnit`, SET_NULL, null/blank), `occupant_party` (`core.Party`, SET_NULL, null/blank), `fiscal_period` (`accounting.FiscalPeriod`, SET_NULL, null/blank), `expense_gl_account` (`accounting.GLAccount`, SET_NULL, null/blank), `recovery_gl_account` (`accounting.GLAccount`, SET_NULL, null/blank), `journal_entry` (`accounting.JournalEntry`, SET_NULL, null/blank, editable=False), `ar_invoice` (`accounting.Invoice`, SET_NULL, null/blank), `approved_by` (`settings.AUTH_USER_MODEL`, SET_NULL, null/blank, editable=False)
+    - **Global (NO `tenant` FK, L39)**: `currency` (`accounting.Currency`, SET_NULL, null/blank)
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_afcb_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_afcb_ten_stat")` (17)
+  - `Index(fields=["tenant", "coordination_type"], name="idx_afcb_ten_type")` (17)
+  - `Index(fields=["tenant", "facility_space"], name="idx_afcb_ten_spc")` (16)
+  - `Index(fields=["tenant", "period_start", "period_end"], name="idx_afcb_ten_per")` (16)
+- **Form (`AssetSpaceChargebackForm`)**:
+  - `Meta.fields`: `title`, `coordination_type`, `allocation_basis`, `facility_space`, `shared_building_system`, `lease_contract`, `fixed_asset`, `charged_org_unit`, `occupant_party`, `currency`, `fiscal_period`, `expense_gl_account`, `recovery_gl_account`, `ar_invoice`, `period_start`, `period_end`, `amortization_end_date`, `allocated_area_sqft`, `allocation_share_pct`, `base_cost_amount`, `shared_cam_amount`, `utility_recovery_amount`, `ti_improvement_cost`, `ti_allowance_offset`, `notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `net_chargeback_amount`, `status`, `approved_at`, `approved_by`, `journal_entry`, `created_at`, `updated_at`
+  - **Global `Currency` rule (L39)**: Do NOT filter `currency` queryset by `tenant`; do NOT include `"currency"` in `reject_foreign(...)` or `validate_tenant_fks(...)`.
+  - `clean()`: `reject_foreign(...)` on all 10 editable tenant FKs (`facility_space`, `shared_building_system`, `lease_contract`, `fixed_asset`, `charged_org_unit`, `occupant_party`, `fiscal_period`, `expense_gl_account`, `recovery_gl_account`, `ar_invoice`); validate `period_end >= period_start`, non-negative monetary/area fields, `0 <= allocation_share_pct <= 100`, at least one charge recipient (`charged_org_unit` or `occupant_party`), and `expense_gl_account != recovery_gl_account` when both are set.
+- **Views, Actions & Context**:
+  - Views: `asset_space_chargeback_list`, `asset_space_chargeback_export_csv`, `asset_space_chargeback_create`, `asset_space_chargeback_detail`, `asset_space_chargeback_edit` (draft/disputed only), `asset_space_chargeback_delete` (draft only, `@require_POST`), plus POST workflow actions `asset_space_chargeback_submit_approval`, `asset_space_chargeback_approve` (`@tenant_admin_required`), `asset_space_chargeback_post_gl` (`@tenant_admin_required`, creates one balanced `accounting.JournalEntry` + 2 `JournalLine`s inside `transaction.atomic()`), `asset_space_chargeback_dispute`, `asset_space_chargeback_close` (`@tenant_admin_required`).
+  - Context keys pinned:
+    - List: `chargebacks` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `approved_count`, `posted_count`, `total_net_chargeback`, `coordination_type_choices`, `basis_choices`, `status_choices`, `spaces`, `org_units`, `search_query`
+    - Detail: `chargeback`, `can_edit`, `can_approve`, `can_post_gl`
+    - Form: `form`, `chargeback` (when editing, else `None`), `is_edit`, `title`
+
+---
+
+## Backend (`apps/assets/{models,forms,views,urls}/SpaceFacilityAsset/`)
+- [ ] Shared sub-package helpers:
+  - [ ] `apps/assets/models/SpaceFacilityAsset/_validators.py` (`validate_tenant_fks` excluding global `Currency`, `validate_space_parent_cycle` with `max_depth=25`, `add_field_error`)
+  - [ ] `apps/assets/forms/SpaceFacilityAsset/_helpers.py` (`scope_tenant_querysets` excluding global `Currency`, `validate_safe_floor_plan_upload` importing `ALLOWED_DOC_EXTENSIONS` & `MAX_UPLOAD_BYTES` from `apps.core.forms._common`)
+  - [ ] `apps/assets/views/SpaceFacilityAsset/_helpers.py` (`parse_pos_int`, `apply_choice_filter`, `apply_fk_filter`, `csv_export_response` with formula neutralization, `serve_protected_floor_plan` with `Content-Disposition: attachment` & `nosniff`, `is_tenant_admin_user`)
+- [ ] Entity 1 (`AssetFacilitySpace` `AFSP-`): `models/SpaceFacilityAsset/AssetFacilitySpaces.py`, `forms/SpaceFacilityAsset/AssetFacilitySpaces.py`, `views/SpaceFacilityAsset/AssetFacilitySpaces.py`, `urls/SpaceFacilityAsset/AssetFacilitySpaces.py` (literal routes `spaces/`, `spaces/create/`, `spaces/export-csv/` before `spaces/<int:pk>/...`)
+- [ ] Entity 2 (`AssetBuildingSystem` `AFBS-`): `models/SpaceFacilityAsset/AssetBuildingSystems.py`, `forms/SpaceFacilityAsset/AssetBuildingSystems.py`, `views/SpaceFacilityAsset/AssetBuildingSystems.py`, `urls/SpaceFacilityAsset/AssetBuildingSystems.py` (literal routes `building-systems/`, `building-systems/create/`, `building-systems/export-csv/` before `building-systems/<int:pk>/...`)
+- [ ] Infrastructure Board: `views/SpaceFacilityAsset/InfrastructureBoard.py` + `urls/SpaceFacilityAsset/InfrastructureBoard.py` (`infrastructure-board/` -> `assets:asset_infrastructure_board`)
+- [ ] Entity 3 (`AssetFurnitureFixture` `AFFE-`): `models/SpaceFacilityAsset/AssetFurnitureFixtures.py`, `forms/SpaceFacilityAsset/AssetFurnitureFixtures.py`, `views/SpaceFacilityAsset/AssetFurnitureFixtures.py`, `urls/SpaceFacilityAsset/AssetFurnitureFixtures.py` (literal routes `furniture-fixtures/`, `furniture-fixtures/create/`, `furniture-fixtures/export-csv/` before `furniture-fixtures/<int:pk>/...`)
+- [ ] Entity 4 (`AssetSpaceChargeback` `AFCB-`): `models/SpaceFacilityAsset/AssetSpaceChargebacks.py`, `forms/SpaceFacilityAsset/AssetSpaceChargebacks.py`, `views/SpaceFacilityAsset/AssetSpaceChargebacks.py`, `urls/SpaceFacilityAsset/AssetSpaceChargebacks.py` (literal routes `space-chargebacks/`, `space-chargebacks/create/`, `space-chargebacks/export-csv/` before `space-chargebacks/<int:pk>/...`)
+- [ ] Package re-export `__init__.py` files in `apps/assets/{models,forms,views,urls}/SpaceFacilityAsset/__init__.py` + surgical re-export appends in `apps/assets/{models,forms,views}/__init__.py` + `+ space_facility_asset_urlpatterns` concatenation in `apps/assets/urls/__init__.py`
+- [ ] Register `AssetFacilitySpace`, `AssetBuildingSystem`, `AssetFurnitureFixture`, `AssetSpaceChargeback` in `apps/assets/admin.py` (with `readonly_fields` & status-aware lock guards)
+- [ ] Run `python manage.py makemigrations assets --dry-run` -> `python manage.py makemigrations assets` (`0024_*`) -> `python manage.py migrate`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` idempotently (`_seed_tenant_11_17` creating Acme + Beta demo space hierarchy, HVAC/MEP/elevator/structural systems, FF&E with pending/completed moves, and draft/approved/GL-posted chargebacks reusing existing Party/OrgUnit/GLAccount/FiscalPeriod/Currency/FixedAsset/LeaseContract rows; add flush cleanup in dependency order)
+
+## Wire-up
+- [ ] Add ONLY `LIVE_LINKS["11.17"]` in `apps/core/navigation.py` mapping the exact 5 `NavERP.md` lines 1842–1846 bullets:
+  ```python
+  "11.17": {
+      "Floor Plan & Space Mapping": "assets:asset_facility_space_list",
+      "HVAC & Building Systems": "assets:asset_building_system_list",
+      "Furniture & Fixture Tracking": "assets:asset_furniture_fixture_list",
+      "Infrastructure Asset Management": "assets:asset_infrastructure_board",
+      "Tenant & Occupancy Coordination": "assets:asset_space_chargeback_list",
+  },
+  ```
+- [ ] Extend `apps/assets/views/overview.py` & `templates/assets/overview.html` with 11.17 Space & Facility Asset Management KPI summary metrics & quick navigation cards (NO `config/settings.py` or `config/urls.py` edits)
+
+## Templates (`templates/assets/spacefacilityasset/`)
+- [ ] `templates/assets/spacefacilityasset/asset_facility_space/{list,detail,form}.html` (hierarchical parent/child display, BOMA metrics, utilization bar, protected floor-plan download button, mounted systems/FF&E/chargebacks rollups, filter bar with `|stringformat:"d"`, guarded pagination, colour-named badges)
+- [ ] `templates/assets/spacefacilityasset/asset_building_system/{list,detail,form}.html` (HVAC comfort band indicators, ASHRAE/NFPA & statutory inspection due status, filter bar, guarded pagination, colour-named badges)
+- [ ] `templates/assets/spacefacilityasset/infrastructure_board.html` (dedicated MEP, vertical transport, electrical, plumbing, fire/life-safety & structural infrastructure board with FCA grade chips, statutory overdue indicators, and replacement exposure KPIs)
+- [ ] `templates/assets/spacefacilityasset/asset_furniture_fixture/{list,detail,form}.html` (FF&E inventory, MAC move workflow actions, reconfiguration batch filter, guarded pagination, colour-named badges)
+- [ ] `templates/assets/spacefacilityasset/asset_space_chargeback/{list,detail,form}.html` (TI improvement/allowance breakdown, GL posting action & linked `JournalEntry` link, filter bar, guarded pagination, colour-named badges)
+
+## Verify
+- [ ] `python manage.py makemigrations --check --dry-run` ("No changes detected") & `python manage.py showmigrations assets` (0024 applied)
+- [ ] `python manage.py seed_assets` **x2** (strictly idempotent, zero duplicate errors)
+- [ ] `python manage.py check` (exit 0)
+- [ ] Phase 3.5 Smoke (`qa-smoke-tester`): `temp/smoke_11_17.py` as `admin_acme` / `password` + throwaway Beta tenant asserting 200/302 + literal seeded numbers/names in HTML (L8, L57) + zero `{#`/`{% comment` leaks + all filters + junk params (`?facility_space=abc`, L11) + page 2 pagination (L9) + protected floor-plan download (`nosniff`, `attachment`) + workflow POSTs (including `post_chargeback` creating balanced `JournalEntry` + 2 `JournalLine`s) + cross-tenant IDOR 404; verify sidebar shows `11.17` Live across 5 distinct routes; delete `temp/smoke_11_17.py`
+
+## Close-out
+- [ ] Phase 4: Run 6 serial review passes (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` report-only -> `security-reviewer`) scoped to `BASE...HEAD` -> consolidate/dedupe sorted `C#`/`I#`/`M#` into `.claude/tasks/review-assets-11.17.md`
+- [ ] Phase 5: Run `code-fixer` agent against `.claude/tasks/review-assets-11.17.md` (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
+- [ ] Phase 6: Pin test contract & append `11.17` fixtures (`sfa_*`) below marker in `apps/assets/tests/conftest.py` (L59), then write 4 test modules serially: `test_spacefacility_models.py`, `test_spacefacility_forms.py`, `test_spacefacility_views.py`, `test_spacefacility_security.py` (using `test_spacefacility_*` names), followed by one **unfiltered** `venv\Scripts\python.exe -m pytest -q -W ignore apps/assets/tests/` green pass (L47)
+- [ ] Phase 7: Update `.claude/skills/assets/SKILL.md` with Sub-module 11.17 models/routes/templates/seeder, mark 11.17 complete in `README.md`, record any gaps in `.claude/tasks/gaps-assets-11.17.md` (or declare None), and populate `## Review notes` below
+
+## Later passes / deferred
+1. **Interactive AutoCAD `.dwg` / Revit `.rvt` / IFC CAD-BIM Parser & 2D/3D Floor Plan Canvas**: Server-side CAD/IFC geometry extraction and interactive SVG/WebGL pin-drop UI (current pass stores CAD/BIM refs, BOMA sqft metrics, safe floor-plan attachments, and numeric `pin_x_pct`/`pin_y_pct`).
+2. **Live BMS / BACnet / Modbus HVAC Telemetry Loop (`11.15` integration)**: Continuous automated setpoint overrides and comfort-drift alerting via `AssetTelemetryStream` brokers (current pass evaluates comfort bands explicitly via `evaluate_comfort_band`).
+3. **Automated Recurring Monthly CAM & Chargeback Batch Scheduler**: Scheduled Celery/cron monthly billing runs generating bulk `AssetSpaceChargeback` and `accounting.Invoice` batches.
+4. **Module 20 Facilities & Workplace Management (`20.1`–`20.20`)**: Hot-desking/meeting-room booking, visitor badges, janitorial routes, physical access-control zones, and workplace employee portals remain scoped to future Module 20 (`facilities`).
+
+## Review notes
+(filled in at the end)
