@@ -197,7 +197,16 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center py-8 text-slate-400">No CMDB dependency edges match the active filters.</td>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="git-branch"></i>
+                            <h3>No CMDB Dependency Edges found</h3>
+                            <p>Model multi-hop dependencies, single points of failure (SPOF), and blast radius across hardware, software, cloud, and services.</p>
+                            <a href="{% url 'assets:cmdb_relationship_create' %}" class="btn btn-primary mt-2">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Add CMDB Edge
+                            </a>
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
