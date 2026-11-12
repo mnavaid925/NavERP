@@ -23,7 +23,7 @@ from apps.assets.models.ItAssetManagement.CloudAssetSubscriptions import (
 from apps.assets.models.ItAssetManagement.CmdbRelationships import CmdbRelationship
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.ItAssetManagement._helpers import (
-    CMDB_REL_SELECT_RELATED,
+    CMDB_REL_EDGE_SELECT_RELATED,
     PAGE_SIZE,
     apply_choice_filter,
     apply_fk_filter,
@@ -35,14 +35,14 @@ from apps.core.models.OrgUnit import OrgUnit
 from apps.core.utils import write_audit_log
 
 _CLOUD_LIST_SELECT_RELATED = (
-    "org_unit",
     "currency",
-    "vendor_party",
-    "business_owner",
-    "technical_owner",
 )
 
 _CLOUD_DETAIL_SELECT_RELATED = _CLOUD_LIST_SELECT_RELATED + (
+    "org_unit",
+    "vendor_party",
+    "business_owner",
+    "technical_owner",
     "gl_expense_account",
 )
 
@@ -232,12 +232,12 @@ def cloud_asset_subscription_detail(request, pk):
     )
     outbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, source_cloud=cloud_asset)
-        .select_related(*CMDB_REL_SELECT_RELATED)
+        .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
         .order_by("-updated_at")
     )
     inbound_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant, target_cloud=cloud_asset)
-        .select_related(*CMDB_REL_SELECT_RELATED)
+        .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
         .order_by("-updated_at")
     )
     return render(
