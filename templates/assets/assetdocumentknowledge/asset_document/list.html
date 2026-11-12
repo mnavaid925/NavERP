@@ -156,7 +156,7 @@
                     <th>Access</th>
                     <th>Status</th>
                     <th>Expiry</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -204,7 +204,7 @@
                             —
                         {% endif %}
                     </td>
-                    <td class="text-right whitespace-nowrap">
+                    <td class="text-end whitespace-nowrap">
                         <div class="flex items-center justify-end gap-1">
                             <a href="{% url 'assets:asset_document_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
                                 <i data-lucide="eye"></i>
