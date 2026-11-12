@@ -28,6 +28,7 @@
         </a>
 
         {% if not cloud_asset.is_locked %}
+            {% if cloud_asset.status != "suspended" or request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'assets:cloud_asset_subscription_sync_finops' cloud_asset.pk %}" class="inline">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-primary">
@@ -53,6 +54,7 @@
                 {% csrf_token %}
                 <button type="submit" class="btn btn-outline">Renew +12 mo</button>
             </form>
+            {% endif %}
 
             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                 {% if cloud_asset.status != "suspended" %}
@@ -67,9 +69,11 @@
                 </form>
             {% endif %}
 
+            {% if cloud_asset.status != "suspended" or request.user.is_superuser or request.user.is_tenant_admin %}
             <a href="{% url 'assets:cloud_asset_subscription_edit' cloud_asset.pk %}" class="btn btn-outline">
                 <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
             </a>
+            {% endif %}
 
             {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'assets:cloud_asset_subscription_delete' cloud_asset.pk %}" class="inline" onsubmit="return confirm('Delete cloud asset {{ cloud_asset.number|escapejs }}?');">
