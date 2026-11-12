@@ -183,81 +183,81 @@
                         <tr>
                             <th>Lifecycle Cost Bucket</th>
                             <th>Category</th>
-                            <th class="text-right">Amount</th>
+                            <th class="text-end">Amount</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td>Acquisition Capital Cost</td>
                             <td><span class="badge badge-info">CapEx</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.acquisition_capital_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.acquisition_capital_cost analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Installation &amp; Commissioning</td>
                             <td><span class="badge badge-info">CapEx</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.installation_commissioning_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.installation_commissioning_cost analysis.currency %}</td>
                         </tr>
                         <tr class="bg-slate-50 dark:bg-slate-800/60 font-semibold">
                             <td colspan="2">Total Initial CapEx</td>
-                            <td class="text-right font-mono">{% fmt_money total_capex analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money total_capex analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Preventive &amp; Calibration Maintenance</td>
                             <td><span class="badge badge-green">Maint OpEx</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.preventive_maintenance_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.preventive_maintenance_cost analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Corrective &amp; Breakdown Repairs</td>
                             <td><span class="badge badge-red">Maint OpEx</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.corrective_maintenance_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.corrective_maintenance_cost analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>OEM Service &amp; SLA Contracts</td>
                             <td><span class="badge badge-slate">Maint OpEx</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.service_contract_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.service_contract_cost analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Energy &amp; Utility Consumption</td>
                             <td><span class="badge badge-amber">Operating OpEx</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.energy_utility_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.energy_utility_cost analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Downtime Opportunity Loss</td>
                             <td><span class="badge badge-red">Operating OpEx</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.downtime_opportunity_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.downtime_opportunity_cost analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Insurance &amp; Compliance Costs</td>
                             <td><span class="badge badge-slate">Operating OpEx</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.insurance_compliance_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.insurance_compliance_cost analysis.currency %}</td>
                         </tr>
                         <tr class="bg-slate-50 dark:bg-slate-800/60 font-semibold">
                             <td colspan="2">Total Lifecycle OpEx (incl. {% fmt_money total_maint analysis.currency %} Maintenance)</td>
-                            <td class="text-right font-mono">{% fmt_money total_opex analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money total_opex analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Expected Salvage / Residual Value</td>
                             <td><span class="badge badge-green">Credit / Recovery</span></td>
-                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money analysis.expected_salvage_value analysis.currency negate=True %}</td>
+                            <td class="text-end font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money analysis.expected_salvage_value analysis.currency negate=True %}</td>
                         </tr>
                         <tr>
                             <td>Warranty, Insurance &amp; Disposal Recoveries</td>
                             <td><span class="badge badge-green">Credit / Recovery</span></td>
-                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money analysis.warranty_insurance_recoveries analysis.currency negate=True %}</td>
+                            <td class="text-end font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money analysis.warranty_insurance_recoveries analysis.currency negate=True %}</td>
                         </tr>
                         <tr class="bg-blue-50 dark:bg-blue-950/50 font-bold">
                             <td colspan="2">Net Total Lifecycle Cost (CapEx + OpEx - {% fmt_money total_recoveries analysis.currency %} Recoveries)</td>
-                            <td class="text-right font-mono text-blue-900 dark:text-blue-200">{% fmt_money analysis.total_lifecycle_cost analysis.currency %}</td>
+                            <td class="text-end font-mono text-blue-900 dark:text-blue-200">{% fmt_money analysis.total_lifecycle_cost analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Current Replacement Value (RAV Benchmark)</td>
                             <td><span class="badge badge-muted">Reference</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.current_replacement_value analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.current_replacement_value analysis.currency %}</td>
                         </tr>
                         <tr>
                             <td>Posted Accumulated Depreciation (Ref.)</td>
                             <td><span class="badge badge-muted">Reference</span></td>
-                            <td class="text-right font-mono">{% fmt_money analysis.accumulated_depreciation_cost analysis.currency %}</td>
+                            <td class="text-end font-mono">{% fmt_money analysis.accumulated_depreciation_cost analysis.currency %}</td>
                         </tr>
                     </tbody>
                 </table>
