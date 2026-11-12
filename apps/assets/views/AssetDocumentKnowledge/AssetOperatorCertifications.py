@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -106,15 +106,22 @@ def asset_operator_certification_list(request):
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
+    kpis = base_qs.aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(status="active")),
+        expiring_soon_count=Count("id", filter=Q(status="expiring_soon")),
+        expired_count=Count("id", filter=Q(status="expired")),
+    )
+
     context = {
         "certifications": page_obj,
         "paginator": paginator,
         "page_obj": page_obj,
         "is_paginated": page_obj.has_other_pages(),
-        "total_count": base_qs.count(),
-        "active_count": base_qs.filter(status="active").count(),
-        "expiring_soon_count": base_qs.filter(status="expiring_soon").count(),
-        "expired_count": base_qs.filter(status="expired").count(),
+        "total_count": kpis["total_count"] or 0,
+        "active_count": kpis["active_count"] or 0,
+        "expiring_soon_count": kpis["expiring_soon_count"] or 0,
+        "expired_count": kpis["expired_count"] or 0,
         "qualification_type_choices": AssetOperatorCertification.QUALIFICATION_TYPE_CHOICES,
         "proficiency_choices": AssetOperatorCertification.PROFICIENCY_LEVEL_CHOICES,
         "status_choices": AssetOperatorCertification.STATUS_CHOICES,
