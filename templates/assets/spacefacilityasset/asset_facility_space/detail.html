@@ -26,6 +26,7 @@
         </a>
         {% endif %}
 
+        {% if not space.is_locked %}
         <form method="post" action="{% url 'assets:asset_facility_space_recalculate_utilization' space.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline">
@@ -49,6 +50,7 @@
                 <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Activate
             </button>
         </form>
+        {% endif %}
         {% endif %}
 
         {% if space.status != "decommissioned" %}
@@ -78,7 +80,7 @@
         {% endif %}
 
         <a href="{% url 'assets:asset_facility_space_list' %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back
         </a>
     </div>
 </div>
@@ -137,7 +139,7 @@
                 <div class="detail-item"><dt>Drawing Revision</dt><dd>{{ space.drawing_revision|default:"—" }}</dd></div>
                 <div class="detail-item">
                     <dt>Controlled Drawing</dt>
-                    <dd>{% if space.floor_plan_document %}<a href="{% url 'assets:asset_document_detail' space.floor_plan_document.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ space.floor_plan_document.number }} — {{ space.floor_plan_document.title }}</a>{% else %}—{% endif %}</dd>
+                    <dd>{% if space.floor_plan_document %}{% if can_view_floor_plan_document %}<a href="{% url 'assets:asset_document_detail' space.floor_plan_document.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ space.floor_plan_document.number }} — {{ space.floor_plan_document.title }}</a>{% else %}<span class="text-muted">Restricted Document</span>{% endif %}{% else %}—{% endif %}</dd>
                 </div>
             </dl>
             {% if space.notes %}
@@ -172,7 +174,7 @@
     <div class="card">
         <div class="card-header flex items-center justify-between">
             <h2 class="text-sm font-semibold uppercase tracking-wide">HVAC &amp; Building Systems ({{ mounted_systems|length }})</h2>
-            <a href="{% url 'assets:asset_building_system_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 hover:underline">+ Add System</a>
+            <a href="{% url 'assets:asset_building_system_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">+ Add System</a>
         </div>
         <div class="table-wrap">
             <table class="table">
@@ -180,7 +182,7 @@
                 <tbody>
                     {% for sys in mounted_systems %}
                     <tr>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:asset_building_system_detail' sys.pk %}" class="text-blue-600 hover:underline">{{ sys.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:asset_building_system_detail' sys.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ sys.number }}</a></td>
                         <td class="text-sm">{{ sys.name }}</td>
                         <td class="text-xs">{{ sys.get_system_domain_display }}</td>
                         <td><span class="badge {{ sys.status_badge_class }}">{{ sys.get_status_display }}</span></td>
@@ -196,7 +198,7 @@
     <div class="card">
         <div class="card-header flex items-center justify-between">
             <h2 class="text-sm font-semibold uppercase tracking-wide">Furniture &amp; Fixtures ({{ placed_ffe|length }})</h2>
-            <a href="{% url 'assets:asset_furniture_fixture_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 hover:underline">+ Add FF&amp;E</a>
+            <a href="{% url 'assets:asset_furniture_fixture_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">+ Add FF&amp;E</a>
         </div>
         <div class="table-wrap">
             <table class="table">
@@ -204,7 +206,7 @@
                 <tbody>
                     {% for ffe in placed_ffe %}
                     <tr>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:asset_furniture_fixture_detail' ffe.pk %}" class="text-blue-600 hover:underline">{{ ffe.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:asset_furniture_fixture_detail' ffe.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ ffe.number }}</a></td>
                         <td class="text-sm">{{ ffe.name }}</td>
                         <td class="text-xs font-mono">{{ ffe.quantity }}</td>
                         <td><span class="badge {{ ffe.move_status_badge_class }}">{{ ffe.get_move_status_display }}</span></td>
@@ -221,7 +223,7 @@
 <div class="card">
     <div class="card-header flex items-center justify-between">
         <h2 class="text-sm font-semibold uppercase tracking-wide">Occupancy Chargebacks &amp; Leasehold Improvements ({{ active_chargebacks|length }})</h2>
-        <a href="{% url 'assets:asset_space_chargeback_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 hover:underline">+ New Chargeback</a>
+        <a href="{% url 'assets:asset_space_chargeback_create' %}?facility_space={{ space.pk }}" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">+ New Chargeback</a>
     </div>
     <div class="table-wrap">
         <table class="table">
@@ -229,7 +231,7 @@
             <tbody>
                 {% for cb in active_chargebacks %}
                 <tr>
-                    <td class="font-mono text-xs"><a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="text-blue-600 hover:underline">{{ cb.number }}</a></td>
+                    <td class="font-mono text-xs"><a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ cb.number }}</a></td>
                     <td class="text-sm">{{ cb.title }}</td>
                     <td class="text-xs">{{ cb.get_coordination_type_display }}</td>
                     <td class="text-xs font-mono">${{ cb.net_chargeback_amount|floatformat:2 }}</td>
