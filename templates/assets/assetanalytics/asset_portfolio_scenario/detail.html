@@ -19,6 +19,9 @@
             <h1 class="page-title">{{ scenario.number }} — {{ scenario.name }}</h1>
             <span class="badge {{ scenario.status_badge_class }}">{{ scenario.get_status_display }}</span>
             <span class="badge {{ scenario.scenario_type_badge_class }}">{{ scenario.get_scenario_type_display }}</span>
+            {% if scenario.is_baseline %}
+            <span class="badge badge-slate">Baseline</span>
+            {% endif %}
         </div>
     </div>
     <div class="page-actions flex flex-wrap items-center gap-2">
@@ -135,6 +138,18 @@
                 <div class="detail-item">
                     <dt>Fiscal Year &amp; Horizon</dt>
                     <dd>FY{{ scenario.base_fiscal_year }} ({{ scenario.horizon_years }} yrs)</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Baseline Scenario</dt>
+                    <dd>
+                        {% if scenario.baseline_scenario %}
+                        <a href="{% url 'assets:asset_portfolio_scenario_detail' scenario.baseline_scenario.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline font-mono">
+                            {{ scenario.baseline_scenario.number }} — {{ scenario.baseline_scenario.name|truncatechars:32 }}
+                        </a>
+                        {% elif scenario.is_baseline %}
+                        <span class="badge badge-slate">Self (Baseline)</span>
+                        {% else %}—{% endif %}
+                    </dd>
                 </div>
                 <div class="detail-item">
                     <dt>Scope Org Unit</dt>
