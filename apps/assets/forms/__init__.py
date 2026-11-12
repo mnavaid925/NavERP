@@ -103,6 +103,12 @@ from apps.assets.forms.AssetAnalytics import (
     AssetPortfolioScenarioForm,
     AssetReplacementPlanForm,
 )
+from apps.assets.forms.AssetDocumentKnowledge import (
+    AssetDocumentForm,
+    AssetKnowledgeArticleForm,
+    AssetOperatingProcedureForm,
+    AssetOperatorCertificationForm,
+)
 
 __all__ = [
     "TenantUniqueMixin",
@@ -180,4 +186,8 @@ __all__ = [
     "AssetReplacementPlanForm",
     "AssetPortfolioScenarioForm",
     "AssetExecutiveScorecardForm",
+    "AssetDocumentForm",
+    "AssetOperatingProcedureForm",
+    "AssetOperatorCertificationForm",
+    "AssetKnowledgeArticleForm",
 ]
