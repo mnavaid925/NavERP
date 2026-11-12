@@ -17,6 +17,8 @@ def scope_tenant_querysets(form, tenant_field_models):
             qs = qs.select_related("party")
         elif model_cls.__name__ == "PurchaseOrder":
             qs = qs.select_related("vendor")
+        elif model_cls.__name__ == "AssetScrapSalvage":
+            qs = qs.select_related("fixed_asset")
         form.fields[field_name].queryset = qs
 
 
