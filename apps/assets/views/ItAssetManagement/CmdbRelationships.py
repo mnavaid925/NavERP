@@ -227,14 +227,14 @@ def cmdb_relationship_detail(request, pk):
         .filter(_matching_ci_filter("source", relationship.source_ci_key))
         .exclude(pk=relationship.pk)
         .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
-        .order_by("-updated_at")
+        .order_by("-updated_at")[:50]
     )
     related_target_edges = (
         CmdbRelationship.objects.filter(tenant=request.tenant)
         .filter(_matching_ci_filter("target", relationship.target_ci_key))
         .exclude(pk=relationship.pk)
         .select_related(*CMDB_REL_EDGE_SELECT_RELATED)
-        .order_by("-updated_at")
+        .order_by("-updated_at")[:50]
     )
     return render(
         request,
