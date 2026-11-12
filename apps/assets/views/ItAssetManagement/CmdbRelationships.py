@@ -250,7 +250,12 @@ def cmdb_relationship_detail(request, pk):
 @login_required
 def cmdb_relationship_edit(request, pk):
     """Edit an unlocked CMDB relationship edge."""
-    relationship = assets_object(request, CmdbRelationship, pk)
+    relationship = assets_object(
+        request,
+        CmdbRelationship,
+        pk,
+        select_related=("verified_by",),
+    )
     if relationship.is_locked:
         messages.warning(
             request,
