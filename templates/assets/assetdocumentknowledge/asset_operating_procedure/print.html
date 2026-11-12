@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Print SOP Bench Sheet — {{ procedure.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_operating_procedure_list' %}">SOP &amp; Procedure Management</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_operating_procedure_detail' procedure.pk %}">{{ procedure.number }}</a>
+            <span>/</span>
+            <span>Bench Sheet</span>
+        </div>
+        <h1 class="page-title">{{ procedure.number }} — {{ procedure.title }} ({{ procedure.revision_label }})</h1>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <button type="button" onclick="window.print()" class="btn btn-primary">
+            <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print Bench Sheet
+        </button>
+        <a href="{% url 'assets:asset_operating_procedure_detail' procedure.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Detail
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item"><dt>Controlled Number</dt><dd class="font-mono">{{ procedure.number }}</dd></div>
+            <div class="detail-item"><dt>Type / Safety Level</dt><dd>{{ procedure.get_procedure_type_display }} · {{ procedure.get_safety_level_display }}</dd></div>
+            <div class="detail-item"><dt>Target Equipment</dt><dd>{{ procedure.operational_asset|default:"Site-Wide / Category" }}</dd></div>
+            <div class="detail-item"><dt>Required Qualification</dt><dd class="font-mono">{{ procedure.required_qualification_code|default:"General" }}</dd></div>
+            <div class="detail-item"><dt>Required PPE</dt><dd>{{ procedure.required_ppe|default:"Standard Site PPE" }}</dd></div>
+            <div class="detail-item"><dt>Effective / Next Review</dt><dd>{% if procedure.effective_date %}{{ procedure.effective_date|date:"Y-m-d" }}{% else %}Draft{% endif %} / {% if procedure.next_review_date %}{{ procedure.next_review_date|date:"Y-m-d" }}{% else %}TBD{% endif %}</dd></div>
+        </dl>
+
+        {% if procedure.hazard_warnings %}
+        <div class="mt-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+            <strong class="text-red-700 dark:text-red-300">SAFETY WARNINGS:</strong>
+            <p class="text-sm text-red-700 dark:text-red-300 mt-1 whitespace-pre-line">{{ procedure.hazard_warnings }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if procedure.loto_required or procedure.loto_isolation_points %}
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Lockout / Tagout (LOTO) Isolation Sign-off Matrix</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Energy Source</th>
+                    <th>Tag ID</th>
+                    <th>Isolation Point</th>
+                    <th>Lock / Tag Device</th>
+                    <th>Zero-Energy Verification</th>
+                    <th>Verified By / Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for point in procedure.loto_isolation_points %}
+                <tr>
+                    <td>{{ point.energy_source|default:"—" }}</td>
+                    <td class="font-mono text-xs">{{ point.tag_id|default:"—" }}</td>
+                    <td>{{ point.isolation_point|default:"—" }}</td>
+                    <td>{{ point.lock_device|default:"—" }}</td>
+                    <td>{{ point.verification_step|default:"—" }}</td>
+                    <td class="text-slate-400">__________________</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center text-sm py-3">Verify full zero-energy isolation before servicing.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Step-by-Step Shop-Floor Execution Checklist</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Step</th>
+                    <th>Task</th>
+                    <th>Instruction</th>
+                    <th>Expected Value</th>
+                    <th>Actual / Initials</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for step in procedure.procedure_steps %}
+                <tr>
+                    <td class="font-mono">{{ step.step_no|default:forloop.counter }}</td>
+                    <td class="font-medium">{{ step.title|default:"—" }}</td>
+                    <td>{{ step.instruction|default:"—" }}</td>
+                    <td class="font-mono text-xs">{{ step.expected_reading|default:"—" }}</td>
+                    <td class="text-slate-400">__________________</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center text-sm py-4">No execution steps recorded.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Operator Completion &amp; Supervisor Sign-off</h2>
+    </div>
+    <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-slate-600 dark:text-slate-400">
+        <div>Lead Technician Name &amp; Cert #: ______________________</div>
+        <div>Completion Date / Time: ______________________</div>
+        <div>EHS / Supervisor Sign-off: ______________________</div>
+    </div>
+</div>
+{% endblock %}
