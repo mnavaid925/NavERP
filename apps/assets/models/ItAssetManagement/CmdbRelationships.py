@@ -245,10 +245,13 @@ class CmdbRelationship(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-updated_at"], name="idx_cmdb_ten_upd"),
             models.Index(fields=["tenant", "status"], name="idx_cmdb_ten_stat"),
             models.Index(fields=["tenant", "relationship_type"], name="idx_cmdb_ten_rel"),
             models.Index(fields=["tenant", "source_ci_type"], name="idx_cmdb_ten_src"),
             models.Index(fields=["tenant", "target_ci_type"], name="idx_cmdb_ten_tgt"),
+            models.Index(fields=["tenant", "environment"], name="idx_cmdb_ten_env"),
+            models.Index(fields=["tenant", "criticality"], name="idx_cmdb_ten_crit"),
         ]
 
     def __str__(self):
