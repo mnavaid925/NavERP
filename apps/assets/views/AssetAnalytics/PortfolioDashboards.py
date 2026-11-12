@@ -365,15 +365,8 @@ def scenario_compare(request):
             compared_scenarios = []
             selected_ids = []
         else:
-            by_id = {
-                s.pk: s
-                for s in assets_scope(
-                    AssetPortfolioScenario.objects.select_related(
-                        "scope_org_unit", "scope_category", "currency", "baseline_scenario"
-                    ),
-                    request,
-                ).filter(pk__in=parsed_ids)
-            }
+            parsed_set = set(parsed_ids)
+            by_id = {s.pk: s for s in all_scenarios if s.pk in parsed_set}
             if not by_id:
                 raise Http404("Requested scenarios do not exist in this workspace.")
             compared_scenarios = [by_id[pk] for pk in parsed_ids if pk in by_id]
