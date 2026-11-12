@@ -42,9 +42,9 @@ _SW_DETAIL_SELECT_RELATED = _SW_LIST_SELECT_RELATED + (
 )
 
 
-def _filter_software_queryset(request, base_qs):
+def _filter_software_queryset(request, base_qs, select_related=_SW_LIST_SELECT_RELATED):
     """Apply search and dropdown GET filters to a SoftwareLicense queryset."""
-    qs = base_qs.select_related(*_SW_LIST_SELECT_RELATED)
+    qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
     if search_query:
         qs = qs.filter(
@@ -118,7 +118,7 @@ def software_license_list(request):
 def software_license_export_csv(request):
     """Export filtered software licenses as a formula-safe CSV."""
     base_qs = assets_scope(SoftwareLicense.objects.all(), request)
-    qs = _filter_software_queryset(request, base_qs)
+    qs = _filter_software_queryset(request, base_qs, select_related=())
     headers = [
         "Number",
         "Software Name",
@@ -154,7 +154,7 @@ def software_license_export_csv(request):
             lic.vendor_eol_date.isoformat() if lic.vendor_eol_date else "",
             lic.get_status_display(),
         ]
-        for lic in qs
+        for lic in qs[:10000].iterator(chunk_size=1000)
     )
     return csv_export_response(filename="software_licenses.csv", headers=headers, rows=rows)
 
