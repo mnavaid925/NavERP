@@ -97,8 +97,8 @@ def asset_facility_space_list(request):
 
     org_units = (
         OrgUnit.objects.filter(tenant=request.tenant)
-        .only("id", "code", "name")
-        .order_by("code", "name")
+        .only("id", "name")
+        .order_by("name")
     )
     parent_spaces = (
         assets_scope(AssetFacilitySpace.objects.all(), request)
