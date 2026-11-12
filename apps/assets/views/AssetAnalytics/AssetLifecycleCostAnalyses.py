@@ -243,7 +243,13 @@ def asset_lifecycle_cost_analysis_populate(request, pk):
         return redirect("assets:asset_lifecycle_cost_analysis_detail", pk=analysis.pk)
     with transaction.atomic():
         analysis.populate_from_asset_records(save=True)
-        write_audit_log(request.user, analysis, "populate", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            analysis,
+            "update",
+            changes={"action": "populate", "status": analysis.status},
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"Aggregated upstream spend and recalculated TCO metrics for '{analysis.number}'.",
@@ -274,7 +280,13 @@ def asset_lifecycle_cost_analysis_transition(request, pk):
     with transaction.atomic():
         analysis.status = target_status
         analysis.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, analysis, "update", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            analysis,
+            "update",
+            changes={"action": "transition", "status": analysis.status},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Analysis '{analysis.number}' transitioned to '{analysis.get_status_display()}'.")
     return redirect("assets:asset_lifecycle_cost_analysis_detail", pk=analysis.pk)
 
