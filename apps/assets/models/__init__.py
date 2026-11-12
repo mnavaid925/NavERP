@@ -103,6 +103,12 @@ from apps.assets.models.SpaceFacilityAsset import (
     AssetFurnitureFixture,
     AssetSpaceChargeback,
 )
+from apps.assets.models.ItAssetManagement import (
+    CloudAssetSubscription,
+    CmdbRelationship,
+    ItHardwareAsset,
+    SoftwareLicense,
+)
 
 __all__ = [
     "TenantOwned",
@@ -176,4 +182,8 @@ __all__ = [
     "AssetBuildingSystem",
     "AssetFurnitureFixture",
     "AssetSpaceChargeback",
+    "ItHardwareAsset",
+    "SoftwareLicense",
+    "CloudAssetSubscription",
+    "CmdbRelationship",
 ]
