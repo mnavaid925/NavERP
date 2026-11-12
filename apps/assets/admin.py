@@ -761,6 +761,16 @@ class AssetDocumentAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
 
 @admin.register(AssetOperatingProcedure)
 class AssetOperatingProcedureAdmin(admin.ModelAdmin):
@@ -788,6 +798,16 @@ class AssetOperatingProcedureAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
 
 @admin.register(AssetOperatorCertification)
 class AssetOperatorCertificationAdmin(admin.ModelAdmin):
@@ -813,6 +833,16 @@ class AssetOperatorCertificationAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.status == "revoked":
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.status == "revoked":
+            return False
+        return super().has_delete_permission(request, obj=obj)
 
 
 @admin.register(AssetKnowledgeArticle)
@@ -841,4 +871,14 @@ class AssetKnowledgeArticleAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
 
