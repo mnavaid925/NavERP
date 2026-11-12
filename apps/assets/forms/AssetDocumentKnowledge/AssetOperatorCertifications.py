@@ -121,8 +121,7 @@ class AssetOperatorCertificationForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        for field_name in self._TENANT_FIELDS:
-            reject_foreign(self, cleaned, self.tenant, field_name)
+        reject_foreign(self, cleaned, self._TENANT_FIELDS.keys())
         if not (
             cleaned.get("operator_party")
             or cleaned.get("operator_user")
