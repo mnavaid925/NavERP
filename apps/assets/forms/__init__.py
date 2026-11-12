@@ -115,6 +115,12 @@ from apps.assets.forms.SpaceFacilityAsset import (
     AssetFurnitureFixtureForm,
     AssetSpaceChargebackForm,
 )
+from apps.assets.forms.ItAssetManagement import (
+    CloudAssetSubscriptionForm,
+    CmdbRelationshipForm,
+    ItHardwareAssetForm,
+    SoftwareLicenseForm,
+)
 
 __all__ = [
     "TenantUniqueMixin",
@@ -200,4 +206,8 @@ __all__ = [
     "AssetBuildingSystemForm",
     "AssetFurnitureFixtureForm",
     "AssetSpaceChargebackForm",
+    "ItHardwareAssetForm",
+    "SoftwareLicenseForm",
+    "CloudAssetSubscriptionForm",
+    "CmdbRelationshipForm",
 ]
