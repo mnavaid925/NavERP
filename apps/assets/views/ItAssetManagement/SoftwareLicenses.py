@@ -293,13 +293,20 @@ def software_license_sync_compliance(request, pk):
         return redirect("assets:software_license_detail", pk=license_obj.pk)
     if license_obj.status == "audit_hold" and not is_tenant_admin_user(request.user):
         raise PermissionDenied("Tenant administrator access required while license is on Audit Hold.")
+    prev_status = license_obj.status
     with transaction.atomic():
         if license_obj.status == "audit_hold" and is_tenant_admin_user(request.user):
             license_obj.status = "draft"
         license_obj.status = license_obj.compute_compliance_status()
         license_obj.last_reconciled_at = timezone.now()
         license_obj.save(update_fields=["status", "last_reconciled_at", "updated_at"])
-        write_audit_log(request.user, license_obj, "sync_elp", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            license_obj,
+            "sync_elp",
+            changes={"status": [prev_status, license_obj.status]},
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"ELP reconciled for {license_obj.number}: {license_obj.get_status_display()}.",
@@ -321,8 +328,11 @@ def software_license_reclaim_inactive(request, pk):
     if harvested <= 0:
         messages.info(request, f"No inactive seats flagged for reclamation on {license_obj.number}.")
         return redirect("assets:software_license_detail", pk=license_obj.pk)
+    prev_allocated = int(license_obj.allocated_quantity or 0)
+    prev_reclaimable = int(license_obj.reclaimable_inactive_count or 0)
+    prev_status = license_obj.status
     with transaction.atomic():
-        license_obj.allocated_quantity = max(0, int(license_obj.allocated_quantity or 0) - harvested)
+        license_obj.allocated_quantity = max(0, prev_allocated - harvested)
         license_obj.reclaimable_inactive_count = 0
         license_obj.status = license_obj.compute_compliance_status()
         license_obj.last_reconciled_at = timezone.now()
@@ -335,7 +345,17 @@ def software_license_reclaim_inactive(request, pk):
                 "updated_at",
             ]
         )
-        write_audit_log(request.user, license_obj, "reclaim", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            license_obj,
+            "reclaim",
+            changes={
+                "allocated_quantity": [prev_allocated, license_obj.allocated_quantity],
+                "reclaimable_inactive_count": [prev_reclaimable, 0],
+                "status": [prev_status, license_obj.status],
+            },
+            tenant=request.tenant,
+        )
     messages.success(request, f"Reclaimed {harvested} inactive seat(s) on {license_obj.number}.")
     return redirect("assets:software_license_detail", pk=license_obj.pk)
 
@@ -352,6 +372,8 @@ def software_license_record_true_up(request, pk):
     if shortfall <= 0:
         messages.info(request, f"Software License {license_obj.number} has no entitlement shortfall.")
         return redirect("assets:software_license_detail", pk=license_obj.pk)
+    prev_entitled = int(license_obj.entitled_quantity or 0)
+    prev_status = license_obj.status
     with transaction.atomic():
         license_obj.entitled_quantity = int(license_obj.allocated_quantity)
         license_obj.status = license_obj.compute_compliance_status()
@@ -364,7 +386,16 @@ def software_license_record_true_up(request, pk):
                 "updated_at",
             ]
         )
-        write_audit_log(request.user, license_obj, "true_up", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            license_obj,
+            "true_up",
+            changes={
+                "entitled_quantity": [prev_entitled, license_obj.entitled_quantity],
+                "status": [prev_status, license_obj.status],
+            },
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"Recorded true-up of +{shortfall} entitlement(s) on {license_obj.number}.",
@@ -384,6 +415,8 @@ def software_license_renew_term(request, pk):
         raise PermissionDenied("Tenant administrator access required while license is on Audit Hold.")
     today = timezone.now().date()
     base_date = max(license_obj.renewal_date, today) if license_obj.renewal_date else today
+    prev_renewal = license_obj.renewal_date.isoformat() if license_obj.renewal_date else None
+    prev_status = license_obj.status
     with transaction.atomic():
         license_obj.renewal_date = add_months(base_date, 12)
         if license_obj.status == "expired":
@@ -398,7 +431,16 @@ def software_license_renew_term(request, pk):
                 "updated_at",
             ]
         )
-        write_audit_log(request.user, license_obj, "renew", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            license_obj,
+            "renew",
+            changes={
+                "renewal_date": [prev_renewal, license_obj.renewal_date.isoformat()],
+                "status": [prev_status, license_obj.status],
+            },
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"Renewed {license_obj.number} through {license_obj.renewal_date.isoformat()}.",
@@ -414,10 +456,17 @@ def software_license_place_audit_hold(request, pk):
     if license_obj.is_locked:
         messages.warning(request, f"Software License {license_obj.number} is retired.")
         return redirect("assets:software_license_detail", pk=license_obj.pk)
+    prev_status = license_obj.status
     with transaction.atomic():
         license_obj.status = "audit_hold"
         license_obj.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, license_obj, "hold", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            license_obj,
+            "hold",
+            changes={"status": [prev_status, "audit_hold"]},
+            tenant=request.tenant,
+        )
     messages.warning(request, f"Software License {license_obj.number} placed on Audit Hold.")
     return redirect("assets:software_license_detail", pk=license_obj.pk)
 
@@ -430,10 +479,17 @@ def software_license_retire(request, pk):
     if license_obj.is_locked:
         messages.warning(request, f"Software License {license_obj.number} is already retired.")
         return redirect("assets:software_license_detail", pk=license_obj.pk)
+    prev_status = license_obj.status
     with transaction.atomic():
         license_obj.status = "retired"
         license_obj.retired_at = timezone.now()
         license_obj.save(update_fields=["status", "retired_at", "updated_at"])
-        write_audit_log(request.user, license_obj, "retire", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            license_obj,
+            "retire",
+            changes={"status": [prev_status, "retired"]},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Software License {license_obj.number} retired.")
     return redirect("assets:software_license_detail", pk=license_obj.pk)
