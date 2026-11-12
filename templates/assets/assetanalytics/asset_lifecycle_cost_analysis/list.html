@@ -136,12 +136,12 @@
                     <th>Study # &amp; Title</th>
                     <th>Asset / Scope</th>
                     <th>Stage</th>
-                    <th class="text-right">Net TCO</th>
-                    <th class="text-right">EAC / Yr</th>
-                    <th class="text-right">Maint / RAV %</th>
+                    <th class="text-end">Net TCO</th>
+                    <th class="text-end">EAC / Yr</th>
+                    <th class="text-end">Maint / RAV %</th>
                     <th>Recommendation</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -170,9 +170,9 @@
                     <td>
                         <span class="badge {{ item.lifecycle_stage_badge_class }}">{{ item.get_lifecycle_stage_display }}</span>
                     </td>
-                    <td class="text-right font-mono font-semibold text-slate-900 dark:text-slate-100">{% fmt_money item.total_lifecycle_cost item.currency %}</td>
-                    <td class="text-right font-mono text-slate-700 dark:text-slate-300">{% fmt_money item.equivalent_annual_cost item.currency %}</td>
-                    <td class="text-right font-mono">{{ item.maintenance_to_rav_pct|floatformat:1 }}%</td>
+                    <td class="text-end font-mono font-semibold text-slate-900 dark:text-slate-100">{% fmt_money item.total_lifecycle_cost item.currency %}</td>
+                    <td class="text-end font-mono text-slate-700 dark:text-slate-300">{% fmt_money item.equivalent_annual_cost item.currency %}</td>
+                    <td class="text-end font-mono">{{ item.maintenance_to_rav_pct|floatformat:1 }}%</td>
                     <td>
                         <span class="badge {{ item.recommendation_badge_class }}">{{ item.get_recommendation_display }}</span>
                         {% if item.economic_eol_year %}
@@ -182,7 +182,7 @@
                     <td>
                         <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
                     </td>
-                    <td class="text-right">
+                    <td class="text-end">
                         <div class="table-actions">
                             <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' item.pk %}" class="btn btn-icon" title="View Details" aria-label="View {{ item.number }}">
                                 <i data-lucide="eye"></i>
