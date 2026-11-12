@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import F, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -98,9 +98,13 @@ def asset_knowledge_article_list(request):
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    total_downtime_hours = (
-        base_qs.aggregate(total=Sum("downtime_hours_impacted"))["total"]
-        or Decimal("0.00")
+    kpis = base_qs.aggregate(
+        total_count=Count("id"),
+        published_count=Count("id", filter=Q(status="published")),
+        critical_high_count=Count(
+            "id", filter=Q(severity__in=["high", "critical"])
+        ),
+        total_downtime_hours=Sum("downtime_hours_impacted"),
     )
 
     context = {
@@ -108,12 +112,10 @@ def asset_knowledge_article_list(request):
         "paginator": paginator,
         "page_obj": page_obj,
         "is_paginated": page_obj.has_other_pages(),
-        "total_count": base_qs.count(),
-        "published_count": base_qs.filter(status="published").count(),
-        "critical_high_count": base_qs.filter(
-            severity__in=["high", "critical"]
-        ).count(),
-        "total_downtime_hours": total_downtime_hours,
+        "total_count": kpis["total_count"] or 0,
+        "published_count": kpis["published_count"] or 0,
+        "critical_high_count": kpis["critical_high_count"] or 0,
+        "total_downtime_hours": kpis["total_downtime_hours"] or Decimal("0.00"),
         "article_type_choices": AssetKnowledgeArticle.ARTICLE_TYPE_CHOICES,
         "rca_choices": AssetKnowledgeArticle.RCA_METHODOLOGY_CHOICES,
         "severity_choices": AssetKnowledgeArticle.SEVERITY_CHOICES,
