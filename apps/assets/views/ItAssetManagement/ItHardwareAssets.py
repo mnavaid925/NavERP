@@ -392,8 +392,11 @@ def it_hardware_asset_flag_for_refresh(request, pk):
 def it_hardware_asset_mark_sanitized(request, pk):
     """Verify NIST SP 800-88 data sanitization on an IT hardware asset."""
     hardware = assets_object(request, ItHardwareAsset, pk)
-    if hardware.status == "disposed":
-        messages.warning(request, f"IT Hardware Asset {hardware.number} is already disposed.")
+    if hardware.is_locked:
+        messages.warning(
+            request,
+            f"IT Hardware Asset {hardware.number} is {hardware.get_status_display()} and cannot be modified.",
+        )
         return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
     with transaction.atomic():
         if hardware.sanitization_method == "none":
