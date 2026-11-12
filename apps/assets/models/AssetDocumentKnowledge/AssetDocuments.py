@@ -259,6 +259,17 @@ class AssetDocument(TenantNumbered):
             models.Index(fields=["tenant", "operational_asset"], name="idx_adoc_ten_ast"),
             models.Index(fields=["tenant", "expiry_date"], name="idx_adoc_ten_exp"),
             models.Index(fields=["tenant", "is_current_revision"], name="idx_adoc_ten_cur"),
+            models.Index(fields=["tenant", "-updated_at"], name="idx_adoc_ten_upd"),
+            models.Index(
+                fields=["tenant", "status", "is_current_revision"],
+                name="idx_adoc_ten_st_cur",
+            ),
+            models.Index(
+                fields=["tenant", "access_classification"], name="idx_adoc_ten_acc"
+            ),
+            models.Index(fields=["tenant", "change_type"], name="idx_adoc_ten_chg"),
+            models.Index(fields=["tenant", "asset_category"], name="idx_adoc_ten_cat"),
+            models.Index(fields=["tenant", "org_unit"], name="idx_adoc_ten_org"),
         ]
 
     def __str__(self):
