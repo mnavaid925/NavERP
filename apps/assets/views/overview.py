@@ -26,6 +26,10 @@ from apps.assets.models.IntegrationApiHub.AssetGisMappings import AssetGisMappin
 from apps.assets.models.IntegrationApiHub.AssetGlSyncBatches import AssetGlSyncBatch
 from apps.assets.models.IntegrationApiHub.AssetIntegrationConnectors import AssetIntegrationConnector
 from apps.assets.models.IntegrationApiHub.AssetTelemetryStreams import AssetTelemetryStream
+from apps.assets.models.SpaceFacilityAsset.AssetBuildingSystems import AssetBuildingSystem
+from apps.assets.models.SpaceFacilityAsset.AssetFacilitySpaces import AssetFacilitySpace
+from apps.assets.models.SpaceFacilityAsset.AssetFurnitureFixtures import AssetFurnitureFixture
+from apps.assets.models.SpaceFacilityAsset.AssetSpaceChargebacks import AssetSpaceChargeback
 from apps.assets.views._common import assets_scope
 
 
@@ -110,6 +114,25 @@ def overview(request):
         total=Count("id"),
         published=Count("id", filter=Q(status="published")),
     )
+    space_agg = assets_scope(AssetFacilitySpace.objects.all(), request).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+    )
+    bldg_sys_agg = assets_scope(AssetBuildingSystem.objects.all(), request).aggregate(
+        total=Count("id"),
+        comfort_alerts=Count("id", filter=Q(comfort_status__in=["drift_warning", "out_of_band"])),
+    )
+    ffe_agg = assets_scope(AssetFurnitureFixture.objects.all(), request).aggregate(
+        total=Count("id"),
+        pending_moves=Count(
+            "id",
+            filter=Q(move_status__in=["move_requested", "scheduled_reconfig", "in_transit"]),
+        ),
+    )
+    chargeback_agg = assets_scope(AssetSpaceChargeback.objects.all(), request).aggregate(
+        total=Count("id"),
+        posted=Count("id", filter=Q(status__in=["posted_to_gl", "invoiced"])),
+    )
 
     kpis = {
         "total_requisitions": req_agg["total"],
@@ -145,6 +168,14 @@ def overview(request):
         "expiring_certifications": cert_agg["expiring"],
         "total_kb_articles": kb_agg["total"],
         "published_kb_articles": kb_agg["published"],
+        "total_facility_spaces": space_agg["total"],
+        "active_facility_spaces": space_agg["active"],
+        "total_building_systems": bldg_sys_agg["total"],
+        "comfort_alert_systems": bldg_sys_agg["comfort_alerts"],
+        "total_furniture_fixtures": ffe_agg["total"],
+        "pending_ffe_moves": ffe_agg["pending_moves"],
+        "total_space_chargebacks": chargeback_agg["total"],
+        "posted_space_chargebacks": chargeback_agg["posted"],
     }
 
     recent_requisitions = req_qs.select_related("currency", "proposed_vendor").order_by("-created_at")[:5]
