@@ -25,6 +25,10 @@ class AssetPortfolioScenarioForm(TenantUniqueMixin, TenantModelForm):
         "owner": User,
     }
 
+    _SELECT_RELATED = {
+        "baseline_scenario": ("scope_org_unit", "scope_category", "currency"),
+    }
+
     class Meta:
         model = AssetPortfolioScenario
         fields = [
@@ -78,6 +82,7 @@ class AssetPortfolioScenarioForm(TenantUniqueMixin, TenantModelForm):
             self,
             self._TENANT_FIELDS,
             global_querysets={"currency": Currency.objects.filter(is_active=True)},
+            select_related_map=self._SELECT_RELATED,
         )
         if self.instance and self.instance.pk and "baseline_scenario" in self.fields:
             self.fields["baseline_scenario"].queryset = self.fields["baseline_scenario"].queryset.exclude(
