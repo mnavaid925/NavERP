@@ -8,7 +8,7 @@ from django.http import HttpResponse
 
 PAGE_SIZE = 15
 
-CMDB_REL_SELECT_RELATED = (
+CMDB_REL_EDGE_SELECT_RELATED = (
     "source_hardware",
     "source_software",
     "source_cloud",
@@ -19,9 +19,14 @@ CMDB_REL_SELECT_RELATED = (
     "target_cloud",
     "target_service",
     "target_asset",
+)
+
+CMDB_REL_DETAIL_SELECT_RELATED = CMDB_REL_EDGE_SELECT_RELATED + (
     "owner",
     "verified_by",
 )
+
+CMDB_REL_SELECT_RELATED = CMDB_REL_DETAIL_SELECT_RELATED
 
 
 def is_tenant_admin_user(user):
