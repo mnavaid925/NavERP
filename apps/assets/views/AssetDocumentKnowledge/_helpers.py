@@ -17,12 +17,12 @@ def is_tenant_admin_user(user):
 
 
 def parse_pos_int(raw_value):
-    """Parse an ASCII positive integer query parameter, returning None when invalid."""
-    raw = (raw_value or "").strip()
-    if not raw or not raw.isascii() or not raw.isdigit():
+    """Parse a bounded ASCII positive 32-bit integer query parameter, returning None when invalid."""
+    raw = (str(raw_value) if raw_value is not None else "").strip()
+    if not raw or len(raw) > 10 or not raw.isascii() or not raw.isdigit():
         return None
     val = int(raw)
-    return val if val > 0 else None
+    return val if 0 < val <= 2_147_483_647 else None
 
 
 def apply_choice_filter(qs, request, param_name, field_name=None, allowed_values=None):
