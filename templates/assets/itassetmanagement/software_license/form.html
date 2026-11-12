@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ license_obj.number }}{% else %}New Software License{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:software_license_list' %}">Software Licenses</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ license_obj.number }}{% else %}New Software License{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and license_obj %}
+        <a href="{% url 'assets:software_license_detail' license_obj.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to License
+        </a>
+        {% else %}
+        <a href="{% url 'assets:software_license_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to License Register
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Software Entitlement &amp; Agreement Identity</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.software_name.id_for_label }}">Software Name <span class="req">*</span></label>
+                    {{ form.software_name }}
+                    {% if form.software_name.errors %}<div class="form-error">{{ form.software_name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.publisher_name.id_for_label }}">Publisher Name <span class="req">*</span></label>
+                    {{ form.publisher_name }}
+                    {% if form.publisher_name.errors %}<div class="form-error">{{ form.publisher_name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.product_sku.id_for_label }}">Product SKU</label>
+                    {{ form.product_sku }}
+                    {% if form.product_sku.errors %}<div class="form-error">{{ form.product_sku.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version_edition.id_for_label }}">Version / Edition</label>
+                    {{ form.version_edition }}
+                    {% if form.version_edition.errors %}<div class="form-error">{{ form.version_edition.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.software_category.id_for_label }}">Category <span class="req">*</span></label>
+                    {{ form.software_category }}
+                    {% if form.software_category.errors %}<div class="form-error">{{ form.software_category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.license_type.id_for_label }}">License Type <span class="req">*</span></label>
+                    {{ form.license_type }}
+                    {% if form.license_type.errors %}<div class="form-error">{{ form.license_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.license_metric.id_for_label }}">License Metric <span class="req">*</span></label>
+                    {{ form.license_metric }}
+                    {% if form.license_metric.errors %}<div class="form-error">{{ form.license_metric.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.agreement_number.id_for_label }}">Agreement Number</label>
+                    {{ form.agreement_number }}
+                    {% if form.agreement_number.errors %}<div class="form-error">{{ form.agreement_number.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.license_key_ref.id_for_label }}">Masked License Key Reference</label>
+                    {{ form.license_key_ref }}
+                    {% if form.license_key_ref.errors %}<div class="form-error">{{ form.license_key_ref.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Seat Allocation, Telemetry &amp; Spend</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.entitled_quantity.id_for_label }}">Entitled Qty <span class="req">*</span></label>
+                    {{ form.entitled_quantity }}
+                    {% if form.entitled_quantity.errors %}<div class="form-error">{{ form.entitled_quantity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.allocated_quantity.id_for_label }}">Allocated Qty</label>
+                    {{ form.allocated_quantity }}
+                    {% if form.allocated_quantity.errors %}<div class="form-error">{{ form.allocated_quantity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.active_used_quantity.id_for_label }}">Active Used Qty</label>
+                    {{ form.active_used_quantity }}
+                    {% if form.active_used_quantity.errors %}<div class="form-error">{{ form.active_used_quantity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.reclaimable_inactive_count.id_for_label }}">Reclaimable Inactive</label>
+                    {{ form.reclaimable_inactive_count }}
+                    {% if form.reclaimable_inactive_count.errors %}<div class="form-error">{{ form.reclaimable_inactive_count.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.unit_license_cost.id_for_label }}">Unit License Cost</label>
+                    {{ form.unit_license_cost }}
+                    {% if form.unit_license_cost.errors %}<div class="form-error">{{ form.unit_license_cost.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.total_annual_spend.id_for_label }}">Total Annual Spend</label>
+                    {{ form.total_annual_spend }}
+                    {% if form.total_annual_spend.errors %}<div class="form-error">{{ form.total_annual_spend.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group flex items-end pb-2">
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                        {{ form.auto_renew }} <span>Auto-Renew Contract</span>
+                    </label>
+                    {% if form.auto_renew.errors %}<div class="form-error">{{ form.auto_renew.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Renewal Schedule &amp; Governance Links</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.effective_date.id_for_label }}">Effective Date</label>
+                    {{ form.effective_date }}
+                    {% if form.effective_date.errors %}<div class="form-error">{{ form.effective_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.renewal_date.id_for_label }}">Renewal Date</label>
+                    {{ form.renewal_date }}
+                    {% if form.renewal_date.errors %}<div class="form-error">{{ form.renewal_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vendor_eol_date.id_for_label }}">Vendor EOL Date</label>
+                    {{ form.vendor_eol_date }}
+                    {% if form.vendor_eol_date.errors %}<div class="form-error">{{ form.vendor_eol_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.publisher_party.id_for_label }}">Publisher Party</label>
+                    {{ form.publisher_party }}
+                    {% if form.publisher_party.errors %}<div class="form-error">{{ form.publisher_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.reseller_party.id_for_label }}">Reseller Party</label>
+                    {{ form.reseller_party }}
+                    {% if form.reseller_party.errors %}<div class="form-error">{{ form.reseller_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gl_expense_account.id_for_label }}">GL Expense Account</label>
+                    {{ form.gl_expense_account }}
+                    {% if form.gl_expense_account.errors %}<div class="form-error">{{ form.gl_expense_account.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.purchase_order.id_for_label }}">Purchase Order</label>
+                    {{ form.purchase_order }}
+                    {% if form.purchase_order.errors %}<div class="form-error">{{ form.purchase_order.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.service_contract.id_for_label }}">Service Contract</label>
+                    {{ form.service_contract }}
+                    {% if form.service_contract.errors %}<div class="form-error">{{ form.service_contract.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.license_owner.id_for_label }}">License Owner</label>
+                    {{ form.license_owner }}
+                    {% if form.license_owner.errors %}<div class="form-error">{{ form.license_owner.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and license_obj %}
+                <a href="{% url 'assets:software_license_detail' license_obj.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:software_license_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Software License{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
