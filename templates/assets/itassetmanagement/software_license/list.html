@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Software License Management — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>IT Asset Management (ITAM)</span>
+            <span>/</span>
+            <span>Software License Management</span>
+        </div>
+        <h1 class="page-title">Software License Management (SAM)</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:it_refresh_board' %}" class="btn btn-outline">
+            <i data-lucide="calendar-clock" class="w-4 h-4 me-1"></i> EOL &amp; Refresh Board
+        </a>
+        <a href="{% url 'assets:software_license_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&software_category={{ request.GET.software_category|urlencode }}&license_type={{ request.GET.license_type|urlencode }}&license_metric={{ request.GET.license_metric|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:software_license_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Software License
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="key-round"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total License Titles</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="badge-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Compliant Titles</div>
+            <div class="stat-value">{{ compliant_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">True-Up Required</div>
+            <div class="stat-value">{{ true_up_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="recycle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Reclaimable Seats</div>
+            <div class="stat-value">{{ reclaimable_seats_total }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label for="itsw-filter-q" class="sr-only">Search licenses</label>
+                <input id="itsw-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, software, publisher, SKU..." class="form-input" />
+            </div>
+            <div>
+                <label for="itsw-filter-status" class="sr-only">Status</label>
+                <select id="itsw-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="itsw-filter-cat" class="sr-only">Software Category</label>
+                <select id="itsw-filter-cat" name="software_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if request.GET.software_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="itsw-filter-type" class="sr-only">License Type</label>
+                <select id="itsw-filter-type" name="license_type" class="form-select">
+                    <option value="">All License Types</option>
+                    {% for val, label in license_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.license_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="itsw-filter-metric" class="sr-only">License Metric</label>
+                <select id="itsw-filter-metric" name="license_metric" class="form-select">
+                    <option value="">All Metrics</option>
+                    {% for val, label in metric_choices %}
+                    <option value="{{ val }}" {% if request.GET.license_metric == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="itsw-filter-org" class="sr-only">Org Unit</label>
+                <select id="itsw-filter-org" name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2 md:col-span-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:software_license_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>License #</th>
+                    <th>Software &amp; Publisher</th>
+                    <th>Type &amp; Metric</th>
+                    <th>Entitled / Alloc / Used</th>
+                    <th>ELP Delta</th>
+                    <th>Annual Spend</th>
+                    <th>Renewal / EOL</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lic in licenses %}
+                <tr>
+                    <td class="font-mono text-xs whitespace-nowrap">
+                        <a href="{% url 'assets:software_license_detail' lic.pk %}" class="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">{{ lic.number }}</a>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ lic.software_name }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ lic.publisher_name }}{% if lic.product_sku %} · {{ lic.product_sku }}{% endif %}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ lic.get_license_type_display }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ lic.get_license_metric_display }}</div>
+                    </td>
+                    <td class="font-mono text-xs">
+                        {{ lic.entitled_quantity }} / {{ lic.allocated_quantity }} / {{ lic.active_used_quantity }}
+                        {% if lic.reclaimable_inactive_count %}
+                        <div class="text-amber-600 dark:text-amber-400">{{ lic.reclaimable_inactive_count }} reclaimable</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if lic.is_under_licensed %}
+                        <span class="badge badge-red">{{ lic.compliance_delta }} (Shortfall)</span>
+                        {% elif lic.compliance_delta > 0 %}
+                        <span class="badge badge-info">+{{ lic.compliance_delta }} Surplus</span>
+                        {% else %}
+                        <span class="badge badge-green">0 Balanced</span>
+                        {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap">
+                        {% if lic.currency %}{{ lic.currency.code }} {% endif %}{{ lic.total_annual_spend|floatformat:2 }}
+                    </td>
+                    <td class="text-xs">
+                        <div>Ren: {{ lic.renewal_date|date:"Y-m-d"|default:"—" }}</div>
+                        {% if lic.vendor_eol_date %}
+                        <div class="text-slate-500">EOL: {{ lic.vendor_eol_date|date:"Y-m-d" }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ lic.status_badge_class }}">{{ lic.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'assets:software_license_detail' lic.pk %}" class="btn btn-icon" title="View" aria-label="View {{ lic.number }}">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if not lic.is_locked %}
+                        <a href="{% url 'assets:software_license_edit' lic.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ lic.number }}">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'assets:software_license_delete' lic.pk %}" class="inline" onsubmit="return confirm('Delete software license {{ lic.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete" aria-label="Delete {{ lic.number }}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="key-round"></i>
+                            <h3>No Software Licenses found</h3>
+                            <p>Track software entitlements, Effective License Position (ELP) deltas, true-up exposure, and inactive seat harvesting.</p>
+                            <a href="{% url 'assets:software_license_create' %}" class="btn btn-primary mt-2">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Add Software License
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="text-xs text-slate-500">
+            Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }}
+        </div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&software_category={{ request.GET.software_category|urlencode }}&license_type={{ request.GET.license_type|urlencode }}&license_metric={{ request.GET.license_metric|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            <span class="text-xs font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&software_category={{ request.GET.software_category|urlencode }}&license_type={{ request.GET.license_type|urlencode }}&license_metric={{ request.GET.license_metric|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
