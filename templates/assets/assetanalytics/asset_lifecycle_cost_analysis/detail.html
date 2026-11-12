@@ -114,7 +114,7 @@
     <!-- Scope & Governance -->
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Asset Scope &amp; Model Parameters</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Asset Scope &amp; Model Parameters</h2>
         </div>
         <div class="card-body">
             <dl class="detail-grid">
@@ -173,7 +173,7 @@
     <!-- Cradle-to-Grave Cost Breakdown -->
     <div class="card lg:col-span-2">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Cradle-to-Grave Cost &amp; Recovery Breakdown</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Cradle-to-Grave Cost &amp; Recovery Breakdown</h2>
         </div>
         <div class="card-body">
             <div class="table-wrap">
@@ -237,12 +237,12 @@
                         <tr>
                             <td>Expected Salvage / Residual Value</td>
                             <td><span class="badge badge-green">Credit / Recovery</span></td>
-                            <td class="text-right font-mono text-emerald-700">-${{ analysis.expected_salvage_value|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">-${{ analysis.expected_salvage_value|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Warranty, Insurance &amp; Disposal Recoveries</td>
                             <td><span class="badge badge-green">Credit / Recovery</span></td>
-                            <td class="text-right font-mono text-emerald-700">-${{ analysis.warranty_insurance_recoveries|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">-${{ analysis.warranty_insurance_recoveries|floatformat:"2g" }}</td>
                         </tr>
                         <tr class="bg-blue-50 dark:bg-blue-950/50 font-bold">
                             <td colspan="2">Net Total Lifecycle Cost (CapEx + OpEx - ${{ total_recoveries|floatformat:"2g" }} Recoveries)</td>
@@ -268,10 +268,10 @@
 {% if analysis.notes %}
 <div class="card">
     <div class="card-header">
-        <h2 class="text-base font-semibold text-slate-800">Analyst Notes &amp; Recommendations</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Analyst Notes &amp; Recommendations</h2>
     </div>
     <div class="card-body">
-        <p class="text-sm text-slate-700 whitespace-pre-line">{{ analysis.notes }}</p>
+        <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ analysis.notes }}</p>
     </div>
 </div>
 {% endif %}
