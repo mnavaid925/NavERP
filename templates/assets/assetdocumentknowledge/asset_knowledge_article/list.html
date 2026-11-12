@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Lessons Learned &amp; Failure Analysis — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Document &amp; Knowledge Management</span>
+            <span>/</span>
+            <span>Lessons Learned &amp; Failure Analysis</span>
+        </div>
+        <h1 class="page-title">Lessons Learned &amp; Failure Analysis (RCA)</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:asset_knowledge_article_export_csv' %}?q={{ request.GET.q|urlencode }}&article_type={{ request.GET.article_type|urlencode }}&rca_methodology={{ request.GET.rca_methodology|urlencode }}&severity={{ request.GET.severity|urlencode }}&status={{ request.GET.status|urlencode }}&operational_asset={{ request.GET.operational_asset|urlencode }}&failure_mode={{ request.GET.failure_mode|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_knowledge_article_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Knowledge Article / RCA
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="book-open"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Knowledge Articles</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Published Playbooks</div>
+            <div class="stat-value">{{ published_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="flame"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">High / Critical Severity</div>
+            <div class="stat-value">{{ critical_high_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Downtime Captured (Hrs)</div>
+            <div class="stat-value">{{ total_downtime_hours }}h</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            <div>
+                <label for="akba-filter-q" class="sr-only">Search articles</label>
+                <input id="akba-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, symptom, root cause, tag..." class="form-input" />
+            </div>
+            <div>
+                <label for="akba-filter-type" class="sr-only">Article Type</label>
+                <select id="akba-filter-type" name="article_type" class="form-select">
+                    <option value="">All Article Types</option>
+                    {% for val, label in article_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.article_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="akba-filter-rca" class="sr-only">RCA Methodology</label>
+                <select id="akba-filter-rca" name="rca_methodology" class="form-select">
+                    <option value="">All Methodologies</option>
+                    {% for val, label in rca_choices %}
+                    <option value="{{ val }}" {% if request.GET.rca_methodology == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="akba-filter-severity" class="sr-only">Severity</label>
+                <select id="akba-filter-severity" name="severity" class="form-select">
+                    <option value="">All Severities</option>
+                    {% for val, label in severity_choices %}
+                    <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="akba-filter-status" class="sr-only">Status</label>
+                <select id="akba-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="akba-filter-asset" class="sr-only">Operational Asset</label>
+                <select id="akba-filter-asset" name="operational_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for ast in assets_list %}
+                    <option value="{{ ast.pk }}" {% if request.GET.operational_asset == ast.pk|stringformat:"d" %}selected{% endif %}>{{ ast }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="akba-filter-fmode" class="sr-only">Failure Mode</label>
+                <select id="akba-filter-fmode" name="failure_mode" class="form-select">
+                    <option value="">All Failure Modes</option>
+                    {% for fm in failure_modes %}
+                    <option value="{{ fm.pk }}" {% if request.GET.failure_mode == fm.pk|stringformat:"d" %}selected{% endif %}>{{ fm }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4"></i>
+                </button>
+                <a href="{% url 'assets:asset_knowledge_article_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Articles Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>KB #</th>
+                    <th>Title &amp; Tags</th>
+                    <th>Type &amp; Methodology</th>
+                    <th>Severity</th>
+                    <th>Asset / Failure Mode</th>
+                    <th>Impact</th>
+                    <th>Votes / Views</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in articles %}
+                <tr>
+                    <td class="font-mono text-xs whitespace-nowrap">
+                        <a href="{% url 'assets:asset_knowledge_article_detail' item.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">{{ item.title }}</div>
+                        {% if item.tag_list %}
+                        <div class="flex flex-wrap gap-1 mt-1">
+                            {% for tg in item.tag_list %}
+                            <span class="badge badge-slate">{{ tg }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        <div>{{ item.get_article_type_display }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ item.get_rca_methodology_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.severity_badge_class }}">{{ item.get_severity_display }}</span>
+                    </td>
+                    <td class="text-sm">
+                        <div>{% if item.operational_asset %}{{ item.operational_asset }}{% elif item.asset_category %}{{ item.asset_category.name }}{% else %}—{% endif %}</div>
+                        {% if item.failure_mode %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ item.failure_mode.number }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm whitespace-nowrap">
+                        {{ item.downtime_hours_impacted }}h · {{ item.recurrence_count }}x
+                    </td>
+                    <td class="text-sm whitespace-nowrap">
+                        {{ item.helpful_votes }} helpful · {{ item.view_count }} views
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'assets:asset_knowledge_article_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if item.attachment %}
+                            <a href="{% url 'assets:asset_knowledge_article_download' item.pk %}" class="btn btn-icon" title="Download Evidence" aria-label="Download {{ item.number }}">
+                                <i data-lucide="download"></i>
+                            </a>
+                            {% endif %}
+                            {% if not item.is_locked %}
+                            <a href="{% url 'assets:asset_knowledge_article_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'assets:asset_knowledge_article_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete knowledge article {{ item.number|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete {{ item.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="lightbulb" class="w-12 h-12 text-slate-400 dark:text-slate-500 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">No Knowledge Articles Found</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Document post-incident 5-Why RCAs, Fishbone 6M analyses, and repeatable troubleshooting lessons learned.</p>
+                            <a href="{% url 'assets:asset_knowledge_article_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Knowledge Article
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }} articles</span>
+
+        {% if page_obj.has_previous %}
+        <a aria-label="Previous page" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.article_type %}&article_type={{ request.GET.article_type|urlencode }}{% endif %}{% if request.GET.rca_methodology %}&rca_methodology={{ request.GET.rca_methodology|urlencode }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.failure_mode %}&failure_mode={{ request.GET.failure_mode|urlencode }}{% endif %}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
+
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a aria-label="Next page" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.article_type %}&article_type={{ request.GET.article_type|urlencode }}{% endif %}{% if request.GET.rca_methodology %}&rca_methodology={{ request.GET.rca_methodology|urlencode }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.failure_mode %}&failure_mode={{ request.GET.failure_mode|urlencode }}{% endif %}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
