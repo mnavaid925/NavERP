@@ -30813,3 +30813,350 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - Updated `.claude/skills/assets/SKILL.md` with complete models, routes, templates, and conventions.
   - Updated `README.md` marking 11.8 complete.
 - **Gaps**: None. Recorded in `.claude/tasks/gaps-assets-11.8.md`.
+
+---
+
+# Sub-module 11.16: Document & Knowledge Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.16.md` (2026-11-12)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.15.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: latest leaf on disk is `0021_assetexecutivescorecard_idx_akpi_ten_org_and_more.py`, so **11.16 claims `0022_...`** (check `makemigrations assets --dry-run` before generating per L43/L53).
+> Plan written from `.claude/tasks/research-assets-11.16.md` (Phase 1) and `NavERP.md` lines 1834–1839.
+> **Package folder**: `apps/assets/{models,forms,views,urls}/AssetDocumentKnowledge/<Entity>.py` (`AssetDocuments.py`, `AssetOperatingProcedures.py`, `AssetOperatorCertifications.py`, `AssetKnowledgeArticles.py` + `_validators.py` / `_helpers.py`)
+> **Template folder**: `templates/assets/assetdocumentknowledge/{asset_document,asset_operating_procedure,asset_operator_certification,asset_knowledge_article}/{list,detail,form}.html` (plus `asset_document/changes.html` and `asset_operating_procedure/print.html`)
+
+## Architectural Rulings (verified against spine, `apps/assets`, & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`ADOC`** (`AssetDocument`), **`ASOP`** (`AssetOperatingProcedure`), **`AOCT`** (`AssetOperatorCertification`), **`AKBA`** (`AssetKnowledgeArticle`), all four class names, and URL prefixes (`documents/`, `procedures/`, `certifications/`, `knowledge-base/`) verified collision-free across `apps/` and `.claude/tasks/contract-*`. All four models inherit `TenantNumbered` (`apps/assets/models/_base.py`, which already provides `tenant`, `number`, `created_at`, `updated_at` — do NOT redeclare `tenant`).
+- **Verified FK targets (string references, all tenant-scoped — NO global `Currency` FK needed here)**:
+  - `core`: `"core.OrgUnit"`, `"core.Party"`, `"core.Document"` (`tenant` inherited from `TenantNumbered` -> `"core.Tenant"`).
+  - `accounts`: `settings.AUTH_USER_MODEL` (`accounts.User`; has `tenant` FK nullable for superuser & `is_tenant_admin`).
+  - `scm`: `"scm.Asset"`.
+  - `accounting`: `"accounting.FixedAsset"`.
+  - `hrm`: `"hrm.EmployeeProfile"`, `"hrm.TrainingCertificate"`.
+  - `assets` siblings: `"assets.AssetModel"`, `"assets.AssetCategory"`, `"assets.AssetSpecificationTemplate"`, `"assets.AssetWarranty"`, `"assets.AssetComplianceFramework"`, `"assets.AssetMaintenanceSchedule"`, `"assets.AssetFailureMode"`, `"assets.AssetMaintenanceRequest"`, `"assets.AssetMaintenanceLog"`, `"assets.AssetIncidentReport"`, `"assets.AssetComplianceIncident"`.
+  - Intra-11.16 & self-FKs: `"assets.AssetDocument"`, `"assets.AssetOperatingProcedure"`, `"self"`.
+- **Upload security & protected attachment downloads (`L20`, `L53`)**:
+  - Import `ALLOWED_DOC_EXTENSIONS` (excludes `.svg`) and `MAX_UPLOAD_BYTES` (20 MB) explicitly from `apps.core.forms._common` inside upload validation (`clean_file` / `clean_attachment` / `clean_certificate_file`).
+  - Compute SHA-256 checksum (`file_checksum`), `file_size_bytes`, and `os.path.basename(...)` `original_filename` server-side BEFORE `save()` using chunked streaming (`upload.chunks()` with `seek(0)` before/after).
+  - **NEVER** link raw `{{ obj.file.url }}` / `{{ obj.attachment.url }}` in templates (unauthenticated `/media/` leakage per L53). Every file download links a dedicated `@login_required` tenant-scoped download view (`asset_document_download`, `asset_operating_procedure_download`, `asset_operator_certification_download`, `asset_knowledge_article_download`) returning `FileResponse(..., as_attachment=True, filename=...)` with `X-Content-Type-Options: nosniff` and CR/LF stripped from `filename`.
+- **Workflow, system counters, & `*_at` hygiene (`L22`, `L49`)**:
+  - Exclude from ALL `ModelForm.Meta.fields`: `tenant`, `number`, `created_at`, `updated_at`, workflow-controlled `status`, all system `*_at` timestamps (`checked_out_at`, `approved_at`, `sop_acknowledged_at`, `published_at`), file integrity metadata (`original_filename`, `file_size_bytes`, `file_checksum`), system-controlled revision/lock/signoff flags & pointers (`revision_sequence`, `is_current_revision`, `checked_out_by`, `owner`, `author`, `approved_by`, `reviewed_by`, `sop_acknowledged`), and feedback counters (`helpful_votes`, `view_count`).
+  - All forms inherit `(TenantUniqueMixin, TenantModelForm)` (L49), scope every tenant FK queryset in `__init__` to `tenant=self.tenant`, and run `reject_foreign(...)` in `clean()`. Every model `clean()` also calls `validate_tenant_fks(...)`.
+- **Audit logging (`L66` + `apps/core/utils.py` `varchar(10)` rule)**:
+  - Every mutating view calls `write_audit_log(request.user, obj, verb, changes={...}, tenant=request.tenant)` — NEVER pass `request` or `instance=`/`description=`.
+  - `AuditLog.action` is `varchar(10)`: pass a short verb `<= 10` chars (`"create"`, `"update"`, `"delete"`, `"review"`, `"approve"`, `"draft"`, `"checkout"`, `"checkin"`, `"revise"`, `"archive"`, `"activate"`, `"retire"`, `"verify"`, `"ack_sop"`, `"renew"`, `"revoke"`, `"helpful"`, `"publish"`, `"sync_exp"`) and place the descriptive workflow action in `changes={"action": ...}`.
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**:
+  - Every `CharField(choices=...)` `max_length` verified strictly `>= len(longest_choice_value)` + headroom; every constraint and index `name` verified `<= 30` chars below.
+- **Frontend, Filters, & Views (`L2`, `L9`, `L10`, `L11`, `L33`, `L42`, `L57`)**:
+  - Badges ONLY from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`. Stat icons ONLY from `blue`, `green`, `orange`, `purple`, `slate`, `red`.
+  - Detail views use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Filter GET params parsed cleanly BEFORE pagination; FK params checked with `.isdigit()` (L11); template FK dropdowns compare `|stringformat:"d"`; all filter inputs have matching `id=` and `<label for=>` (`sr-only` or `.form-label text-xs`); paginators guard `has_previous` / `has_next` (L9); nullable user FKs guarded with `{% if fk %}` (L10); KPI `.aggregate(...)` keys never collide with model `@property` names (L57).
+  - Delete & state-transition routes use `@require_POST` (`confirm(...)` uses system `number` with escaped apostrophes per L42). CSV exports sanitize formulas (`=`, `+`, `-`, `@`, `\t`, `\r`, `\n`) and emit `X-Content-Type-Options: nosniff`.
+
+---
+
+## Models (from research — 4)
+
+### 1. `AssetDocument` (`ADOC-`)
+*Maps NavERP bullets: `Asset Documentation Repository` + `Version Control & Change Management`*
+- **File**: `apps/assets/models/AssetDocumentKnowledge/AssetDocuments.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "ADOC"`)
+- **Fields & Choices (L65 longest choice value checked)**:
+  - `title`: `CharField(max_length=200)`
+  - `document_class`: `CharField(max_length=32, choices=DOCUMENT_CLASS_CHOICES, default="manual")` — `"manual"` (6), `"schematic_pid"` (13), `"electrical_diagram"` (18), `"datasheet"` (9), `"warranty_cert"` (13), `"calibration_cert"` (16), `"compliance_cert"` (15), `"inspection_dossier"` (18), `"vendor_transmittal"` (18), `"as_built_drawing"` (16) (longest: 18 <= 32)
+  - `access_classification`: `CharField(max_length=24, choices=ACCESS_CLASSIFICATION_CHOICES, default="internal_tech")` — `"public_floor"` (12), `"internal_tech"` (13), `"restricted_eng"` (14), `"confidential"` (12) (longest: 14 <= 24)
+  - `tag_code`: `CharField(max_length=80, blank=True)`
+  - `manufacturer_ref`: `CharField(max_length=120, blank=True)`
+  - `document_language`: `CharField(max_length=32, default="en")`
+  - `storage_location_ref`: `CharField(max_length=160, blank=True)`
+  - `file`: `FileField(upload_to="assets/documents/%Y/%m/", blank=True, null=True)`
+  - `original_filename`: `CharField(max_length=255, blank=True, editable=False)`
+  - `file_size_bytes`: `PositiveBigIntegerField(default=0, editable=False)`
+  - `file_checksum`: `CharField(max_length=64, blank=True, editable=False)` (SHA-256 hex digest)
+  - `revision_label`: `CharField(max_length=24, default="Rev A")`
+  - `revision_sequence`: `PositiveIntegerField(default=1, editable=False)`
+  - `supersedes`: `ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="superseded_by_revisions")`
+  - `is_current_revision`: `BooleanField(default=True, editable=False)`
+  - `change_request_ref`: `CharField(max_length=64, blank=True)`
+  - `change_type`: `CharField(max_length=24, choices=CHANGE_TYPE_CHOICES, default="new_issue")` — `"new_issue"` (9), `"drawing_redline"` (15), `"spec_update"` (11), `"vendor_bulletin"` (15), `"regulatory_update"` (17), `"as_built_reconcile"` (18) (longest: 18 <= 24)
+  - `redline_summary`: `TextField(blank=True)`
+  - `spec_delta_notes`: `TextField(blank=True)`
+  - `checked_out_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="checked_out_asset_documents")`
+  - `checked_out_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `effective_date`: `DateField(null=True, blank=True)`
+  - `expiry_date`: `DateField(null=True, blank=True)`
+  - `retention_years`: `PositiveSmallIntegerField(null=True, blank=True)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft", editable=False)` — `"draft"` (5), `"in_review"` (9), `"approved"` (8), `"superseded"` (10), `"archived"` (8) (longest: 10 <= 20)
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="owned_asset_documents")`
+  - `reviewer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="reviewed_asset_documents")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="approved_asset_documents")`
+  - `approved_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `review_notes`: `TextField(blank=True)`
+  - `description`: `TextField(blank=True)`
+  - **Verified FKs**: `org_unit` (`core.OrgUnit`), `operational_asset` (`scm.Asset`), `fixed_asset` (`accounting.FixedAsset`), `asset_model` (`assets.AssetModel`), `asset_category` (`assets.AssetCategory`), `specification_template` (`assets.AssetSpecificationTemplate`), `warranty` (`assets.AssetWarranty`), `compliance_framework` (`assets.AssetComplianceFramework`), `vendor_party` (`core.Party`), `core_document` (`core.Document`)
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_adoc_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_adoc_ten_stat")` (17)
+  - `Index(fields=["tenant", "document_class"], name="idx_adoc_ten_cls")` (16)
+  - `Index(fields=["tenant", "operational_asset"], name="idx_adoc_ten_ast")` (16)
+  - `Index(fields=["tenant", "expiry_date"], name="idx_adoc_ten_exp")` (16)
+  - `Index(fields=["tenant", "is_current_revision"], name="idx_adoc_ten_cur")` (16)
+- **Form (`AssetDocumentForm`)**:
+  - `Meta.fields`: `title`, `document_class`, `access_classification`, `tag_code`, `manufacturer_ref`, `document_language`, `storage_location_ref`, `file`, `revision_label`, `supersedes`, `change_request_ref`, `change_type`, `redline_summary`, `spec_delta_notes`, `effective_date`, `expiry_date`, `retention_years`, `reviewer`, `review_notes`, `description`, `org_unit`, `operational_asset`, `fixed_asset`, `asset_model`, `asset_category`, `specification_template`, `warranty`, `compliance_framework`, `vendor_party`, `core_document`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `status`, `revision_sequence`, `is_current_revision`, `original_filename`, `file_size_bytes`, `file_checksum`, `checked_out_by`, `checked_out_at`, `owner`, `approved_by`, `approved_at`, `created_at`, `updated_at`
+  - `clean_file()`: validate extension via `ALLOWED_DOC_EXTENSIONS` (no `.svg`) & size `<= MAX_UPLOAD_BYTES` (20 MB)
+  - `clean()`: `reject_foreign(...)` on all 12 tenant FKs (`supersedes`, `reviewer`, `org_unit`, `operational_asset`, `fixed_asset`, `asset_model`, `asset_category`, `specification_template`, `warranty`, `compliance_framework`, `vendor_party`, `core_document`); ensure `expiry_date >= effective_date` when both set; disallow `supersedes == self.instance`.
+- **Views, Actions & Context**:
+  - Views: `asset_document_list`, `asset_document_change_list` (MOC / revision-change queue filtered to drafts, in-review, checked-out, or superseded-chain records), `asset_document_export_csv`, `asset_document_create`, `asset_document_detail`, `asset_document_edit` (locked once `approved`/`superseded`/`archived`, and blocks when checked out by another user), `asset_document_delete` (draft only, `@require_POST`), `asset_document_download` (authenticated `FileResponse` attachment), plus POST transitions `asset_document_submit_review`, `asset_document_approve_release` (atomically supersedes predecessor via `select_for_update()`), `asset_document_return_to_draft`, `asset_document_checkout`, `asset_document_checkin`, `asset_document_create_revision`, `asset_document_archive`.
+  - Context keys pinned:
+    - List (`list.html` / `changes.html`): `documents` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `approved_count`, `in_review_count`, `expiring_soon_count`, `checked_out_count`, `draft_count`, `class_choices`, `classification_choices`, `change_type_choices`, `status_choices`, `assets_list`, `categories`, `org_units`, `search_query`
+    - Detail: `document`, `revision_history`, `linked_procedures`, `linked_articles`, `can_edit`, `can_approve`
+    - Form: `form`, `document` (when editing, else `None`), `is_edit`, `title`
+
+### 2. `AssetOperatingProcedure` (`ASOP-`)
+*Maps NavERP bullet: `SOP & Procedure Management`*
+- **File**: `apps/assets/models/AssetDocumentKnowledge/AssetOperatingProcedures.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "ASOP"`)
+- **Fields & Choices (L65 longest choice value checked)**:
+  - `title`: `CharField(max_length=200)`
+  - `procedure_type`: `CharField(max_length=28, choices=PROCEDURE_TYPE_CHOICES, default="sop_operation")` — `"sop_operation"` (13), `"pm_protocol"` (11), `"loto_isolation"` (14), `"emergency_shutdown"` (18), `"commissioning"` (13), `"calibration_protocol"` (20), `"inspection_checklist"` (20) (longest: 20 <= 28)
+  - `safety_level`: `CharField(max_length=24, choices=SAFETY_LEVEL_CHOICES, default="standard")` — `"standard"` (8), `"caution"` (7), `"high_hazard_loto"` (16), `"permit_required"` (15) (longest: 16 <= 24)
+  - `revision_label`: `CharField(max_length=24, default="Rev 1.0")`
+  - `supersedes`: `ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="superseded_by_procedures")`
+  - `purpose_scope`: `TextField(blank=True)`
+  - `hazard_warnings`: `TextField(blank=True)`
+  - `required_ppe`: `CharField(max_length=255, blank=True)`
+  - `loto_required`: `BooleanField(default=False)`
+  - `loto_isolation_points`: `JSONField(default=list, blank=True)` (validated list of `{energy_source, tag_id, isolation_point, lock_device, verification_step}`)
+  - `procedure_steps`: `JSONField(default=list, blank=True)` (validated list of `{step_no, title, instruction, expected_reading, is_mandatory_signoff}`)
+  - `required_qualification_code`: `CharField(max_length=64, blank=True)`
+  - `estimated_duration_minutes`: `PositiveIntegerField(default=30)`
+  - `attachment`: `FileField(upload_to="assets/procedures/%Y/%m/", blank=True, null=True)`
+  - `effective_date`: `DateField(null=True, blank=True)`
+  - `review_cycle_months`: `PositiveSmallIntegerField(default=12)`
+  - `next_review_date`: `DateField(null=True, blank=True)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft", editable=False)` — `"draft"` (5), `"under_review"` (12), `"active"` (6), `"superseded"` (10), `"retired"` (7) (longest: 12 <= 20)
+  - `author`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="authored_asset_procedures")`
+  - `safety_reviewer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="safety_reviewed_asset_procedures")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="approved_asset_procedures")`
+  - `approved_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `review_notes`: `TextField(blank=True)`
+  - **Verified FKs**: `org_unit` (`core.OrgUnit`), `operational_asset` (`scm.Asset`), `asset_category` (`assets.AssetCategory`), `asset_model` (`assets.AssetModel`), `maintenance_schedule` (`assets.AssetMaintenanceSchedule`), `compliance_framework` (`assets.AssetComplianceFramework`), `primary_document` (`assets.AssetDocument`)
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_asop_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_asop_ten_stat")` (17)
+  - `Index(fields=["tenant", "procedure_type"], name="idx_asop_ten_type")` (17)
+  - `Index(fields=["tenant", "safety_level"], name="idx_asop_ten_haz")` (16)
+  - `Index(fields=["tenant", "next_review_date"], name="idx_asop_ten_rev")` (16)
+- **Form (`AssetOperatingProcedureForm`)**:
+  - `Meta.fields`: `title`, `procedure_type`, `safety_level`, `revision_label`, `supersedes`, `purpose_scope`, `hazard_warnings`, `required_ppe`, `loto_required`, `loto_isolation_points`, `procedure_steps`, `required_qualification_code`, `estimated_duration_minutes`, `attachment`, `effective_date`, `review_cycle_months`, `next_review_date`, `safety_reviewer`, `review_notes`, `org_unit`, `operational_asset`, `asset_category`, `asset_model`, `maintenance_schedule`, `compliance_framework`, `primary_document`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `status`, `author`, `approved_by`, `approved_at`, `created_at`, `updated_at`
+  - `clean_attachment()`: `ALLOWED_DOC_EXTENSIONS` & `MAX_UPLOAD_BYTES`
+  - `clean()`: `reject_foreign(...)` on all 9 tenant FKs; validate `estimated_duration_minutes >= 1`, `review_cycle_months >= 1`; validate bounded JSON lists on `loto_isolation_points` and `procedure_steps`.
+- **Views, Actions & Context**:
+  - Views: `asset_operating_procedure_list`, `asset_operating_procedure_export_csv`, `asset_operating_procedure_create`, `asset_operating_procedure_detail`, `asset_operating_procedure_edit` (draft/under_review only), `asset_operating_procedure_delete` (draft only, `@require_POST`), `asset_operating_procedure_print` (printable shop-floor SOP & LOTO sheet), `asset_operating_procedure_download`, plus POST transitions `asset_operating_procedure_submit_review`, `asset_operating_procedure_activate` (enforces `loto_required` safety data & atomically supersedes `supersedes`), `asset_operating_procedure_clone_revision`, `asset_operating_procedure_retire`.
+  - Context keys pinned:
+    - List: `procedures` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `active_count`, `loto_count`, `overdue_review_count`, `type_choices`, `safety_choices`, `status_choices`, `assets_list`, `categories`, `search_query`
+    - Detail / Print: `procedure`, `certified_operators`, `linked_articles`, `can_edit`, `can_activate`
+    - Form: `form`, `procedure` (when editing, else `None`), `is_edit`, `title`
+
+### 3. `AssetOperatorCertification` (`AOCT-`)
+*Maps NavERP bullet: `Training & Certification Records`*
+- **File**: `apps/assets/models/AssetDocumentKnowledge/AssetOperatorCertifications.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AOCT"`)
+- **Fields & Choices (L65 longest choice value checked)**:
+  - `title`: `CharField(max_length=200)`
+  - `qualification_code`: `CharField(max_length=64, blank=True)`
+  - `qualification_type`: `CharField(max_length=28, choices=QUALIFICATION_TYPE_CHOICES, default="equipment_operator")` — `"equipment_operator"` (18), `"maintenance_technician"` (22), `"loto_authorized"` (15), `"electrical_hv"` (13), `"confined_space"` (14), `"crane_rigging"` (13), `"pressure_welding"` (16), `"calibration_specialist"` (22), `"oem_certified"` (13) (longest: 22 <= 28)
+  - `proficiency_level`: `CharField(max_length=24, choices=PROFICIENCY_LEVEL_CHOICES, default="qualified_operator")` — `"trainee_supervised"` (18), `"qualified_operator"` (18), `"senior_technician"` (17), `"lead_inspector"` (14), `"trainer_assessor"` (16) (longest: 18 <= 24)
+  - `issuing_authority`: `CharField(max_length=150, blank=True)`
+  - `certificate_reference`: `CharField(max_length=80, blank=True)`
+  - `certificate_file`: `FileField(upload_to="assets/certifications/%Y/%m/", blank=True, null=True)`
+  - `issued_date`: `DateField()`
+  - `expires_on`: `DateField(null=True, blank=True)`
+  - `renewal_lead_days`: `PositiveSmallIntegerField(default=30)`
+  - `last_assessed_date`: `DateField(null=True, blank=True)`
+  - `training_hours`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))`
+  - `assessment_score`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)`
+  - `sop_acknowledged`: `BooleanField(default=False, editable=False)`
+  - `sop_acknowledged_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - `notes`: `TextField(blank=True)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="pending", editable=False)` — `"pending"` (7), `"active"` (6), `"expiring_soon"` (13), `"expired"` (7), `"revoked"` (7) (longest: 13 <= 20)
+  - **Verified FKs**: `org_unit` (`core.OrgUnit`), `operator_party` (`core.Party`), `operator_user` (`settings.AUTH_USER_MODEL`), `employee_profile` (`hrm.EmployeeProfile`), `hrm_certificate` (`hrm.TrainingCertificate`), `issuing_party` (`core.Party`), `assessor` (`settings.AUTH_USER_MODEL`), `operational_asset` (`scm.Asset`), `asset_category` (`assets.AssetCategory`), `asset_model` (`assets.AssetModel`), `operating_procedure` (`assets.AssetOperatingProcedure`), `compliance_framework` (`assets.AssetComplianceFramework`)
+- **Clean Rules, Properties & Helpers**:
+  - `clean()`: requires at least one person link (`operator_party`, `operator_user`, or `employee_profile`); validates `expires_on >= issued_date` when set, `training_hours >= 0`, `0 <= assessment_score <= 100` when set, `renewal_lead_days >= 1`; `validate_tenant_fks(...)` on all 12 FKs.
+  - Properties: `days_until_expiry`, `is_expired` (live date check using `timezone.localdate()`), `is_renewal_due`, `status_badge_class`, `proficiency_badge_class`.
+  - Methods/hooks: `sync_expiry_status()`, plus module-level dispatch helper `is_operator_certified(...)`.
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_aoct_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_aoct_ten_stat")` (17)
+  - `Index(fields=["tenant", "qualification_type"], name="idx_aoct_ten_type")` (17)
+  - `Index(fields=["tenant", "expires_on"], name="idx_aoct_ten_exp")` (16)
+  - `Index(fields=["tenant", "operator_user"], name="idx_aoct_ten_usr")` (16)
+  - `Index(fields=["tenant", "operator_party"], name="idx_aoct_ten_pty")` (16)
+- **Form (`AssetOperatorCertificationForm`)**:
+  - `Meta.fields`: `title`, `qualification_code`, `qualification_type`, `proficiency_level`, `org_unit`, `operator_party`, `operator_user`, `employee_profile`, `hrm_certificate`, `issuing_authority`, `issuing_party`, `certificate_reference`, `certificate_file`, `operational_asset`, `asset_category`, `asset_model`, `operating_procedure`, `compliance_framework`, `issued_date`, `expires_on`, `renewal_lead_days`, `last_assessed_date`, `assessor`, `training_hours`, `assessment_score`, `notes`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `status`, `sop_acknowledged`, `sop_acknowledged_at`, `created_at`, `updated_at`
+  - `clean_certificate_file()`: `ALLOWED_DOC_EXTENSIONS` & `MAX_UPLOAD_BYTES`
+  - `clean()`: `reject_foreign(...)` on all 12 tenant FKs.
+- **Views, Actions & Context**:
+  - Views: `asset_operator_certification_list`, `asset_operator_certification_export_csv`, `asset_operator_certification_refresh_alerts` (`@require_POST` batch `sync_expiry_status`), `asset_operator_certification_create`, `asset_operator_certification_detail`, `asset_operator_certification_edit` (blocked if `revoked`), `asset_operator_certification_delete` (`pending`/`revoked` or admin `@require_POST`), `asset_operator_certification_download`, plus POST actions `asset_operator_certification_verify_activate`, `asset_operator_certification_acknowledge_sop`, `asset_operator_certification_renew`, `asset_operator_certification_revoke`.
+  - Context keys pinned:
+    - List: `certifications` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `active_count`, `expiring_soon_count`, `expired_count`, `qualification_type_choices`, `proficiency_choices`, `status_choices`, `assets_list`, `procedures`, `search_query`
+    - Detail: `certification`, `can_acknowledge_sop`, `can_revoke`
+    - Form: `form`, `certification` (when editing, else `None`), `is_edit`, `title`
+
+### 4. `AssetKnowledgeArticle` (`AKBA-`)
+*Maps NavERP bullet: `Lessons Learned & Failure Analysis`*
+- **File**: `apps/assets/models/AssetDocumentKnowledge/AssetKnowledgeArticles.py`
+- **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "AKBA"`)
+- **Fields & Choices (L65 longest choice value checked)**:
+  - `title`: `CharField(max_length=200)`
+  - `article_type`: `CharField(max_length=28, choices=ARTICLE_TYPE_CHOICES, default="lessons_learned")` — `"rca_post_incident"` (17), `"lessons_learned"` (15), `"troubleshooting_guide"` (21), `"failure_bulletin"` (16), `"oem_service_advisory"` (20), `"pm_optimization_note"` (20) (longest: 21 <= 28)
+  - `rca_methodology`: `CharField(max_length=28, choices=RCA_METHODOLOGY_CHOICES, default="five_whys")` — `"five_whys"` (9), `"fishbone_ishikawa"` (17), `"problem_cause_remedy"` (20), `"fmea_feedback"` (13), `"fault_tree"` (10), `"general_kb"` (10) (longest: 20 <= 28)
+  - `severity`: `CharField(max_length=16, choices=SEVERITY_CHOICES, default="medium")` — `"low"` (3), `"medium"` (6), `"high"` (4), `"critical"` (8) (longest: 8 <= 16)
+  - `symptom_problem`: `TextField()`
+  - `root_cause_summary`: `TextField(blank=True)`
+  - `five_whys`: `JSONField(default=list, blank=True)` (validated list of `{why_level, question, answer}`)
+  - `contributing_factors`: `JSONField(default=dict, blank=True)` (validated 6M Fishbone keys: `machine`, `method`, `material`, `manpower`, `measurement`, `environment`)
+  - `remedy_corrective_action`: `TextField(blank=True)`
+  - `preventive_lessons`: `TextField(blank=True)`
+  - `downtime_hours_impacted`: `DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))`
+  - `recurrence_count`: `PositiveIntegerField(default=1)`
+  - `tags`: `CharField(max_length=255, blank=True)`
+  - `helpful_votes`: `PositiveIntegerField(default=0, editable=False)`
+  - `view_count`: `PositiveIntegerField(default=0, editable=False)`
+  - `attachment`: `FileField(upload_to="assets/knowledge/%Y/%m/", blank=True, null=True)`
+  - `incident_occurred_on`: `DateField(null=True, blank=True)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft", editable=False)` — `"draft"` (5), `"peer_review"` (11), `"published"` (9), `"retired"` (7) (longest: 11 <= 20)
+  - `author`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="authored_asset_kb_articles")`
+  - `reviewed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, editable=False, related_name="reviewed_asset_kb_articles")`
+  - `published_at`: `DateTimeField(null=True, blank=True, editable=False)` (L22)
+  - **Verified FKs**: `org_unit` (`core.OrgUnit`), `operational_asset` (`scm.Asset`), `fixed_asset` (`accounting.FixedAsset`), `asset_category` (`assets.AssetCategory`), `asset_model` (`assets.AssetModel`), `failure_mode` (`assets.AssetFailureMode`), `maintenance_request` (`assets.AssetMaintenanceRequest`), `maintenance_log` (`assets.AssetMaintenanceLog`), `incident_report` (`assets.AssetIncidentReport`), `compliance_incident` (`assets.AssetComplianceIncident`), `related_document` (`assets.AssetDocument`), `recommended_procedure` (`assets.AssetOperatingProcedure`)
+- **Constraints & Indexes (`<= 30` chars, L65)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_akba_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "status"], name="idx_akba_ten_stat")` (17)
+  - `Index(fields=["tenant", "article_type"], name="idx_akba_ten_type")` (17)
+  - `Index(fields=["tenant", "severity"], name="idx_akba_ten_sev")` (16)
+  - `Index(fields=["tenant", "rca_methodology"], name="idx_akba_ten_rca")` (16)
+  - `Index(fields=["tenant", "operational_asset"], name="idx_akba_ten_ast")` (16)
+- **Form (`AssetKnowledgeArticleForm`)**:
+  - `Meta.fields`: `title`, `article_type`, `rca_methodology`, `severity`, `symptom_problem`, `root_cause_summary`, `five_whys`, `contributing_factors`, `remedy_corrective_action`, `preventive_lessons`, `downtime_hours_impacted`, `recurrence_count`, `tags`, `attachment`, `incident_occurred_on`, `org_unit`, `operational_asset`, `fixed_asset`, `asset_category`, `asset_model`, `failure_mode`, `maintenance_request`, `maintenance_log`, `incident_report`, `compliance_incident`, `related_document`, `recommended_procedure`
+  - **Excluded** (`editable=False`/system): `tenant`, `number`, `status`, `author`, `reviewed_by`, `published_at`, `helpful_votes`, `view_count`, `created_at`, `updated_at`
+  - `clean_attachment()`: `ALLOWED_DOC_EXTENSIONS` & `MAX_UPLOAD_BYTES`
+  - `clean()`: `reject_foreign(...)` on all 12 tenant FKs; validate `downtime_hours_impacted >= 0`, `recurrence_count >= 1`, bounded JSON structure on `five_whys` and Fishbone 6M `contributing_factors`.
+- **Views, Actions & Context**:
+  - Views: `asset_knowledge_article_list`, `asset_knowledge_article_export_csv`, `asset_knowledge_article_create`, `asset_knowledge_article_detail` (atomic `F("view_count") + 1` on GET), `asset_knowledge_article_edit` (draft/peer_review only), `asset_knowledge_article_delete` (draft only, `@require_POST`), `asset_knowledge_article_download`, plus POST actions `asset_knowledge_article_submit_review`, `asset_knowledge_article_publish` (validates root cause + remedy for RCA/bulletin), `asset_knowledge_article_mark_helpful` (atomic `F("helpful_votes") + 1`), `asset_knowledge_article_retire`.
+  - Context keys pinned:
+    - List: `articles` (`page_obj`), `paginator`, `page_obj`, `is_paginated`, `total_count`, `published_count`, `critical_high_count`, `total_downtime_hours`, `article_type_choices`, `rca_choices`, `severity_choices`, `status_choices`, `assets_list`, `failure_modes`, `search_query`
+    - Detail: `article`, `can_edit`, `can_publish`
+    - Form: `form`, `article` (when editing, else `None`), `is_edit`, `title`
+
+---
+
+## Sub-module 11.16 Implementation Checklist
+
+### Phase 1 & Phase 2 (Research & Plan)
+- [x] Research commercial EAM EDMS, ECM/MOC, SOP/LOTO, operator qualification, and RCA KB tools -> `.claude/tasks/research-assets-11.16.md`
+- [x] Verify all FK target models exist across `core`, `accounts`, `scm`, `accounting`, `hrm`, `assets` and append checkable Sub-module 11.16 plan to `.claude/tasks/todo.md`
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze pre-build spec/contract in `.claude/tasks/contract-assets-11.16.md` (every model field, `CHOICES` value & `max_length`, `<= 30`-char index/constraint name, `ModelForm.Meta.fields` & explicit exclusions, literal-before-`<int:pk>` URL routes & names, exact view context keys, filter dropdown querysets/choices, badge CSS dicts, and `AuditLog.action` `<= 10`-char verb map)
+
+### Phase 3.2: Scaffold (SKIPPED — `apps/assets/` Already Exists)
+- [x] App `apps/assets` already scaffolded; NO `config/settings.py` or `config/urls.py` edits
+
+### Phase 3.3: Entity-by-Entity Build (Strictly Serial — NO shared `__init__.py` / `admin.py` / `navigation.py` edits here)
+- [ ] **Shared sub-package helpers**:
+  - [ ] `apps/assets/models/AssetDocumentKnowledge/_validators.py` (`validate_tenant_fks`, `add_field_error`, `file_sha256`, bounded `five_whys` / `contributing_factors` / `procedure_steps` / `loto_isolation_points` JSON validators)
+  - [ ] `apps/assets/forms/AssetDocumentKnowledge/_helpers.py` (`validate_safe_doc_upload` pulling `ALLOWED_DOC_EXTENSIONS` & `MAX_UPLOAD_BYTES` from `apps.core.forms._common`)
+  - [ ] `apps/assets/views/AssetDocumentKnowledge/_helpers.py` (`serve_protected_attachment` with `Content-Disposition: attachment` & `X-Content-Type-Options: nosniff`; `csv_export_response` with formula neutralization)
+- [ ] **Entity 1: `AssetDocument` (`ADOC-`)**
+  - [ ] `apps/assets/models/AssetDocumentKnowledge/AssetDocuments.py`
+  - [ ] `apps/assets/forms/AssetDocumentKnowledge/AssetDocuments.py`
+  - [ ] `apps/assets/views/AssetDocumentKnowledge/AssetDocuments.py` (CRUD + `changes` MOC queue + `export_csv` + `download` + `submit_review` / `approve_release` / `return_to_draft` / `checkout` / `checkin` / `create_revision` / `archive`)
+  - [ ] `apps/assets/urls/AssetDocumentKnowledge/AssetDocuments.py` (literal routes `documents/`, `documents/create/`, `documents/changes/`, `documents/export-csv/` before `documents/<int:pk>/...`)
+  - [ ] `templates/assets/assetdocumentknowledge/asset_document/list.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_document/changes.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_document/detail.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_document/form.html`
+- [ ] **Entity 2: `AssetOperatingProcedure` (`ASOP-`)**
+  - [ ] `apps/assets/models/AssetDocumentKnowledge/AssetOperatingProcedures.py`
+  - [ ] `apps/assets/forms/AssetDocumentKnowledge/AssetOperatingProcedures.py`
+  - [ ] `apps/assets/views/AssetDocumentKnowledge/AssetOperatingProcedures.py` (CRUD + `export_csv` + `print` shop-floor LOTO sheet + `download` + `submit_review` / `activate` / `clone_revision` / `retire`)
+  - [ ] `apps/assets/urls/AssetDocumentKnowledge/AssetOperatingProcedures.py` (literal routes `procedures/`, `procedures/create/`, `procedures/export-csv/` before `procedures/<int:pk>/...`)
+  - [ ] `templates/assets/assetdocumentknowledge/asset_operating_procedure/list.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_operating_procedure/detail.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_operating_procedure/form.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_operating_procedure/print.html`
+- [ ] **Entity 3: `AssetOperatorCertification` (`AOCT-`)**
+  - [ ] `apps/assets/models/AssetDocumentKnowledge/AssetOperatorCertifications.py` (includes `sync_expiry_status()` + `is_operator_certified(...)`)
+  - [ ] `apps/assets/forms/AssetDocumentKnowledge/AssetOperatorCertifications.py`
+  - [ ] `apps/assets/views/AssetDocumentKnowledge/AssetOperatorCertifications.py` (CRUD + `export_csv` + `refresh_alerts` + `download` + `verify_activate` / `acknowledge_sop` / `renew` / `revoke`)
+  - [ ] `apps/assets/urls/AssetDocumentKnowledge/AssetOperatorCertifications.py` (literal routes `certifications/`, `certifications/create/`, `certifications/refresh-alerts/`, `certifications/export-csv/` before `certifications/<int:pk>/...`)
+  - [ ] `templates/assets/assetdocumentknowledge/asset_operator_certification/list.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_operator_certification/detail.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_operator_certification/form.html`
+- [ ] **Entity 4: `AssetKnowledgeArticle` (`AKBA-`)**
+  - [ ] `apps/assets/models/AssetDocumentKnowledge/AssetKnowledgeArticles.py`
+  - [ ] `apps/assets/forms/AssetDocumentKnowledge/AssetKnowledgeArticles.py`
+  - [ ] `apps/assets/views/AssetDocumentKnowledge/AssetKnowledgeArticles.py` (CRUD + `export_csv` + `download` + `submit_review` / `publish` / `mark_helpful` / `retire`)
+  - [ ] `apps/assets/urls/AssetDocumentKnowledge/AssetKnowledgeArticles.py` (literal routes `knowledge-base/`, `knowledge-base/create/`, `knowledge-base/export-csv/` before `knowledge-base/<int:pk>/...`)
+  - [ ] `templates/assets/assetdocumentknowledge/asset_knowledge_article/list.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_knowledge_article/detail.html`
+  - [ ] `templates/assets/assetdocumentknowledge/asset_knowledge_article/form.html`
+
+### Phase 3.4: Integrate & Wire-up (Single-writer, AFTER all entity files exist)
+- [ ] Verify all 19 entity/helper backend files & 14 template files landed on disk before wiring
+- [ ] Create `apps/assets/{models,forms,views,urls}/AssetDocumentKnowledge/__init__.py` re-exports
+- [ ] Surgically append `AssetDocumentKnowledge` re-exports to `apps/assets/{models,forms,views}/__init__.py` and concatenate `+ asset_document_knowledge_urlpatterns` in `apps/assets/urls/__init__.py`
+- [ ] Register `AssetDocument`, `AssetOperatingProcedure`, `AssetOperatorCertification`, `AssetKnowledgeArticle` in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/views/overview.py` & `templates/assets/overview.html` with 11.16 KPI summary metrics & quick navigation cards
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` idempotently (`_seed_tenant_11_16` creating Acme + Beta demo records across all 4 models including revision chains, LOTO SOPs, active/expiring/expired certs, and 5-Why/Fishbone KB articles; safe to run multiple times without `--flush`)
+- [ ] Add `LIVE_LINKS["11.16"]` in `apps/core/navigation.py` using exact `NavERP.md` lines 1835–1839 bullets -> string route names (NO tuples):
+  ```python
+  "11.16": {
+      "Asset Documentation Repository": "assets:asset_document_list",
+      "Version Control & Change Management": "assets:asset_document_change_list",
+      "SOP & Procedure Management": "assets:asset_operating_procedure_list",
+      "Training & Certification Records": "assets:asset_operator_certification_list",
+      "Lessons Learned & Failure Analysis": "assets:asset_knowledge_article_list",
+  },
+  ```
+- [ ] Run `python manage.py makemigrations assets --dry-run` -> `python manage.py makemigrations assets` (`0022_*`) -> `python manage.py migrate` -> `python manage.py showmigrations assets` -> `python manage.py seed_assets` **x2** -> `python manage.py check`
+
+### Phase 3.5: Verify & Smoke Gate (`qa-smoke-tester`)
+- [ ] Write & execute `temp/smoke_11_16.py` as `admin_acme` (`password`) + isolated throwaway `uuid4` tenant:
+  - [ ] Every list, create, detail, edit, delete, `changes`, `print`, `export-csv`, and protected `download` (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`) returns expected status and non-blank rendered row numbers/titles (L8, L57)
+  - [ ] Exercise all list filters + junk query params (`?operational_asset=abc`, L11) + page 2 pagination (L9)
+  - [ ] Exercise workflow POST actions (`submit_review`, `approve_release` superseding predecessor, `checkout`/`checkin`, `create_revision`, `activate`, `clone_revision`, `verify_activate`, `acknowledge_sop`, `renew`, `refresh_alerts`, `publish`, `mark_helpful`)
+  - [ ] Cross-tenant Beta IDOR returns `404` across all detail/edit/delete/download/action endpoints
+  - [ ] Delete `temp/smoke_11_16.py` when verified clean
+
+### Phase 4 & Phase 5: Serial Review & Code Fixer
+- [ ] Run 6 serial reviewers (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) scoped to `11.16` changeset (`BASE...HEAD`) and consolidate/dedupe sorted `C#`, `I#`, `M#` findings into `.claude/tasks/review-assets-11.16.md`
+- [ ] Run `code-fixer` agent against `.claude/tasks/review-assets-11.16.md` in ID order (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
+
+### Phase 6: Tests (Serial)
+- [ ] Pin test contract and append `11.16` fixtures (`_asset_document_knowledge_*` / `asset_document_knowledge_*`) strictly below a marker in `apps/assets/tests/conftest.py` (L59)
+- [ ] Write `apps/assets/tests/test_asset_document_knowledge_models.py` (`ADOC-`/`ASOP-`/`AOCT-`/`AKBA-` auto-numbering, L65 choice lengths, SHA-256 checksums, expiry properties/`sync_expiry_status`/`is_operator_certified`, JSON validators, tenant FK `clean()`)
+- [ ] Write `apps/assets/tests/test_asset_document_knowledge_forms.py` (`reject_foreign`, excluded `editable=False`/system fields, `ALLOWED_DOC_EXTENSIONS` rejecting `.svg`, `MAX_UPLOAD_BYTES`, date & score bounds)
+- [ ] Write `apps/assets/tests/test_asset_document_knowledge_views.py` (CRUD, `changes` queue, `print` sheet, CSV export formula neutralization, protected `download` headers, filter/pagination, atomic supersession, `create_revision`, `acknowledge_sop`, `mark_helpful`, `view_count`, query-invariance N+1 check per L58)
+- [ ] Write `apps/assets/tests/test_asset_document_knowledge_security.py` (unauthenticated redirect, Beta tenant IDOR 404 on CRUD/actions/downloads, `@require_POST` enforcement, draft-only edit/delete lock)
+- [ ] Run full unfiltered `pytest apps/assets/tests/` (never `-k` filtered per L47) and verify 100% green
+
+### Phase 7: Close-out
+- [ ] Update `.claude/skills/assets/SKILL.md` with Sub-module 11.16 models, URLs, templates, and seeder coverage
+- [ ] Mark Sub-module 11.16 complete in `README.md`
+- [ ] Record any deferred/open items in `.agents/tasks/gaps-assets-11.16.md` (or `.claude/tasks/gaps-assets-11.16.md`) and populate `## Review notes` below
+
+## Later passes / deferred
+1. **Hard work-order dispatch certification gate (`11.5` / `11.13`)**: Enforcing `is_operator_certified(...)` as a blocking validator inside `AssetMaintenanceRequest` and `FieldWorkOrder` assignment views (without altering sibling `11.5`/`11.13` schemas/views in this pass).
+2. **Scheduled background expiry & safety-review notifications**: Automated Celery/cron email & in-app alerting for upcoming `AssetOperatorCertification` expirations, `AssetDocument` expirations, and `AssetOperatingProcedure` `next_review_date` deadlines.
+3. **OCR PDF full-text extraction & AI manual Q&A (`Module 13` / `11.19`)**: Automated OCR indexing of scanned vendor PDFs and RAG/LLM troubleshooting assistant over repository manuals and RCA articles.
+4. **In-browser CAD/DWG/BIM viewer & geometric canvas redlining (`11.17`)**: Interactive CAD layer toggling, floor-plan spatial pinning, and visual markup overlays.
+5. **21 CFR Part 11 cryptographic e-signatures & dynamic PDF watermarking (`Module 12` / `Module 13`)**: Re-authenticated signature challenges and per-downloader watermarks on controlled downloads.
+6. **External EDMS bi-directional webhook/API sync (`11.15` extension)**: Automated sync bridges to Accruent Meridian, OpenText, or SharePoint repositories.
+
+## Review notes
+_(To be populated after Phase 4–7 close-out; link `.agents/tasks/gaps-assets-11.16.md` or state `**Gaps**: None`.)_
