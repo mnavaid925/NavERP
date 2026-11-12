@@ -127,7 +127,7 @@
                     <th>Net Chargeback</th>
                     <th>GL Entry</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -142,7 +142,7 @@
                     </td>
                     <td class="text-xs">
                         <div>
-                            <a href="{% url 'assets:asset_facility_space_detail' cb.facility_space.pk %}" class="text-blue-600 hover:underline font-medium">{{ cb.facility_space.code }}</a>
+                            <a href="{% url 'assets:asset_facility_space_detail' cb.facility_space.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{{ cb.facility_space.code }}</a>
                         </div>
                         <div class="text-muted">
                             {% if cb.charged_org_unit %}{{ cb.charged_org_unit.name }}{% endif %}
@@ -161,14 +161,16 @@
                         {% else %}—{% endif %}
                     </td>
                     <td><span class="badge {{ cb.status_badge_class }}">{{ cb.get_status_display }}</span></td>
-                    <td class="table-actions text-right">
-                        <a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                    <td class="table-actions text-end">
+                        <a href="{% url 'assets:asset_space_chargeback_detail' cb.pk %}" class="btn btn-icon" title="View" aria-label="View chargeback {{ cb.number }}"><i data-lucide="eye" class="w-4 h-4"></i></a>
                         {% if cb.can_edit and not cb.journal_entry %}
-                        <a href="{% url 'assets:asset_space_chargeback_edit' cb.pk %}" class="btn btn-icon btn-outline" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+                        <a href="{% url 'assets:asset_space_chargeback_edit' cb.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit chargeback {{ cb.number }}"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <form method="post" action="{% url 'assets:asset_space_chargeback_delete' cb.pk %}" class="inline" onsubmit="return confirm('Delete space chargeback {{ cb.number|escapejs }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete chargeback {{ cb.number }}"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </form>
+                        {% endif %}
                         {% endif %}
                     </td>
                 </tr>
@@ -190,19 +192,19 @@
 
     {% if is_paginated %}
     <div class="pagination">
-        <div class="text-xs text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</div>
-        <div class="flex items-center gap-2">
-            {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&coordination_type={{ request.GET.coordination_type|urlencode }}&allocation_basis={{ request.GET.allocation_basis|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&charged_org_unit={{ request.GET.charged_org_unit|urlencode }}" class="btn btn-outline">Previous</a>
-            {% else %}
-            <span class="btn btn-outline opacity-50 pointer-events-none">Previous</span>
-            {% endif %}
-            {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&coordination_type={{ request.GET.coordination_type|urlencode }}&allocation_basis={{ request.GET.allocation_basis|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&charged_org_unit={{ request.GET.charged_org_unit|urlencode }}" class="btn btn-outline">Next</a>
-            {% else %}
-            <span class="btn btn-outline opacity-50 pointer-events-none">Next</span>
-            {% endif %}
-        </div>
+        <span class="muted">Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</span>
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&coordination_type={{ request.GET.coordination_type|urlencode }}&allocation_basis={{ request.GET.allocation_basis|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&charged_org_unit={{ request.GET.charged_org_unit|urlencode }}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&coordination_type={{ request.GET.coordination_type|urlencode }}&allocation_basis={{ request.GET.allocation_basis|urlencode }}&status={{ request.GET.status|urlencode }}&facility_space={{ request.GET.facility_space|urlencode }}&charged_org_unit={{ request.GET.charged_org_unit|urlencode }}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
     </div>
     {% endif %}
 </div>
