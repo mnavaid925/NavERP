@@ -11,6 +11,7 @@ from apps.assets.models._base import TenantNumbered
 from apps.assets.models.SpaceFacilityAsset._validators import (
     add_field_error,
     validate_non_negative,
+    validate_safe_floor_plan_upload,
     validate_space_parent_cycle,
     validate_tenant_fks,
 )
@@ -184,6 +185,7 @@ class AssetFacilitySpace(TenantNumbered):
         upload_to="assets/space_floor_plans/%Y/%m/",
         blank=True,
         null=True,
+        validators=[validate_safe_floor_plan_upload],
     )
     original_floor_plan_name = models.CharField(
         max_length=255, blank=True, editable=False
@@ -281,7 +283,8 @@ class AssetFacilitySpace(TenantNumbered):
         self.code = (self.code or "").strip().upper()
         self.occupancy_status = self.compute_occupancy_status()
         if self.floor_plan_image and getattr(self.floor_plan_image, "name", ""):
-            self.original_floor_plan_name = os.path.basename(str(self.floor_plan_image.name))[:255]
+            if not getattr(self.floor_plan_image, "_committed", True) or not self.original_floor_plan_name:
+                self.original_floor_plan_name = os.path.basename(str(self.floor_plan_image.name))[:255]
         elif not self.floor_plan_image:
             self.original_floor_plan_name = ""
         return super().save(*args, **kwargs)
