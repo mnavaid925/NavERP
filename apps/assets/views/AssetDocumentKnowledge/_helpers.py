@@ -7,6 +7,12 @@ import re
 
 from django.http import FileResponse, Http404, HttpResponse
 
+from apps.assets.models.AssetDocumentKnowledge._validators import (
+    OPEN_CLASSIFICATIONS,
+    is_asset_document_readable,
+    readable_asset_document_q,
+)
+
 PAGE_SIZE = 15
 _UNSAFE_FILENAME_RE = re.compile(r'[\r\n"\\/;]+')
 
