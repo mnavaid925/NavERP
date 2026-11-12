@@ -206,6 +206,16 @@ class AssetOperatingProcedure(TenantNumbered):
             models.Index(fields=["tenant", "procedure_type"], name="idx_asop_ten_type"),
             models.Index(fields=["tenant", "safety_level"], name="idx_asop_ten_haz"),
             models.Index(fields=["tenant", "next_review_date"], name="idx_asop_ten_rev"),
+            models.Index(fields=["tenant", "-updated_at"], name="idx_asop_ten_upd"),
+            models.Index(
+                fields=["tenant", "status", "next_review_date"],
+                name="idx_asop_ten_st_rev",
+            ),
+            models.Index(
+                fields=["tenant", "operational_asset"], name="idx_asop_ten_ast"
+            ),
+            models.Index(fields=["tenant", "asset_category"], name="idx_asop_ten_cat"),
+            models.Index(fields=["tenant", "loto_required"], name="idx_asop_ten_loto"),
         ]
 
     def __str__(self):
