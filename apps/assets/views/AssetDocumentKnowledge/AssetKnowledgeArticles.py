@@ -431,7 +431,6 @@ def asset_knowledge_article_mark_helpful(request, pk):
         AssetKnowledgeArticle.objects.filter(
             tenant=request.tenant, pk=article.pk
         ).update(helpful_votes=F("helpful_votes") + 1)
-        article.refresh_from_db(fields=["helpful_votes"])
         write_audit_log(request.user, article, "helpful", tenant=request.tenant)
     messages.success(request, f"Marked {article.number} as helpful.")
     return redirect("assets:asset_knowledge_article_detail", pk=article.pk)
