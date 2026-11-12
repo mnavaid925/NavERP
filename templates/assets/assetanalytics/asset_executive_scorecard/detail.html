@@ -108,7 +108,7 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Period Scope &amp; Governance</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Period Scope &amp; Governance</h2>
         </div>
         <div class="card-body">
             <dl class="detail-grid">
@@ -146,7 +146,7 @@
 
     <div class="card lg:col-span-2">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Portfolio Financial, Reliability &amp; Compliance Benchmarks</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Portfolio Financial, Reliability &amp; Compliance Benchmarks</h2>
         </div>
         <div class="card-body">
             <dl class="detail-grid">
@@ -192,7 +192,7 @@
                 </div>
                 <div class="detail-item">
                     <dt>Unfunded Replacement Backlog</dt>
-                    <dd class="font-mono font-semibold text-red-700">${{ scorecard.unfunded_replacement_backlog|floatformat:"2g" }}</dd>
+                    <dd class="font-mono font-semibold text-red-700 dark:text-red-400">${{ scorecard.unfunded_replacement_backlog|floatformat:"2g" }}</dd>
                 </div>
             </dl>
         </div>
@@ -202,10 +202,10 @@
 {% if scorecard.executive_summary %}
 <div class="card">
     <div class="card-header">
-        <h2 class="text-base font-semibold text-slate-800">Executive Commentary &amp; Action Plan</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Executive Commentary &amp; Action Plan</h2>
     </div>
     <div class="card-body">
-        <p class="text-sm text-slate-700 whitespace-pre-line">{{ scorecard.executive_summary }}</p>
+        <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ scorecard.executive_summary }}</p>
     </div>
 </div>
 {% endif %}
