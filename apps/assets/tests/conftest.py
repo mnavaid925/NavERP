@@ -68,6 +68,10 @@ from apps.assets.models import (
     AssetOperatingProcedure,
     AssetOperatorCertification,
     AssetKnowledgeArticle,
+    AssetLifecycleCostAnalysis,
+    AssetReplacementPlan,
+    AssetPortfolioScenario,
+    AssetExecutiveScorecard,
 )
 
 
@@ -3446,3 +3450,464 @@ def adk_article_b(
     article.full_clean()
     article.save()
     return article
+
+
+# ── Sub-module 11.14: Asset Analytics & Business Intelligence ───────────────
+
+
+@pytest.fixture
+def analytics_lcc_a(
+    db,
+    tenant_a,
+    fixed_asset_a,
+    operational_asset_a,
+    category_root_a,
+    asset_model_a,
+    org_unit_a,
+    currency_usd,
+    admin_user,
+):
+    lcc = AssetLifecycleCostAnalysis(
+        tenant=tenant_a,
+        title="CNC Lathe 5-Year Lifecycle Cost Study",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        asset_category=category_root_a,
+        asset_model=asset_model_a,
+        org_unit=org_unit_a,
+        currency=currency_usd,
+        analyzed_by=admin_user,
+        analysis_date=timezone.localdate(),
+        analysis_horizon_years=5,
+        discount_rate_pct=Decimal("8.00"),
+        lifecycle_stage="in_service",
+        status="draft",
+        acquisition_capital_cost=Decimal("120000.00"),
+        installation_commissioning_cost=Decimal("10000.00"),
+        preventive_maintenance_cost=Decimal("12000.00"),
+        corrective_maintenance_cost=Decimal("8000.00"),
+        service_contract_cost=Decimal("6000.00"),
+        energy_utility_cost=Decimal("9000.00"),
+        downtime_opportunity_cost=Decimal("4000.00"),
+        insurance_compliance_cost=Decimal("3000.00"),
+        accumulated_depreciation_cost=Decimal("25000.00"),
+        expected_salvage_value=Decimal("15000.00"),
+        warranty_insurance_recoveries=Decimal("2000.00"),
+        current_replacement_value=Decimal("140000.00"),
+        notes="Baseline lifecycle cost study for CNC lathe.",
+    )
+    lcc.full_clean()
+    lcc.save()
+    return lcc
+
+
+@pytest.fixture
+def analytics_lcc_locked_a(
+    db,
+    tenant_a,
+    fixed_asset_a,
+    operational_asset_a,
+    category_root_a,
+    org_unit_a,
+    currency_usd,
+    admin_user,
+):
+    lcc = AssetLifecycleCostAnalysis(
+        tenant=tenant_a,
+        title="Approved Chiller Lifecycle Study",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        asset_category=category_root_a,
+        org_unit=org_unit_a,
+        currency=currency_usd,
+        analyzed_by=admin_user,
+        analysis_date=timezone.localdate(),
+        analysis_horizon_years=7,
+        discount_rate_pct=Decimal("7.50"),
+        lifecycle_stage="late_life",
+        status="approved",
+        acquisition_capital_cost=Decimal("85000.00"),
+        preventive_maintenance_cost=Decimal("22000.00"),
+        corrective_maintenance_cost=Decimal("28000.00"),
+        current_replacement_value=Decimal("90000.00"),
+    )
+    lcc.full_clean()
+    lcc.save()
+    return lcc
+
+
+@pytest.fixture
+def analytics_lcc_b(
+    db,
+    tenant_b,
+    fixed_asset_b,
+    operational_asset_b,
+    category_root_b,
+    org_unit_b,
+    currency_usd,
+    admin_b,
+):
+    lcc = AssetLifecycleCostAnalysis(
+        tenant=tenant_b,
+        title="Globex Compressor Lifecycle Cost Study",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        asset_category=category_root_b,
+        org_unit=org_unit_b,
+        currency=currency_usd,
+        analyzed_by=admin_b,
+        analysis_date=timezone.localdate(),
+        analysis_horizon_years=5,
+        discount_rate_pct=Decimal("8.00"),
+        lifecycle_stage="in_service",
+        status="draft",
+        acquisition_capital_cost=Decimal("60000.00"),
+        preventive_maintenance_cost=Decimal("5000.00"),
+        current_replacement_value=Decimal("70000.00"),
+    )
+    lcc.full_clean()
+    lcc.save()
+    return lcc
+
+
+@pytest.fixture
+def analytics_rpl_a(
+    db,
+    tenant_a,
+    fixed_asset_a,
+    operational_asset_a,
+    category_root_a,
+    asset_model_a,
+    org_unit_a,
+    location_a,
+    currency_usd,
+    condition_assessment_a,
+    analytics_lcc_a,
+    admin_user,
+):
+    rpl = AssetReplacementPlan(
+        tenant=tenant_a,
+        title="CNC Lathe FY2027 Capital Replacement",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        asset_category=category_root_a,
+        asset_model=asset_model_a,
+        org_unit=org_unit_a,
+        location=location_a,
+        currency=currency_usd,
+        condition_assessment=condition_assessment_a,
+        lifecycle_analysis=analytics_lcc_a,
+        planner=admin_user,
+        predicted_eol_date=timezone.localdate() + timedelta(days=365),
+        remaining_useful_life_months=12,
+        planned_replacement_year=timezone.localdate().year + 1,
+        planned_quarter="q2",
+        replacement_strategy="technology_upgrade",
+        funding_status="unfunded",
+        status="forecasted",
+        condition_score=Decimal("42.00"),
+        criticality_weight=8,
+        failure_risk_score=Decimal("70.00"),
+        current_replacement_value=Decimal("150000.00"),
+        deferred_maintenance_cost=Decimal("45000.00"),
+        estimated_replacement_cost=Decimal("155000.00"),
+        inflation_rate_pct=Decimal("4.00"),
+        estimated_salvage_recovery=Decimal("12000.00"),
+        deferral_penalty_cost=Decimal("9000.00"),
+    )
+    rpl.full_clean()
+    rpl.save()
+    return rpl
+
+
+@pytest.fixture
+def analytics_rpl_locked_a(
+    db,
+    tenant_a,
+    fixed_asset_a,
+    operational_asset_a,
+    category_root_a,
+    org_unit_a,
+    location_a,
+    currency_usd,
+    admin_user,
+):
+    rpl = AssetReplacementPlan(
+        tenant=tenant_a,
+        title="Approved Substation Switchgear Replacement",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        asset_category=category_root_a,
+        org_unit=org_unit_a,
+        location=location_a,
+        currency=currency_usd,
+        planner=admin_user,
+        remaining_useful_life_months=6,
+        planned_replacement_year=timezone.localdate().year + 1,
+        planned_quarter="q1",
+        replacement_strategy="like_for_like",
+        funding_status="budget_allocated",
+        status="approved",
+        condition_score=Decimal("30.00"),
+        criticality_weight=9,
+        failure_risk_score=Decimal("82.00"),
+        current_replacement_value=Decimal("200000.00"),
+        deferred_maintenance_cost=Decimal("60000.00"),
+        estimated_replacement_cost=Decimal("210000.00"),
+        inflation_rate_pct=Decimal("3.50"),
+    )
+    rpl.full_clean()
+    rpl.save()
+    return rpl
+
+
+@pytest.fixture
+def analytics_rpl_b(
+    db,
+    tenant_b,
+    fixed_asset_b,
+    operational_asset_b,
+    category_root_b,
+    org_unit_b,
+    location_b,
+    currency_usd,
+    admin_b,
+):
+    rpl = AssetReplacementPlan(
+        tenant=tenant_b,
+        title="Globex Forklift Replacement Plan",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        asset_category=category_root_b,
+        org_unit=org_unit_b,
+        location=location_b,
+        currency=currency_usd,
+        planner=admin_b,
+        remaining_useful_life_months=18,
+        planned_replacement_year=timezone.localdate().year + 2,
+        planned_quarter="q3",
+        replacement_strategy="like_for_like",
+        funding_status="unfunded",
+        status="forecasted",
+        condition_score=Decimal("55.00"),
+        criticality_weight=6,
+        failure_risk_score=Decimal("50.00"),
+        current_replacement_value=Decimal("75000.00"),
+        deferred_maintenance_cost=Decimal("10000.00"),
+        estimated_replacement_cost=Decimal("78000.00"),
+        inflation_rate_pct=Decimal("4.00"),
+    )
+    rpl.full_clean()
+    rpl.save()
+    return rpl
+
+
+@pytest.fixture
+def analytics_scenario_base_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    category_root_a,
+    currency_usd,
+    admin_user,
+    analytics_rpl_a,
+):
+    scenario = AssetPortfolioScenario(
+        tenant=tenant_a,
+        name="FY2026 Baseline BAU Scenario",
+        scenario_type="baseline_bau",
+        is_baseline=True,
+        base_fiscal_year=timezone.localdate().year,
+        horizon_years=5,
+        scope_org_unit=org_unit_a,
+        scope_category=category_root_a,
+        currency=currency_usd,
+        owner=admin_user,
+        status="draft",
+        annual_capex_budget_limit=Decimal("300000.00"),
+        discount_rate_pct=Decimal("8.00"),
+        inflation_rate_pct=Decimal("4.00"),
+    )
+    scenario.full_clean()
+    scenario.save()
+    scenario.run_simulation()
+    return scenario
+
+
+@pytest.fixture
+def analytics_scenario_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    category_root_a,
+    currency_usd,
+    admin_user,
+    analytics_scenario_base_a,
+):
+    scenario = AssetPortfolioScenario(
+        tenant=tenant_a,
+        name="Accelerated Replacement & Efficiency Scenario",
+        scenario_type="accelerated_replacement",
+        is_baseline=False,
+        base_fiscal_year=timezone.localdate().year,
+        horizon_years=5,
+        scope_org_unit=org_unit_a,
+        scope_category=category_root_a,
+        currency=currency_usd,
+        baseline_scenario=analytics_scenario_base_a,
+        owner=admin_user,
+        status="draft",
+        annual_capex_budget_limit=Decimal("450000.00"),
+        discount_rate_pct=Decimal("8.00"),
+        inflation_rate_pct=Decimal("4.00"),
+        acceleration_months=12,
+        fleet_growth_pct=Decimal("5.00"),
+        consolidation_reduction_pct=Decimal("0.00"),
+        maintenance_efficiency_gain_pct=Decimal("12.00"),
+    )
+    scenario.full_clean()
+    scenario.save()
+    return scenario
+
+
+@pytest.fixture
+def analytics_scenario_locked_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    currency_usd,
+    admin_user,
+):
+    scenario = AssetPortfolioScenario(
+        tenant=tenant_a,
+        name="Adopted FY2026 Fleet Consolidation",
+        scenario_type="site_consolidation",
+        is_baseline=False,
+        base_fiscal_year=timezone.localdate().year,
+        horizon_years=5,
+        scope_org_unit=org_unit_a,
+        currency=currency_usd,
+        owner=admin_user,
+        status="adopted",
+        annual_capex_budget_limit=Decimal("250000.00"),
+        consolidation_reduction_pct=Decimal("10.00"),
+    )
+    scenario.full_clean()
+    scenario.save()
+    return scenario
+
+
+@pytest.fixture
+def analytics_scenario_b(
+    db,
+    tenant_b,
+    org_unit_b,
+    category_root_b,
+    currency_usd,
+    admin_b,
+):
+    scenario = AssetPortfolioScenario(
+        tenant=tenant_b,
+        name="Globex Baseline BAU Scenario",
+        scenario_type="baseline_bau",
+        is_baseline=True,
+        base_fiscal_year=timezone.localdate().year,
+        horizon_years=5,
+        scope_org_unit=org_unit_b,
+        scope_category=category_root_b,
+        currency=currency_usd,
+        owner=admin_b,
+        status="draft",
+        annual_capex_budget_limit=Decimal("150000.00"),
+    )
+    scenario.full_clean()
+    scenario.save()
+    return scenario
+
+
+@pytest.fixture
+def analytics_scorecard_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    category_root_a,
+    currency_usd,
+    admin_user,
+):
+    today = timezone.localdate()
+    scorecard = AssetExecutiveScorecard(
+        tenant=tenant_a,
+        title="Q1 Portfolio Executive Scorecard",
+        period_type="quarterly",
+        period_start=today - timedelta(days=90),
+        period_end=today,
+        org_unit=org_unit_a,
+        asset_category=category_root_a,
+        currency=currency_usd,
+        prepared_by=admin_user,
+        status="draft",
+        target_asset_roi_pct=Decimal("12.00"),
+        target_mcr_pct=Decimal("3.50"),
+        target_compliance_rate_pct=Decimal("95.00"),
+        annual_asset_return_amount=Decimal("40000.00"),
+        executive_summary="Quarterly asset performance & risk brief.",
+    )
+    scorecard.full_clean()
+    scorecard.save()
+    return scorecard
+
+
+@pytest.fixture
+def analytics_scorecard_published_a(
+    db,
+    tenant_a,
+    org_unit_a,
+    currency_usd,
+    member_user,
+):
+    today = timezone.localdate()
+    scorecard = AssetExecutiveScorecard(
+        tenant=tenant_a,
+        title="Published Executive Scorecard",
+        period_type="quarterly",
+        period_start=today - timedelta(days=90),
+        period_end=today,
+        org_unit=org_unit_a,
+        currency=currency_usd,
+        prepared_by=member_user,
+        status="published",
+        rag_status="green",
+        target_asset_roi_pct=Decimal("12.00"),
+        target_mcr_pct=Decimal("3.50"),
+        target_compliance_rate_pct=Decimal("95.00"),
+        annual_asset_return_amount=Decimal("55000.00"),
+    )
+    scorecard.full_clean()
+    scorecard.save()
+    return scorecard
+
+
+@pytest.fixture
+def analytics_scorecard_b(
+    db,
+    tenant_b,
+    org_unit_b,
+    currency_usd,
+    admin_b,
+):
+    today = timezone.localdate()
+    scorecard = AssetExecutiveScorecard(
+        tenant=tenant_b,
+        title="Globex Q1 Executive Scorecard",
+        period_type="quarterly",
+        period_start=today - timedelta(days=90),
+        period_end=today,
+        org_unit=org_unit_b,
+        currency=currency_usd,
+        prepared_by=admin_b,
+        status="draft",
+        annual_asset_return_amount=Decimal("25000.00"),
+    )
+    scorecard.full_clean()
+    scorecard.save()
+    return scorecard
