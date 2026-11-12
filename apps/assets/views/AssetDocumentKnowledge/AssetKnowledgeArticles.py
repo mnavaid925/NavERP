@@ -251,6 +251,9 @@ def asset_knowledge_article_detail(request, pk):
 @login_required
 def asset_knowledge_article_create(request):
     """Create a new Draft lessons-learned note or failure RCA article."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating a knowledge article.")
+        return redirect("assets:asset_knowledge_article_list")
     if request.method == "POST":
         form = AssetKnowledgeArticleForm(
             request.POST, request.FILES, tenant=request.tenant, user=request.user
