@@ -70,6 +70,10 @@ from apps.assets.models import (
     AssetLifecycleCostAnalysis,
     AssetPortfolioScenario,
     AssetReplacementPlan,
+    AssetDocument,
+    AssetOperatingProcedure,
+    AssetOperatorCertification,
+    AssetKnowledgeArticle,
 )
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.scm.models import Asset, Location, PurchaseOrder
@@ -90,6 +94,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetKnowledgeArticle.objects.all().delete()
+            AssetOperatorCertification.objects.all().delete()
+            AssetOperatingProcedure.objects.all().delete()
+            AssetDocument.objects.all().delete()
             AssetGisMapping.objects.all().delete()
             AssetGlSyncBatch.objects.all().delete()
             AssetTelemetryStream.objects.all().delete()
@@ -166,6 +174,7 @@ class Command(BaseCommand):
             self._seed_tenant_11_13(tenant)
             self._seed_tenant_11_14(tenant)
             self._seed_tenant_11_15(tenant)
+            self._seed_tenant_11_16(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -4123,4 +4132,490 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(f"[{tenant.name}] 11.15 Seeding complete (5 connectors, telemetry streams, 3 GL batches, 3 GIS mappings).")
+
+    def _seed_tenant_11_16(self, tenant):
+        """Idempotent seeding for 11.16 Document & Knowledge Management."""
+        if AssetDocument.objects.filter(tenant=tenant).exists():
+            self.stdout.write(
+                f"[{tenant.name}] 11.16 Document & Knowledge Management data already seeded, skipping."
+            )
+            return
+
+        self.stdout.write(
+            f"[{tenant.name}] Seeding 11.16 Document & Knowledge Management..."
+        )
+        today = timezone.localdate()
+        now = timezone.now()
+
+        user = User.objects.filter(tenant=tenant).order_by("pk").first()
+        org_unit = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
+        party = Party.objects.filter(tenant=tenant).order_by("pk").first()
+        assets_qs = Asset.objects.filter(tenant=tenant).order_by("pk")
+        op1 = assets_qs.first()
+        op2 = assets_qs[1] if assets_qs.count() > 1 else op1
+        fixed_asset = FixedAsset.objects.filter(tenant=tenant).order_by("pk").first()
+        category = AssetCategory.objects.filter(tenant=tenant).order_by("pk").first()
+        model_obj = AssetModel.objects.filter(tenant=tenant).order_by("pk").first()
+        schedule = (
+            AssetMaintenanceSchedule.objects.filter(tenant=tenant)
+            .order_by("pk")
+            .first()
+        )
+        framework = (
+            AssetComplianceFramework.objects.filter(tenant=tenant)
+            .order_by("pk")
+            .first()
+        )
+        failure_mode = (
+            AssetFailureMode.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+
+        with transaction.atomic():
+            doc_rev_a = AssetDocument.objects.create(
+                tenant=tenant,
+                title="Centrifugal Chiller OEM Operation & Maintenance Manual",
+                document_class="manual",
+                access_classification="internal_tech",
+                tag_code="OEM-CHW-001",
+                manufacturer_ref="Trane CVHF-770",
+                document_language="en",
+                storage_location_ref="DMS Vault / Chiller Bay A",
+                revision_label="Rev A",
+                revision_sequence=1,
+                is_current_revision=False,
+                change_type="new_issue",
+                change_request_ref="ECR-2025-004",
+                effective_date=today - timezone.timedelta(days=365),
+                expiry_date=today + timezone.timedelta(days=365),
+                retention_years=10,
+                status="superseded",
+                owner=user,
+                reviewer=user,
+                approved_by=user,
+                approved_at=now - timezone.timedelta(days=365),
+                org_unit=org_unit,
+                operational_asset=op1,
+                fixed_asset=fixed_asset,
+                asset_category=category,
+                asset_model=model_obj,
+                compliance_framework=framework,
+                vendor_party=party,
+                description="Initial OEM release for central chiller compressor train.",
+            )
+
+            doc_rev_b = AssetDocument.objects.create(
+                tenant=tenant,
+                title="Centrifugal Chiller OEM Operation & Maintenance Manual",
+                document_class="manual",
+                access_classification="internal_tech",
+                tag_code="OEM-CHW-001",
+                manufacturer_ref="Trane CVHF-770",
+                document_language="en",
+                storage_location_ref="DMS Vault / Chiller Bay A",
+                revision_label="Rev B",
+                revision_sequence=2,
+                supersedes=doc_rev_a,
+                is_current_revision=True,
+                change_type="vendor_bulletin",
+                change_request_ref="ECR-2026-011",
+                redline_summary="Updated thrust bearing oil pressure cutoff threshold per OEM SB-442.",
+                spec_delta_notes="Minimum differential oil pressure raised from 18 PSI to 22 PSI.",
+                effective_date=today - timezone.timedelta(days=30),
+                expiry_date=today + timezone.timedelta(days=335),
+                retention_years=10,
+                status="approved",
+                owner=user,
+                reviewer=user,
+                approved_by=user,
+                approved_at=now - timezone.timedelta(days=30),
+                org_unit=org_unit,
+                operational_asset=op1,
+                fixed_asset=fixed_asset,
+                asset_category=category,
+                asset_model=model_obj,
+                compliance_framework=framework,
+                vendor_party=party,
+                description="Current controlled manual incorporating OEM bearing lubrication bulletin.",
+            )
+
+            AssetDocument.objects.create(
+                tenant=tenant,
+                title="Plant #1 Main Switchgear P&ID & Single-Line Schematic",
+                document_class="electrical_diagram",
+                access_classification="restricted_eng",
+                tag_code="EL-SLD-480V",
+                manufacturer_ref="Schneider Masterpact MTZ",
+                document_language="en",
+                storage_location_ref="EHS Electrical Vault C-02",
+                revision_label="Rev B",
+                revision_sequence=2,
+                supersedes=doc_rev_b,
+                is_current_revision=False,
+                change_type="drawing_redline",
+                change_request_ref="ECR-2026-028",
+                redline_summary="Added harmonic filter feeder breaker FB-14 and updated arc-flash relay curve.",
+                effective_date=today,
+                expiry_date=today + timezone.timedelta(days=18),
+                retention_years=15,
+                status="in_review",
+                owner=user,
+                reviewer=user,
+                checked_out_by=user,
+                checked_out_at=now - timezone.timedelta(hours=4),
+                org_unit=org_unit,
+                operational_asset=op2,
+                asset_category=category,
+                compliance_framework=framework,
+                description="As-built redline awaiting chief electrical engineer release sign-off.",
+            )
+
+            AssetDocument.objects.create(
+                tenant=tenant,
+                title="Pressure Vessel Annual Statutory Inspection Certificate",
+                document_class="compliance_cert",
+                access_classification="public_floor",
+                tag_code="PV-CERT-2026",
+                manufacturer_ref="ASME Section VIII Div 1",
+                document_language="en",
+                storage_location_ref="Shop Floor Binder / Receiver Bay",
+                revision_label="Rev A",
+                revision_sequence=1,
+                is_current_revision=True,
+                change_type="regulatory_update",
+                effective_date=today - timezone.timedelta(days=90),
+                expiry_date=today + timezone.timedelta(days=275),
+                retention_years=7,
+                status="approved",
+                owner=user,
+                approved_by=user,
+                approved_at=now - timezone.timedelta(days=90),
+                org_unit=org_unit,
+                operational_asset=op1,
+                asset_category=category,
+                compliance_framework=framework,
+            )
+
+            sop_loto = AssetOperatingProcedure.objects.create(
+                tenant=tenant,
+                title="480V Chiller Compressor LOTO & Zero-Energy Verification SOP",
+                procedure_type="loto_isolation",
+                safety_level="high_hazard_loto",
+                revision_label="Rev 2.0",
+                purpose_scope="Mandatory full electrical and mechanical isolation prior to bearing or motor servicing.",
+                hazard_warnings="480V 3-phase arc-flash hazard and pressurized refrigerant receiver tank (240 PSI).",
+                required_ppe="Arc-flash hood Cat-2, insulated gloves Class 0, dielectric boots, personal red padlock.",
+                loto_required=True,
+                loto_isolation_points=[
+                    {
+                        "energy_source": "Electrical 480V 3-Phase",
+                        "tag_id": "MCC-CHW-01B",
+                        "isolation_point": "Main Feeder Disconnect",
+                        "lock_device": "Personal Red Padlock + Hasps",
+                        "verification_step": "Phase-to-phase zero-voltage test (<1V)",
+                    },
+                    {
+                        "energy_source": "Pressurized Refrigerant Loop",
+                        "tag_id": "VLV-SUCT-04",
+                        "isolation_point": "Suction Header Isolation Valve",
+                        "lock_device": "Chain & Cable Lockout + Tag",
+                        "verification_step": "Verify manifold gauge reads 0 PSIG",
+                    },
+                ],
+                procedure_steps=[
+                    {
+                        "step_no": 1,
+                        "title": "Controlled Shutdown & Cool-down",
+                        "instruction": "Command chiller standby stop and verify compressor coast-down to 0 RPM.",
+                        "expected_reading": "0 RPM",
+                        "is_mandatory_signoff": True,
+                    },
+                    {
+                        "step_no": 2,
+                        "title": "Apply LOTO Locks & Bleed Residual Pressure",
+                        "instruction": "Isolate MCC-CHW-01B and VLV-SUCT-04, apply personal locks and tags.",
+                        "expected_reading": "0 VAC / 0 PSIG",
+                        "is_mandatory_signoff": True,
+                    },
+                    {
+                        "step_no": 3,
+                        "title": "Perform Try-Start Verification",
+                        "instruction": "Attempt local start pushbutton to confirm zero-energy state.",
+                        "expected_reading": "No Start / De-energized",
+                        "is_mandatory_signoff": True,
+                    },
+                ],
+                required_qualification_code="QUAL-LOTO-HV",
+                estimated_duration_minutes=45,
+                effective_date=today - timezone.timedelta(days=60),
+                review_cycle_months=12,
+                next_review_date=today + timezone.timedelta(days=180),
+                status="active",
+                author=user,
+                safety_reviewer=user,
+                approved_by=user,
+                approved_at=now - timezone.timedelta(days=60),
+                org_unit=org_unit,
+                operational_asset=op1,
+                asset_category=category,
+                asset_model=model_obj,
+                maintenance_schedule=schedule,
+                compliance_framework=framework,
+                primary_document=doc_rev_b,
+            )
+
+            sop_pm = AssetOperatingProcedure.objects.create(
+                tenant=tenant,
+                title="Quarterly Bearing Vibration & Oil Analysis Sampling Protocol",
+                procedure_type="pm_protocol",
+                safety_level="caution",
+                revision_label="Rev 1.0",
+                purpose_scope="Standardized triaxial vibration data collection and oil port sampling under running load.",
+                hazard_warnings="Rotating shaft coupling guard must remain installed; maintain safe clearance.",
+                required_ppe="Safety glasses, hearing protection, close-fitting FR coveralls.",
+                loto_required=False,
+                procedure_steps=[
+                    {
+                        "step_no": 1,
+                        "title": "Record Steady-State Load & Bearing Temperature",
+                        "instruction": "Log RMS velocity at drive-end and non-drive-end bearing housings.",
+                        "expected_reading": "< 2.8 mm/s RMS",
+                        "is_mandatory_signoff": False,
+                    },
+                    {
+                        "step_no": 2,
+                        "title": "Draw Representative Oil Sample",
+                        "instruction": "Flush 50 mL sample valve before filling clean ICP lab bottle.",
+                        "expected_reading": "ISO 17/15/12 cleanliness",
+                        "is_mandatory_signoff": True,
+                    },
+                ],
+                required_qualification_code="QUAL-PM-VIB",
+                estimated_duration_minutes=30,
+                effective_date=today - timezone.timedelta(days=390),
+                review_cycle_months=12,
+                next_review_date=today - timezone.timedelta(days=5),
+                status="active",
+                author=user,
+                safety_reviewer=user,
+                approved_by=user,
+                approved_at=now - timezone.timedelta(days=390),
+                org_unit=org_unit,
+                operational_asset=op1,
+                asset_category=category,
+                maintenance_schedule=schedule,
+                primary_document=doc_rev_b,
+            )
+
+            AssetOperatingProcedure.objects.create(
+                tenant=tenant,
+                title="Emergency Sub-Station Blackout & E-Stop Recovery Checklist",
+                procedure_type="emergency_shutdown",
+                safety_level="permit_required",
+                revision_label="Rev 1.0",
+                purpose_scope="Emergency sequence for utility outage and controlled UPS load shedding.",
+                hazard_warnings="Energized ATS transfer bus; permit-to-work required before manual bypass.",
+                required_ppe="Arc-flash PPE Cat-2, insulated rescue hook nearby.",
+                loto_required=True,
+                required_qualification_code="QUAL-HV-SWITCH",
+                estimated_duration_minutes=25,
+                review_cycle_months=6,
+                status="under_review",
+                author=user,
+                safety_reviewer=user,
+                org_unit=org_unit,
+                operational_asset=op2,
+                asset_category=category,
+                compliance_framework=framework,
+            )
+
+            if user is not None or party is not None:
+                AssetOperatorCertification.objects.create(
+                    tenant=tenant,
+                    title="LOTO Authorized Person — High-Voltage Chiller & MCC Systems",
+                    qualification_code="QUAL-LOTO-HV",
+                    qualification_type="loto_authorized",
+                    proficiency_level="senior_technician",
+                    issuing_authority="EHS Internal Authorization Board",
+                    certificate_reference="EHS-LOTO-2026-019",
+                    issued_date=today - timezone.timedelta(days=120),
+                    expires_on=today + timezone.timedelta(days=245),
+                    renewal_lead_days=30,
+                    last_assessed_date=today - timezone.timedelta(days=120),
+                    training_hours=Decimal("16.00"),
+                    assessment_score=Decimal("94.50"),
+                    sop_acknowledged=True,
+                    sop_acknowledged_at=now - timezone.timedelta(days=10),
+                    status="active",
+                    org_unit=org_unit,
+                    operator_user=user,
+                    operator_party=party,
+                    issuing_party=party,
+                    assessor=user,
+                    operational_asset=op1,
+                    asset_category=category,
+                    asset_model=model_obj,
+                    operating_procedure=sop_loto,
+                    compliance_framework=framework,
+                    notes="Verified practical LOTO demonstration on MCC-CHW-01B.",
+                )
+
+                AssetOperatorCertification.objects.create(
+                    tenant=tenant,
+                    title="Condition Monitoring & Vibration Specialist Level II",
+                    qualification_code="QUAL-PM-VIB",
+                    qualification_type="maintenance_technician",
+                    proficiency_level="qualified_operator",
+                    issuing_authority="ISO 18436 Vibration Institute",
+                    certificate_reference="VIB-II-88412",
+                    issued_date=today - timezone.timedelta(days=351),
+                    expires_on=today + timezone.timedelta(days=14),
+                    renewal_lead_days=30,
+                    last_assessed_date=today - timezone.timedelta(days=351),
+                    training_hours=Decimal("24.00"),
+                    assessment_score=Decimal("91.00"),
+                    sop_acknowledged=True,
+                    sop_acknowledged_at=now - timezone.timedelta(days=20),
+                    status="expiring_soon",
+                    org_unit=org_unit,
+                    operator_party=party,
+                    operator_user=user,
+                    assessor=user,
+                    operational_asset=op1,
+                    asset_category=category,
+                    operating_procedure=sop_pm,
+                    notes="Due for annual ISO-18436 recertification assessment.",
+                )
+
+                AssetOperatorCertification.objects.create(
+                    tenant=tenant,
+                    title="Crane, Hoist & Rigging Safe Lift Qualification",
+                    qualification_code="QUAL-CRANE-01",
+                    qualification_type="crane_rigging",
+                    proficiency_level="trainee_supervised",
+                    issuing_authority="NCCCO Rigging Academy",
+                    certificate_reference="RIG-2026-305",
+                    issued_date=today - timezone.timedelta(days=7),
+                    expires_on=today + timezone.timedelta(days=358),
+                    renewal_lead_days=45,
+                    training_hours=Decimal("12.50"),
+                    assessment_score=Decimal("88.00"),
+                    sop_acknowledged=False,
+                    status="pending",
+                    org_unit=org_unit,
+                    operator_user=user,
+                    operational_asset=op2,
+                    asset_category=category,
+                    operating_procedure=sop_loto,
+                    notes="Awaiting supervisor verification and mandatory SOP sign-off.",
+                )
+
+            AssetKnowledgeArticle.objects.create(
+                tenant=tenant,
+                title="Chiller Thrust Bearing Pre-Mature Spalling — 5-Why Oil Starvation RCA",
+                article_type="rca_post_incident",
+                rca_methodology="five_whys",
+                severity="critical",
+                symptom_problem="High bearing casing temperature alarm (94°C) and 8.4 mm/s axial vibration trip during peak cooling load.",
+                root_cause_summary="Clogged inline 40-micron oil strainer combined with legacy 18 PSI differential trip threshold masked early oil starvation.",
+                five_whys=[
+                    {
+                        "why_level": 1,
+                        "question": "Why did the compressor thrust bearing seize?",
+                        "answer": "Oil film thickness collapsed under peak axial thrust load.",
+                    },
+                    {
+                        "why_level": 2,
+                        "question": "Why did oil pressure drop below lubrication requirements?",
+                        "answer": "Inline supply strainer delta-P reached 14 PSI due to varnish buildup.",
+                    },
+                    {
+                        "why_level": 3,
+                        "question": "Why was the strainer restriction not caught before failure?",
+                        "answer": "PM checklist lacked differential-pressure log and OEM bulletin SB-442 was unapplied.",
+                    },
+                ],
+                contributing_factors={
+                    "machine": "Legacy 18 PSI oil trip switch",
+                    "method": "OEM service bulletin SB-442 not propagated into PM protocol",
+                    "material": "Oxidized synthetic refrigeration oil",
+                    "measurement": "Missing differential pressure transmitter across filter housing",
+                },
+                remedy_corrective_action="Replaced thrust bearing assembly, flushed oil sump, raised differential cutoff to 22 PSI per OEM SB-442.",
+                preventive_lessons="Adopted quarterly oil cleanliness sampling SOP and upgraded controlled manual to Rev B.",
+                downtime_hours_impacted=Decimal("14.50"),
+                recurrence_count=2,
+                tags="chiller, bearing, starvation, 5-why, oem-sb",
+                helpful_votes=7,
+                view_count=42,
+                incident_occurred_on=today - timezone.timedelta(days=25),
+                status="published",
+                author=user,
+                reviewed_by=user,
+                published_at=now - timezone.timedelta(days=20),
+                org_unit=org_unit,
+                operational_asset=op1,
+                fixed_asset=fixed_asset,
+                asset_category=category,
+                asset_model=model_obj,
+                failure_mode=failure_mode,
+                related_document=doc_rev_b,
+                recommended_procedure=sop_loto,
+            )
+
+            AssetKnowledgeArticle.objects.create(
+                tenant=tenant,
+                title="Motor-Pump Coupling Alignment Tolerance & Soft-Foot Field Troubleshooting",
+                article_type="troubleshooting_guide",
+                rca_methodology="fishbone_ishikawa",
+                severity="high",
+                symptom_problem="Recurring 2x line-frequency horizontal vibration (>6.5 mm/s) after mechanical seal overhaul.",
+                root_cause_summary="Pipe strain and 0.18 mm angular soft-foot induced thermal growth misalignment at operating temperature.",
+                contributing_factors={
+                    "machine": "Excessive baseplate shim stack (>5 shims)",
+                    "method": "Cold alignment done without pipe strain relaxation",
+                    "manpower": "Pre-cut stainless shims not micrometers-verified",
+                    "measurement": "Thermal growth offset neglected",
+                },
+                remedy_corrective_action="Re-machined base pad, limited shims to <=3 precision pieces, performed laser hot-alignment check.",
+                preventive_lessons="Mandate soft-foot tolerance <0.05 mm on all rotating equipment >50 HP.",
+                downtime_hours_impacted=Decimal("6.00"),
+                recurrence_count=3,
+                tags="alignment, vibration, soft-foot, laser",
+                helpful_votes=4,
+                view_count=19,
+                incident_occurred_on=today - timezone.timedelta(days=12),
+                status="published",
+                author=user,
+                reviewed_by=user,
+                published_at=now - timezone.timedelta(days=10),
+                org_unit=org_unit,
+                operational_asset=op1,
+                asset_category=category,
+                recommended_procedure=sop_pm,
+            )
+
+            AssetKnowledgeArticle.objects.create(
+                tenant=tenant,
+                title="Harmonic Filter Feeder Breaker Curve Coordination Note",
+                article_type="lessons_learned",
+                rca_methodology="problem_cause_remedy",
+                severity="medium",
+                symptom_problem="Nuisance instantaneous trip on switchgear feeder during capacitor bank energization transient.",
+                root_cause_summary="Inrush transient peak overlapped overly tight short-time pickup dial setting.",
+                remedy_corrective_action="Adjusted short-time delay band per redlined P&ID ECR-2026-028.",
+                preventive_lessons="Coordinate relay curve modeling whenever power factor correction banks are modified.",
+                downtime_hours_impacted=Decimal("2.25"),
+                recurrence_count=1,
+                tags="switchgear, harmonics, relay-curve",
+                incident_occurred_on=today - timezone.timedelta(days=3),
+                status="peer_review",
+                author=user,
+                org_unit=org_unit,
+                operational_asset=op2,
+                asset_category=category,
+            )
+
+        self.stdout.write(
+            f"[{tenant.name}] 11.16 Seeding complete (4 docs, 3 SOPs, 3 certifications, 3 KB articles)."
+        )
 
