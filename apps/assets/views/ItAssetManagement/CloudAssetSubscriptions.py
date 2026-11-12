@@ -189,7 +189,11 @@ def cloud_asset_subscription_export_csv(request):
 def cloud_asset_subscription_create(request):
     """Create a new tenant-scoped cloud asset or SaaS subscription record."""
     if request.method == "POST":
+        if request.tenant is None:
+            messages.warning(request, "Workspace context is required to create a cloud asset subscription.")
+            return redirect("assets:cloud_asset_subscription_list")
         form = CloudAssetSubscriptionForm(request.POST, tenant=request.tenant)
+        form.instance.tenant = request.tenant
         if form.is_valid():
             with transaction.atomic():
                 cloud_asset = form.save(commit=False)
