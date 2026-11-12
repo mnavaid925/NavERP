@@ -17,11 +17,11 @@
     <div class="page-actions">
         {% if is_edit and space %}
         <a href="{% url 'assets:asset_facility_space_detail' space.pk %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Space
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back to Space
         </a>
         {% else %}
         <a href="{% url 'assets:asset_facility_space_list' %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back to List
         </a>
         {% endif %}
     </div>
@@ -158,7 +158,7 @@
                     {{ form.floor_plan_image }}
                     {% if is_edit and space and space.floor_plan_image %}
                     <p class="text-xs text-muted mt-1">
-                        Current file: <a href="{% url 'assets:asset_facility_space_floor_plan_download' space.pk %}" class="text-blue-600 underline">{{ space.original_floor_plan_name|default:"Download existing floor plan" }}</a>
+                        Current file: <a href="{% url 'assets:asset_facility_space_floor_plan_download' space.pk %}" class="text-blue-600 dark:text-blue-400 underline">{{ space.original_floor_plan_name|default:"Download existing floor plan" }}</a>
                     </p>
                     {% endif %}
                     {% if form.floor_plan_image.errors %}<div class="form-error">{{ form.floor_plan_image.errors }}</div>{% endif %}
@@ -171,7 +171,7 @@
             </div>
 
             <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-                <a href="{% url 'assets:asset_facility_space_list' %}" class="btn btn-outline">Cancel</a>
+                <a href="{% if is_edit and space %}{% url 'assets:asset_facility_space_detail' space.pk %}{% else %}{% url 'assets:asset_facility_space_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
                 <button type="submit" class="btn btn-primary">
                     <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Facility Space{% endif %}
                 </button>
