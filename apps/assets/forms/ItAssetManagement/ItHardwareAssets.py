@@ -44,6 +44,13 @@ class ItHardwareAssetForm(TenantUniqueMixin, TenantModelForm):
         "employee_profile": EmployeeProfile,
         "owner": User,
     }
+    _SANITIZATION_ADMIN_FIELDS = (
+        "sanitization_required",
+        "sanitization_method",
+        "sanitization_status",
+        "sanitization_date",
+        "sanitization_certificate_ref",
+    )
 
     class Meta:
         model = ItHardwareAsset
@@ -131,10 +138,18 @@ class ItHardwareAssetForm(TenantUniqueMixin, TenantModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         scope_tenant_querysets(self, self._TENANT_FIELDS)
         if "currency" in self.fields:
             self.fields["currency"].queryset = Currency.objects.filter(is_active=True).order_by("code")
+        is_admin = bool(
+            getattr(self.user, "is_superuser", False)
+            or getattr(self.user, "is_tenant_admin", False)
+        )
+        if not is_admin:
+            for field_name in self._SANITIZATION_ADMIN_FIELDS:
+                self.fields.pop(field_name, None)
 
     def clean(self):
         cleaned = super().clean()
