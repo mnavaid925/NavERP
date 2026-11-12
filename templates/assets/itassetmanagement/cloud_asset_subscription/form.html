@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ cloud_asset.number }}{% else %}New Cloud / SaaS Asset{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:cloud_asset_subscription_list' %}">Cloud &amp; SaaS Tracking</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ cloud_asset.number }}{% else %}New Cloud / SaaS Asset{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and cloud_asset %}
+        <a href="{% url 'assets:cloud_asset_subscription_detail' cloud_asset.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Subscription
+        </a>
+        {% else %}
+        <a href="{% url 'assets:cloud_asset_subscription_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Cloud Register
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Cloud Resource &amp; Provider Identity</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Subscription / Resource Name <span class="req">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.provider.id_for_label }}">Provider <span class="req">*</span></label>
+                    {{ form.provider }}
+                    {% if form.provider.errors %}<div class="form-error">{{ form.provider.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_kind.id_for_label }}">Asset Kind <span class="req">*</span></label>
+                    {{ form.asset_kind }}
+                    {% if form.asset_kind.errors %}<div class="form-error">{{ form.asset_kind.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.environment.id_for_label }}">Environment <span class="req">*</span></label>
+                    {{ form.environment }}
+                    {% if form.environment.errors %}<div class="form-error">{{ form.environment.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.cloud_region.id_for_label }}">Cloud Region</label>
+                    {{ form.cloud_region }}
+                    {% if form.cloud_region.errors %}<div class="form-error">{{ form.cloud_region.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.external_account_id.id_for_label }}">External Account / Tenant ID</label>
+                    {{ form.external_account_id }}
+                    {% if form.external_account_id.errors %}<div class="form-error">{{ form.external_account_id.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.cloud_resource_id.id_for_label }}">Cloud Resource ID / ARN</label>
+                    {{ form.cloud_resource_id }}
+                    {% if form.cloud_resource_id.errors %}<div class="form-error">{{ form.cloud_resource_id.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.resource_tags.id_for_label }}">Resource FinOps Tags (JSON object)</label>
+                    {{ form.resource_tags }}
+                    {% if form.resource_tags.errors %}<div class="form-error">{{ form.resource_tags.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">FinOps Commitment, Billing &amp; Seat Utilization</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.billing_cadence.id_for_label }}">Billing Cadence <span class="req">*</span></label>
+                    {{ form.billing_cadence }}
+                    {% if form.billing_cadence.errors %}<div class="form-error">{{ form.billing_cadence.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.commitment_term.id_for_label }}">Commitment Term <span class="req">*</span></label>
+                    {{ form.commitment_term }}
+                    {% if form.commitment_term.errors %}<div class="form-error">{{ form.commitment_term.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.monthly_recurring_cost.id_for_label }}">Monthly Recurring Cost</label>
+                    {{ form.monthly_recurring_cost }}
+                    {% if form.monthly_recurring_cost.errors %}<div class="form-error">{{ form.monthly_recurring_cost.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.annual_contract_value.id_for_label }}">Annual Contract Value</label>
+                    {{ form.annual_contract_value }}
+                    {% if form.annual_contract_value.errors %}<div class="form-error">{{ form.annual_contract_value.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.cancellation_notice_days.id_for_label }}">Cancellation Notice Days</label>
+                    {{ form.cancellation_notice_days }}
+                    {% if form.cancellation_notice_days.errors %}<div class="form-error">{{ form.cancellation_notice_days.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.provisioned_seats.id_for_label }}">Provisioned Seats</label>
+                    {{ form.provisioned_seats }}
+                    {% if form.provisioned_seats.errors %}<div class="form-error">{{ form.provisioned_seats.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.active_seats_30d.id_for_label }}">Active Seats (30d)</label>
+                    {{ form.active_seats_30d }}
+                    {% if form.active_seats_30d.errors %}<div class="form-error">{{ form.active_seats_30d.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group flex items-end pb-2">
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                        {{ form.auto_renew }} <span>Auto-Renew Subscription</span>
+                    </label>
+                    {% if form.auto_renew.errors %}<div class="form-error">{{ form.auto_renew.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">SSO Posture, Governance &amp; Ownership</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sso_status.id_for_label }}">SSO / Identity Posture <span class="req">*</span></label>
+                    {{ form.sso_status }}
+                    {% if form.sso_status.errors %}<div class="form-error">{{ form.sso_status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.approval_status.id_for_label }}">IT Approval Status <span class="req">*</span></label>
+                    {{ form.approval_status }}
+                    {% if form.approval_status.errors %}<div class="form-error">{{ form.approval_status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.renewal_date.id_for_label }}">Renewal Date</label>
+                    {{ form.renewal_date }}
+                    {% if form.renewal_date.errors %}<div class="form-error">{{ form.renewal_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vendor_eol_date.id_for_label }}">Vendor EOL Date</label>
+                    {{ form.vendor_eol_date }}
+                    {% if form.vendor_eol_date.errors %}<div class="form-error">{{ form.vendor_eol_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vendor_party.id_for_label }}">Vendor Party</label>
+                    {{ form.vendor_party }}
+                    {% if form.vendor_party.errors %}<div class="form-error">{{ form.vendor_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gl_expense_account.id_for_label }}">GL Expense Account</label>
+                    {{ form.gl_expense_account }}
+                    {% if form.gl_expense_account.errors %}<div class="form-error">{{ form.gl_expense_account.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.business_owner.id_for_label }}">Business Owner</label>
+                    {{ form.business_owner }}
+                    {% if form.business_owner.errors %}<div class="form-error">{{ form.business_owner.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.technical_owner.id_for_label }}">Technical Owner</label>
+                    {{ form.technical_owner }}
+                    {% if form.technical_owner.errors %}<div class="form-error">{{ form.technical_owner.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and cloud_asset %}
+                <a href="{% url 'assets:cloud_asset_subscription_detail' cloud_asset.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:cloud_asset_subscription_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Cloud / SaaS Asset{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
