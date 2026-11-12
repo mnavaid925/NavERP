@@ -147,27 +147,27 @@
                 {% for s in scenarios %}
                 <tr>
                     <td>
-                        <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="font-medium text-blue-600 hover:underline">
+                        <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="font-medium text-blue-600 dark:text-blue-400 hover:underline">
                             {{ s.number }}
                         </a>
                         {% if s.is_baseline %}
                         <span class="badge badge-slate ml-1">Baseline</span>
                         {% endif %}
-                        <div class="text-xs text-slate-500">{{ s.name|truncatechars:42 }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ s.name|truncatechars:42 }}</div>
                     </td>
                     <td>
                         <span class="badge {{ s.scenario_type_badge_class }}">{{ s.get_scenario_type_display }}</span>
                     </td>
                     <td>
                         <div class="text-sm font-medium">FY{{ s.base_fiscal_year }} ({{ s.horizon_years }} yrs)</div>
-                        <div class="text-xs text-slate-500">{{ s.scope_org_unit.name|default:"Enterprise-Wide" }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ s.scope_org_unit.name|default:"Enterprise-Wide" }}</div>
                     </td>
                     <td class="text-right font-mono font-semibold">${{ s.simulated_capex_total|floatformat:"2g" }}</td>
-                    <td class="text-right font-mono text-emerald-700">${{ s.opex_savings_amount|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">${{ s.opex_savings_amount|floatformat:"2g" }}</td>
                     <td class="text-right font-mono">{{ s.simulated_fci_pct|floatformat:2 }}%</td>
                     <td class="text-right font-mono">
                         <div>${{ s.net_present_value|floatformat:"2g" }}</div>
-                        <div class="text-xs text-slate-500">BCR: {{ s.benefit_cost_ratio|floatformat:2 }}x</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">BCR: {{ s.benefit_cost_ratio|floatformat:2 }}x</div>
                     </td>
                     <td>
                         <span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span>
@@ -197,9 +197,9 @@
                 <tr>
                     <td colspan="9">
                         <div class="empty-state">
-                            <i data-lucide="git-branch" class="w-12 h-12 text-slate-400 mb-3"></i>
-                            <h3 class="text-base font-semibold text-slate-800">No What-If Portfolio Scenarios Found</h3>
-                            <p class="text-sm text-slate-500 mb-4">Model expansion, consolidation, accelerated replacement, or budget cap scenarios across your portfolio.</p>
+                            <i data-lucide="git-branch" class="w-12 h-12 text-slate-400 dark:text-slate-500 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">No What-If Portfolio Scenarios Found</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Model expansion, consolidation, accelerated replacement, or budget cap scenarios across your portfolio.</p>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_portfolio_scenario_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> New What-If Scenario
