@@ -222,6 +222,15 @@ class AssetOperatorCertification(TenantNumbered):
             models.Index(fields=["tenant", "expires_on"], name="idx_aoct_ten_exp"),
             models.Index(fields=["tenant", "operator_user"], name="idx_aoct_ten_usr"),
             models.Index(fields=["tenant", "operator_party"], name="idx_aoct_ten_pty"),
+            models.Index(
+                fields=["tenant", "proficiency_level"], name="idx_aoct_ten_prof"
+            ),
+            models.Index(
+                fields=["tenant", "operational_asset"], name="idx_aoct_ten_ast"
+            ),
+            models.Index(
+                fields=["tenant", "operating_procedure"], name="idx_aoct_ten_sop"
+            ),
         ]
 
     def __str__(self):
