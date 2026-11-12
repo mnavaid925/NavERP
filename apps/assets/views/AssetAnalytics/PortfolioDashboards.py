@@ -45,6 +45,8 @@ def _build_portfolio_context(request):
     cat_id = parse_pos_int(request.GET.get("asset_category"))
     loc_id = parse_pos_int(request.GET.get("location"))
     base_year = parse_pos_int(request.GET.get("fiscal_year")) or timezone.localdate().year
+    if not (2000 <= base_year <= 2100):
+        base_year = timezone.localdate().year
 
     scm_qs = assets_scope(Asset.objects.all(), request).exclude(
         status__in=["retired", "disposed"]
