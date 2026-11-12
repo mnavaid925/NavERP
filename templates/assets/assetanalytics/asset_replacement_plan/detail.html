@@ -173,15 +173,15 @@
                 </div>
                 <div class="detail-item">
                     <dt>Asset Category</dt>
-                    <dd>{{ plan.asset_category.name|default:"—" }}</dd>
+                    <dd>{% if plan.asset_category %}{{ plan.asset_category.name }}{% else %}—{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Org Unit &amp; Location</dt>
-                    <dd>{{ plan.org_unit.name|default:"—" }}{% if plan.location %} / {{ plan.location.name }}{% endif %}</dd>
+                    <dd>{% if plan.org_unit %}{{ plan.org_unit.name }}{% else %}—{% endif %}{% if plan.location %} / {{ plan.location.name }}{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Currency</dt>
-                    <dd>{{ plan.currency.code|default:"Default" }}</dd>
+                    <dd>{% if plan.currency %}{{ plan.currency.code }}{% else %}Default{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Predicted EOL Date</dt>
@@ -189,7 +189,7 @@
                 </div>
                 <div class="detail-item">
                     <dt>Capital Budget</dt>
-                    <dd>{{ plan.capital_budget.name|default:"Unallocated" }}</dd>
+                    <dd>{% if plan.capital_budget %}{{ plan.capital_budget.name }}{% else %}Unallocated{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Linked Requisition</dt>
@@ -210,6 +210,10 @@
                         </a>
                         {% else %}—{% endif %}
                     </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Capital Planner</dt>
+                    <dd>{% if plan.planner %}{{ plan.planner.get_full_name|default:plan.planner.username }}{% else %}—{% endif %}</dd>
                 </div>
             </dl>
         </div>
