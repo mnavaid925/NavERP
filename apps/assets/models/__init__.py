@@ -97,6 +97,12 @@ from apps.assets.models.AssetDocumentKnowledge import (
     AssetOperatorCertification,
     is_operator_certified,
 )
+from apps.assets.models.SpaceFacilityAsset import (
+    AssetBuildingSystem,
+    AssetFacilitySpace,
+    AssetFurnitureFixture,
+    AssetSpaceChargeback,
+)
 
 __all__ = [
     "TenantOwned",
@@ -166,4 +172,8 @@ __all__ = [
     "AssetOperatorCertification",
     "AssetKnowledgeArticle",
     "is_operator_certified",
+    "AssetFacilitySpace",
+    "AssetBuildingSystem",
+    "AssetFurnitureFixture",
+    "AssetSpaceChargeback",
 ]
