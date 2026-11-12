@@ -198,6 +198,7 @@
                     {{ form.currency }}
                     {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
                 </div>
+                {% if "sanitization_status" in form.fields %}
                 <div class="form-group flex items-center gap-2 pt-6">
                     {{ form.sanitization_required }}
                     <label class="form-label !mb-0" for="{{ form.sanitization_required.id_for_label }}">Sanitization Required</label>
@@ -223,6 +224,11 @@
                     {{ form.sanitization_certificate_ref }}
                     {% if form.sanitization_certificate_ref.errors %}<div class="form-error">{{ form.sanitization_certificate_ref.errors }}</div>{% endif %}
                 </div>
+                {% else %}
+                <div class="md:col-span-3 text-xs text-slate-500 dark:text-slate-400">
+                    NIST SP 800-88 sanitization compliance and attestation fields are managed by tenant administrators.
+                </div>
+                {% endif %}
             </div>
 
             <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Custodianship &amp; Spine Links</h2>
