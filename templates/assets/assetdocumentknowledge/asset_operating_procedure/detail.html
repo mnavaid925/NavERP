@@ -133,7 +133,7 @@
                 <div class="detail-item"><dt>Required PPE</dt><dd>{{ procedure.required_ppe|default:"—" }}</dd></div>
                 <div class="detail-item"><dt>Operational Asset</dt><dd>{{ procedure.operational_asset|default:"—" }}</dd></div>
                 <div class="detail-item"><dt>Asset Category / Model</dt><dd>{{ procedure.asset_category|default:"—" }}{% if procedure.asset_model %} · {{ procedure.asset_model }}{% endif %}</dd></div>
-                <div class="detail-item"><dt>Primary Manual / Doc</dt><dd>{% if procedure.primary_document %}<a href="{% url 'assets:asset_document_detail' procedure.primary_document.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">{{ procedure.primary_document }}</a>{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Primary Manual / Doc</dt><dd>{% if procedure.primary_document %}{% if can_view_primary_document %}<a href="{% url 'assets:asset_document_detail' procedure.primary_document.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">{{ procedure.primary_document }}</a>{% else %}<span class="text-muted">Restricted Document</span>{% endif %}{% else %}—{% endif %}</dd></div>
                 <div class="detail-item"><dt>Maintenance Schedule</dt><dd>{{ procedure.maintenance_schedule|default:"—" }}</dd></div>
                 <div class="detail-item"><dt>Compliance Framework</dt><dd>{{ procedure.compliance_framework|default:"—" }}</dd></div>
             </dl>
