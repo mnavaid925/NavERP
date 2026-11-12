@@ -21,6 +21,7 @@ from apps.assets.views.ItAssetManagement._helpers import (
     apply_choice_filter,
     apply_fk_filter,
     csv_export_response,
+    is_tenant_admin_user,
 )
 from apps.core.decorators import tenant_admin_required
 from apps.core.models.OrgUnit import OrgUnit
@@ -195,23 +196,40 @@ def it_hardware_asset_export_csv(request):
     return csv_export_response(filename="it_hardware_assets.csv", headers=headers, rows=rows)
 
 
+def _sync_sanitization_attestation(hardware, user):
+    """Keep sanitization_verified_by and sanitized_at consistent on admin form saves."""
+    if not is_tenant_admin_user(user):
+        return
+    if hardware.sanitization_status in ("wiped_verified", "certificate_on_file"):
+        if hardware.sanitization_verified_by_id is None:
+            hardware.sanitization_verified_by = user
+        if hardware.sanitized_at is None:
+            hardware.sanitized_at = timezone.now()
+        if hardware.sanitization_date is None:
+            hardware.sanitization_date = timezone.now().date()
+    else:
+        hardware.sanitization_verified_by = None
+        hardware.sanitized_at = None
+
+
 @login_required
 def it_hardware_asset_create(request):
     """Create a new tenant-scoped IT hardware asset."""
     if request.method == "POST":
-        form = ItHardwareAssetForm(request.POST, tenant=request.tenant)
+        form = ItHardwareAssetForm(request.POST, tenant=request.tenant, user=request.user)
         if form.is_valid():
             with transaction.atomic():
                 hardware = form.save(commit=False)
                 hardware.tenant = request.tenant
                 if hardware.owner_id is None:
                     hardware.owner = request.user
+                _sync_sanitization_attestation(hardware, request.user)
                 hardware.save()
                 write_audit_log(request.user, hardware, "create", tenant=request.tenant)
             messages.success(request, f"IT Hardware Asset {hardware.number} created.")
             return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
     else:
-        form = ItHardwareAssetForm(tenant=request.tenant)
+        form = ItHardwareAssetForm(tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -267,15 +285,17 @@ def it_hardware_asset_edit(request, pk):
         return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
 
     if request.method == "POST":
-        form = ItHardwareAssetForm(request.POST, instance=hardware, tenant=request.tenant)
+        form = ItHardwareAssetForm(request.POST, instance=hardware, tenant=request.tenant, user=request.user)
         if form.is_valid():
             with transaction.atomic():
-                hardware = form.save()
+                hardware = form.save(commit=False)
+                _sync_sanitization_attestation(hardware, request.user)
+                hardware.save()
                 write_audit_log(request.user, hardware, "update", tenant=request.tenant)
             messages.success(request, f"IT Hardware Asset {hardware.number} updated.")
             return redirect("assets:it_hardware_asset_detail", pk=hardware.pk)
     else:
-        form = ItHardwareAssetForm(instance=hardware, tenant=request.tenant)
+        form = ItHardwareAssetForm(instance=hardware, tenant=request.tenant, user=request.user)
 
     return render(
         request,
