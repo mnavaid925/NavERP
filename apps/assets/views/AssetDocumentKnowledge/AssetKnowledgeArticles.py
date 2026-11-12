@@ -24,6 +24,7 @@ from apps.assets.views.AssetDocumentKnowledge._helpers import (
     apply_choice_filter,
     apply_fk_filter,
     csv_export_response,
+    is_asset_document_readable,
     is_tenant_admin_user,
     serve_protected_attachment,
 )
@@ -205,6 +206,9 @@ def asset_knowledge_article_detail(request, pk):
     is_admin = is_tenant_admin_user(request.user)
     context = {
         "article": article,
+        "can_view_related_document": is_asset_document_readable(
+            article.related_document, request.user
+        ),
         "can_edit": article.status in AssetKnowledgeArticle.EDITABLE_STATUSES,
         "can_publish": (
             is_admin and article.status in AssetKnowledgeArticle.EDITABLE_STATUSES
@@ -222,7 +226,7 @@ def asset_knowledge_article_create(request):
     """Create a new Draft lessons-learned note or failure RCA article."""
     if request.method == "POST":
         form = AssetKnowledgeArticleForm(
-            request.POST, request.FILES, tenant=request.tenant
+            request.POST, request.FILES, tenant=request.tenant, user=request.user
         )
         if form.is_valid():
             article = form.save(commit=False)
@@ -236,7 +240,7 @@ def asset_knowledge_article_create(request):
                 "assets:asset_knowledge_article_detail", pk=article.pk
             )
     else:
-        form = AssetKnowledgeArticleForm(tenant=request.tenant)
+        form = AssetKnowledgeArticleForm(tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -267,6 +271,7 @@ def asset_knowledge_article_edit(request, pk):
             request.FILES,
             instance=article,
             tenant=request.tenant,
+            user=request.user,
         )
         if form.is_valid():
             updated = form.save()
@@ -276,7 +281,9 @@ def asset_knowledge_article_edit(request, pk):
                 "assets:asset_knowledge_article_detail", pk=updated.pk
             )
     else:
-        form = AssetKnowledgeArticleForm(instance=article, tenant=request.tenant)
+        form = AssetKnowledgeArticleForm(
+            instance=article, tenant=request.tenant, user=request.user
+        )
 
     return render(
         request,
