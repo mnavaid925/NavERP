@@ -147,7 +147,7 @@
                     <th>Environment</th>
                     <th>Criticality &amp; Impact</th>
                     <th>Status</th>
-                    <th></th>
+                    <th class="th-actions">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -176,8 +176,23 @@
                         <div class="text-xs text-slate-400 mt-1">{{ rel.get_impact_severity_display }}</div>
                     </td>
                     <td><span class="badge {{ rel.status_badge_class }}">{{ rel.get_status_display }}</span></td>
-                    <td class="text-right whitespace-nowrap">
-                        <a href="{% url 'assets:cmdb_relationship_detail' rel.pk %}" class="btn btn-outline btn-sm">View</a>
+                    <td class="table-actions">
+                        <a href="{% url 'assets:cmdb_relationship_detail' rel.pk %}" class="btn btn-icon" title="View" aria-label="View {{ rel.number }}">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if not rel.is_locked %}
+                        <a href="{% url 'assets:cmdb_relationship_edit' rel.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ rel.number }}">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'assets:cmdb_relationship_delete' rel.pk %}" class="inline" onsubmit="return confirm('Delete CMDB relationship {{ rel.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon danger text-danger" title="Delete" aria-label="Delete {{ rel.number }}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
