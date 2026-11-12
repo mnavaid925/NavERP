@@ -93,6 +93,7 @@ class AssetOperatingProcedureForm(TenantUniqueMixin, TenantModelForm):
             "estimated_duration_minutes": forms.NumberInput(
                 attrs={"min": "1", "max": "1440"}
             ),
+            "attachment": forms.FileInput(attrs={"class": "form-input"}),
             "review_cycle_months": forms.NumberInput(attrs={"min": "1", "max": "120"}),
             "purpose_scope": forms.Textarea(
                 attrs={
