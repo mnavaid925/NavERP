@@ -3,8 +3,6 @@
 from calendar import monthrange
 from datetime import date
 
-from django.core.exceptions import ValidationError
-
 
 def add_months(base_date, months):
     """Add calendar months to a date while clamping day-of-month safely."""
@@ -32,6 +30,4 @@ def validate_tenant_fks(instance, field_names):
         related_obj = getattr(instance, field_name, None)
         if related_obj is not None and getattr(related_obj, "tenant_id", None) != tenant_id:
             add_field_error(errors, field_name, "Selected record belongs to another workspace.")
-    if errors:
-        raise ValidationError(errors)
     return errors
