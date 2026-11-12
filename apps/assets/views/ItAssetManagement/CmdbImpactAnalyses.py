@@ -6,7 +6,6 @@ from django.shortcuts import render
 from apps.assets.models.ItAssetManagement.CmdbRelationships import CmdbRelationship
 from apps.assets.views._common import assets_scope
 from apps.assets.views.ItAssetManagement._helpers import (
-    CMDB_REL_SELECT_RELATED,
     build_ci_label_map,
     compute_cmdb_impact,
     csv_export_response,
@@ -26,7 +25,7 @@ def _build_impact_context(request):
     edges_qs = assets_scope(
         CmdbRelationship.objects.filter(status="active"),
         request,
-    ).select_related(*CMDB_REL_SELECT_RELATED)
+    )
     if selected_environment:
         edges_qs = edges_qs.filter(environment=selected_environment)
     edges = list(edges_qs)
@@ -62,7 +61,20 @@ def _build_impact_context(request):
     else:
         upstream_nodes, downstream_nodes = [], []
 
-    spof_edges = [edge for edge in edges if edge.is_single_point_of_failure]
+    spof_edges = [
+        {
+            "pk": edge.pk,
+            "number": edge.number,
+            "source_label": label_map.get(edge.source_ci_key) or "Unlinked Source CI",
+            "target_label": label_map.get(edge.target_ci_key) or "Unlinked Target CI",
+            "get_relationship_type_display": edge.get_relationship_type_display(),
+            "get_impact_severity_display": edge.get_impact_severity_display(),
+            "criticality_badge_class": edge.criticality_badge_class,
+            "get_criticality_display": edge.get_criticality_display(),
+        }
+        for edge in edges
+        if edge.is_single_point_of_failure
+    ]
 
     return {
         "ci_options": ci_options,
