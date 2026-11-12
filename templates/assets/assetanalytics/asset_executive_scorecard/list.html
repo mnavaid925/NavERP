@@ -136,12 +136,12 @@
                     <th>Scorecard # &amp; Title</th>
                     <th>Period</th>
                     <th>RAG</th>
-                    <th class="text-right">Asset ROI %</th>
-                    <th class="text-right">MCR %</th>
-                    <th class="text-right">Compliance %</th>
-                    <th class="text-right">Risk Exposure</th>
+                    <th class="text-end">Asset ROI %</th>
+                    <th class="text-end">MCR %</th>
+                    <th class="text-end">Compliance %</th>
+                    <th class="text-end">Risk Exposure</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -160,14 +160,14 @@
                     <td>
                         <span class="badge {{ k.rag_status_badge_class }}">{{ k.get_rag_status_display }}</span>
                     </td>
-                    <td class="text-right font-mono font-semibold">{{ k.asset_roi_pct|floatformat:2 }}%</td>
-                    <td class="text-right font-mono">{{ k.maintenance_cost_to_rav_pct|floatformat:2 }}%</td>
-                    <td class="text-right font-mono">{{ k.compliance_audit_pass_rate_pct|floatformat:1 }}%</td>
-                    <td class="text-right font-mono">{% fmt_money k.total_risk_exposure_amount k.currency %}</td>
+                    <td class="text-end font-mono font-semibold">{{ k.asset_roi_pct|floatformat:2 }}%</td>
+                    <td class="text-end font-mono">{{ k.maintenance_cost_to_rav_pct|floatformat:2 }}%</td>
+                    <td class="text-end font-mono">{{ k.compliance_audit_pass_rate_pct|floatformat:1 }}%</td>
+                    <td class="text-end font-mono">{% fmt_money k.total_risk_exposure_amount k.currency %}</td>
                     <td>
                         <span class="badge {{ k.status_badge_class }}">{{ k.get_status_display }}</span>
                     </td>
-                    <td class="text-right">
+                    <td class="text-end">
                         <div class="table-actions">
                             <a href="{% url 'assets:asset_executive_scorecard_detail' k.pk %}" class="btn btn-icon" title="View Details" aria-label="View {{ k.number }}">
                                 <i data-lucide="eye"></i>
