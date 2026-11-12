@@ -155,8 +155,7 @@ class AssetKnowledgeArticleForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        for field_name in self._TENANT_FIELDS:
-            reject_foreign(self, cleaned, self.tenant, field_name)
+        reject_foreign(self, cleaned, self._TENANT_FIELDS.keys())
         dt_hours = cleaned.get("downtime_hours_impacted")
         if dt_hours is not None and dt_hours < Decimal("0.00"):
             self.add_error(
