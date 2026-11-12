@@ -332,8 +332,11 @@ class ItHardwareAsset(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "hostname"], name="idx_ithw_ten_host"),
             models.Index(fields=["tenant", "status"], name="idx_ithw_ten_stat"),
             models.Index(fields=["tenant", "device_class"], name="idx_ithw_ten_dcls"),
+            models.Index(fields=["tenant", "environment"], name="idx_ithw_ten_env"),
+            models.Index(fields=["tenant", "sanitization_status"], name="idx_ithw_ten_sanst"),
             models.Index(fields=["tenant", "vendor_eol_date"], name="idx_ithw_ten_eol"),
             models.Index(fields=["tenant", "refresh_due_date"], name="idx_ithw_ten_rfsh"),
         ]
