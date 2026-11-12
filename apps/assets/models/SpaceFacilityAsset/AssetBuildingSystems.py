@@ -281,7 +281,10 @@ class AssetBuildingSystem(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_afbs_ten_stat"),
             models.Index(fields=["tenant", "system_domain"], name="idx_afbs_ten_dom"),
+            models.Index(fields=["tenant", "subsystem_type"], name="idx_afbs_ten_sub"),
             models.Index(fields=["tenant", "comfort_status"], name="idx_afbs_ten_cmf"),
+            models.Index(fields=["tenant", "condition_grade"], name="idx_afbs_ten_cond"),
+            models.Index(fields=["tenant", "criticality_tier"], name="idx_afbs_ten_crit"),
             models.Index(fields=["tenant", "facility_space"], name="idx_afbs_ten_spc"),
             models.Index(fields=["tenant", "next_inspection_due_date"], name="idx_afbs_ten_insp"),
         ]
