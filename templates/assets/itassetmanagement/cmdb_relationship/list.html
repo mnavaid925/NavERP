@@ -154,7 +154,7 @@
                 {% for rel in relationships %}
                 <tr>
                     <td class="font-mono text-xs whitespace-nowrap">
-                        <a href="{% url 'assets:cmdb_relationship_detail' rel.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ rel.number }}</a>
+                        <a href="{% url 'assets:cmdb_relationship_detail' rel.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">{{ rel.number }}</a>
                         {% if rel.is_single_point_of_failure %}
                         <div><span class="badge badge-red mt-1">SPOF</span></div>
                         {% endif %}
