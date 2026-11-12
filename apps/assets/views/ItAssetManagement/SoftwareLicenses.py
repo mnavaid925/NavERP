@@ -163,7 +163,11 @@ def software_license_export_csv(request):
 def software_license_create(request):
     """Create a new tenant-scoped software license record."""
     if request.method == "POST":
+        if request.tenant is None:
+            messages.warning(request, "Workspace context is required to create a software license.")
+            return redirect("assets:software_license_list")
         form = SoftwareLicenseForm(request.POST, tenant=request.tenant)
+        form.instance.tenant = request.tenant
         if form.is_valid():
             with transaction.atomic():
                 license_obj = form.save(commit=False)
