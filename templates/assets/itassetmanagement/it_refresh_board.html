@@ -117,7 +117,7 @@
                     {% for hw in hardware_rows %}
                     <tr>
                         <td class="font-mono text-xs whitespace-nowrap">
-                            <a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ hw.number }}</a>
+                            <a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">{{ hw.number }}</a>
                         </td>
                         <td>
                             <div class="font-medium text-sm">{{ hw.hostname }}</div>
@@ -170,7 +170,7 @@
             <tbody>
                 {% for hw in sanitization_backlog %}
                 <tr>
-                    <td class="font-mono text-xs"><a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ hw.number }}</a></td>
+                    <td class="font-mono text-xs"><a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">{{ hw.number }}</a></td>
                     <td class="text-sm font-medium">{{ hw.hostname }}</td>
                     <td><span class="badge {{ hw.status_badge_class }}">{{ hw.get_status_display }}</span></td>
                     <td class="text-sm">{{ hw.get_sanitization_method_display }}</td>
@@ -195,7 +195,7 @@
                 <tbody>
                     {% for sw in software_rows %}
                     <tr>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:software_license_detail' sw.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ sw.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:software_license_detail' sw.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">{{ sw.number }}</a></td>
                         <td class="text-sm font-medium">{{ sw.software_name }}</td>
                         <td class="text-xs whitespace-nowrap">Ren: {{ sw.renewal_date|date:"Y-m-d"|default:"—" }} · EOL: {{ sw.vendor_eol_date|date:"Y-m-d"|default:"—" }}</td>
                         <td><span class="badge {{ sw.status_badge_class }}">{{ sw.get_status_display }}</span></td>
@@ -216,7 +216,7 @@
                 <tbody>
                     {% for cl in cloud_rows %}
                     <tr>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:cloud_asset_subscription_detail' cl.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ cl.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cloud_asset_subscription_detail' cl.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">{{ cl.number }}</a></td>
                         <td class="text-sm font-medium">{{ cl.name }}</td>
                         <td class="text-xs whitespace-nowrap">Ren: {{ cl.renewal_date|date:"Y-m-d"|default:"—" }} · EOL: {{ cl.vendor_eol_date|date:"Y-m-d"|default:"—" }}</td>
                         <td><span class="badge {{ cl.status_badge_class }}">{{ cl.get_status_display }}</span></td>
