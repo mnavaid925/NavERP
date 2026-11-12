@@ -66,10 +66,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div>
-                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, title, asset..." class="form-input" />
+                <label for="alcc-filter-q" class="sr-only">Search lifecycle analyses</label>
+                <input id="alcc-filter-q" type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, title, asset..." class="form-input" />
             </div>
             <div>
-                <select name="status" class="form-select">
+                <label for="alcc-filter-status" class="sr-only">Status</label>
+                <select id="alcc-filter-status" name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -77,7 +79,8 @@
                 </select>
             </div>
             <div>
-                <select name="lifecycle_stage" class="form-select">
+                <label for="alcc-filter-stage" class="sr-only">Lifecycle Stage</label>
+                <select id="alcc-filter-stage" name="lifecycle_stage" class="form-select">
                     <option value="">All Lifecycle Stages</option>
                     {% for val, label in stage_choices %}
                     <option value="{{ val }}" {% if request.GET.lifecycle_stage == val %}selected{% endif %}>{{ label }}</option>
@@ -85,7 +88,8 @@
                 </select>
             </div>
             <div>
-                <select name="recommendation" class="form-select">
+                <label for="alcc-filter-recommendation" class="sr-only">Recommendation</label>
+                <select id="alcc-filter-recommendation" name="recommendation" class="form-select">
                     <option value="">All Recommendations</option>
                     {% for val, label in recommendation_choices %}
                     <option value="{{ val }}" {% if request.GET.recommendation == val %}selected{% endif %}>{{ label }}</option>
@@ -93,7 +97,8 @@
                 </select>
             </div>
             <div>
-                <select name="asset_category" class="form-select">
+                <label for="alcc-filter-category" class="sr-only">Asset Category</label>
+                <select id="alcc-filter-category" name="asset_category" class="form-select">
                     <option value="">All Categories</option>
                     {% for cat in categories %}
                     <option value="{{ cat.pk }}" {% if request.GET.asset_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
@@ -101,7 +106,8 @@
                 </select>
             </div>
             <div class="flex gap-2">
-                <select name="org_unit" class="form-select">
+                <label for="alcc-filter-org-unit" class="sr-only">Org Unit</label>
+                <select id="alcc-filter-org-unit" name="org_unit" class="form-select">
                     <option value="">All Org Units</option>
                     {% for ou in org_units %}
                     <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
@@ -111,7 +117,7 @@
                     <i data-lucide="filter" class="w-4 h-4"></i>
                 </button>
                 {% if request.GET.q or request.GET.status or request.GET.lifecycle_stage or request.GET.recommendation or request.GET.asset_category or request.GET.org_unit %}
-                <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
@@ -177,17 +183,17 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' item.pk %}" class="btn btn-icon" title="View Details" aria-label="View {{ item.number }}">
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not item.is_locked %}
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete LCC analysis {{ item.number|escapejs }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon danger" title="Delete">
+                                <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete {{ item.number }}">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
