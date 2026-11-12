@@ -216,7 +216,11 @@ def _sync_sanitization_attestation(hardware, user):
 def it_hardware_asset_create(request):
     """Create a new tenant-scoped IT hardware asset."""
     if request.method == "POST":
+        if request.tenant is None:
+            messages.warning(request, "Workspace context is required to create an IT hardware asset.")
+            return redirect("assets:it_hardware_asset_list")
         form = ItHardwareAssetForm(request.POST, tenant=request.tenant, user=request.user)
+        form.instance.tenant = request.tenant
         if form.is_valid():
             with transaction.atomic():
                 hardware = form.save(commit=False)
