@@ -123,15 +123,15 @@
                 </div>
                 <div class="detail-item">
                     <dt>Org Unit Scope</dt>
-                    <dd>{{ scorecard.org_unit.name|default:"Enterprise-Wide" }}</dd>
+                    <dd>{% if scorecard.org_unit %}{{ scorecard.org_unit.name }}{% else %}Enterprise-Wide{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Category Scope</dt>
-                    <dd>{{ scorecard.asset_category.name|default:"All Categories" }}</dd>
+                    <dd>{% if scorecard.asset_category %}{{ scorecard.asset_category.name }}{% else %}All Categories{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Currency</dt>
-                    <dd>{{ scorecard.currency.code|default:"Default" }}</dd>
+                    <dd>{% if scorecard.currency %}{{ scorecard.currency.code }}{% else %}Default{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Snapshot Lock State</dt>
@@ -139,11 +139,11 @@
                 </div>
                 <div class="detail-item">
                     <dt>Prepared By</dt>
-                    <dd>{{ scorecard.prepared_by.get_full_name|default:scorecard.prepared_by|default:"—" }}</dd>
+                    <dd>{% if scorecard.prepared_by %}{{ scorecard.prepared_by.get_full_name|default:scorecard.prepared_by.username }}{% else %}—{% endif %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Approved By</dt>
-                    <dd>{{ scorecard.approved_by.get_full_name|default:scorecard.approved_by|default:"Pending Board Sign-Off" }}</dd>
+                    <dd>{% if scorecard.approved_by %}{{ scorecard.approved_by.get_full_name|default:scorecard.approved_by.username }}{% else %}Pending Board Sign-Off{% endif %}</dd>
                 </div>
             </dl>
         </div>
