@@ -88,7 +88,7 @@
         <div class="stat-body">
             <div class="stat-label">Active Portfolio &amp; NBV</div>
             <div class="stat-value">${{ kpis.total_nbv|floatformat:"2g" }}</div>
-            <div class="text-xs text-slate-500 mt-1">{{ kpis.total_assets|floatformat:"0g" }} active assets (Acq ${{ kpis.total_acquisition_value|floatformat:"0g" }})</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">{{ kpis.total_assets|floatformat:"0g" }} active assets (Acq ${{ kpis.total_acquisition_value|floatformat:"0g" }})</div>
         </div>
     </div>
     <div class="stat-card">
@@ -96,7 +96,7 @@
         <div class="stat-body">
             <div class="stat-label">Avg Health &amp; Portfolio FCI</div>
             <div class="stat-value">{{ kpis.avg_health_score|floatformat:1 }} / 100</div>
-            <div class="text-xs text-slate-500 mt-1">Facility Condition Index: {{ kpis.portfolio_fci_pct|floatformat:2 }}%</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">Facility Condition Index: {{ kpis.portfolio_fci_pct|floatformat:2 }}%</div>
         </div>
     </div>
     <div class="stat-card">
@@ -104,7 +104,7 @@
         <div class="stat-body">
             <div class="stat-label">5-Year CapEx Demand</div>
             <div class="stat-value">${{ kpis.five_year_capex_demand|floatformat:"2g" }}</div>
-            <div class="text-xs text-amber-700 mt-1">Unfunded backlog: ${{ kpis.unfunded_backlog_total|floatformat:"0g" }}</div>
+            <div class="text-xs text-amber-700 dark:text-amber-400 mt-1">Unfunded backlog: ${{ kpis.unfunded_backlog_total|floatformat:"0g" }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -112,7 +112,7 @@
         <div class="stat-body">
             <div class="stat-label">Open Risk Exposure</div>
             <div class="stat-value">${{ kpis.open_risk_exposure|floatformat:"2g" }}</div>
-            <div class="text-xs text-slate-500 mt-1">{{ compliance_summary.pass_rate_pct|floatformat:1 }}% audit pass · {{ kpis.open_incidents_count }} open incidents</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">{{ compliance_summary.pass_rate_pct|floatformat:1 }}% audit pass · {{ kpis.open_incidents_count }} open incidents</div>
         </div>
     </div>
 </div>
@@ -122,7 +122,7 @@
     <!-- Health Heat Map -->
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Asset Health Heat Map (Condition × Criticality)</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Asset Health Heat Map (Condition × Criticality)</h2>
         </div>
         <div class="card-body">
             <div class="table-wrap">
@@ -142,16 +142,16 @@
                         <tr>
                             <td class="font-medium">{{ row.label }}</td>
                             <td class="text-center">
-                                {% if row.counts.critical %}<span class="badge badge-red">{{ row.counts.critical }}</span>{% else %}<span class="text-slate-400">0</span>{% endif %}
+                                {% if row.counts.critical %}<span class="badge badge-red">{{ row.counts.critical }}</span>{% else %}<span class="text-slate-400 dark:text-slate-500">0</span>{% endif %}
                             </td>
                             <td class="text-center">
-                                {% if row.counts.high %}<span class="badge badge-amber">{{ row.counts.high }}</span>{% else %}<span class="text-slate-400">0</span>{% endif %}
+                                {% if row.counts.high %}<span class="badge badge-amber">{{ row.counts.high }}</span>{% else %}<span class="text-slate-400 dark:text-slate-500">0</span>{% endif %}
                             </td>
                             <td class="text-center">
-                                {% if row.counts.medium %}<span class="badge badge-info">{{ row.counts.medium }}</span>{% else %}<span class="text-slate-400">0</span>{% endif %}
+                                {% if row.counts.medium %}<span class="badge badge-info">{{ row.counts.medium }}</span>{% else %}<span class="text-slate-400 dark:text-slate-500">0</span>{% endif %}
                             </td>
                             <td class="text-center">
-                                {% if row.counts.low %}<span class="badge badge-green">{{ row.counts.low }}</span>{% else %}<span class="text-slate-400">0</span>{% endif %}
+                                {% if row.counts.low %}<span class="badge badge-green">{{ row.counts.low }}</span>{% else %}<span class="text-slate-400 dark:text-slate-500">0</span>{% endif %}
                             </td>
                             <td class="text-right font-mono font-semibold">{{ row.total }}</td>
                         </tr>
@@ -165,7 +165,7 @@
     <!-- 5-Year CapEx Forecast -->
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">5-Year Capital Replacement Demand ({{ selected_fiscal_year }}–{{ selected_fiscal_year|add:4 }})</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">5-Year Capital Replacement Demand ({{ selected_fiscal_year }}–{{ selected_fiscal_year|add:4 }})</h2>
         </div>
         <div class="card-body">
             <div class="table-wrap">
@@ -183,14 +183,14 @@
                         {% for yr in capex_forecast_years %}
                         <tr>
                             <td class="font-medium">
-                                <a href="{% url 'assets:asset_replacement_plan_list' %}?planned_replacement_year={{ yr.year }}" class="text-blue-600 hover:underline">
+                                <a href="{% url 'assets:asset_replacement_plan_list' %}?planned_replacement_year={{ yr.year }}" class="text-blue-600 dark:text-blue-400 hover:underline">
                                     FY{{ yr.year }}
                                 </a>
                             </td>
                             <td class="text-right font-mono">{{ yr.plan_count }}</td>
                             <td class="text-right font-mono font-semibold">${{ yr.inflation_cost|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono text-emerald-700">${{ yr.funded_cost|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono text-red-700">${{ yr.unfunded_cost|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">${{ yr.funded_cost|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono text-red-700 dark:text-red-400">${{ yr.unfunded_cost|floatformat:"2g" }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -205,8 +205,8 @@
     <!-- Bad Actors -->
     <div class="card lg:col-span-2">
         <div class="card-header flex items-center justify-between">
-            <h2 class="text-base font-semibold text-slate-800">Top Lifecycle Cost (TCO) Bad Actors</h2>
-            <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="text-xs text-blue-600 hover:underline">View All Studies</a>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Top Lifecycle Cost (TCO) Bad Actors</h2>
+            <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">View All Studies</a>
         </div>
         <div class="card-body">
             <div class="table-wrap">
@@ -224,10 +224,10 @@
                         {% for ba in bad_actors %}
                         <tr>
                             <td>
-                                <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' ba.pk %}" class="font-medium text-blue-600 hover:underline">
+                                <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' ba.pk %}" class="font-medium text-blue-600 dark:text-blue-400 hover:underline">
                                     {{ ba.number }}
                                 </a>
-                                <div class="text-xs text-slate-500">{{ ba.title|truncatechars:35 }}</div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400">{{ ba.title|truncatechars:35 }}</div>
                             </td>
                             <td>
                                 {% if ba.operational_asset %}{{ ba.operational_asset.name }}{% elif ba.fixed_asset %}{{ ba.fixed_asset.name }}{% elif ba.asset_category %}{{ ba.asset_category.name }}{% else %}—{% endif %}
@@ -238,7 +238,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="5" class="text-center text-sm text-slate-500 py-4">No lifecycle cost analyses recorded yet.</td>
+                            <td colspan="5" class="text-center text-sm text-slate-500 dark:text-slate-400 py-4">No lifecycle cost analyses recorded yet.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -250,7 +250,7 @@
     <!-- Risk & Compliance Posture -->
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Risk Exposure &amp; Compliance</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Risk Exposure &amp; Compliance</h2>
         </div>
         <div class="card-body">
             <div class="table-wrap mb-4">
@@ -273,7 +273,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="text-xs text-slate-600 space-y-1 border-t pt-3">
+            <div class="text-xs text-slate-600 dark:text-slate-300 space-y-1 border-t border-slate-200 dark:border-slate-700 pt-3">
                 <div><strong>Audits Completed / Scheduled:</strong> {{ compliance_summary.total_audits }}</div>
                 <div><strong>Checkpoint Pass Rate:</strong> {{ compliance_summary.pass_rate_pct|floatformat:2 }}%</div>
                 <div><strong>Open Incidents:</strong> {{ compliance_summary.open_incidents }}</div>
@@ -285,8 +285,8 @@
 <!-- Row 3: Recent Executive Scorecards -->
 <div class="card">
     <div class="card-header flex items-center justify-between">
-        <h2 class="text-base font-semibold text-slate-800">Recent Executive Scorecards (AKPI)</h2>
-        <a href="{% url 'assets:asset_executive_scorecard_list' %}" class="text-xs text-blue-600 hover:underline">Manage Scorecards</a>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Recent Executive Scorecards (AKPI)</h2>
+        <a href="{% url 'assets:asset_executive_scorecard_list' %}" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Manage Scorecards</a>
     </div>
     <div class="table-wrap">
         <table class="table">
@@ -305,8 +305,8 @@
                 {% for sc in recent_scorecards %}
                 <tr>
                     <td>
-                        <a href="{% url 'assets:asset_executive_scorecard_detail' sc.pk %}" class="font-medium text-blue-600 hover:underline">{{ sc.number }}</a>
-                        <div class="text-xs text-slate-500">{{ sc.title|truncatechars:45 }}</div>
+                        <a href="{% url 'assets:asset_executive_scorecard_detail' sc.pk %}" class="font-medium text-blue-600 dark:text-blue-400 hover:underline">{{ sc.number }}</a>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ sc.title|truncatechars:45 }}</div>
                     </td>
                     <td>{{ sc.period_start }} → {{ sc.period_end }}</td>
                     <td><span class="badge {{ sc.rag_status_badge_class }}">{{ sc.get_rag_status_display }}</span></td>
@@ -317,7 +317,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center text-sm text-slate-500 py-4">No executive scorecards published yet.</td>
+                    <td colspan="7" class="text-center text-sm text-slate-500 dark:text-slate-400 py-4">No executive scorecards published yet.</td>
                 </tr>
                 {% endfor %}
             </tbody>
