@@ -25,6 +25,7 @@ from apps.assets.views.AssetDocumentKnowledge._helpers import (
     apply_choice_filter,
     apply_fk_filter,
     csv_export_response,
+    is_asset_document_readable,
     is_tenant_admin_user,
     serve_protected_attachment,
 )
@@ -181,6 +182,9 @@ def _build_procedure_detail_context(request, proc):
         "revision_history": revision_history,
         "certified_operators": certified_operators,
         "linked_articles": linked_articles,
+        "can_view_primary_document": is_asset_document_readable(
+            proc.primary_document, request.user
+        ),
         "can_edit": proc.status in AssetOperatingProcedure.EDITABLE_STATUSES,
         "can_activate": (
             is_admin and proc.status in AssetOperatingProcedure.EDITABLE_STATUSES
@@ -328,7 +332,7 @@ def asset_operating_procedure_create(request):
     """Create a new Draft Operating Procedure / LOTO protocol."""
     if request.method == "POST":
         form = AssetOperatingProcedureForm(
-            request.POST, request.FILES, tenant=request.tenant
+            request.POST, request.FILES, tenant=request.tenant, user=request.user
         )
         if form.is_valid():
             proc = form.save(commit=False)
@@ -340,7 +344,7 @@ def asset_operating_procedure_create(request):
             messages.success(request, f"Created SOP {proc.number}.")
             return redirect("assets:asset_operating_procedure_detail", pk=proc.pk)
     else:
-        form = AssetOperatingProcedureForm(tenant=request.tenant)
+        form = AssetOperatingProcedureForm(tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -371,6 +375,7 @@ def asset_operating_procedure_edit(request, pk):
             request.FILES,
             instance=proc,
             tenant=request.tenant,
+            user=request.user,
         )
         if form.is_valid():
             updated = form.save()
@@ -378,7 +383,9 @@ def asset_operating_procedure_edit(request, pk):
             messages.success(request, f"Updated SOP {updated.number}.")
             return redirect("assets:asset_operating_procedure_detail", pk=updated.pk)
     else:
-        form = AssetOperatingProcedureForm(instance=proc, tenant=request.tenant)
+        form = AssetOperatingProcedureForm(
+            instance=proc, tenant=request.tenant, user=request.user
+        )
 
     return render(
         request,
