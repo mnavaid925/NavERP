@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cloud_asset.number }} — {{ cloud_asset.name }} — Cloud Assets — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:cloud_asset_subscription_list' %}">Cloud &amp; SaaS Tracking</a>
+            <span>/</span>
+            <span>{{ cloud_asset.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ cloud_asset.number }} — {{ cloud_asset.name }}</h1>
+            <span class="badge {{ cloud_asset.status_badge_class }}">{{ cloud_asset.get_status_display }}</span>
+            <span class="badge {{ cloud_asset.approval_badge_class }}">{{ cloud_asset.get_approval_status_display }}</span>
+            <span class="badge {{ cloud_asset.sso_badge_class }}">{{ cloud_asset.get_sso_status_display }}</span>
+            {% if cloud_asset.is_eol_expired %}
+            <span class="badge badge-red">Vendor EOL Passed</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:cmdb_impact_analysis' %}?ci=cloud_asset:{{ cloud_asset.pk }}" class="btn btn-outline">
+            <i data-lucide="network" class="w-4 h-4 me-1"></i> Impact Analysis
+        </a>
+
+        {% if not cloud_asset.is_locked %}
+            <form method="post" action="{% url 'assets:cloud_asset_subscription_sync_finops' cloud_asset.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Sync FinOps
+                </button>
+            </form>
+
+            {% if cloud_asset.approval_status != "sanctioned" %}
+            <form method="post" action="{% url 'assets:cloud_asset_subscription_sanction' cloud_asset.pk %}" class="inline" onsubmit="return confirm('Mark {{ cloud_asset.number|escapejs }} as IT Sanctioned?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Sanction IT</button>
+            </form>
+            {% endif %}
+
+            {% if cloud_asset.approval_status != "shadow_it_flagged" %}
+            <form method="post" action="{% url 'assets:cloud_asset_subscription_flag_shadow' cloud_asset.pk %}" class="inline" onsubmit="return confirm('Flag {{ cloud_asset.number|escapejs }} as Shadow IT?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Flag Shadow IT</button>
+            </form>
+            {% endif %}
+
+            <form method="post" action="{% url 'assets:cloud_asset_subscription_renew' cloud_asset.pk %}" class="inline" onsubmit="return confirm('Extend renewal date by 12 months for {{ cloud_asset.number|escapejs }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">Renew +12 mo</button>
+            </form>
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                {% if cloud_asset.status != "suspended" %}
+                <form method="post" action="{% url 'assets:cloud_asset_subscription_suspend' cloud_asset.pk %}" class="inline" onsubmit="return confirm('Suspend {{ cloud_asset.number|escapejs }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline">Suspend</button>
+                </form>
+                {% endif %}
+                <form method="post" action="{% url 'assets:cloud_asset_subscription_decommission' cloud_asset.pk %}" class="inline" onsubmit="return confirm('Decommission and cancel {{ cloud_asset.number|escapejs }}? Cancelled subscriptions become locked.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline">Decommission</button>
+                </form>
+            {% endif %}
+
+            <a href="{% url 'assets:cloud_asset_subscription_edit' cloud_asset.pk %}" class="btn btn-outline">
+                <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+            </a>
+
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'assets:cloud_asset_subscription_delete' cloud_asset.pk %}" class="inline" onsubmit="return confirm('Delete cloud asset {{ cloud_asset.number|escapejs }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">
+                    <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+                </button>
+            </form>
+            {% endif %}
+        {% endif %}
+
+        <a href="{% url 'assets:cloud_asset_subscription_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Summary KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Monthly Recurring Cost</div>
+            <div class="stat-value">
+                {% if cloud_asset.currency %}{{ cloud_asset.currency.code }} {% endif %}{{ cloud_asset.monthly_recurring_cost|floatformat:2 }}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">{{ cloud_asset.get_billing_cadence_display }} · {{ cloud_asset.get_commitment_term_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="calendar-range"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Annual Contract Value</div>
+            <div class="stat-value">
+                {% if cloud_asset.currency %}{{ cloud_asset.currency.code }} {% endif %}{{ cloud_asset.annual_contract_value|floatformat:2 }}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">Notice window: {{ cloud_asset.cancellation_notice_days }} days</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="users"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">30d Active / Provisioned</div>
+            <div class="stat-value">
+                {% if cloud_asset.provisioned_seats > 0 %}
+                {{ cloud_asset.active_seats_30d }} / {{ cloud_asset.provisioned_seats }}
+                {% else %}
+                Infra / PAYG
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">
+                {% if cloud_asset.seat_utilization_pct != None %}Utilization: {{ cloud_asset.seat_utilization_pct }}%{% else %}Resource-metered{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if cloud_asset.wasted_monthly_spend > 0 %}amber{% else %}slate{% endif %}">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-label">Wasted Monthly Spend</div>
+            <div class="stat-value">
+                {% if cloud_asset.currency %}{{ cloud_asset.currency.code }} {% endif %}{{ cloud_asset.wasted_monthly_spend|floatformat:2 }}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">
+                Required FinOps tags: {% if cloud_asset.has_required_tags %}Complete{% else %}Missing tags{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cloud Asset & FinOps Details -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Cloud Provider, Identity &amp; Tag Hygiene</h2></div>
+        <div class="card-body">
+            <dl class="detail-grid !grid-cols-1">
+                <div class="detail-item"><dt>Provider &amp; Kind</dt><dd>{{ cloud_asset.get_provider_display }} · {{ cloud_asset.get_asset_kind_display }}</dd></div>
+                <div class="detail-item"><dt>Environment &amp; Region</dt><dd>{{ cloud_asset.get_environment_display }}{% if cloud_asset.cloud_region %} ({{ cloud_asset.cloud_region }}){% endif %}</dd></div>
+                <div class="detail-item"><dt>External Account ID</dt><dd class="font-mono text-xs">{{ cloud_asset.external_account_id|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Cloud Resource / ARN</dt><dd class="font-mono text-xs break-all">{{ cloud_asset.cloud_resource_id|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Org Unit / Vendor</dt><dd>{{ cloud_asset.org_unit|default:"—" }} / {{ cloud_asset.vendor_party|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>GL Expense Account</dt><dd>{{ cloud_asset.gl_expense_account|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Resource Tags (JSON)</dt><dd class="font-mono text-xs">{% if cloud_asset.resource_tags %}{{ cloud_asset.resource_tags }}{% else %}—{% endif %}</dd></div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Ownership, Renewal &amp; Governance</h2></div>
+        <div class="card-body">
+            <dl class="detail-grid !grid-cols-1">
+                <div class="detail-item"><dt>Business Owner</dt><dd>{% if cloud_asset.business_owner %}{{ cloud_asset.business_owner.get_full_name|default:cloud_asset.business_owner.username }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Technical Owner</dt><dd>{% if cloud_asset.technical_owner %}{{ cloud_asset.technical_owner.get_full_name|default:cloud_asset.technical_owner.username }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Renewal Date</dt><dd>{{ cloud_asset.renewal_date|date:"Y-m-d"|default:"—" }} ({% if cloud_asset.auto_renew %}Auto-Renew{% else %}Manual{% endif %})</dd></div>
+                <div class="detail-item"><dt>Vendor EOL Date</dt><dd>{{ cloud_asset.vendor_eol_date|date:"Y-m-d"|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Last FinOps Sync</dt><dd>{% if cloud_asset.last_finops_sync_at %}{{ cloud_asset.last_finops_sync_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Decommissioned At</dt><dd>{% if cloud_asset.decommissioned_at %}{{ cloud_asset.decommissioned_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+            </dl>
+            {% if cloud_asset.notes %}
+            <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300">
+                <div class="text-xs font-semibold uppercase text-slate-400 mb-1">FinOps &amp; Shadow IT Notes</div>
+                {{ cloud_asset.notes|linebreaksbr }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- CMDB Relationships Panel -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Upstream Dependencies (Outbound CMDB Edges)</h2>
+            <a href="{% url 'assets:cmdb_relationship_create' %}" class="btn btn-outline btn-sm">Add Edge</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Edge #</th><th>Relation</th><th>Target CI</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for edge in outbound_edges %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td>{{ edge.get_relationship_type_display }}</td>
+                        <td class="text-sm">{{ edge.target_label }}</td>
+                        <td><span class="badge {{ edge.status_badge_class }}">{{ edge.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-sm text-slate-400 py-4">No outbound CMDB dependencies recorded.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Downstream Dependents (Inbound CMDB Edges)</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Edge #</th><th>Dependent CI</th><th>Relation</th><th>Criticality</th></tr></thead>
+                <tbody>
+                    {% for edge in inbound_edges %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td class="text-sm">{{ edge.source_label }}</td>
+                        <td>{{ edge.get_relationship_type_display }}</td>
+                        <td><span class="badge {{ edge.criticality_badge_class }}">{{ edge.get_criticality_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-sm text-slate-400 py-4">No downstream dependents recorded.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
