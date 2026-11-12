@@ -276,8 +276,7 @@ class SoftwareLicense(TenantNumbered):
 
     def clean(self):
         super().clean()
-        validate_tenant_fks(self, self._TENANT_FK_FIELDS)
-        errors = {}
+        errors = validate_tenant_fks(self, self._TENANT_FK_FIELDS)
         if self.entitled_quantity is not None and self.entitled_quantity < 1:
             add_field_error(errors, "entitled_quantity", "Entitled quantity must be at least 1.")
         if self.unit_license_cost is not None and self.unit_license_cost < 0:
