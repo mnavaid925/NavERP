@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Hardware Lifecycle Management — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>IT Asset Management (ITAM)</span>
+            <span>/</span>
+            <span>Hardware Lifecycle Management</span>
+        </div>
+        <h1 class="page-title">IT Hardware Assets</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:it_refresh_board' %}" class="btn btn-outline">
+            <i data-lucide="calendar-clock" class="w-4 h-4 me-1"></i> EOL &amp; Refresh Board
+        </a>
+        <a href="{% url 'assets:it_hardware_asset_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&device_class={{ request.GET.device_class|urlencode }}&environment={{ request.GET.environment|urlencode }}&disk_encryption_status={{ request.GET.disk_encryption_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&eol_state={{ request.GET.eol_state|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:it_hardware_asset_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Hardware Asset
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="laptop"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total IT Hardware</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Deployed / Active</div>
+            <div class="stat-value">{{ deployed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">EOL / Refresh &le; 90d</div>
+            <div class="stat-value">{{ eol_due_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Pending NIST Wipe</div>
+            <div class="stat-value">{{ pending_wipe_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label for="ithw-filter-q" class="sr-only">Search hardware</label>
+                <input id="ithw-filter-q" type="text" name="q" value="{{ search_query }}" placeholder="Search #, hostname, serial, IP, OS..." class="form-input" />
+            </div>
+            <div>
+                <label for="ithw-filter-status" class="sr-only">Status</label>
+                <select id="ithw-filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ithw-filter-class" class="sr-only">Device Class</label>
+                <select id="ithw-filter-class" name="device_class" class="form-select">
+                    <option value="">All Device Classes</option>
+                    {% for val, label in device_class_choices %}
+                    <option value="{{ val }}" {% if request.GET.device_class == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ithw-filter-env" class="sr-only">Environment</label>
+                <select id="ithw-filter-env" name="environment" class="form-select">
+                    <option value="">All Environments</option>
+                    {% for val, label in environment_choices %}
+                    <option value="{{ val }}" {% if request.GET.environment == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ithw-filter-enc" class="sr-only">Disk Encryption</label>
+                <select id="ithw-filter-enc" name="disk_encryption_status" class="form-select">
+                    <option value="">All Encryption States</option>
+                    {% for val, label in encryption_choices %}
+                    <option value="{{ val }}" {% if request.GET.disk_encryption_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ithw-filter-org" class="sr-only">Org Unit</label>
+                <select id="ithw-filter-org" name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ithw-filter-eol" class="sr-only">EOL &amp; Refresh State</label>
+                <select id="ithw-filter-eol" name="eol_state" class="form-select">
+                    <option value="">All Lifecycle Windows</option>
+                    <option value="eol_expired" {% if request.GET.eol_state == "eol_expired" %}selected{% endif %}>Vendor EOL Expired</option>
+                    <option value="eos_soon" {% if request.GET.eol_state == "eos_soon" %}selected{% endif %}>Vendor EOS &le; 90 Days</option>
+                    <option value="refresh_due" {% if request.GET.eol_state == "refresh_due" %}selected{% endif %}>Refresh Due &le; 90 Days</option>
+                    <option value="pending_wipe" {% if request.GET.eol_state == "pending_wipe" %}selected{% endif %}>Pending NIST Wipe</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:it_hardware_asset_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Asset #</th>
+                    <th>Hostname / Model</th>
+                    <th>Class &amp; Env</th>
+                    <th>OS / Network</th>
+                    <th>Custodian / Org</th>
+                    <th>Refresh / EOL</th>
+                    <th>Sanitization</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for hw in hardware_assets %}
+                <tr>
+                    <td class="font-mono text-xs whitespace-nowrap">
+                        <a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">{{ hw.number }}</a>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ hw.hostname }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">
+                            {{ hw.manufacturer }} {{ hw.model_name }}{% if hw.serial_number %} · SN: {{ hw.serial_number }}{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ hw.get_device_class_display }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ hw.get_environment_display }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ hw.operating_system|default:"—" }} {{ hw.os_version }}</div>
+                        <div class="text-xs font-mono text-slate-500 dark:text-slate-400">{{ hw.ip_address|default:"No IP" }}</div>
+                    </td>
+                    <td>
+                        {% if hw.employee_profile %}
+                        <div class="text-sm">{{ hw.employee_profile }}</div>
+                        {% elif hw.custodian_party %}
+                        <div class="text-sm">{{ hw.custodian_party.name }}</div>
+                        {% else %}
+                        <div class="text-sm text-slate-400">Unassigned</div>
+                        {% endif %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{% if hw.org_unit %}{{ hw.org_unit.name }}{% else %}—{% endif %}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ hw.refresh_priority_badge_class }}">{{ hw.refresh_priority_display }}</span>
+                        {% if hw.vendor_eol_date %}
+                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">EOL: {{ hw.vendor_eol_date|date:"Y-m-d" }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ hw.sanitization_badge_class }}">{{ hw.get_sanitization_status_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ hw.status_badge_class }}">{{ hw.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="btn btn-icon" title="View" aria-label="View {{ hw.number }}">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if not hw.is_locked %}
+                        <a href="{% url 'assets:it_hardware_asset_edit' hw.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ hw.number }}">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'assets:it_hardware_asset_delete' hw.pk %}" class="inline" onsubmit="return confirm('Delete IT hardware asset {{ hw.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete" aria-label="Delete {{ hw.number }}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="laptop"></i>
+                            <h3>No IT Hardware Assets found</h3>
+                            <p>Register laptops, servers, or network appliances to track lifecycle, MDM encryption, EOL, and NIST 800-88 sanitization.</p>
+                            <a href="{% url 'assets:it_hardware_asset_create' %}" class="btn btn-primary mt-2">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register Hardware Asset
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="text-xs text-slate-500">
+            Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }}
+        </div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&device_class={{ request.GET.device_class|urlencode }}&environment={{ request.GET.environment|urlencode }}&disk_encryption_status={{ request.GET.disk_encryption_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&eol_state={{ request.GET.eol_state|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            <span class="text-xs font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&device_class={{ request.GET.device_class|urlencode }}&environment={{ request.GET.environment|urlencode }}&disk_encryption_status={{ request.GET.disk_encryption_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&eol_state={{ request.GET.eol_state|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
