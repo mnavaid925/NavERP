@@ -319,6 +319,8 @@ def cloud_asset_subscription_sanction(request, pk):
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
     if cloud_asset.status == "suspended" and not is_tenant_admin_user(request.user):
         raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
+    prev_approval = cloud_asset.approval_status
+    prev_status = cloud_asset.status
     with transaction.atomic():
         cloud_asset.approval_status = "sanctioned"
         if cloud_asset.sso_status == "shadow_it_unapproved":
@@ -334,7 +336,16 @@ def cloud_asset_subscription_sanction(request, pk):
                 "updated_at",
             ]
         )
-        write_audit_log(request.user, cloud_asset, "sanction", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            cloud_asset,
+            "sanction",
+            changes={
+                "approval_status": [prev_approval, "sanctioned"],
+                "status": [prev_status, cloud_asset.status],
+            },
+            tenant=request.tenant,
+        )
     messages.success(request, f"Cloud Asset {cloud_asset.number} marked IT Sanctioned.")
     return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
 
@@ -349,11 +360,22 @@ def cloud_asset_subscription_flag_shadow(request, pk):
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
     if cloud_asset.status == "suspended" and not is_tenant_admin_user(request.user):
         raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
+    prev_approval = cloud_asset.approval_status
+    prev_status = cloud_asset.status
     with transaction.atomic():
         cloud_asset.approval_status = "shadow_it_flagged"
         cloud_asset.status = "shadow_flagged"
         cloud_asset.save(update_fields=["approval_status", "status", "updated_at"])
-        write_audit_log(request.user, cloud_asset, "shadow", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            cloud_asset,
+            "shadow",
+            changes={
+                "approval_status": [prev_approval, "shadow_it_flagged"],
+                "status": [prev_status, "shadow_flagged"],
+            },
+            tenant=request.tenant,
+        )
     messages.warning(request, f"Cloud Asset {cloud_asset.number} flagged as Shadow IT.")
     return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
 
@@ -368,11 +390,18 @@ def cloud_asset_subscription_sync_finops(request, pk):
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
     if cloud_asset.status == "suspended" and not is_tenant_admin_user(request.user):
         raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
+    prev_status = cloud_asset.status
     with transaction.atomic():
         cloud_asset.status = cloud_asset.compute_operational_status()
         cloud_asset.last_finops_sync_at = timezone.now()
         cloud_asset.save(update_fields=["status", "last_finops_sync_at", "updated_at"])
-        write_audit_log(request.user, cloud_asset, "finops", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            cloud_asset,
+            "finops",
+            changes={"status": [prev_status, cloud_asset.status]},
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"FinOps telemetry synced for {cloud_asset.number}: {cloud_asset.get_status_display()}.",
@@ -392,6 +421,8 @@ def cloud_asset_subscription_renew(request, pk):
         raise PermissionDenied("Tenant administrator access required while subscription is suspended.")
     today = timezone.now().date()
     base_date = max(cloud_asset.renewal_date, today) if cloud_asset.renewal_date else today
+    prev_renewal = cloud_asset.renewal_date.isoformat() if cloud_asset.renewal_date else None
+    prev_status = cloud_asset.status
     with transaction.atomic():
         cloud_asset.renewal_date = add_months(base_date, 12)
         cloud_asset.status = cloud_asset.compute_operational_status(today=today)
@@ -404,7 +435,16 @@ def cloud_asset_subscription_renew(request, pk):
                 "updated_at",
             ]
         )
-        write_audit_log(request.user, cloud_asset, "renew", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            cloud_asset,
+            "renew",
+            changes={
+                "renewal_date": [prev_renewal, cloud_asset.renewal_date.isoformat()],
+                "status": [prev_status, cloud_asset.status],
+            },
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"Renewed {cloud_asset.number} through {cloud_asset.renewal_date.isoformat()}.",
@@ -420,10 +460,17 @@ def cloud_asset_subscription_suspend(request, pk):
     if cloud_asset.is_locked:
         messages.warning(request, f"Cloud Asset {cloud_asset.number} is cancelled.")
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
+    prev_status = cloud_asset.status
     with transaction.atomic():
         cloud_asset.status = "suspended"
         cloud_asset.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, cloud_asset, "suspend", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            cloud_asset,
+            "suspend",
+            changes={"status": [prev_status, "suspended"]},
+            tenant=request.tenant,
+        )
     messages.warning(request, f"Cloud Asset {cloud_asset.number} suspended.")
     return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
 
@@ -436,6 +483,8 @@ def cloud_asset_subscription_decommission(request, pk):
     if cloud_asset.is_locked:
         messages.warning(request, f"Cloud Asset {cloud_asset.number} is already cancelled.")
         return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
+    prev_approval = cloud_asset.approval_status
+    prev_status = cloud_asset.status
     with transaction.atomic():
         cloud_asset.approval_status = "decommissioned"
         cloud_asset.status = "cancelled"
@@ -448,6 +497,15 @@ def cloud_asset_subscription_decommission(request, pk):
                 "updated_at",
             ]
         )
-        write_audit_log(request.user, cloud_asset, "decomm", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            cloud_asset,
+            "decomm",
+            changes={
+                "approval_status": [prev_approval, "decommissioned"],
+                "status": [prev_status, "cancelled"],
+            },
+            tenant=request.tenant,
+        )
     messages.success(request, f"Cloud Asset {cloud_asset.number} decommissioned and cancelled.")
     return redirect("assets:cloud_asset_subscription_detail", pk=cloud_asset.pk)
