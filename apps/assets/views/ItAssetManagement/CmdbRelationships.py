@@ -23,9 +23,9 @@ from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
-def _filter_cmdb_queryset(request, base_qs):
+def _filter_cmdb_queryset(request, base_qs, select_related=CMDB_REL_SELECT_RELATED):
     """Apply search and dropdown GET filters to a CmdbRelationship queryset."""
-    qs = base_qs.select_related(*CMDB_REL_SELECT_RELATED)
+    qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
     if search_query:
         qs = qs.filter(
@@ -137,7 +137,7 @@ def cmdb_relationship_list(request):
 def cmdb_relationship_export_csv(request):
     """Export filtered CMDB dependency edges as a formula-safe CSV."""
     base_qs = assets_scope(CmdbRelationship.objects.all(), request)
-    qs = _filter_cmdb_queryset(request, base_qs)
+    qs = _filter_cmdb_queryset(request, base_qs, select_related=CMDB_REL_SELECT_RELATED[:10])
     headers = [
         "Edge #",
         "Source Type",
@@ -167,7 +167,7 @@ def cmdb_relationship_export_csv(request):
             rel.verified_on.isoformat() if rel.verified_on else "",
             rel.get_status_display(),
         ]
-        for rel in qs
+        for rel in qs[:10000].iterator(chunk_size=1000)
     )
     return csv_export_response(
         filename="cmdb_relationships.csv",
