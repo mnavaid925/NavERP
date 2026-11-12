@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.number }} — {{ document.title }} — Asset Documentation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_document_list' %}">Asset Documentation Repository</a>
+            <span>/</span>
+            <span>{{ document.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mt-1">
+            <h1 class="page-title">{{ document.number }} — {{ document.title }}</h1>
+            <span class="badge {{ document.status_badge_class }}">{{ document.get_status_display }}</span>
+            <span class="badge {{ document.access_classification_badge_class }}">{{ document.get_access_classification_display }}</span>
+            <span class="badge {% if document.is_current_revision %}badge-green{% else %}badge-muted{% endif %}">
+                {{ document.revision_label }}{% if document.is_current_revision %} · Current{% endif %}
+            </span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if document.file %}
+        <a href="{% url 'assets:asset_document_download' document.pk %}" class="btn btn-primary">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Download Attachment
+        </a>
+        {% endif %}
+
+        {% if not document.is_locked %}
+            {% if not document.checked_out_by %}
+            <form method="post" action="{% url 'assets:asset_document_checkout' document.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">
+                    <i data-lucide="lock" class="w-4 h-4 me-1"></i> Check Out
+                </button>
+            </form>
+            {% elif can_checkin %}
+            <form method="post" action="{% url 'assets:asset_document_checkin' document.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline">
+                    <i data-lucide="unlock" class="w-4 h-4 me-1"></i> Check In
+                </button>
+            </form>
+            {% endif %}
+        {% endif %}
+
+        {% if document.status == "draft" %}
+        <form method="post" action="{% url 'assets:asset_document_submit_review' document.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Submit for Review
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_approve %}
+        <form method="post" action="{% url 'assets:asset_document_approve_release' document.pk %}" class="inline" onsubmit="return confirm('Approve and release {{ document.number|escapejs }}? Any superseded revision will be marked Superseded.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Approve &amp; Release
+            </button>
+        </form>
+        {% if document.status == "in_review" %}
+        <form method="post" action="{% url 'assets:asset_document_return_to_draft' document.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="undo-2" class="w-4 h-4 me-1"></i> Return to Draft
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if document.status != "archived" %}
+        <form method="post" action="{% url 'assets:asset_document_create_revision' document.pk %}" class="inline" onsubmit="return confirm('Create a new draft revision superseding {{ document.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="git-branch" class="w-4 h-4 me-1"></i> Create New Revision
+            </button>
+        </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_document_archive' document.pk %}" class="inline" onsubmit="return confirm('Archive {{ document.number|escapejs }}? Archived documents are permanently locked.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Archive
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        {% if can_edit %}
+        <a href="{% url 'assets:asset_document_edit' document.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if not document.is_locked %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_document_delete' document.pk %}" class="inline" onsubmit="return confirm('Delete document {{ document.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+
+        <a href="{% url 'assets:asset_document_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Document Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="layers"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Document Class</div>
+            <div class="stat-value text-base">{{ document.get_document_class_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="file-check-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Revision Sequence</div>
+            <div class="stat-value">{{ document.revision_label }} (#{{ document.revision_sequence }})</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Validity / Expiry</div>
+            <div class="stat-value text-base">
+                {% if document.expiry_date %}{{ document.expiry_date|date:"Y-m-d" }}{% else %}No Expiry{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">File Integrity (SHA-256)</div>
+            <div class="stat-value text-sm font-mono">{{ document.short_checksum|default:"No File" }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title">Controlled Metadata &amp; Asset Context</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>Document Number</dt><dd class="font-mono">{{ document.number }}</dd></div>
+                <div class="detail-item"><dt>Equipment Tag / Ref</dt><dd>{{ document.tag_code|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Manufacturer / OEM</dt><dd>{{ document.manufacturer_ref|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Language / Storage Vault</dt><dd>{{ document.document_language|upper }} · {{ document.storage_location_ref|default:"DMS Default" }}</dd></div>
+                <div class="detail-item"><dt>Operational Asset</dt><dd>{{ document.operational_asset|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Fixed Asset</dt><dd>{{ document.fixed_asset|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Asset Category</dt><dd>{{ document.asset_category|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Asset Model</dt><dd>{{ document.asset_model|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Specification Template</dt><dd>{{ document.specification_template|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Warranty Record</dt><dd>{{ document.warranty|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Compliance Framework</dt><dd>{{ document.compliance_framework|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Vendor / Submitter</dt><dd>{{ document.vendor_party|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Core DMS Link</dt><dd>{{ document.core_document|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Org Unit</dt><dd>{{ document.org_unit|default:"—" }}</dd></div>
+            </dl>
+
+            {% if document.description %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</h3>
+                <p class="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{{ document.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Change Control &amp; Governance</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item"><dt>Change Type</dt><dd>{{ document.get_change_type_display }}</dd></div>
+                <div class="detail-item"><dt>Change Request (ECR)</dt><dd>{{ document.change_request_ref|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Checked Out By</dt><dd>{% if document.checked_out_by %}<span class="badge badge-amber">{{ document.checked_out_by.username }}</span>{% else %}Available{% endif %}</dd></div>
+                <div class="detail-item"><dt>Owner / Author</dt><dd>{{ document.owner|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Assigned Reviewer</dt><dd>{{ document.reviewer|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Approved By</dt><dd>{{ document.approved_by|default:"—" }}</dd></div>
+                <div class="detail-item"><dt>Approved At</dt><dd>{% if document.approved_at %}{{ document.approved_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Effective Date</dt><dd>{% if document.effective_date %}{{ document.effective_date|date:"Y-m-d" }}{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Retention Period</dt><dd>{% if document.retention_years %}{{ document.retention_years }} years{% else %}—{% endif %}</dd></div>
+                <div class="detail-item"><dt>Attachment</dt><dd>{% if document.file %}{{ document.original_filename|default:"Attached File" }} ({{ document.file_size_bytes|filesizeformat }}){% else %}No file attached{% endif %}</dd></div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+{% if document.redline_summary or document.spec_delta_notes or document.review_notes %}
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Engineering Redlines, Spec Deltas &amp; Review Notes</h2>
+    </div>
+    <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+            <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Redline Summary</h3>
+            <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ document.redline_summary|default:"—" }}</p>
+        </div>
+        <div>
+            <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Specification Delta Notes</h3>
+            <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ document.spec_delta_notes|default:"—" }}</p>
+        </div>
+        <div>
+            <h3 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Review Notes</h3>
+            <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ document.review_notes|default:"—" }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Revision History Chain -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Revision History Lineage</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Doc #</th>
+                    <th>Revision</th>
+                    <th>Change Type &amp; ECR</th>
+                    <th>Status</th>
+                    <th>Effective Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in revision_history %}
+                <tr>
+                    <td class="font-mono text-xs">
+                        <a href="{% url 'assets:asset_document_detail' rev.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ rev.number }}</a>
+                        {% if rev.pk == document.pk %}<span class="badge badge-info ms-1">Viewing</span>{% endif %}
+                    </td>
+                    <td>{{ rev.revision_label }} (#{{ rev.revision_sequence }}){% if rev.is_current_revision %} · <span class="badge badge-green">Current</span>{% endif %}</td>
+                    <td class="text-sm">{{ rev.get_change_type_display }}{% if rev.change_request_ref %} ({{ rev.change_request_ref }}){% endif %}</td>
+                    <td><span class="badge {{ rev.status_badge_class }}">{{ rev.get_status_display }}</span></td>
+                    <td class="text-sm">{% if rev.effective_date %}{{ rev.effective_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Cross-Links to SOPs and Knowledge Articles -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Linked Operating Procedures (SOPs)</h2>
+        </div>
+        <div class="card-body">
+            {% for sop in linked_procedures %}
+            <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+                <div>
+                    <a href="{% url 'assets:asset_operating_procedure_detail' sop.pk %}" class="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">{{ sop.number }} — {{ sop.title }}</a>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">{{ sop.get_procedure_type_display }}</div>
+                </div>
+                <span class="badge {{ sop.status_badge_class }}">{{ sop.get_status_display }}</span>
+            </div>
+            {% empty %}
+            <p class="text-sm text-slate-500 dark:text-slate-400">No operating procedures currently reference this document.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Related Lessons Learned &amp; RCA Notes</h2>
+        </div>
+        <div class="card-body">
+            {% for art in linked_articles %}
+            <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+                <div>
+                    <a href="{% url 'assets:asset_knowledge_article_detail' art.pk %}" class="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">{{ art.number }} — {{ art.title }}</a>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">{{ art.get_article_type_display }}</div>
+                </div>
+                <span class="badge {{ art.status_badge_class }}">{{ art.get_status_display }}</span>
+            </div>
+            {% empty %}
+            <p class="text-sm text-slate-500 dark:text-slate-400">No knowledge base articles link to this document yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
