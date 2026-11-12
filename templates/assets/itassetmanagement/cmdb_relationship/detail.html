@@ -127,7 +127,7 @@
                 <tbody>
                     {% for edge in related_source_edges %}
                     <tr>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ edge.number }}</a></td>
                         <td>{{ edge.get_relationship_type_display }}</td>
                         <td class="text-sm">{{ edge.target_label }}</td>
                         <td><span class="badge {{ edge.status_badge_class }}">{{ edge.get_status_display }}</span></td>
@@ -148,7 +148,7 @@
                 <tbody>
                     {% for edge in related_target_edges %}
                     <tr>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ edge.number }}</a></td>
                         <td class="text-sm">{{ edge.source_label }}</td>
                         <td>{{ edge.get_relationship_type_display }}</td>
                         <td><span class="badge {{ edge.status_badge_class }}">{{ edge.get_status_display }}</span></td>
