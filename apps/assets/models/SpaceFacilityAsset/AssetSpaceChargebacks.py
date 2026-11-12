@@ -157,7 +157,7 @@ class AssetSpaceChargeback(TenantNumbered):
     )
     journal_entry = models.ForeignKey(
         "accounting.JournalEntry",
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         editable=False,
@@ -247,7 +247,9 @@ class AssetSpaceChargeback(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_afcb_ten_stat"),
             models.Index(fields=["tenant", "coordination_type"], name="idx_afcb_ten_type"),
+            models.Index(fields=["tenant", "allocation_basis"], name="idx_afcb_ten_basis"),
             models.Index(fields=["tenant", "facility_space"], name="idx_afcb_ten_spc"),
+            models.Index(fields=["tenant", "charged_org_unit"], name="idx_afcb_ten_org"),
             models.Index(fields=["tenant", "period_start", "period_end"], name="idx_afcb_ten_per"),
         ]
 
@@ -318,6 +320,19 @@ class AssetSpaceChargeback(TenantNumbered):
             ("ti_allowance_offset", "TI allowance offset"),
         ):
             validate_non_negative(getattr(self, fld), errors, fld, label)
+
+        base = self.base_cost_amount or Decimal("0.00")
+        cam = self.shared_cam_amount or Decimal("0.00")
+        utility = self.utility_recovery_amount or Decimal("0.00")
+        ti_cost = self.ti_improvement_cost or Decimal("0.00")
+        ti_offset = self.ti_allowance_offset or Decimal("0.00")
+        raw_total = base + cam + utility + max(Decimal("0.00"), ti_cost - ti_offset)
+        if raw_total > Decimal("99999999999999.99"):
+            add_field_error(
+                errors,
+                "base_cost_amount",
+                "Combined net chargeback exceeds the maximum supported value of 99,999,999,999,999.99.",
+            )
 
         if errors:
             raise ValidationError(errors)
