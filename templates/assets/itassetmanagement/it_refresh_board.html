@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}End-of-Life &amp; Refresh Cycles — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>IT Asset Management (ITAM)</span>
+            <span>/</span>
+            <span>End-of-Life &amp; Refresh Cycles</span>
+        </div>
+        <h1 class="page-title">IT End-of-Life &amp; Refresh Cycles Workbench</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:it_hardware_asset_list' %}" class="btn btn-outline">
+            <i data-lucide="laptop" class="w-4 h-4 me-1"></i> Hardware Register
+        </a>
+        <a href="{% url 'assets:it_refresh_board_export_csv' %}?horizon={{ horizon_days }}&priority={{ selected_priority|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Overdue / EOL Expired</div>
+            <div class="stat-value">{{ overdue_hw_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Due &le; 90 Days</div>
+            <div class="stat-value">{{ due_90d_hw_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Forecast Refresh CapEx</div>
+            <div class="stat-value">{{ total_refresh_capex|floatformat:2 }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ expiring_sw_cloud_count }} software/cloud cliffs in {{ horizon_days }}d</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">NIST Pending Wipes</div>
+            <div class="stat-value">{{ pending_wipe_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Workbench Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label for="rfsh-horizon" class="sr-only">Horizon Window</label>
+                <select id="rfsh-horizon" name="horizon" class="form-select">
+                    <option value="30" {% if horizon_days == 30 %}selected{% endif %}>Horizon: Next 30 Days</option>
+                    <option value="90" {% if horizon_days == 90 %}selected{% endif %}>Horizon: Next 90 Days</option>
+                    <option value="180" {% if horizon_days == 180 %}selected{% endif %}>Horizon: Next 180 Days</option>
+                    <option value="365" {% if horizon_days == 365 %}selected{% endif %}>Horizon: Next 365 Days</option>
+                </select>
+            </div>
+            <div>
+                <label for="rfsh-priority" class="sr-only">Refresh Priority</label>
+                <select id="rfsh-priority" name="priority" class="form-select">
+                    <option value="">All Refresh Priorities (In Window)</option>
+                    <option value="overdue_critical" {% if selected_priority == "overdue_critical" %}selected{% endif %}>Overdue / EOL Expired</option>
+                    <option value="due_within_90d" {% if selected_priority == "due_within_90d" %}selected{% endif %}>Due &le; 90 Days</option>
+                    <option value="planned_fy" {% if selected_priority == "planned_fy" %}selected{% endif %}>Planned (12 Mo)</option>
+                    <option value="healthy" {% if selected_priority == "healthy" %}selected{% endif %}>Healthy</option>
+                </select>
+            </div>
+            <div>
+                <label for="rfsh-org" class="sr-only">Org Unit</label>
+                <select id="rfsh-org" name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary">Apply Horizon</button>
+                <a href="{% url 'assets:it_refresh_board' %}" class="btn btn-outline">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Hardware Refresh Forecast & Org Unit CapEx Rollup -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header"><h2 class="card-title">Hardware Refresh &amp; EOL Queue ({{ hardware_rows|length }})</h2></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Asset #</th>
+                        <th>Hostname / Model</th>
+                        <th>Org Unit</th>
+                        <th>Refresh / EOL</th>
+                        <th>Est. CapEx</th>
+                        <th>Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for hw in hardware_rows %}
+                    <tr>
+                        <td class="font-mono text-xs whitespace-nowrap">
+                            <a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ hw.number }}</a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-sm">{{ hw.hostname }}</div>
+                            <div class="text-xs text-slate-400">{{ hw.get_device_class_display }}{% if hw.model_name %} · {{ hw.model_name }}{% endif %}</div>
+                        </td>
+                        <td class="text-sm">{{ hw.org_unit.name|default:"—" }}</td>
+                        <td class="text-xs whitespace-nowrap">
+                            <div>Refresh: {{ hw.refresh_due_date|date:"Y-m-d"|default:"—" }}</div>
+                            <div class="text-slate-400">EOL: {{ hw.vendor_eol_date|date:"Y-m-d"|default:"—" }}</div>
+                        </td>
+                        <td class="text-sm whitespace-nowrap">{% if hw.currency %}{{ hw.currency.code }} {% endif %}{{ hw.estimated_refresh_cost|floatformat:2 }}</td>
+                        <td><span class="badge {{ hw.refresh_priority_badge_class }}">{{ hw.refresh_priority_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center py-6 text-slate-400">No IT hardware assets require refresh inside this horizon.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">CapEx Rollup by Org Unit</h2></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Org Unit</th><th>Assets</th><th>Overdue</th><th>Est. CapEx</th></tr></thead>
+                <tbody>
+                    {% for bucket in org_unit_summary %}
+                    <tr>
+                        <td class="text-sm font-medium">{{ bucket.org_unit_name }}</td>
+                        <td class="text-sm">{{ bucket.hw_count }}</td>
+                        <td class="text-sm">{{ bucket.overdue_count }}</td>
+                        <td class="text-sm font-medium">{{ bucket.capex|floatformat:2 }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center py-6 text-slate-400">No refresh budget demand.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- NIST SP 800-88 Media Sanitization Backlog -->
+<div class="card mb-6">
+    <div class="card-header"><h2 class="card-title">NIST SP 800-88 Media Sanitization Backlog ({{ sanitization_backlog|length }})</h2></div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Asset #</th><th>Hostname</th><th>Status</th><th>Sanitization Method</th><th>Encryption</th><th></th></tr></thead>
+            <tbody>
+                {% for hw in sanitization_backlog %}
+                <tr>
+                    <td class="font-mono text-xs"><a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ hw.number }}</a></td>
+                    <td class="text-sm font-medium">{{ hw.hostname }}</td>
+                    <td><span class="badge {{ hw.status_badge_class }}">{{ hw.get_status_display }}</span></td>
+                    <td class="text-sm">{{ hw.get_sanitization_method_display }}</td>
+                    <td class="text-sm">{{ hw.get_disk_encryption_status_display }}</td>
+                    <td class="text-right"><a href="{% url 'assets:it_hardware_asset_detail' hw.pk %}" class="btn btn-outline btn-sm">Verify Wipe</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center py-4 text-slate-400">No hardware devices awaiting media sanitization verification.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Software & Cloud Renewal Cliffs -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Software License Renewals &amp; EOL ({{ software_rows|length }})</h2></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>License #</th><th>Software Title</th><th>Renewal / EOL</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for sw in software_rows %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:software_license_detail' sw.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ sw.number }}</a></td>
+                        <td class="text-sm font-medium">{{ sw.software_name }}</td>
+                        <td class="text-xs whitespace-nowrap">Ren: {{ sw.renewal_date|date:"Y-m-d"|default:"—" }} · EOL: {{ sw.vendor_eol_date|date:"Y-m-d"|default:"—" }}</td>
+                        <td><span class="badge {{ sw.status_badge_class }}">{{ sw.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center py-4 text-slate-400">No software renewals or EOL dates within horizon.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title">Cloud &amp; SaaS Renewal Cliffs ({{ cloud_rows|length }})</h2></div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Cloud #</th><th>Subscription</th><th>Renewal / EOL</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for cl in cloud_rows %}
+                    <tr>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cloud_asset_subscription_detail' cl.pk %}" class="text-indigo-600 hover:underline font-semibold">{{ cl.number }}</a></td>
+                        <td class="text-sm font-medium">{{ cl.name }}</td>
+                        <td class="text-xs whitespace-nowrap">Ren: {{ cl.renewal_date|date:"Y-m-d"|default:"—" }} · EOL: {{ cl.vendor_eol_date|date:"Y-m-d"|default:"—" }}</td>
+                        <td><span class="badge {{ cl.status_badge_class }}">{{ cl.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center py-4 text-slate-400">No cloud/SaaS renewals or EOL dates within horizon.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
