@@ -132,7 +132,7 @@ def _build_document_list_context(request, base_qs, filtered_qs):
 @login_required
 def asset_document_list(request):
     """Controlled asset documentation repository list view."""
-    base_qs = assets_scope(AssetDocument, request)
+    base_qs = assets_scope(AssetDocument.objects.all(), request)
     filtered_qs = _filter_document_queryset(request, base_qs)
     context = _build_document_list_context(request, base_qs, filtered_qs)
     return render(
@@ -145,7 +145,7 @@ def asset_document_list(request):
 @login_required
 def asset_document_change_list(request):
     """Version control, engineering change requests, and review queue view."""
-    base_qs = assets_scope(AssetDocument, request).filter(
+    base_qs = assets_scope(AssetDocument.objects.all(), request).filter(
         Q(status__in=["draft", "in_review"])
         | Q(revision_sequence__gt=1)
         | Q(supersedes__isnull=False)
@@ -164,7 +164,7 @@ def asset_document_change_list(request):
 @login_required
 def asset_document_export_csv(request):
     """Export filtered tenant AssetDocuments as an injection-hardened CSV."""
-    base_qs = assets_scope(AssetDocument, request)
+    base_qs = assets_scope(AssetDocument.objects.all(), request)
     filtered_qs = _filter_document_queryset(request, base_qs)
     headers = [
         "Document #",
@@ -210,7 +210,10 @@ def asset_document_export_csv(request):
 def asset_document_detail(request, pk):
     """Controlled document detail view with revision chain, checkout state, and cross-links."""
     doc = assets_object(
-        AssetDocument.objects.select_related(
+        request,
+        AssetDocument,
+        pk,
+        select_related=(
             "operational_asset",
             "fixed_asset",
             "asset_model",
@@ -227,8 +230,6 @@ def asset_document_detail(request, pk):
             "checked_out_by",
             "supersedes",
         ),
-        request,
-        pk,
     )
 
     chain_seen = {doc.pk}
@@ -331,7 +332,7 @@ def asset_document_create(request):
 @login_required
 def asset_document_edit(request, pk):
     """Edit an unlocked Draft / In-Review controlled document."""
-    doc = assets_object(AssetDocument, request, pk)
+    doc = assets_object(request, AssetDocument, pk)
     if doc.is_locked:
         messages.warning(
             request,
@@ -388,7 +389,7 @@ def asset_document_edit(request, pk):
 @tenant_admin_required
 def asset_document_delete(request, pk):
     """Delete an unlocked Draft / In-Review asset document."""
-    doc = assets_object(AssetDocument, request, pk)
+    doc = assets_object(request, AssetDocument, pk)
     if doc.is_locked:
         messages.error(
             request,
@@ -405,7 +406,7 @@ def asset_document_delete(request, pk):
 @login_required
 def asset_document_download(request, pk):
     """Download the controlled document attachment cleanly as an attachment with nosniff."""
-    doc = assets_object(AssetDocument, request, pk)
+    doc = assets_object(request, AssetDocument, pk)
     return serve_protected_attachment(doc, file_attr="file", original_filename_attr="original_filename")
 
 
@@ -414,7 +415,12 @@ def asset_document_download(request, pk):
 def asset_document_submit_review(request, pk):
     """Transition a Draft document into In Review."""
     with transaction.atomic():
-        doc = assets_object(AssetDocument.objects.select_for_update(), request, pk)
+        doc = assets_object(
+            request,
+            AssetDocument,
+            pk,
+            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+        )
         if doc.status != "draft":
             messages.warning(
                 request,
@@ -434,7 +440,12 @@ def asset_document_submit_review(request, pk):
 def asset_document_approve_release(request, pk):
     """Approve & release a document revision and atomically supersede its predecessor."""
     with transaction.atomic():
-        doc = assets_object(AssetDocument.objects.select_for_update(), request, pk)
+        doc = assets_object(
+            request,
+            AssetDocument,
+            pk,
+            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+        )
         if doc.status not in ("draft", "in_review"):
             messages.warning(
                 request,
@@ -486,7 +497,12 @@ def asset_document_approve_release(request, pk):
 def asset_document_return_to_draft(request, pk):
     """Return an In-Review document back to Draft for revisions."""
     with transaction.atomic():
-        doc = assets_object(AssetDocument.objects.select_for_update(), request, pk)
+        doc = assets_object(
+            request,
+            AssetDocument,
+            pk,
+            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+        )
         if doc.status != "in_review":
             messages.warning(
                 request,
@@ -505,7 +521,12 @@ def asset_document_return_to_draft(request, pk):
 def asset_document_checkout(request, pk):
     """Acquire an advisory checkout lock on an editable document."""
     with transaction.atomic():
-        doc = assets_object(AssetDocument.objects.select_for_update(), request, pk)
+        doc = assets_object(
+            request,
+            AssetDocument,
+            pk,
+            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+        )
         if doc.is_locked:
             messages.warning(
                 request,
@@ -534,7 +555,12 @@ def asset_document_checkout(request, pk):
 def asset_document_checkin(request, pk):
     """Release an advisory checkout lock (checkout owner or tenant admin)."""
     with transaction.atomic():
-        doc = assets_object(AssetDocument.objects.select_for_update(), request, pk)
+        doc = assets_object(
+            request,
+            AssetDocument,
+            pk,
+            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+        )
         if doc.checked_out_by_id is None:
             messages.info(request, f"Document {doc.number} is not currently checked out.")
             return redirect("assets:asset_document_detail", pk=doc.pk)
@@ -559,7 +585,12 @@ def asset_document_checkin(request, pk):
 def asset_document_create_revision(request, pk):
     """Create a new Draft child revision superseding this document without losing the current approved issue."""
     with transaction.atomic():
-        source = assets_object(AssetDocument.objects.select_for_update(), request, pk)
+        source = assets_object(
+            request,
+            AssetDocument,
+            pk,
+            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+        )
         if source.status == "archived":
             messages.warning(
                 request,
@@ -626,7 +657,12 @@ def asset_document_create_revision(request, pk):
 def asset_document_archive(request, pk):
     """Archive a controlled document revision and release any checkout lock."""
     with transaction.atomic():
-        doc = assets_object(AssetDocument.objects.select_for_update(), request, pk)
+        doc = assets_object(
+            request,
+            AssetDocument,
+            pk,
+            queryset=AssetDocument.objects.filter(tenant=request.tenant).select_for_update(),
+        )
         if doc.status == "archived":
             messages.info(request, f"Document {doc.number} is already archived.")
             return redirect("assets:asset_document_detail", pk=doc.pk)
