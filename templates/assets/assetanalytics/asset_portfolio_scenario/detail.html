@@ -123,7 +123,7 @@
     <!-- Scenario Levers -->
     <div class="card">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Scope &amp; Modeling Levers</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Scope &amp; Modeling Levers</h2>
         </div>
         <div class="card-body">
             <dl class="detail-grid">
@@ -174,7 +174,7 @@
     <!-- Baseline vs Simulated Matrix -->
     <div class="card lg:col-span-2">
         <div class="card-header">
-            <h2 class="text-base font-semibold text-slate-800">Baseline vs. Simulated Portfolio Impact</h2>
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Baseline vs. Simulated Portfolio Impact</h2>
         </div>
         <div class="card-body">
             <div class="table-wrap">
@@ -198,31 +198,31 @@
                             <td>Maintenance Operating Spend (OpEx)</td>
                             <td class="text-right font-mono">${{ scenario.baseline_opex_maintenance|floatformat:"2g" }}</td>
                             <td class="text-right font-mono font-semibold">${{ scenario.simulated_opex_maintenance|floatformat:"2g" }}</td>
-                            <td class="text-right font-mono text-emerald-700">${{ scenario.opex_savings_amount|floatformat:"2g" }} saved</td>
+                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">${{ scenario.opex_savings_amount|floatformat:"2g" }} saved</td>
                         </tr>
                         <tr>
                             <td>Deferred Maintenance Backlog</td>
                             <td class="text-right font-mono">${{ scenario.baseline_deferred_backlog|floatformat:"2g" }}</td>
                             <td class="text-right font-mono font-semibold">${{ scenario.simulated_deferred_backlog|floatformat:"2g" }}</td>
-                            <td class="text-right text-xs text-slate-500">Backlog impact</td>
+                            <td class="text-right text-xs text-slate-500 dark:text-slate-400">Backlog impact</td>
                         </tr>
                         <tr>
                             <td>Portfolio Health Score (0–100)</td>
                             <td class="text-right font-mono">{{ scenario.baseline_avg_health_score|floatformat:2 }}</td>
                             <td class="text-right font-mono font-semibold">{{ scenario.simulated_avg_health_score|floatformat:2 }}</td>
-                            <td class="text-right text-xs text-slate-500">Avg asset health</td>
+                            <td class="text-right text-xs text-slate-500 dark:text-slate-400">Avg asset health</td>
                         </tr>
                         <tr>
                             <td>Portfolio Facility Condition Index (FCI %)</td>
                             <td class="text-right font-mono">{{ scenario.baseline_fci_pct|floatformat:2 }}%</td>
                             <td class="text-right font-mono font-semibold">{{ scenario.simulated_fci_pct|floatformat:2 }}%</td>
-                            <td class="text-right text-xs text-slate-500">Condition index</td>
+                            <td class="text-right text-xs text-slate-500 dark:text-slate-400">Condition index</td>
                         </tr>
                         <tr>
                             <td>Open Financial Risk Exposure</td>
                             <td class="text-right font-mono">${{ scenario.baseline_risk_exposure|floatformat:"2g" }}</td>
                             <td class="text-right font-mono font-semibold">${{ scenario.simulated_risk_exposure|floatformat:"2g" }}</td>
-                            <td class="text-right text-xs text-slate-500">Risk mitigation</td>
+                            <td class="text-right text-xs text-slate-500 dark:text-slate-400">Risk mitigation</td>
                         </tr>
                     </tbody>
                 </table>
@@ -234,10 +234,10 @@
 {% if scenario.assumptions_summary %}
 <div class="card">
     <div class="card-header">
-        <h2 class="text-base font-semibold text-slate-800">Assumptions &amp; Modeling Notes</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Assumptions &amp; Modeling Notes</h2>
     </div>
     <div class="card-body">
-        <p class="text-sm text-slate-700 whitespace-pre-line">{{ scenario.assumptions_summary }}</p>
+        <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ scenario.assumptions_summary }}</p>
     </div>
 </div>
 {% endif %}
