@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load asset_analytics_tags %}
 
 {% block title %}{{ scorecard.number }} — {{ scorecard.title }} — Executive Scorecard — NavERP{% endblock %}
 
@@ -100,7 +101,7 @@
         <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
         <div class="stat-body">
             <div class="stat-label">Open Risk Exposure</div>
-            <div class="stat-value">${{ scorecard.total_risk_exposure_amount|floatformat:"2g" }}</div>
+            <div class="stat-value">{% fmt_money scorecard.total_risk_exposure_amount scorecard.currency %}</div>
         </div>
     </div>
 </div>
@@ -127,6 +128,10 @@
                 <div class="detail-item">
                     <dt>Category Scope</dt>
                     <dd>{{ scorecard.asset_category.name|default:"All Categories" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Currency</dt>
+                    <dd>{{ scorecard.currency.code|default:"Default" }}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Snapshot Lock State</dt>
@@ -156,19 +161,19 @@
                 </div>
                 <div class="detail-item">
                     <dt>Gross Replacement Value (RAV)</dt>
-                    <dd class="font-mono">${{ scorecard.gross_replacement_value|floatformat:"2g" }}</dd>
+                    <dd class="font-mono">{% fmt_money scorecard.gross_replacement_value scorecard.currency %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Total Net Book Value</dt>
-                    <dd class="font-mono">${{ scorecard.total_net_book_value|floatformat:"2g" }}</dd>
+                    <dd class="font-mono">{% fmt_money scorecard.total_net_book_value scorecard.currency %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Period Maintenance Spend</dt>
-                    <dd class="font-mono">${{ scorecard.total_maintenance_spend|floatformat:"2g" }}</dd>
+                    <dd class="font-mono">{% fmt_money scorecard.total_maintenance_spend scorecard.currency %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Annual Asset Return Basis</dt>
-                    <dd class="font-mono">${{ scorecard.annual_asset_return_amount|floatformat:"2g" }}</dd>
+                    <dd class="font-mono">{% fmt_money scorecard.annual_asset_return_amount scorecard.currency %}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Planned Maintenance Ratio</dt>
@@ -192,7 +197,7 @@
                 </div>
                 <div class="detail-item">
                     <dt>Unfunded Replacement Backlog</dt>
-                    <dd class="font-mono font-semibold text-red-700 dark:text-red-400">${{ scorecard.unfunded_replacement_backlog|floatformat:"2g" }}</dd>
+                    <dd class="font-mono font-semibold text-red-700 dark:text-red-400">{% fmt_money scorecard.unfunded_replacement_backlog scorecard.currency %}</dd>
                 </div>
             </dl>
         </div>
