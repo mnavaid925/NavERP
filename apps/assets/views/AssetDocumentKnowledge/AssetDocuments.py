@@ -400,6 +400,9 @@ def asset_document_detail(request, pk):
 @login_required
 def asset_document_create(request):
     """Create a new controlled asset document or draft revision."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating a document.")
+        return redirect("assets:asset_document_list")
     if request.method == "POST":
         form = AssetDocumentForm(
             request.POST, request.FILES, tenant=request.tenant, user=request.user
