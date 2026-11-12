@@ -92,7 +92,7 @@ def _filter_article_queryset(request, base_qs):
 @login_required
 def asset_knowledge_article_list(request):
     """Knowledge base, lessons learned, and RCA catalog list view."""
-    base_qs = assets_scope(AssetKnowledgeArticle, request)
+    base_qs = assets_scope(AssetKnowledgeArticle.objects.all(), request)
     filtered_qs = _filter_article_queryset(request, base_qs)
     paginator = Paginator(filtered_qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -133,7 +133,7 @@ def asset_knowledge_article_list(request):
 @login_required
 def asset_knowledge_article_export_csv(request):
     """Export filtered tenant Knowledge Articles & RCAs as a hardened CSV download."""
-    base_qs = assets_scope(AssetKnowledgeArticle, request)
+    base_qs = assets_scope(AssetKnowledgeArticle.objects.all(), request)
     filtered_qs = _filter_article_queryset(request, base_qs)
     headers = [
         "Article #",
@@ -177,7 +177,10 @@ def asset_knowledge_article_export_csv(request):
 def asset_knowledge_article_detail(request, pk):
     """Knowledge article and structured 5-Why / Fishbone 6M RCA detail view."""
     article = assets_object(
-        AssetKnowledgeArticle.objects.select_related(
+        request,
+        AssetKnowledgeArticle,
+        pk,
+        select_related=(
             "org_unit",
             "operational_asset",
             "fixed_asset",
@@ -193,8 +196,6 @@ def asset_knowledge_article_detail(request, pk):
             "author",
             "reviewed_by",
         ),
-        request,
-        pk,
     )
     AssetKnowledgeArticle.objects.filter(
         tenant=request.tenant, pk=article.pk
@@ -252,7 +253,7 @@ def asset_knowledge_article_create(request):
 @login_required
 def asset_knowledge_article_edit(request, pk):
     """Edit an unlocked Draft or Peer Review knowledge article."""
-    article = assets_object(AssetKnowledgeArticle, request, pk)
+    article = assets_object(request, AssetKnowledgeArticle, pk)
     if article.is_locked:
         messages.warning(
             request,
@@ -294,7 +295,7 @@ def asset_knowledge_article_edit(request, pk):
 @tenant_admin_required
 def asset_knowledge_article_delete(request, pk):
     """Delete an unlocked Draft / Peer Review knowledge article."""
-    article = assets_object(AssetKnowledgeArticle, request, pk)
+    article = assets_object(request, AssetKnowledgeArticle, pk)
     if article.is_locked:
         messages.error(
             request,
@@ -311,7 +312,7 @@ def asset_knowledge_article_delete(request, pk):
 @login_required
 def asset_knowledge_article_download(request, pk):
     """Download the RCA evidence attachment safely as an attachment with nosniff."""
-    article = assets_object(AssetKnowledgeArticle, request, pk)
+    article = assets_object(request, AssetKnowledgeArticle, pk)
     return serve_protected_attachment(
         article,
         file_attr="attachment",
@@ -325,7 +326,12 @@ def asset_knowledge_article_submit_review(request, pk):
     """Submit a Draft knowledge article for reliability / engineering peer review."""
     with transaction.atomic():
         article = assets_object(
-            AssetKnowledgeArticle.objects.select_for_update(), request, pk
+            request,
+            AssetKnowledgeArticle,
+            pk,
+            queryset=AssetKnowledgeArticle.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if article.status != "draft":
             messages.warning(
@@ -349,7 +355,12 @@ def asset_knowledge_article_publish(request, pk):
     """Publish a reviewed lessons-learned / RCA article to the reliability knowledge base."""
     with transaction.atomic():
         article = assets_object(
-            AssetKnowledgeArticle.objects.select_for_update(), request, pk
+            request,
+            AssetKnowledgeArticle,
+            pk,
+            queryset=AssetKnowledgeArticle.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if article.status not in AssetKnowledgeArticle.EDITABLE_STATUSES:
             messages.warning(
@@ -376,7 +387,12 @@ def asset_knowledge_article_mark_helpful(request, pk):
     """Record a technician helpfulness vote on a knowledge base article."""
     with transaction.atomic():
         article = assets_object(
-            AssetKnowledgeArticle.objects.select_for_update(), request, pk
+            request,
+            AssetKnowledgeArticle,
+            pk,
+            queryset=AssetKnowledgeArticle.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         AssetKnowledgeArticle.objects.filter(
             tenant=request.tenant, pk=article.pk
@@ -394,7 +410,12 @@ def asset_knowledge_article_retire(request, pk):
     """Retire an obsolete troubleshooting note or RCA article."""
     with transaction.atomic():
         article = assets_object(
-            AssetKnowledgeArticle.objects.select_for_update(), request, pk
+            request,
+            AssetKnowledgeArticle,
+            pk,
+            queryset=AssetKnowledgeArticle.objects.filter(
+                tenant=request.tenant
+            ).select_for_update(),
         )
         if article.status == "retired":
             messages.info(request, f"Article {article.number} is already retired.")
