@@ -47,9 +47,9 @@ _CLOUD_DETAIL_SELECT_RELATED = _CLOUD_LIST_SELECT_RELATED + (
 )
 
 
-def _filter_cloud_queryset(request, base_qs):
+def _filter_cloud_queryset(request, base_qs, select_related=_CLOUD_LIST_SELECT_RELATED):
     """Apply search and dropdown GET filters to a CloudAssetSubscription queryset."""
-    qs = base_qs.select_related(*_CLOUD_LIST_SELECT_RELATED)
+    qs = base_qs.select_related(*select_related) if select_related else base_qs
     search_query = request.GET.get("q", "").strip()
     if search_query:
         qs = qs.filter(
@@ -140,7 +140,7 @@ def cloud_asset_subscription_list(request):
 def cloud_asset_subscription_export_csv(request):
     """Export filtered cloud assets & SaaS subscriptions as a formula-safe CSV."""
     base_qs = assets_scope(CloudAssetSubscription.objects.all(), request)
-    qs = _filter_cloud_queryset(request, base_qs)
+    qs = _filter_cloud_queryset(request, base_qs, select_related=())
     headers = [
         "Number",
         "Name",
@@ -176,7 +176,7 @@ def cloud_asset_subscription_export_csv(request):
             item.renewal_date.isoformat() if item.renewal_date else "",
             item.get_status_display(),
         ]
-        for item in qs
+        for item in qs[:10000].iterator(chunk_size=1000)
     )
     return csv_export_response(
         filename="cloud_asset_subscriptions.csv",
