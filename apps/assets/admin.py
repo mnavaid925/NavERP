@@ -65,6 +65,10 @@ from apps.assets.models import (
     AssetOperatingProcedure,
     AssetOperatorCertification,
     AssetKnowledgeArticle,
+    AssetFacilitySpace,
+    AssetBuildingSystem,
+    AssetFurnitureFixture,
+    AssetSpaceChargeback,
 )
 
 
@@ -879,6 +883,123 @@ class AssetKnowledgeArticleAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
+
+@admin.register(AssetFacilitySpace)
+class AssetFacilitySpaceAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "code",
+        "name",
+        "space_level",
+        "space_category",
+        "occupancy_status",
+        "status",
+        "usable_area_sqft",
+        "tenant",
+    )
+    list_select_related = ("tenant", "parent", "org_unit", "scm_location")
+    list_filter = ("tenant", "status", "space_level", "space_category", "occupancy_status")
+    search_fields = ("number", "code", "name", "cad_layer_ref", "bim_guid")
+    readonly_fields = ("number", "occupancy_status", "original_floor_plan_name", "created_at", "updated_at")
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
+
+@admin.register(AssetBuildingSystem)
+class AssetBuildingSystemAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "name",
+        "system_domain",
+        "subsystem_type",
+        "comfort_status",
+        "condition_grade",
+        "criticality_tier",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "facility_space", "service_vendor", "operating_permit")
+    list_filter = ("tenant", "status", "system_domain", "comfort_status", "condition_grade", "criticality_tier")
+    search_fields = ("number", "name", "manufacturer", "model_number", "serial_number", "ashrae_nfpa_code_ref")
+    readonly_fields = ("number", "comfort_status", "created_at", "updated_at")
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
+
+@admin.register(AssetFurnitureFixture)
+class AssetFurnitureFixtureAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "name",
+        "ffe_category",
+        "facility_space",
+        "target_space",
+        "quantity",
+        "condition_grade",
+        "move_status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "facility_space", "target_space", "assigned_org_unit")
+    list_filter = ("tenant", "move_status", "ffe_category", "condition_grade")
+    search_fields = ("number", "name", "asset_tag_code", "manufacturer", "model_sku", "reconfiguration_batch_ref")
+    readonly_fields = ("number", "move_status", "move_completed_at", "movement_log", "created_at", "updated_at")
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
+
+@admin.register(AssetSpaceChargeback)
+class AssetSpaceChargebackAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "coordination_type",
+        "allocation_basis",
+        "facility_space",
+        "period_start",
+        "period_end",
+        "net_chargeback_amount",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "facility_space", "charged_org_unit", "occupant_party", "currency", "journal_entry")
+    list_filter = ("tenant", "status", "coordination_type", "allocation_basis")
+    search_fields = ("number", "title", "facility_space__code")
+    readonly_fields = ("number", "net_chargeback_amount", "status", "approved_by", "approved_at", "journal_entry", "created_at", "updated_at")
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and (obj.is_locked or obj.journal_entry_id is not None):
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and (obj.is_locked or obj.journal_entry_id is not None):
             return False
         return super().has_delete_permission(request, obj=obj)
 
