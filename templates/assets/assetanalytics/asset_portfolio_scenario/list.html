@@ -136,12 +136,12 @@
                     <th>Scenario # &amp; Name</th>
                     <th>Scenario Type</th>
                     <th>Horizon</th>
-                    <th class="text-right">Simulated CapEx</th>
-                    <th class="text-right">OpEx Savings</th>
-                    <th class="text-right">Simulated FCI %</th>
-                    <th class="text-right">NPV / BCR</th>
+                    <th class="text-end">Simulated CapEx</th>
+                    <th class="text-end">OpEx Savings</th>
+                    <th class="text-end">Simulated FCI %</th>
+                    <th class="text-end">NPV / BCR</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -152,7 +152,7 @@
                             {{ s.number }}
                         </a>
                         {% if s.is_baseline %}
-                        <span class="badge badge-slate ml-1">Baseline</span>
+                        <span class="badge badge-slate ms-1">Baseline</span>
                         {% endif %}
                         <div class="text-xs text-slate-500 dark:text-slate-400">{{ s.name|truncatechars:42 }}</div>
                     </td>
@@ -163,17 +163,17 @@
                         <div class="text-sm font-medium">FY{{ s.base_fiscal_year }} ({{ s.horizon_years }} yrs)</div>
                         <div class="text-xs text-slate-500 dark:text-slate-400">{% if s.scope_org_unit %}{{ s.scope_org_unit.name }}{% else %}Enterprise-Wide{% endif %}</div>
                     </td>
-                    <td class="text-right font-mono font-semibold">{% fmt_money s.simulated_capex_total s.currency %}</td>
-                    <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money s.opex_savings_amount s.currency %}</td>
-                    <td class="text-right font-mono">{{ s.simulated_fci_pct|floatformat:2 }}%</td>
-                    <td class="text-right font-mono">
+                    <td class="text-end font-mono font-semibold">{% fmt_money s.simulated_capex_total s.currency %}</td>
+                    <td class="text-end font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money s.opex_savings_amount s.currency %}</td>
+                    <td class="text-end font-mono">{{ s.simulated_fci_pct|floatformat:2 }}%</td>
+                    <td class="text-end font-mono">
                         <div>{% fmt_money s.net_present_value s.currency %}</div>
                         <div class="text-xs text-slate-500 dark:text-slate-400">BCR: {{ s.benefit_cost_ratio|floatformat:2 }}x</div>
                     </td>
                     <td>
                         <span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span>
                     </td>
-                    <td class="text-right">
+                    <td class="text-end">
                         <div class="table-actions">
                             <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="btn btn-icon" title="View Details" aria-label="View {{ s.number }}">
                                 <i data-lucide="eye"></i>
