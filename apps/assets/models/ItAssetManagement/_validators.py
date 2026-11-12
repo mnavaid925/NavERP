@@ -26,7 +26,7 @@ def validate_tenant_fks(instance, field_names):
     """Verify every populated tenant-scoped FK belongs to ``instance.tenant_id``."""
     tenant_id = getattr(instance, "tenant_id", None)
     if not tenant_id:
-        return
+        return {}
     errors = {}
     for field_name in field_names:
         related_obj = getattr(instance, field_name, None)
@@ -34,3 +34,4 @@ def validate_tenant_fks(instance, field_names):
             add_field_error(errors, field_name, "Selected record belongs to another workspace.")
     if errors:
         raise ValidationError(errors)
+    return errors
