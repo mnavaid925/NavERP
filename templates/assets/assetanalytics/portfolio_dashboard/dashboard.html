@@ -135,7 +135,7 @@
                             <th class="text-center">High</th>
                             <th class="text-center">Medium</th>
                             <th class="text-center">Low</th>
-                            <th class="text-right">Total</th>
+                            <th class="text-end">Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -154,7 +154,7 @@
                             <td class="text-center">
                                 {% if row.counts.low %}<span class="badge badge-green">{{ row.counts.low }}</span>{% else %}<span class="text-slate-400 dark:text-slate-500">0</span>{% endif %}
                             </td>
-                            <td class="text-right font-mono font-semibold">{{ row.total }}</td>
+                            <td class="text-end font-mono font-semibold">{{ row.total }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -174,10 +174,10 @@
                     <thead>
                         <tr>
                             <th>Year</th>
-                            <th class="text-right">Plans</th>
-                            <th class="text-right">Escalated CapEx</th>
-                            <th class="text-right">Allocated</th>
-                            <th class="text-right">Unfunded</th>
+                            <th class="text-end">Plans</th>
+                            <th class="text-end">Escalated CapEx</th>
+                            <th class="text-end">Allocated</th>
+                            <th class="text-end">Unfunded</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -188,10 +188,10 @@
                                     FY{{ yr.year }}
                                 </a>
                             </td>
-                            <td class="text-right font-mono">{{ yr.plan_count }}</td>
-                            <td class="text-right font-mono font-semibold">{% fmt_money yr.inflation_cost %}</td>
-                            <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money yr.funded_cost %}</td>
-                            <td class="text-right font-mono text-red-700 dark:text-red-400">{% fmt_money yr.unfunded_cost %}</td>
+                            <td class="text-end font-mono">{{ yr.plan_count }}</td>
+                            <td class="text-end font-mono font-semibold">{% fmt_money yr.inflation_cost %}</td>
+                            <td class="text-end font-mono text-emerald-700 dark:text-emerald-400">{% fmt_money yr.funded_cost %}</td>
+                            <td class="text-end font-mono text-red-700 dark:text-red-400">{% fmt_money yr.unfunded_cost %}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -216,8 +216,8 @@
                         <tr>
                             <th>Study</th>
                             <th>Asset / Category</th>
-                            <th class="text-right">Net TCO</th>
-                            <th class="text-right">Maint / RAV %</th>
+                            <th class="text-end">Net TCO</th>
+                            <th class="text-end">Maint / RAV %</th>
                             <th>Recommendation</th>
                         </tr>
                     </thead>
@@ -233,8 +233,8 @@
                             <td>
                                 {% if ba.operational_asset %}{{ ba.operational_asset.name }}{% elif ba.fixed_asset %}{{ ba.fixed_asset.name }}{% elif ba.asset_category %}{{ ba.asset_category.name }}{% else %}—{% endif %}
                             </td>
-                            <td class="text-right font-mono font-semibold">{% fmt_money ba.total_lifecycle_cost ba.currency %}</td>
-                            <td class="text-right font-mono">{{ ba.maintenance_to_rav_pct|floatformat:1 }}%</td>
+                            <td class="text-end font-mono font-semibold">{% fmt_money ba.total_lifecycle_cost ba.currency %}</td>
+                            <td class="text-end font-mono">{{ ba.maintenance_to_rav_pct|floatformat:1 }}%</td>
                             <td><span class="badge {{ ba.recommendation_badge_class }}">{{ ba.get_recommendation_display }}</span></td>
                         </tr>
                         {% empty %}
@@ -259,16 +259,16 @@
                     <thead>
                         <tr>
                             <th>Risk Tier</th>
-                            <th class="text-right">Count</th>
-                            <th class="text-right">Exposure</th>
+                            <th class="text-end">Count</th>
+                            <th class="text-end">Exposure</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for r in risk_posture_rows %}
                         <tr>
                             <td><span class="badge {{ r.badge_class }}">{{ r.label }}</span></td>
-                            <td class="text-right font-mono">{{ r.count }}</td>
-                            <td class="text-right font-mono">{% fmt_money r.exposure %}</td>
+                            <td class="text-end font-mono">{{ r.count }}</td>
+                            <td class="text-end font-mono">{% fmt_money r.exposure %}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -296,9 +296,9 @@
                     <th>Scorecard</th>
                     <th>Period</th>
                     <th>RAG</th>
-                    <th class="text-right">Asset ROI %</th>
-                    <th class="text-right">MCR %</th>
-                    <th class="text-right">Portfolio FCI %</th>
+                    <th class="text-end">Asset ROI %</th>
+                    <th class="text-end">MCR %</th>
+                    <th class="text-end">Portfolio FCI %</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -311,9 +311,9 @@
                     </td>
                     <td>{{ sc.period_start }} → {{ sc.period_end }}</td>
                     <td><span class="badge {{ sc.rag_status_badge_class }}">{{ sc.get_rag_status_display }}</span></td>
-                    <td class="text-right font-mono">{{ sc.asset_roi_pct|floatformat:2 }}%</td>
-                    <td class="text-right font-mono">{{ sc.maintenance_cost_to_rav_pct|floatformat:2 }}%</td>
-                    <td class="text-right font-mono">{{ sc.portfolio_fci_pct|floatformat:2 }}%</td>
+                    <td class="text-end font-mono">{{ sc.asset_roi_pct|floatformat:2 }}%</td>
+                    <td class="text-end font-mono">{{ sc.maintenance_cost_to_rav_pct|floatformat:2 }}%</td>
+                    <td class="text-end font-mono">{{ sc.portfolio_fci_pct|floatformat:2 }}%</td>
                     <td><span class="badge {{ sc.status_badge_class }}">{{ sc.get_status_display }}</span></td>
                 </tr>
                 {% empty %}
