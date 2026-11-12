@@ -164,11 +164,11 @@
                     <th>Asset / Scope</th>
                     <th>Horizon</th>
                     <th>Priority</th>
-                    <th class="text-right">FCI %</th>
-                    <th class="text-right">Forecast CapEx</th>
+                    <th class="text-end">FCI %</th>
+                    <th class="text-end">Forecast CapEx</th>
                     <th>Funding</th>
                     <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -201,8 +201,8 @@
                         <span class="badge {{ p.priority_band_badge_class }}">{{ p.get_priority_band_display }}</span>
                         <div class="text-xs text-slate-500 dark:text-slate-400">Score: {{ p.priority_score|floatformat:1 }}</div>
                     </td>
-                    <td class="text-right font-mono">{{ p.fci_ratio_pct|floatformat:1 }}%</td>
-                    <td class="text-right font-mono font-semibold text-slate-900 dark:text-slate-100">
+                    <td class="text-end font-mono">{{ p.fci_ratio_pct|floatformat:1 }}%</td>
+                    <td class="text-end font-mono font-semibold text-slate-900 dark:text-slate-100">
                         {% fmt_money p.inflation_adjusted_cost p.currency %}
                         <div class="text-xs font-normal text-slate-500 dark:text-slate-400">Base: {% fmt_money p.estimated_replacement_cost p.currency decimals=0 %}</div>
                     </td>
@@ -212,7 +212,7 @@
                     <td>
                         <span class="badge {{ p.status_badge_class }}">{{ p.get_status_display }}</span>
                     </td>
-                    <td class="text-right">
+                    <td class="text-end">
                         <div class="table-actions">
                             <a href="{% url 'assets:asset_replacement_plan_detail' p.pk %}" class="btn btn-icon" title="View Details" aria-label="View {{ p.number }}">
                                 <i data-lucide="eye"></i>
