@@ -253,7 +253,13 @@ def asset_replacement_plan_recalculate(request, pk):
     with transaction.atomic():
         plan.recalculate_metrics()
         plan.save()
-        write_audit_log(request.user, plan, "compute", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            plan,
+            "update",
+            changes={"action": "recalculate", "status": plan.status},
+            tenant=request.tenant,
+        )
     messages.success(
         request,
         f"Recalculated FCI ({plan.fci_ratio_pct:.2f}%), priority ({plan.priority_score:.1f}), and inflation forecast for '{plan.number}'.",
@@ -284,7 +290,13 @@ def asset_replacement_plan_transition(request, pk):
     with transaction.atomic():
         plan.status = target_status
         plan.save(update_fields=["status", "updated_at"])
-        write_audit_log(request.user, plan, "update", tenant=request.tenant)
+        write_audit_log(
+            request.user,
+            plan,
+            "update",
+            changes={"action": "transition", "status": plan.status},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Replacement plan '{plan.number}' moved to '{plan.get_status_display()}'.")
     return redirect("assets:asset_replacement_plan_detail", pk=plan.pk)
 
