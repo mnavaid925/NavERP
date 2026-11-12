@@ -142,7 +142,7 @@
                     <th>SOP Ack</th>
                     <th>Expires On</th>
                     <th>Status</th>
-                    <th class="text-end">Actions</th>
+                    <th class="th-actions !text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -194,7 +194,7 @@
                         <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
                     </td>
                     <td class="text-end whitespace-nowrap">
-                        <div class="flex items-center justify-end gap-1">
+                        <div class="table-actions">
                             <a href="{% url 'assets:asset_operator_certification_detail' item.pk %}" class="btn btn-icon" title="View" aria-label="View {{ item.number }}">
                                 <i data-lucide="eye"></i>
                             </a>
