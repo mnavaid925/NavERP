@@ -6,30 +6,23 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
 from django.shortcuts import render
-from django.utils import timezone
 
 from apps.assets.models.SpaceFacilityAsset.AssetBuildingSystems import AssetBuildingSystem
 from apps.assets.models.SpaceFacilityAsset.AssetFacilitySpaces import AssetFacilitySpace
 from apps.assets.views._common import assets_scope
-from apps.assets.views.SpaceFacilityAsset._helpers import (
-    PAGE_SIZE,
-    apply_choice_filter,
-    apply_fk_filter,
-)
+from apps.assets.views.SpaceFacilityAsset._helpers import PAGE_SIZE
+from apps.assets.views.SpaceFacilityAsset.AssetBuildingSystems import _filtered_systems_queryset
 
 
 @login_required
 def asset_infrastructure_board(request):
     """Dedicated Infrastructure Asset Management register covering electrical, plumbing, elevators, fire/life-safety, and structural systems."""
-    today = timezone.now().date()
     infra_domains = AssetBuildingSystem.INFRASTRUCTURE_DOMAINS
     infra_domain_choices = [
         choice for choice in AssetBuildingSystem.SYSTEM_DOMAIN_CHOICES if choice[0] in infra_domains
     ]
 
-    base_qs = assets_scope(AssetBuildingSystem.objects.all(), request).filter(
-        system_domain__in=infra_domains
-    )
+    base_qs, qs, q, today = _filtered_systems_queryset(request, infra_only=True)
     kpis = base_qs.aggregate(
         total=Count("id"),
         life_safety=Count("id", filter=Q(criticality_tier="tier_1_life_safety")),
@@ -41,35 +34,7 @@ def asset_infrastructure_board(request):
         exposure=Sum("replacement_cost_estimate", filter=~Q(status="decommissioned")),
     )
 
-    qs = base_qs.select_related(
-        "facility_space",
-        "operating_permit",
-        "service_vendor",
-    ).defer("notes")
-
-    q = (request.GET.get("q") or "").strip()
-    if q:
-        qs = qs.filter(
-            Q(number__icontains=q)
-            | Q(name__icontains=q)
-            | Q(load_or_voltage_rating__icontains=q)
-            | Q(ashrae_nfpa_code_ref__icontains=q)
-            | Q(facility_space__code__icontains=q)
-        )
-
-    qs = apply_choice_filter(qs, request, "system_domain", allowed_values=dict(infra_domain_choices))
-    qs = apply_choice_filter(
-        qs, request, "condition_grade", allowed_values=dict(AssetBuildingSystem.CONDITION_GRADE_CHOICES)
-    )
-    qs = apply_choice_filter(
-        qs, request, "criticality_tier", allowed_values=dict(AssetBuildingSystem.CRITICALITY_TIER_CHOICES)
-    )
-    qs = apply_choice_filter(
-        qs, request, "status", allowed_values=dict(AssetBuildingSystem.STATUS_CHOICES)
-    )
-    qs = apply_fk_filter(qs, request, "facility_space")
-
-    paginator = Paginator(qs.order_by("criticality_tier", "next_inspection_due_date", "-number"), PAGE_SIZE)
+    paginator = Paginator(qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
     spaces = (
