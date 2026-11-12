@@ -3361,6 +3361,13 @@ LIVE_LINKS = {
         "Training & Certification Records": "assets:asset_operator_certification_list",
         "Lessons Learned & Failure Analysis": "assets:asset_knowledge_article_list",
     },
+    "11.17": {
+        "Floor Plan & Space Mapping": "assets:asset_facility_space_list",
+        "HVAC & Building Systems": "assets:asset_building_system_list",
+        "Furniture & Fixture Tracking": "assets:asset_furniture_fixture_list",
+        "Infrastructure Asset Management": "assets:asset_infrastructure_board",
+        "Tenant & Occupancy Coordination": "assets:asset_space_chargeback_list",
+    },
 
 
 
