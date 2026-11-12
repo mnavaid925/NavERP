@@ -5,6 +5,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -163,11 +164,13 @@ class CloudAssetSubscription(TenantNumbered):
         max_digits=14,
         decimal_places=2,
         default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
     )
     annual_contract_value = models.DecimalField(
         max_digits=14,
         decimal_places=2,
         default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
     )
     # Global Currency table (shared across tenants)
     currency = models.ForeignKey(
@@ -252,9 +255,12 @@ class CloudAssetSubscription(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "name"], name="idx_itcl_ten_name"),
             models.Index(fields=["tenant", "status"], name="idx_itcl_ten_stat"),
+            models.Index(fields=["tenant", "asset_kind"], name="idx_itcl_ten_kind"),
             models.Index(fields=["tenant", "provider"], name="idx_itcl_ten_prov"),
             models.Index(fields=["tenant", "approval_status"], name="idx_itcl_ten_aprv"),
+            models.Index(fields=["tenant", "sso_status"], name="idx_itcl_ten_sso"),
             models.Index(fields=["tenant", "renewal_date"], name="idx_itcl_ten_ren"),
         ]
 
