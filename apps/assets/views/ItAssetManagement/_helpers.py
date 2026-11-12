@@ -80,7 +80,7 @@ def csv_export_response(*, filename, headers, rows):
     return response
 
 
-def build_ci_label_map(tenant):
+def build_ci_label_map(tenant, limit=500):
     """Build deterministic ``(ci_type, pk) -> label`` and option list in 5 bounded queries."""
     from apps.assets.models.ItAssetManagement.CloudAssetSubscriptions import CloudAssetSubscription
     from apps.assets.models.ItAssetManagement.ItHardwareAssets import ItHardwareAsset
@@ -91,35 +91,55 @@ def build_ci_label_map(tenant):
     label_map = {}
     options = []
 
-    for hw in ItHardwareAsset.objects.filter(tenant=tenant).order_by("hostname", "number"):
-        key = ("it_hardware", hw.pk)
-        label = f"[HW] {hw.number} — {hw.hostname}"
+    for pk, number, hostname in (
+        ItHardwareAsset.objects.filter(tenant=tenant)
+        .order_by("hostname", "number")
+        .values_list("pk", "number", "hostname")[:limit]
+    ):
+        key = ("it_hardware", pk)
+        label = f"[HW] {number} — {hostname}"
         label_map[key] = label
-        options.append({"token": f"it_hardware:{hw.pk}", "label": label, "ci_type": "it_hardware", "pk": hw.pk})
+        options.append({"token": f"it_hardware:{pk}", "label": label, "ci_type": "it_hardware", "pk": pk})
 
-    for sw in SoftwareLicense.objects.filter(tenant=tenant).order_by("software_name", "number"):
-        key = ("software_license", sw.pk)
-        label = f"[SW] {sw.number} — {sw.software_name}"
+    for pk, number, software_name in (
+        SoftwareLicense.objects.filter(tenant=tenant)
+        .order_by("software_name", "number")
+        .values_list("pk", "number", "software_name")[:limit]
+    ):
+        key = ("software_license", pk)
+        label = f"[SW] {number} — {software_name}"
         label_map[key] = label
-        options.append({"token": f"software_license:{sw.pk}", "label": label, "ci_type": "software_license", "pk": sw.pk})
+        options.append({"token": f"software_license:{pk}", "label": label, "ci_type": "software_license", "pk": pk})
 
-    for cl in CloudAssetSubscription.objects.filter(tenant=tenant).order_by("name", "number"):
-        key = ("cloud_asset", cl.pk)
-        label = f"[Cloud] {cl.number} — {cl.name}"
+    for pk, number, name in (
+        CloudAssetSubscription.objects.filter(tenant=tenant)
+        .order_by("name", "number")
+        .values_list("pk", "number", "name")[:limit]
+    ):
+        key = ("cloud_asset", pk)
+        label = f"[Cloud] {number} — {name}"
         label_map[key] = label
-        options.append({"token": f"cloud_asset:{cl.pk}", "label": label, "ci_type": "cloud_asset", "pk": cl.pk})
+        options.append({"token": f"cloud_asset:{pk}", "label": label, "ci_type": "cloud_asset", "pk": pk})
 
-    for svc in ServiceComponent.objects.filter(tenant=tenant).order_by("display_order", "name"):
-        key = ("service_component", svc.pk)
-        label = f"[Service] {svc.name}"
+    for pk, name in (
+        ServiceComponent.objects.filter(tenant=tenant)
+        .order_by("display_order", "name")
+        .values_list("pk", "name")[:limit]
+    ):
+        key = ("service_component", pk)
+        label = f"[Service] {name}"
         label_map[key] = label
-        options.append({"token": f"service_component:{svc.pk}", "label": label, "ci_type": "service_component", "pk": svc.pk})
+        options.append({"token": f"service_component:{pk}", "label": label, "ci_type": "service_component", "pk": pk})
 
-    for ast in Asset.objects.filter(tenant=tenant).order_by("code", "name"):
-        key = ("operational_asset", ast.pk)
-        label = f"[SCM Asset] {ast.code} — {ast.name}"
+    for pk, code, name in (
+        Asset.objects.filter(tenant=tenant)
+        .order_by("code", "name")
+        .values_list("pk", "code", "name")[:limit]
+    ):
+        key = ("operational_asset", pk)
+        label = f"[SCM Asset] {code} — {name}"
         label_map[key] = label
-        options.append({"token": f"operational_asset:{ast.pk}", "label": label, "ci_type": "operational_asset", "pk": ast.pk})
+        options.append({"token": f"operational_asset:{pk}", "label": label, "ci_type": "operational_asset", "pk": pk})
 
     return label_map, options
 
