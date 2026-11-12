@@ -88,6 +88,12 @@ class AssetLifecycleCostAnalysisAdmin(admin.ModelAdmin):
         "economic_eol_year",
     )
 
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None and "status" not in fields:
+            fields.append("status")
+        return fields
+
 
 @admin.register(AssetReplacementPlan)
 class AssetReplacementPlanAdmin(admin.ModelAdmin):
@@ -111,8 +117,13 @@ class AssetReplacementPlanAdmin(admin.ModelAdmin):
         "priority_band",
         "fci_ratio_pct",
         "inflation_adjusted_cost",
-        "deferral_penalty_cost",
     )
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None and "status" not in fields:
+            fields.append("status")
+        return fields
 
 
 @admin.register(AssetPortfolioScenario)
@@ -152,6 +163,12 @@ class AssetPortfolioScenarioAdmin(admin.ModelAdmin):
         "benefit_cost_ratio",
     )
 
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None and "status" not in fields:
+            fields.append("status")
+        return fields
+
 
 @admin.register(AssetExecutiveScorecard)
 class AssetExecutiveScorecardAdmin(admin.ModelAdmin):
@@ -189,6 +206,24 @@ class AssetExecutiveScorecardAdmin(admin.ModelAdmin):
         "total_risk_exposure_amount",
         "unfunded_replacement_backlog",
     )
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None:
+            for extra in ("status", "approved_by"):
+                if extra not in fields:
+                    fields.append(extra)
+        return fields
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_locked:
+            return False
+        return super().has_delete_permission(request, obj=obj)
 
 
 @admin.register(AssetRequisition)
