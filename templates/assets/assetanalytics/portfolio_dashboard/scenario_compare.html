@@ -29,7 +29,7 @@
 <!-- Multi-Select Scenario Selector -->
 <div class="card mb-6">
     <div class="card-header">
-        <h2 class="text-base font-semibold text-slate-800">Select Scenarios to Compare</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Select Scenarios to Compare</h2>
     </div>
     <div class="card-body">
         {% if all_scenarios %}
@@ -53,7 +53,7 @@
             </div>
         </form>
         {% else %}
-        <p class="text-sm text-slate-500">No portfolio scenarios created yet.</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">No portfolio scenarios created yet.</p>
         {% endif %}
     </div>
 </div>
@@ -61,7 +61,7 @@
 <!-- Side-by-Side Comparison Matrix -->
 <div class="card">
     <div class="card-header flex items-center justify-between">
-        <h2 class="text-base font-semibold text-slate-800">Side-by-Side Strategic Comparison</h2>
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Side-by-Side Strategic Comparison</h2>
         {% if baseline_scenario %}
         <span class="badge badge-slate">BAU Baseline: {{ baseline_scenario.number }}</span>
         {% endif %}
@@ -73,8 +73,8 @@
                     <th>Metric / Dimension</th>
                     {% for s in compared_scenarios %}
                     <th class="text-right">
-                        <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="text-blue-600 hover:underline">{{ s.number }}</a>
-                        <div class="text-xs font-normal text-slate-500">{{ s.name|truncatechars:26 }}</div>
+                        <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ s.number }}</a>
+                        <div class="text-xs font-normal text-slate-500 dark:text-slate-400">{{ s.name|truncatechars:26 }}</div>
                     </th>
                     {% endfor %}
                 </tr>
@@ -120,7 +120,7 @@
                 <tr>
                     <td class="font-medium">OpEx Savings Amount</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono text-emerald-700">${{ s.opex_savings_amount|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono text-emerald-700 dark:text-emerald-400">${{ s.opex_savings_amount|floatformat:"2g" }}</td>
                     {% endfor %}
                 </tr>
                 <tr>
@@ -167,7 +167,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="2" class="text-center text-sm text-slate-500 py-6">Select one or more scenarios above to view side-by-side comparisons.</td>
+                    <td colspan="2" class="text-center text-sm text-slate-500 dark:text-slate-400 py-6">Select one or more scenarios above to view side-by-side comparisons.</td>
                 </tr>
                 {% endif %}
             </tbody>
