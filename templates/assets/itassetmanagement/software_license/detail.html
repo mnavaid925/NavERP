@@ -112,7 +112,7 @@
         </div>
         <div class="stat-body">
             <div class="stat-label">ELP Compliance Delta</div>
-            <div class="stat-value {% if license_obj.is_under_licensed %}text-red-600{% endif %}">
+            <div class="stat-value {% if license_obj.is_under_licensed %}text-red-600 dark:text-red-400{% endif %}">
                 {% if license_obj.compliance_delta > 0 %}+{% endif %}{{ license_obj.compliance_delta }}
             </div>
             <div class="text-xs text-slate-400 mt-1">
@@ -201,7 +201,7 @@
                 <tbody>
                     {% for edge in outbound_edges %}
                     <tr>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ edge.number }}</a></td>
                         <td>{{ edge.get_relationship_type_display }}</td>
                         <td class="text-sm">{{ edge.target_label }}</td>
                         <td><span class="badge {{ edge.status_badge_class }}">{{ edge.get_status_display }}</span></td>
@@ -224,7 +224,7 @@
                 <tbody>
                     {% for edge in inbound_edges %}
                     <tr>
-                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 hover:underline">{{ edge.number }}</a></td>
+                        <td class="font-mono text-xs"><a href="{% url 'assets:cmdb_relationship_detail' edge.pk %}" class="text-indigo-600 dark:text-indigo-400 hover:underline">{{ edge.number }}</a></td>
                         <td class="text-sm">{{ edge.source_label }}</td>
                         <td>{{ edge.get_relationship_type_display }}</td>
                         <td><span class="badge {{ edge.criticality_badge_class }}">{{ edge.get_criticality_display }}</span></td>
