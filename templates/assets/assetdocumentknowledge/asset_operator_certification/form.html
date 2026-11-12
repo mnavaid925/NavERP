@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ certification.number }}{% else %}New Operator Certification{% endif %} — Assets &amp; Fleet — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_operator_certification_list' %}">Training &amp; Certification Records</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ certification.number }}{% else %}New Certification{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        {% if is_edit and certification %}
+        <a href="{% url 'assets:asset_operator_certification_detail' certification.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Certification
+        </a>
+        {% else %}
+        <a href="{% url 'assets:asset_operator_certification_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to Certifications
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Credential Identity &amp; Competency</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Certification Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.qualification_code.id_for_label }}">Qualification Code</label>
+                    {{ form.qualification_code }}
+                    {% if form.qualification_code.errors %}<div class="form-error">{{ form.qualification_code.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.qualification_type.id_for_label }}">Qualification Type *</label>
+                    {{ form.qualification_type }}
+                    {% if form.qualification_type.errors %}<div class="form-error">{{ form.qualification_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.proficiency_level.id_for_label }}">Proficiency Level *</label>
+                    {{ form.proficiency_level }}
+                    {% if form.proficiency_level.errors %}<div class="form-error">{{ form.proficiency_level.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Operator Assignment &amp; HRM Linkage (At Least One Operator Required)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operator_party.id_for_label }}">Operator / Contractor Party</label>
+                    {{ form.operator_party }}
+                    {% if form.operator_party.errors %}<div class="form-error">{{ form.operator_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operator_user.id_for_label }}">Operator User Account</label>
+                    {{ form.operator_user }}
+                    {% if form.operator_user.errors %}<div class="form-error">{{ form.operator_user.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.employee_profile.id_for_label }}">HRM Employee Profile</label>
+                    {{ form.employee_profile }}
+                    {% if form.employee_profile.errors %}<div class="form-error">{{ form.employee_profile.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.hrm_certificate.id_for_label }}">HRM Training Certificate</label>
+                    {{ form.hrm_certificate }}
+                    {% if form.hrm_certificate.errors %}<div class="form-error">{{ form.hrm_certificate.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Equipment &amp; SOP Scope</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_category.id_for_label }}">Asset Category</label>
+                    {{ form.asset_category }}
+                    {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_model.id_for_label }}">Asset Model</label>
+                    {{ form.asset_model }}
+                    {% if form.asset_model.errors %}<div class="form-error">{{ form.asset_model.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.operating_procedure.id_for_label }}">Required Operating Procedure (SOP / LOTO)</label>
+                    {{ form.operating_procedure }}
+                    {% if form.operating_procedure.errors %}<div class="form-error">{{ form.operating_procedure.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.compliance_framework.id_for_label }}">Compliance Framework</label>
+                    {{ form.compliance_framework }}
+                    {% if form.compliance_framework.errors %}<div class="form-error">{{ form.compliance_framework.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Issuance, Expiry &amp; Assessment Metrics</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.issuing_authority.id_for_label }}">Issuing Authority</label>
+                    {{ form.issuing_authority }}
+                    {% if form.issuing_authority.errors %}<div class="form-error">{{ form.issuing_authority.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.issuing_party.id_for_label }}">Issuing Body Party</label>
+                    {{ form.issuing_party }}
+                    {% if form.issuing_party.errors %}<div class="form-error">{{ form.issuing_party.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.certificate_reference.id_for_label }}">External Certificate Reference #</label>
+                    {{ form.certificate_reference }}
+                    {% if form.certificate_reference.errors %}<div class="form-error">{{ form.certificate_reference.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.issued_date.id_for_label }}">Issued Date *</label>
+                    {{ form.issued_date }}
+                    {% if form.issued_date.errors %}<div class="form-error">{{ form.issued_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.expires_on.id_for_label }}">Expires On</label>
+                    {{ form.expires_on }}
+                    {% if form.expires_on.errors %}<div class="form-error">{{ form.expires_on.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.renewal_lead_days.id_for_label }}">Renewal Alert Lead (Days) *</label>
+                    {{ form.renewal_lead_days }}
+                    {% if form.renewal_lead_days.errors %}<div class="form-error">{{ form.renewal_lead_days.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.last_assessed_date.id_for_label }}">Last Assessed Date</label>
+                    {{ form.last_assessed_date }}
+                    {% if form.last_assessed_date.errors %}<div class="form-error">{{ form.last_assessed_date.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.assessor.id_for_label }}">Assessor / Verifier</label>
+                    {{ form.assessor }}
+                    {% if form.assessor.errors %}<div class="form-error">{{ form.assessor.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.training_hours.id_for_label }}">Training Hours *</label>
+                    {{ form.training_hours }}
+                    {% if form.training_hours.errors %}<div class="form-error">{{ form.training_hours.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.assessment_score.id_for_label }}">Assessment Score (0–100%)</label>
+                    {{ form.assessment_score }}
+                    {% if form.assessment_score.errors %}<div class="form-error">{{ form.assessment_score.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.certificate_file.id_for_label }}">Certificate Evidence Upload (PDF / Image)</label>
+                    {{ form.certificate_file }}
+                    {% if is_edit and certification and certification.certificate_file %}
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Current certificate:
+                        <a href="{% url 'assets:asset_operator_certification_download' certification.pk %}" class="text-indigo-600 dark:text-indigo-400 underline">
+                            {{ certification.original_filename|default:"Download existing certificate" }}
+                        </a>
+                    </p>
+                    {% endif %}
+                    {% if form.certificate_file.errors %}<div class="form-error">{{ form.certificate_file.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-3">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Assessment Notes &amp; Restrictions</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                {% if is_edit and certification %}
+                <a href="{% url 'assets:asset_operator_certification_detail' certification.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_operator_certification_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Certification{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
