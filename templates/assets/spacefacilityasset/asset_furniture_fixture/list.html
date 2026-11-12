@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}Furniture &amp; Fixture Tracking — Assets &amp; Fleet — NavERP{% endblock %}
 
@@ -51,7 +50,7 @@
         <div class="stat-icon purple"><i data-lucide="layers"></i></div>
         <div class="stat-body">
             <div class="stat-label">Total Units Deployed</div>
-            <div class="stat-value">{{ total_quantity|intcomma }}</div>
+            <div class="stat-value">{{ total_quantity }}</div>
         </div>
     </div>
 </div>
@@ -156,7 +155,7 @@
                     </td>
                     <td class="font-mono text-xs">
                         <div>{{ item.quantity }} unit{{ item.quantity|pluralize }}</div>
-                        <div class="text-muted">{{ item.total_replacement_value|floatformat:2|intcomma }}</div>
+                        <div class="text-muted">{{ item.total_replacement_value|floatformat:2 }}</div>
                     </td>
                     <td><span class="badge {{ item.condition_badge_class }}">{{ item.get_condition_grade_display }}</span></td>
                     <td><span class="badge {{ item.move_status_badge_class }}">{{ item.get_move_status_display }}</span></td>
