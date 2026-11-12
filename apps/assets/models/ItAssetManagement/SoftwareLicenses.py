@@ -11,6 +11,7 @@ from django.utils import timezone
 from apps.assets.models._base import TenantNumbered
 from apps.assets.models.ItAssetManagement._validators import (
     add_field_error,
+    validate_masked_key_ref,
     validate_tenant_fks,
 )
 
@@ -295,5 +296,11 @@ class SoftwareLicense(TenantNumbered):
             )
         if self.effective_date and self.renewal_date and self.renewal_date < self.effective_date:
             add_field_error(errors, "renewal_date", "Renewal date cannot precede effective date.")
+        if self.license_key_ref:
+            try:
+                self.license_key_ref = validate_masked_key_ref(self.license_key_ref)
+            except ValidationError as exc:
+                for msg in exc.messages:
+                    add_field_error(errors, "license_key_ref", msg)
         if errors:
             raise ValidationError(errors)
