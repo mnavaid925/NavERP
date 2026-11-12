@@ -127,7 +127,7 @@
                     <th>ECR &amp; Change Type</th>
                     <th>Checkout Lock</th>
                     <th>Status</th>
-                    <th class="text-end">Actions</th>
+                    <th class="th-actions !text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -169,7 +169,7 @@
                         <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
                     </td>
                     <td class="text-end whitespace-nowrap">
-                        <div class="flex items-center justify-end gap-1">
+                        <div class="table-actions">
                             <a href="{% url 'assets:asset_document_detail' item.pk %}" class="btn btn-icon" title="Review Revision" aria-label="View {{ item.number }}">
                                 <i data-lucide="eye"></i>
                             </a>
@@ -178,6 +178,14 @@
                             <a href="{% url 'assets:asset_document_edit' item.pk %}" class="btn btn-icon" title="Edit Revision" aria-label="Edit {{ item.number }}">
                                 <i data-lucide="pencil"></i>
                             </a>
+                            {% endif %}
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'assets:asset_document_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete document {{ item.number|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon danger" title="Delete" aria-label="Delete {{ item.number }}">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
                             {% endif %}
                             {% endif %}
                         </div>
