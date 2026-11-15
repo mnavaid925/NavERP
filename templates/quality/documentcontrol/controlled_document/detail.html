@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.number }} Rev {{ document.revision }} | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:controlled_document_list' %}">Controlled Documents</a>
+            <span>/</span>
+            <span>{{ document.number }}</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">{{ document.number }} Rev {{ document.revision }}</h1>
+            {% if document.lifecycle_state == 'draft' %}
+            <span class="badge badge-slate text-sm">Draft</span>
+            {% elif document.lifecycle_state == 'in_review' %}
+            <span class="badge badge-amber text-sm">In Review</span>
+            {% elif document.lifecycle_state == 'pending_approval' %}
+            <span class="badge badge-info text-sm">Pending Approval</span>
+            {% elif document.lifecycle_state == 'approved' %}
+            <span class="badge badge-info text-sm">Approved</span>
+            {% elif document.lifecycle_state == 'effective' %}
+            <span class="badge badge-green text-sm">Effective</span>
+            {% elif document.lifecycle_state == 'superseded' %}
+            <span class="badge badge-amber text-sm">Superseded</span>
+            {% elif document.lifecycle_state == 'obsolete' %}
+            <span class="badge badge-red text-sm">Obsolete</span>
+            {% elif document.lifecycle_state == 'archived' %}
+            <span class="badge badge-muted text-sm">Archived</span>
+            {% endif %}
+            <span class="badge badge-info text-sm">{{ document.get_document_type_display }}</span>
+        </div>
+        <p class="text-slate-600 mt-1 text-lg font-medium">{{ document.title }}</p>
+    </div>
+    <div class="page-actions">
+        {% if can_edit %}
+        <a href="{% url 'quality:controlled_document_edit' document.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if can_submit %}
+        <form method="post" action="{% url 'quality:controlled_document_submit' document.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-blue-600 border-blue-300 hover:bg-blue-50">
+                <i data-lucide="send"></i> Submit for Review
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_approve %}
+        <form method="post" action="{% url 'quality:controlled_document_approve' document.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-600 border-green-300 hover:bg-green-50">
+                <i data-lucide="check-square"></i> Approve Document
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_make_effective %}
+        <form method="post" action="{% url 'quality:controlled_document_make_effective' document.pk %}" class="inline" onsubmit="return confirm('Enact document {{ document.number }} Rev {{ document.revision }} as EFFECTIVE? Any prior revision will be superseded.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+                <i data-lucide="check-circle-2"></i> Make Effective
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_revise %}
+        <a href="{% url 'quality:controlled_document_new_revision' document.pk %}" class="btn btn-outline text-indigo-600 border-indigo-300 hover:bg-indigo-50">
+            <i data-lucide="git-branch"></i> Branch Revision
+        </a>
+        {% endif %}
+
+        {% if can_obsolete %}
+        <form method="post" action="{% url 'quality:controlled_document_obsolete' document.pk %}" class="inline" onsubmit="return confirm('Retire document {{ document.number }} to OBSOLETE status?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="archive"></i> Obsolete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Dynamic Lifecycle Watermark Banner -->
+<div class="mb-6 p-4 rounded-lg flex items-center justify-between border
+    {% if document.lifecycle_state == 'effective' %}bg-emerald-50 border-emerald-200 text-emerald-800
+    {% elif document.lifecycle_state == 'draft' %}bg-slate-50 border-slate-300 text-slate-700
+    {% elif document.lifecycle_state == 'in_review' %}bg-amber-50 border-amber-200 text-amber-800
+    {% elif document.lifecycle_state == 'superseded' %}bg-amber-50 border-amber-300 text-amber-900
+    {% elif document.lifecycle_state == 'obsolete' %}bg-red-50 border-red-300 text-red-800
+    {% else %}bg-blue-50 border-blue-200 text-blue-800{% endif %}">
+    <div class="flex items-center space-x-3">
+        <i data-lucide="shield-check" class="w-6 h-6"></i>
+        <div>
+            <div class="font-bold tracking-wider text-sm">{{ document.watermark_text }}</div>
+            <div class="text-xs opacity-90">
+                {% if document.lifecycle_state == 'effective' %}
+                This is an official, approved, and released controlled document in current operational use.
+                {% elif document.lifecycle_state == 'superseded' %}
+                CAUTION: This document revision has been superseded by a newer revision. Do not use for current operations.
+                {% elif document.lifecycle_state == 'obsolete' %}
+                RETIRED: This document is obsolete and preserved for quality audit and historical retention purposes only.
+                {% else %}
+                DRAFT / UNAPPROVED: Not authorized for manufacturing, clinical, or operational execution.
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% if document.file %}
+    <a href="{{ document.file.url }}" target="_blank" class="btn btn-sm btn-outline bg-white">
+        <i data-lucide="file-down"></i> Download Master File
+    </a>
+    {% endif %}
+</div>
+
+<!-- Document Details Card -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-bold text-slate-800">Document Specifications</h2>
+        <span class="badge badge-slate text-xs">Classification: {{ document.get_classification_display }}</span>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Document Number</dt>
+                <dd class="font-mono font-bold">{{ document.number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Revision</dt>
+                <dd class="font-mono">Rev {{ document.revision }} {% if document.is_latest_revision %}<span class="badge badge-green text-xs ml-1">Latest</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Document Type</dt>
+                <dd>{{ document.get_document_type_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Owning Department</dt>
+                <dd>{{ document.department.name|default:"General / Organization-Wide" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Document Owner</dt>
+                <dd>{{ document.owner.get_full_name|default:document.owner.username }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Effective Date</dt>
+                <dd>{{ document.effective_date|default:"Pending Approval" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Review Frequency</dt>
+                <dd>Every {{ document.review_interval_months }} months</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Next Review Date</dt>
+                <dd>
+                    {% if document.next_review_date %}
+                        {% if document.is_overdue_review %}
+                        <span class="text-red-600 font-bold flex items-center">
+                            <i data-lucide="alert-circle" class="w-4 h-4 mr-1"></i> {{ document.next_review_date }} (OVERDUE)
+                        </span>
+                        {% else %}
+                        {{ document.next_review_date }}
+                        {% endif %}
+                    {% else %}
+                    —
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Retention Period</dt>
+                <dd>{{ document.retention_years }} years</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Predecessor Revision</dt>
+                <dd>
+                    {% if document.supersedes %}
+                    <a href="{% url 'quality:controlled_document_detail' document.supersedes.pk %}" class="text-blue-600 hover:underline font-mono">
+                        {{ document.supersedes.number }} Rev {{ document.supersedes.revision }}
+                    </a>
+                    {% else %}
+                    Initial Revision
+                    {% endif %}
+                </dd>
+            </div>
+        </dl>
+
+        {% if document.description %}
+        <div class="mt-4 pt-4 border-t border-slate-200">
+            <h3 class="text-sm font-semibold text-slate-700 mb-1">Scope & Purpose</h3>
+            <p class="text-sm text-slate-600 whitespace-pre-line">{{ document.description }}</p>
+        </div>
+        {% endif %}
+
+        {% if document.change_summary %}
+        <div class="mt-4 pt-4 border-t border-slate-200">
+            <h3 class="text-sm font-semibold text-slate-700 mb-1">Revision Change Summary</h3>
+            <p class="text-sm text-slate-600 whitespace-pre-line">{{ document.change_summary }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 21 CFR Part 11 Electronic Signature Manifest -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-bold text-slate-800">21 CFR Part 11 Electronic Signatures</h2>
+            <p class="text-xs text-slate-500">Immutable signature manifest satisfying FDA 21 CFR § 11.50 signature requirements</p>
+        </div>
+        <a href="{% url 'quality:electronic_signature_list' %}" class="btn btn-sm btn-outline">
+            <i data-lucide="signature"></i> View All Signatures
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Signer Name</th>
+                    <th>Role / Meaning of Signature</th>
+                    <th>Date & Time</th>
+                    <th>Document Rev</th>
+                    <th>Cryptographic SHA-256 Digest</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sig in signatures %}
+                <tr>
+                    <td class="font-medium text-slate-800">
+                        {{ sig.signer_name }}
+                        {% if sig.signer_title %}<div class="text-xs text-slate-500">{{ sig.signer_title }}</div>{% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-green">{{ sig.get_signature_meaning_display }}</span>
+                    </td>
+                    <td class="text-sm text-slate-600">{{ sig.signature_timestamp|date:"Y-m-d H:i:s" }}</td>
+                    <td class="font-mono text-sm">Rev {{ sig.document_revision }}</td>
+                    <td class="font-mono text-xs text-slate-500 max-w-xs truncate" title="{{ sig.signature_hash }}">
+                        {{ sig.signature_hash }}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-4 text-slate-500 text-sm">
+                        No electronic signatures recorded for this document revision yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Document Change Orders (DCO) History -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-bold text-slate-800">Document Change Orders (DCO)</h2>
+            <p class="text-xs text-slate-500">Formal change requests and revision control authorizations</p>
+        </div>
+        <a href="{% url 'quality:document_change_order_create' %}" class="btn btn-sm btn-outline">
+            <i data-lucide="plus"></i> New Change Request
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>DCO Number</th>
+                    <th>Change Title</th>
+                    <th>Type</th>
+                    <th>Target Rev</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>CCB Decision</th>
+                    <th>Requested By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dco in change_orders %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'quality:document_change_order_detail' dco.pk %}" class="text-blue-600 hover:underline">
+                            {{ dco.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-800">{{ dco.title }}</td>
+                    <td><span class="badge badge-info text-xs">{{ dco.get_change_type_display }}</span></td>
+                    <td class="font-mono text-sm">Rev {{ dco.target_revision }}</td>
+                    <td><span class="badge badge-slate text-xs">{{ dco.get_priority_display }}</span></td>
+                    <td>
+                        {% if dco.status == 'approved' or dco.status == 'implemented' %}
+                        <span class="badge badge-green text-xs">{{ dco.get_status_display }}</span>
+                        {% elif dco.status == 'rejected' or dco.status == 'cancelled' %}
+                        <span class="badge badge-red text-xs">{{ dco.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-amber text-xs">{{ dco.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if dco.ccb_decision == 'approved' %}
+                        <span class="badge badge-green text-xs">CCB Approved</span>
+                        {% elif dco.ccb_decision == 'rejected' %}
+                        <span class="badge badge-red text-xs">CCB Rejected</span>
+                        {% else %}
+                        <span class="badge badge-slate text-xs">{{ dco.get_ccb_decision_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ dco.requested_by.username }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-slate-500 text-sm">
+                        No Document Change Orders linked to this document.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Read & Acknowledge Tracking -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-bold text-slate-800">Read & Acknowledge Training Compliance</h2>
+            <p class="text-xs text-slate-500">Employee distribution and adherence confirmations</p>
+        </div>
+        <a href="{% url 'quality:document_acknowledgment_list' %}" class="btn btn-sm btn-outline">
+            <i data-lucide="users"></i> View All Acknowledgments
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Ack Number</th>
+                    <th>User / Employee</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th>Acknowledged Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ack in acknowledgments %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'quality:document_acknowledgment_detail' ack.pk %}" class="text-blue-600 hover:underline">
+                            {{ ack.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-800">{{ ack.user.get_full_name|default:ack.user.username }}</td>
+                    <td>{{ ack.due_date }}</td>
+                    <td>
+                        {% if ack.status == 'acknowledged' %}
+                        <span class="badge badge-green text-xs">Acknowledged</span>
+                        {% elif ack.status == 'overdue' %}
+                        <span class="badge badge-red text-xs">Overdue</span>
+                        {% else %}
+                        <span class="badge badge-amber text-xs">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ ack.acknowledged_at|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-4 text-slate-500 text-sm">
+                        No read-and-acknowledge sign-offs issued for this document yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Revision History Lineage -->
+{% if revision_history %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-bold text-slate-800">Document Family Revision Lineage</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Doc Number</th>
+                    <th>Revision</th>
+                    <th>State</th>
+                    <th>Effective Date</th>
+                    <th>Summary</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in revision_history %}
+                <tr>
+                    <td class="font-mono">{{ rev.number }}</td>
+                    <td class="font-mono">Rev {{ rev.revision }}</td>
+                    <td><span class="badge badge-slate text-xs">{{ rev.get_lifecycle_state_display }}</span></td>
+                    <td>{{ rev.effective_date|default:"—" }}</td>
+                    <td class="text-sm text-slate-600 truncate max-w-sm">{{ rev.change_summary|default:"—" }}</td>
+                    <td class="text-right">
+                        <a href="{% url 'quality:controlled_document_detail' rev.pk %}" class="btn btn-icon" title="View Revision">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
