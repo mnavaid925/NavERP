@@ -164,6 +164,11 @@ def document_acknowledgment_delete(request, pk):
 @login_required
 def document_acknowledgment_sign(request, pk):
     ack = quality_object(request, DocumentAcknowledgment, pk, select_related=["document", "user"])
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    if request.user != ack.user and not is_admin:
+        messages.error(request, "You are not authorized to sign this acknowledgment on behalf of another user.")
+        return redirect("quality:document_acknowledgment_detail", pk=ack.pk)
+
     if ack.status == "acknowledged":
         messages.info(request, "This document acknowledgment has already been signed.")
         return redirect("quality:document_acknowledgment_detail", pk=ack.pk)
