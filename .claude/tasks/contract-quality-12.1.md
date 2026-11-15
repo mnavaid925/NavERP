@@ -13,7 +13,7 @@
   - `apps/quality/forms/DocumentControl/`
   - `apps/quality/views/DocumentControl/`
   - `apps/quality/urls/DocumentControl/`
-  - `templates/quality/documentcontrol/{controlled_document,document_change_order,electronic_signature,document_acknowledgment}/{list,detail,form}.html` + `templates/quality/documentcontrol/{document_archive_vault,e_signature_modal}.html`
+  - `templates/quality/documentcontrol/{controlled_document,document_change_order,electronic_signature,document_acknowledgment}/{list,detail,form}.html` + `templates/quality/documentcontrol/document_archive_vault.html` (note: `e_signature_modal.html` placeholder was cleanly superseded by dedicated 21 CFR Part 11 page route `electronic_signature/form.html`)
 - **AuditLog `action` Max Length (`<= 10` chars, L66)**:
   - Allowed `action` verbs passed to `write_audit_log(request.user, obj, verb, changes=..., tenant=request.tenant)`:
     `"create"`, `"update"`, `"delete"`, `"submit"`, `"approve"`, `"effective"`, `"supersede"`, `"obsolete"`, `"archive"`, `"sign"`, `"ccb_dec"`, `"ack"` (every verb `<= 9` chars).
