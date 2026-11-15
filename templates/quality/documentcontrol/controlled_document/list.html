@@ -79,7 +79,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div>
                 <label class="form-label" for="search-input">Search</label>
                 <input type="text" id="search-input" name="q" value="{{ q }}" placeholder="Number, title, revision..." class="form-input">
@@ -91,6 +91,14 @@
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="latest-filter">Revisions</label>
+                <select id="latest-filter" name="latest" class="form-select">
+                    <option value="1" {% if request.GET.latest == "1" or not request.GET.latest %}selected{% endif %}>Latest Only</option>
+                    <option value="all" {% if request.GET.latest == "all" %}selected{% endif %}>All Historical</option>
+                    <option value="0" {% if request.GET.latest == "0" %}selected{% endif %}>Older Revisions</option>
                 </select>
             </div>
             <div>
@@ -244,13 +252,13 @@
         </div>
         <div class="flex space-x-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.latest %}&latest={{ request.GET.latest }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% endif %}
             <span class="btn btn-sm btn-outline text-slate-700">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.latest %}&latest={{ request.GET.latest }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% endif %}
