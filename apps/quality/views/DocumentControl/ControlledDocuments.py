@@ -102,14 +102,13 @@ def controlled_document_create(request):
             with transaction.atomic():
                 doc = form.save(commit=False)
                 doc.tenant = request.tenant
-                if not doc.owner_id:
-                    doc.owner = request.user
+                doc.owner = request.user
                 doc.save()
                 write_audit_log(request.user, doc, "create", tenant=request.tenant)
             messages.success(request, f"Controlled document {doc.number} ({doc.title}) created.")
             return redirect("quality:controlled_document_detail", pk=doc.pk)
     else:
-        form = ControlledDocumentForm(tenant=request.tenant, initial={"owner": request.user})
+        form = ControlledDocumentForm(tenant=request.tenant)
 
     return render(
         request,
