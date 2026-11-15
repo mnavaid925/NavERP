@@ -51,13 +51,6 @@ class FleetVehicleForm(TenantUniqueMixin, TenantModelForm):
             "battery_capacity_kwh",
             "is_telematics_enabled",
             "telematics_device_id",
-            "current_latitude",
-            "current_longitude",
-            "current_location_name",
-            "current_speed_mph",
-            "current_heading",
-            "engine_state",
-            "geofence_status",
             "operational_asset",
             "fixed_asset",
             "asset_category",
@@ -92,10 +85,6 @@ class FleetVehicleForm(TenantUniqueMixin, TenantModelForm):
         if year is not None:
             if year < 1900 or year > current_year + 2:
                 self.add_error("year", f"Model year must be between 1900 and {current_year + 2}.")
-
-        heading = cleaned_data.get("current_heading")
-        if heading is not None and not (0 <= heading <= 360):
-            self.add_error("current_heading", "Compass heading must be between 0 and 360 degrees.")
 
         reject_foreign(self, cleaned_data, self._TENANT_FIELDS)
         return cleaned_data
