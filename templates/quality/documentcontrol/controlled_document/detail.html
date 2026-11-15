@@ -83,6 +83,17 @@
             </button>
         </form>
         {% endif %}
+
+        {% if document.lifecycle_state == 'draft' or document.lifecycle_state == 'in_review' or document.lifecycle_state == 'pending_approval' %}
+        {% if is_admin or document.owner == request.user %}
+        <form method="post" action="{% url 'quality:controlled_document_delete' document.pk %}" class="inline" onsubmit="return confirm('Permanently delete controlled document {{ document.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 border-red-300 hover:bg-red-50">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
     </div>
 </div>
 
