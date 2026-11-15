@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Document Archive Vault | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:controlled_document_list' %}">Controlled Documents</a>
+            <span>/</span>
+            <span>Archive Vault</span>
+        </div>
+        <h1 class="page-title">Quality Document Archive Vault</h1>
+        <p class="text-slate-600 mt-1">Quarantined repository of superseded revisions, obsolete policies, and archived quality procedures.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:controlled_document_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Active Documents
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="archive"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Vault Total</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.total_vault }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="history"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Superseded</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.superseded }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="slash"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Obsolete</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.obsolete }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="box"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Archived</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.archived }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="flex space-x-4">
+            <div class="flex-1">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search vault by document number, title, revision, or description..." class="form-input">
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="search"></i> Search Vault
+            </button>
+            <a href="{% url 'quality:document_archive_vault' %}" class="btn btn-outline">
+                <i data-lucide="rotate-ccw"></i> Reset
+            </a>
+        </form>
+    </div>
+</div>
+
+<!-- Vault Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Doc Number</th>
+                    <th>Title</th>
+                    <th>Revision</th>
+                    <th>Type</th>
+                    <th>State</th>
+                    <th>Department</th>
+                    <th>Archived / Retired Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in vault_documents %}
+                <tr>
+                    <td class="font-mono font-medium text-slate-900">
+                        <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="text-blue-600 hover:underline">
+                            {{ doc.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-800">{{ doc.title }}</td>
+                    <td class="font-mono text-sm">Rev {{ doc.revision }}</td>
+                    <td><span class="badge badge-info">{{ doc.get_document_type_display }}</span></td>
+                    <td>
+                        {% if doc.lifecycle_state == 'superseded' %}
+                        <span class="badge badge-amber">Superseded</span>
+                        {% elif doc.lifecycle_state == 'obsolete' %}
+                        <span class="badge badge-red">Obsolete</span>
+                        {% else %}
+                        <span class="badge badge-muted">Archived</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ doc.department.name|default:"—" }}</td>
+                    <td>{{ doc.archived_at|date:"Y-m-d"|default:doc.updated_at|date:"Y-m-d" }}</td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="btn btn-icon" title="View Audit Record">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-8 text-slate-500">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <div class="text-base font-medium text-slate-700">Archive Vault is Clean</div>
+                            <p class="text-sm text-slate-500">No superseded, obsolete, or retired quality documents found.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} archived records
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="btn btn-sm btn-outline text-slate-700">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
