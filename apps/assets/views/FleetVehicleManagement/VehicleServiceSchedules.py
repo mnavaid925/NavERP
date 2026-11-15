@@ -202,6 +202,10 @@ def vehicle_service_schedule_delete(request, pk):
 def vehicle_service_schedule_complete(request, pk):
     """Complete a service event, log actual costs, and roll forward interval due dates."""
     schedule = assets_object(request, VehicleServiceSchedule, pk)
+    if schedule.vehicle.is_locked:
+        messages.error(request, f"Vehicle '{schedule.vehicle.number}' is decommissioned / locked and service cannot be completed.")
+        return redirect("assets:vehicle_service_schedule_detail", pk=schedule.pk)
+
     comp_date_raw = request.POST.get("completion_date")
     completion_date = safe_parse_date(comp_date_raw) or timezone.now().date()
 
