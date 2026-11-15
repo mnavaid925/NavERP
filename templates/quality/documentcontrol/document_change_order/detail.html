@@ -174,7 +174,7 @@
                 {% if can_ccb_approve %}
                 <div class="p-4 rounded-lg bg-slate-50 border border-slate-200 mt-2">
                     <h3 class="text-sm font-bold text-slate-800 mb-2">Record Change Control Board Determination</h3>
-                    <form method="post" action="{% url 'quality:document_change_order_ccb_decision' change_order.pk %}">
+                    <form method="post" action="{% url 'quality:document_change_order_ccb_decision' change_order.pk %}" onsubmit="return confirm('Record this official CCB determination?');">
                         {% csrf_token %}
                         <div class="mb-3">
                             <label class="form-label" for="ccb-decision-select">Determination <span class="text-red-500">*</span></label>
@@ -189,12 +189,57 @@
                             <label class="form-label" for="ccb-closure-notes">Closure Notes / Action Items</label>
                             <textarea id="ccb-closure-notes" name="closure_notes" rows="2" class="form-textarea" placeholder="Mandatory rationale or conditional action items..."></textarea>
                         </div>
-                        <button type="submit" class="btn btn-primary" onsubmit="return confirm('Record this official CCB determination?');">
+                        <button type="submit" class="btn btn-primary">
                             <i data-lucide="check"></i> Submit CCB Decision
                         </button>
                     </form>
                 </div>
                 {% endif %}
+            </div>
+        </div>
+
+        <!-- Electronic Signatures Card for Change Order -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div>
+                    <h2 class="text-base font-bold text-slate-800">Electronic Signatures & CCB Approvals</h2>
+                    <p class="text-xs text-slate-500">21 CFR Part 11 compliant digital signature manifest</p>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Signer</th>
+                            <th>Intent / Meaning</th>
+                            <th>Timestamp</th>
+                            <th>Cryptographic Hash</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sig in signatures %}
+                        <tr>
+                            <td class="font-medium text-slate-800">
+                                {{ sig.signer_name }}
+                                {% if sig.signer_title %}<div class="text-xs text-slate-500">{{ sig.signer_title }}</div>{% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-green">{{ sig.get_signature_meaning_display }}</span>
+                            </td>
+                            <td class="text-sm text-slate-600">{{ sig.signature_timestamp|date:"Y-m-d H:i:s" }}</td>
+                            <td class="font-mono text-xs text-slate-500 max-w-xs truncate" title="{{ sig.signature_hash }}">
+                                {{ sig.signature_hash }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-slate-500 text-sm">
+                                No electronic signatures recorded for this change order.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
