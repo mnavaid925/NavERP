@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:document_change_order_list' %}">Change Orders</a>
+            <span>/</span>
+            <span>{{ title }}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if change_order %}{% url 'quality:document_change_order_detail' change_order.pk %}{% else %}{% url 'quality:document_change_order_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-header">
+        <h2 class="text-base font-bold text-slate-800">Change Request Specification</h2>
+        <p class="text-xs text-slate-500">Provide full regulatory and operational justification for modifying controlled documentation.</p>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="mb-4 p-4 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Change Title <span class="text-red-500">*</span></label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.document.id_for_label }}">Target Controlled Document <span class="text-red-500">*</span></label>
+                    {{ form.document }}
+                    {% if form.document.errors %}<div class="form-error">{{ form.document.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_revision.id_for_label }}">Target Revision <span class="text-red-500">*</span></label>
+                    {{ form.target_revision }}
+                    {% if form.target_revision.errors %}<div class="form-error">{{ form.target_revision.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.change_type.id_for_label }}">Change Type <span class="text-red-500">*</span></label>
+                    {{ form.change_type }}
+                    {% if form.change_type.errors %}<div class="form-error">{{ form.change_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.priority.id_for_label }}">Priority Level <span class="text-red-500">*</span></label>
+                    {{ form.priority }}
+                    {% if form.priority.errors %}<div class="form-error">{{ form.priority.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.requested_by.id_for_label }}">Requested By <span class="text-red-500">*</span></label>
+                    {{ form.requested_by }}
+                    {% if form.requested_by.errors %}<div class="form-error">{{ form.requested_by.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_effective_date.id_for_label }}">Target Effective Date</label>
+                    {{ form.target_effective_date }}
+                    {% if form.target_effective_date.errors %}<div class="form-error">{{ form.target_effective_date.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.reason_for_change.id_for_label }}">Reason for Change <span class="text-red-500">*</span></label>
+                    {{ form.reason_for_change }}
+                    {% if form.reason_for_change.errors %}<div class="form-error">{{ form.reason_for_change.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.change_description.id_for_label }}">Detailed Change Description <span class="text-red-500">*</span></label>
+                    {{ form.change_description }}
+                    {% if form.change_description.errors %}<div class="form-error">{{ form.change_description.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.impact_assessment.id_for_label }}">Impact Assessment</label>
+                    {{ form.impact_assessment }}
+                    {% if form.impact_assessment.errors %}<div class="form-error">{{ form.impact_assessment.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center space-x-6 pt-2">
+                    <div class="flex items-center space-x-2">
+                        {{ form.regulatory_impact }}
+                        <label class="form-label mb-0" for="{{ form.regulatory_impact.id_for_label }}">Triggers Regulatory Filings / Notification</label>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        {{ form.training_required }}
+                        <label class="form-label mb-0" for="{{ form.training_required.id_for_label }}">Triggers Mandatory Retraining</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                <a href="{% if change_order %}{% url 'quality:document_change_order_detail' change_order.pk %}{% else %}{% url 'quality:document_change_order_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {{ action }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
