@@ -1177,23 +1177,24 @@ class CmdbRelationshipAdmin(admin.ModelAdmin):
 class FleetVehicleAdmin(admin.ModelAdmin):
     list_display = (
         "number",
+        "name",
         "vin",
         "license_plate",
         "make",
-        "model_name",
+        "model",
         "year",
         "vehicle_type",
         "fuel_type",
         "ownership_type",
-        "operational_status",
-        "current_odometer_km",
-        "assigned_driver",
+        "current_odometer",
+        "primary_driver",
         "status",
+        "compliance_status",
         "tenant",
     )
-    list_select_related = ("tenant", "asset", "assigned_driver", "department")
-    list_filter = ("tenant", "status", "vehicle_type", "fuel_type", "ownership_type", "operational_status")
-    search_fields = ("number", "vin", "license_plate", "make", "model_name")
+    list_select_related = ("tenant", "primary_driver", "org_unit", "operational_asset", "fixed_asset")
+    list_filter = ("tenant", "status", "compliance_status", "vehicle_type", "fuel_type", "ownership_type", "engine_state", "geofence_status")
+    search_fields = ("number", "name", "vin", "license_plate", "make", "model")
     readonly_fields = (
         "number",
         "created_at",
@@ -1205,23 +1206,23 @@ class FleetVehicleAdmin(admin.ModelAdmin):
 class VehicleFuelLogAdmin(admin.ModelAdmin):
     list_display = (
         "number",
-        "fleet_vehicle",
+        "vehicle",
         "driver",
         "fuel_date",
-        "quantity_liters",
+        "quantity_gallons",
+        "unit_price",
         "total_cost",
-        "odometer_km",
+        "odometer_at_fueling",
         "fuel_type",
         "is_full_tank",
-        "status",
+        "efficiency_rating",
         "tenant",
     )
-    list_select_related = ("tenant", "fleet_vehicle", "driver", "vendor", "currency")
-    list_filter = ("tenant", "status", "fuel_type", "payment_method", "is_full_tank")
-    search_fields = ("number", "fleet_vehicle__license_plate", "driver__first_name", "driver__last_name", "receipt_number")
+    list_select_related = ("tenant", "vehicle", "driver", "fuel_vendor", "currency")
+    list_filter = ("tenant", "fuel_type", "route_category", "efficiency_rating", "is_full_tank")
+    search_fields = ("number", "vehicle__license_plate", "vehicle__name", "driver__first_name", "driver__last_name", "receipt_reference", "fuel_station_name")
     readonly_fields = (
         "number",
-        "cost_per_liter",
         "created_at",
         "updated_at",
     )
@@ -1231,20 +1232,21 @@ class VehicleFuelLogAdmin(admin.ModelAdmin):
 class VehicleDriverAssignmentAdmin(admin.ModelAdmin):
     list_display = (
         "number",
-        "fleet_vehicle",
+        "vehicle",
         "driver",
-        "assignment_type",
-        "start_odometer_km",
-        "end_odometer_km",
+        "assignment_role",
+        "start_odometer",
+        "end_odometer",
         "start_datetime",
         "end_datetime",
-        "assignment_status",
+        "qualification_status",
+        "safety_score",
         "status",
         "tenant",
     )
-    list_select_related = ("tenant", "fleet_vehicle", "driver", "approved_by")
-    list_filter = ("tenant", "status", "assignment_type", "assignment_status")
-    search_fields = ("number", "fleet_vehicle__license_plate", "driver__first_name", "driver__last_name")
+    list_select_related = ("tenant", "vehicle", "driver", "user")
+    list_filter = ("tenant", "status", "assignment_role", "license_class", "qualification_status", "duty_status", "safety_tier")
+    search_fields = ("number", "vehicle__license_plate", "vehicle__name", "driver__first_name", "driver__last_name", "driver_license_number")
     readonly_fields = (
         "number",
         "created_at",
@@ -1256,20 +1258,21 @@ class VehicleDriverAssignmentAdmin(admin.ModelAdmin):
 class VehicleServiceScheduleAdmin(admin.ModelAdmin):
     list_display = (
         "number",
-        "fleet_vehicle",
+        "vehicle",
         "service_title",
         "service_type",
-        "frequency_type",
-        "scheduled_date",
-        "service_status",
-        "service_provider",
-        "actual_cost",
+        "next_due_date",
+        "next_due_odometer",
+        "priority",
         "status",
+        "service_vendor",
+        "estimated_cost",
+        "actual_cost",
         "tenant",
     )
-    list_select_related = ("tenant", "fleet_vehicle", "service_provider", "work_order", "currency")
-    list_filter = ("tenant", "status", "service_type", "frequency_type", "service_status")
-    search_fields = ("number", "service_title", "fleet_vehicle__license_plate", "invoice_reference")
+    list_select_related = ("tenant", "vehicle", "service_vendor", "warranty", "maintenance_schedule", "currency")
+    list_filter = ("tenant", "status", "priority", "service_type", "is_warranty_covered")
+    search_fields = ("number", "service_title", "vehicle__license_plate", "vehicle__name", "work_order_invoice_ref")
     readonly_fields = (
         "number",
         "created_at",
