@@ -43,6 +43,12 @@ class Command(BaseCommand):
             self._seed_submodule_12_1(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
+        self.stdout.write(
+            "NOTE: The global 'admin' superuser has tenant=None by design and cannot view tenant-scoped records."
+        )
+        self.stdout.write(
+            "Log in as a tenant user (e.g. admin_acme / password) to inspect seeded quality data."
+        )
 
     def _seed_submodule_12_1(self, tenant):
         if ControlledDocument.objects.filter(tenant=tenant).exists():
@@ -52,25 +58,25 @@ class Command(BaseCommand):
         self.stdout.write(f"[{tenant.name}] Seeding 12.1 Document Control & Management...")
 
         admin_user = (
-            User.objects.filter(tenant=tenant, is_superuser=True).first()
-            or User.objects.filter(tenant=tenant).first()
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
         )
         if not admin_user:
             self.stdout.write(f"[{tenant.name}] Warning: No user found for tenant.")
             return
 
-        users = list(User.objects.filter(tenant=tenant))
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
         reviewer_user = users[1] if len(users) > 1 else admin_user
 
-        qa_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="quality").first()
+        qa_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="quality").order_by("pk").first()
         if not qa_dept:
-            qa_dept = OrgUnit.objects.filter(tenant=tenant).first()
+            qa_dept = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
 
-        ops_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="operation").first()
+        ops_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="operation").order_by("pk").first()
         if not ops_dept:
-            ops_dept = OrgUnit.objects.filter(tenant=tenant).last()
+            ops_dept = OrgUnit.objects.filter(tenant=tenant).order_by("pk").last()
 
-        employee = EmployeeProfile.objects.filter(tenant=tenant).first()
+        employee = EmployeeProfile.objects.filter(tenant=tenant).order_by("pk").first()
 
         today = timezone.now().date()
 
