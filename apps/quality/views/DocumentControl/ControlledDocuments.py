@@ -379,7 +379,7 @@ def controlled_document_export(request):
 
     writer = csv.writer(response)
     writer.writerow(["Number", "Title", "Type", "Revision", "State", "Classification", "Department", "Owner", "Effective Date", "Next Review Date"])
-    for d in qs:
+    for d in qs.iterator(chunk_size=1000):
         writer.writerow([
             csv_safe(d.number),
             csv_safe(d.title),
