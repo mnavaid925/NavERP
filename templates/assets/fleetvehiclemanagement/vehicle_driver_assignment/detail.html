@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Driver Assignment {{ assignment.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:vehicle_driver_assignment_list' %}">Driver Assignments</a>
+            <span>/</span>
+            <span>{{ assignment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ assignment.driver }}</h1>
+            <span class="badge {{ assignment.status_badge_class }}">{{ assignment.get_status_display }}</span>
+            <span class="badge {{ assignment.safety_tier_badge_class }}">{{ assignment.safety_score }}/100</span>
+            <span class="badge {{ assignment.qualification_badge_class }}">{{ assignment.get_qualification_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:vehicle_driver_assignment_edit' assignment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit Assignment
+        </a>
+
+        {% if assignment.status == "active" %}
+        <form method="post" action="{% url 'assets:vehicle_driver_assignment_complete' assignment.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-600 border-green-600 hover:bg-green-50">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Check In / Complete
+            </button>
+        </form>
+
+        <form method="post" action="{% url 'assets:vehicle_driver_assignment_record_incident' assignment.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600 border-amber-600 hover:bg-amber-50">
+                <i data-lucide="alert-octagon" class="w-4 h-4 me-1"></i> Log Safety Incident (-10 Pts)
+            </button>
+        </form>
+
+        <form method="post" action="{% url 'assets:vehicle_driver_assignment_revoke' assignment.pk %}" class="inline" onsubmit="return confirm('Revoke driver assignment \'{{ assignment.number }}\' for safety violation?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 border-red-600 hover:bg-red-50">
+                <i data-lucide="ban" class="w-4 h-4 me-1"></i> Revoke Assignment
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:vehicle_driver_assignment_delete' assignment.pk %}" class="inline" onsubmit="return confirm('Delete driver assignment \'{{ assignment.number }}\'?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Assignment Details Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Assignment &amp; Vehicle Standing</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Assignment Ref</dt>
+                    <dd class="font-mono font-medium">{{ assignment.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Assigned Driver</dt>
+                    <dd class="font-semibold text-slate-900 dark:text-slate-100">{{ assignment.driver }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Assigned Vehicle</dt>
+                    <dd>
+                        {% if assignment.vehicle %}
+                        <a href="{% url 'assets:fleet_vehicle_detail' assignment.vehicle.pk %}" class="text-blue-600 hover:underline font-medium">
+                            {{ assignment.vehicle.name }} ({{ assignment.vehicle.license_plate }})
+                        </a>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Assignment Role</dt>
+                    <dd>{{ assignment.get_assignment_role_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Start Datetime</dt>
+                    <dd>{{ assignment.start_datetime|date:"Y-m-d H:i" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>End Datetime</dt>
+                    <dd>{% if assignment.end_datetime %}{{ assignment.end_datetime|date:"Y-m-d H:i" }}{% else %}<span class="badge badge-green">Active</span>{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Starting Odometer</dt>
+                    <dd class="font-mono">{{ assignment.start_odometer }} miles</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Ending Odometer</dt>
+                    <dd class="font-mono">{% if assignment.end_odometer %}{{ assignment.end_odometer }} miles{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Driver License #</dt>
+                    <dd class="font-mono">{{ assignment.driver_license_number|default:"—" }} {% if assignment.driver_license_state %}({{ assignment.driver_license_state }}){% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>License Class</dt>
+                    <dd>{{ assignment.get_license_class_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>License Expiration</dt>
+                    <dd>
+                        {% if assignment.license_expiration_date %}
+                        {{ assignment.license_expiration_date }}
+                        {% if assignment.is_license_expired %}<span class="badge badge-red ms-2">Expired</span>{% elif assignment.is_license_expiring_soon %}<span class="badge badge-amber ms-2">Expiring</span>{% endif %}
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>DOT Medical Card Expiration</dt>
+                    <dd>
+                        {% if assignment.medical_card_expiration_date %}
+                        {{ assignment.medical_card_expiration_date }}
+                        {% if assignment.is_medical_expired %}<span class="badge badge-red ms-2">Expired</span>{% endif %}
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Hazmat Endorsement</dt>
+                    <dd>{% if assignment.hazmat_endorsed %}<span class="badge badge-green">Endorsed</span>{% else %}<span class="badge badge-slate">None</span>{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Current Duty Status</dt>
+                    <dd><span class="badge {{ assignment.duty_status_badge_class }}">{{ assignment.get_duty_status_display }}</span></dd>
+                </div>
+            </dl>
+            {% if assignment.supervisor_notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h4 class="text-xs font-semibold uppercase text-slate-500 mb-1">Supervisor Notes</h4>
+                <p class="text-sm text-slate-700 dark:text-slate-300">{{ assignment.supervisor_notes|linebreaks }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Safety Scorecard Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="text-base font-semibold">Driver Safety Scorecard</h3>
+        </div>
+        <div class="card-body">
+            <div class="text-center py-3">
+                <div class="text-5xl font-extrabold text-blue-600 dark:text-blue-400 font-mono">
+                    {{ assignment.safety_score }}
+                </div>
+                <div class="text-xs text-slate-500 font-medium uppercase mt-1">Safety Index (0-100)</div>
+                <div class="mt-2">
+                    <span class="badge {{ assignment.safety_tier_badge_class }}">{{ assignment.get_safety_tier_display }}</span>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-3 space-y-2 text-sm">
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-slate-500">Speeding Events</span>
+                    <span class="font-mono font-medium">{{ assignment.speeding_event_count }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-slate-500">Harsh Braking</span>
+                    <span class="font-mono font-medium">{{ assignment.harsh_braking_count }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-slate-500">Harsh Acceleration</span>
+                    <span class="font-mono font-medium">{{ assignment.harsh_acceleration_count }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-t border-slate-100 dark:border-slate-800 pt-2">
+                    <span class="text-slate-500 font-medium">Logged Safety Incidents</span>
+                    <span class="font-mono font-bold text-red-600">{{ assignment.incident_count }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
