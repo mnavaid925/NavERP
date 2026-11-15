@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:controlled_document_list' %}">Controlled Documents</a>
+            <span>/</span>
+            <span>{{ title }}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if document %}{% url 'quality:controlled_document_detail' document.pk %}{% else %}{% url 'quality:controlled_document_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-header">
+        <h2 class="text-base font-bold text-slate-800">Controlled Document Information</h2>
+        <p class="text-xs text-slate-500">Ensure all metadata and regulatory classifications are accurate before saving.</p>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="mb-4 p-4 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                {% if form.title %}
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Document Title <span class="text-red-500">*</span></label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.document_type %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.document_type.id_for_label }}">Document Type <span class="text-red-500">*</span></label>
+                    {{ form.document_type }}
+                    {% if form.document_type.errors %}<div class="form-error">{{ form.document_type.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.revision %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.revision.id_for_label }}">Revision Identifier <span class="text-red-500">*</span></label>
+                    {{ form.revision }}
+                    {% if form.revision.errors %}<div class="form-error">{{ form.revision.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.department %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.department.id_for_label }}">Owning Department</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="form-error">{{ form.department.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.owner %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Document Author / Owner <span class="text-red-500">*</span></label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.classification %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.classification.id_for_label }}">Security Classification <span class="text-red-500">*</span></label>
+                    {{ form.classification }}
+                    {% if form.classification.errors %}<div class="form-error">{{ form.classification.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.effective_date %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.effective_date.id_for_label }}">Target Effective Date</label>
+                    {{ form.effective_date }}
+                    {% if form.effective_date.errors %}<div class="form-error">{{ form.effective_date.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.review_interval_months %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.review_interval_months.id_for_label }}">Review Interval (Months)</label>
+                    {{ form.review_interval_months }}
+                    {% if form.review_interval_months.errors %}<div class="form-error">{{ form.review_interval_months.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.retention_years %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.retention_years.id_for_label }}">Retention Period (Years)</label>
+                    {{ form.retention_years }}
+                    {% if form.retention_years.errors %}<div class="form-error">{{ form.retention_years.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.file %}
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.file.id_for_label }}">Controlled Master File</label>
+                    {{ form.file }}
+                    {% if form.file.errors %}<div class="form-error">{{ form.file.errors.0 }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Attach primary procedure PDF or approved editable document format.</span>
+                </div>
+                {% endif %}
+
+                {% if form.description %}
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Scope & Purpose</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.change_summary %}
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.change_summary.id_for_label }}">Revision Summary / Change Rationale</label>
+                    {{ form.change_summary }}
+                    {% if form.change_summary.errors %}<div class="form-error">{{ form.change_summary.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if form.is_template %}
+                <div class="form-group md:col-span-2 flex items-center space-x-2 pt-2">
+                    {{ form.is_template }}
+                    <label class="form-label mb-0" for="{{ form.is_template.id_for_label }}">Mark as Reusable Quality Template</label>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                <a href="{% if document %}{% url 'quality:controlled_document_detail' document.pk %}{% else %}{% url 'quality:controlled_document_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {{ action }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
