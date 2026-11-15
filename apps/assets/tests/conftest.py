@@ -4710,6 +4710,16 @@ def sfa_chargeback_b(
 
 
 @pytest.fixture
+def user_a(admin_user):
+    return admin_user
+
+
+@pytest.fixture
+def user_b(admin_b):
+    return admin_b
+
+
+@pytest.fixture
 def driver_profile_a(db, tenant_a):
     party = Party.objects.create(
         tenant=tenant_a,
