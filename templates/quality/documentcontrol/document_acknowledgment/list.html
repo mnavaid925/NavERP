@@ -146,7 +146,7 @@
                         {% elif ack.status == 'waived' %}
                         <span class="badge badge-slate text-xs">Waived</span>
                         {% else %}
-                        <span class="badge badge-amber text-xs">Pending Sign-Off</span>
+                        <span class="badge badge-amber text-xs">{{ ack.get_status_display }}</span>
                         {% endif %}
                     </td>
                     <td class="text-sm text-slate-600">
