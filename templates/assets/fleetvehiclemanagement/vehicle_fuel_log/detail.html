@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Fuel Fill-up {{ fuel_log.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:vehicle_fuel_log_list' %}">Vehicle Fuel Logs</a>
+            <span>/</span>
+            <span>{{ fuel_log.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ fuel_log.number }}</h1>
+            <span class="badge {{ fuel_log.efficiency_badge_class }}">{{ fuel_log.get_efficiency_rating_display }}</span>
+            {% if fuel_log.is_full_tank %}
+            <span class="badge badge-info">Full Tank Verified</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:vehicle_fuel_log_edit' fuel_log.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit Log
+        </a>
+        <form method="post" action="{% url 'assets:vehicle_fuel_log_delete' fuel_log.pk %}" class="inline" onsubmit="return confirm('Delete fuel log \'{{ fuel_log.number }}\'?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Fuel Fill-up Transaction Details</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Vehicle</dt>
+                    <dd class="font-medium">
+                        {% if fuel_log.vehicle %}
+                        <a href="{% url 'assets:fleet_vehicle_detail' fuel_log.vehicle.pk %}" class="text-blue-600 hover:underline">
+                            {{ fuel_log.vehicle.name }} ({{ fuel_log.vehicle.license_plate }})
+                        </a>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Transaction Timestamp</dt>
+                    <dd>{{ fuel_log.fuel_date|date:"Y-m-d H:i" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Odometer at Fill-up</dt>
+                    <dd class="font-mono font-medium">{{ fuel_log.odometer_at_fueling }} miles</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Miles Since Previous</dt>
+                    <dd class="font-mono">{% if fuel_log.distance_since_last_fuel %}+{{ fuel_log.distance_since_last_fuel }} mi{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Calculated Fuel Economy</dt>
+                    <dd class="font-mono font-semibold text-base text-blue-600 dark:text-blue-400">
+                        {% if fuel_log.calculated_mpg %}{{ fuel_log.calculated_mpg }} MPG{% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Cost Per Mile</dt>
+                    <dd class="font-mono">{% if fuel_log.cost_per_mile %}${{ fuel_log.cost_per_mile }} / mi{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fuel Type</dt>
+                    <dd>{{ fuel_log.get_fuel_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Volume Pumped</dt>
+                    <dd class="font-mono">{{ fuel_log.quantity_gallons }} gallons</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Unit Price</dt>
+                    <dd class="font-mono">${{ fuel_log.unit_price }} / gallon</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Total Transaction Spend</dt>
+                    <dd class="font-mono font-bold text-lg text-slate-900 dark:text-slate-100">${{ fuel_log.total_cost }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Full Tank Fill</dt>
+                    <dd>{% if fuel_log.is_full_tank %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-amber">Partial Fill</span>{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Route Profile</dt>
+                    <dd>{{ fuel_log.get_route_category_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Driver / Authorizer</dt>
+                    <dd>{{ fuel_log.driver|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fuel Vendor Party</dt>
+                    <dd>{{ fuel_log.fuel_vendor|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Station / Location</dt>
+                    <dd>{{ fuel_log.fuel_station_name|default:"—" }} {% if fuel_log.station_city_state %}({{ fuel_log.station_city_state }}){% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fuel Card Token</dt>
+                    <dd class="font-mono text-xs">{{ fuel_log.fuel_card_token|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Receipt Reference</dt>
+                    <dd class="font-mono">{{ fuel_log.receipt_reference|default:"—" }}</dd>
+                </div>
+            </dl>
+            {% if fuel_log.notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h4 class="text-xs font-semibold uppercase text-slate-500 mb-1">Notes</h4>
+                <p class="text-sm text-slate-700 dark:text-slate-300">{{ fuel_log.notes|linebreaks }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Efficiency & Advice Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="text-base font-semibold">Fuel Economy Benchmark</h3>
+        </div>
+        <div class="card-body">
+            <div class="text-center py-4">
+                <div class="text-4xl font-extrabold text-blue-600 dark:text-blue-400 font-mono">
+                    {% if fuel_log.calculated_mpg %}{{ fuel_log.calculated_mpg }}<span class="text-sm font-normal text-slate-500 ms-1">MPG</span>{% else %}N/A{% endif %}
+                </div>
+                <div class="mt-2">
+                    <span class="badge {{ fuel_log.efficiency_badge_class }}">{{ fuel_log.get_efficiency_rating_display }}</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-3 px-2">
+                    Mileage is calculated between consecutive full-tank fuelings on this vehicle unit.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
