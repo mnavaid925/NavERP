@@ -21,6 +21,7 @@ urlpatterns = [
     path("ecommerce/", include("apps.ecommerce.urls")), # /ecommerce/, catalog/products/variants/categories
     path("bi/", include("apps.bi.urls")),               # /bi/, data integration/ingestion/connectors/pipelines
     path("assets/", include("apps.assets.urls")),       # /assets/, asset procurement/capitalization/tags
+    path("quality/", include("apps.quality.urls")),     # /quality/, document control, QMS
 ]
 
 if settings.DEBUG:
