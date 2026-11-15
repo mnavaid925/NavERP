@@ -104,7 +104,14 @@ def document_acknowledgment_detail(request, pk):
         request,
         DocumentAcknowledgment,
         pk,
-        select_related=["document", "user", "employee", "signature_record"],
+        select_related=[
+            "document",
+            "document__department",
+            "document__owner",
+            "user",
+            "employee",
+            "signature_record",
+        ],
     )
 
     can_sign = (
