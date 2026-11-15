@@ -52,7 +52,7 @@ class VehicleDriverAssignmentForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, tenant=tenant, **kwargs)
         if self.tenant is not None:
             self.fields["vehicle"].queryset = FleetVehicle.objects.filter(tenant=self.tenant)
-            self.fields["driver"].queryset = EmployeeProfile.objects.filter(tenant=self.tenant)
+            self.fields["driver"].queryset = EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
             self.fields["user"].queryset = User.objects.filter(tenant=self.tenant)
 
     def clean(self):
