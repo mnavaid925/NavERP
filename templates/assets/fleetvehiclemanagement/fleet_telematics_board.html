@@ -73,6 +73,46 @@
     </div>
 </div>
 
+<!-- Live Fleet GPS Map Card -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <i data-lucide="map-pin" class="w-4 h-4 text-blue-600"></i>
+            <h2 class="text-base font-semibold">Live Fleet GPS Map &amp; Geofence Boundary</h2>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="badge badge-green"><i data-lucide="satellite" class="w-3 h-3 inline me-1"></i> GPS Satellite Link Active</span>
+            <span class="text-xs text-slate-400 font-mono">{{ moving_count }} Active Movers</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="relative bg-slate-900 rounded-b overflow-hidden h-64 md:h-80 flex items-center justify-center border-t border-slate-700">
+            <div class="absolute inset-0 opacity-20 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:2rem_2rem]"></div>
+            
+            <div class="relative z-10 text-center p-6 max-w-md">
+                <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-blue-900/60 flex items-center justify-center text-blue-400 ring-4 ring-blue-500/20">
+                    <i data-lucide="map" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-base font-medium text-slate-100">Live Telematics GIS Map Overview</h3>
+                <p class="text-xs text-slate-400 mt-1 mb-4">
+                    Real-time geofence corridors, breadcrumb trails, and live GPS positioning enabled for {{ recent_vehicles|length }} vehicles.
+                </p>
+                <div class="flex flex-wrap justify-center gap-2 text-xs">
+                    <span class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700">
+                        <span class="w-2 h-2 rounded-full bg-green-400 inline-block me-1"></span>{{ moving_count }} Moving
+                    </span>
+                    <span class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 inline-block me-1"></span>{{ idling_count }} Idling
+                    </span>
+                    <span class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700">
+                        <span class="w-2 h-2 rounded-full bg-red-400 inline-block me-1"></span>{{ geofence_breach_count }} Alerts
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     <!-- Active Fleet Telematics Feed Table -->
     <div class="card lg:col-span-2">
