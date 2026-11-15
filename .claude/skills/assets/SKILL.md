@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, asset analytics & BI — Asset Lifecycle Cost Analysis TCO/EAC (`ALCC-`), Replacement Planning & FCI Forecasting (`ARPL-`), What-if Portfolio Scenarios (`AWIF-`), Executive KPI Scorecards (`AKPI-`), and computed Portfolio Dashboard & Scenario Comparison, integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification, and document & knowledge management — controlled engineering document repository & revision/MOC queue, LOTO-enabled SOP bench sheets, operator training/qualification matrix with expiry alerts, and 5-Why / Fishbone 6M RCA knowledge base). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.14, 11.15, 11.16), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, asset analytics & BI — Asset Lifecycle Cost Analysis TCO/EAC (`ALCC-`), Replacement Planning & FCI Forecasting (`ARPL-`), What-if Portfolio Scenarios (`AWIF-`), Executive KPI Scorecards (`AKPI-`), and computed Portfolio Dashboard & Scenario Comparison, integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification, document & knowledge management — controlled engineering document repository & revision/MOC queue, LOTO-enabled SOP bench sheets, operator training/qualification matrix with expiry alerts, and 5-Why / Fishbone 6M RCA knowledge base, and IT asset management (ITAM) — hardware lifecycle with NIST SP 800-88 sanitization (`[ITHW-]`), software license compliance & Effective License Position ELP (`[ITSW-]`), cloud asset subscription FinOps & shadow-IT governance (`[ITCL-]`), CMDB multi-type directed CI dependency graph (`[CMDB-]`), EOL/EOS hardware refresh cycle planning board, and cycle-safe CMDB blast-radius impact analysis). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.14, 11.15, 11.16, 11.17, 11.18), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -32,6 +32,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.14 Asset Analytics & Business Intelligence**: Lifecycle Cost Analysis TCO/EAC (`[ALCC-]`), Replacement Planning & FCI Forecasting (`[ARPL-]`), What-if Portfolio Scenario Modeling (`[AWIF-]`), Executive Reporting & KPI Scorecards (`[AKPI-]`), plus computed Portfolio Performance Dashboard & multi-scenario comparison workbench.
 - **11.15 Integration & API Hub**: ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 secret rotation & SSRF defense (`[AICN-]`), IoT/SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation (`[ATMS-]`), GL sync & reconciliation batches posting balanced `JournalEntry` rows (`[AGLS-]`), and GIS/LRS spatial coordinate & drift verification (`[AGIS-]`).
 - **11.16 Document & Knowledge Management**: Controlled engineering manuals/drawings repository with revision chains, checkout/check-in locks, access-classification tiers, and protected attachment downloads (`[ADOC-]`), controlled SOP & LOTO isolation procedures with printable shop-floor bench sheets (`[ASOP-]`), operator qualification & training certifications with bulk expiry refresh and `is_operator_certified(...)` resolver (`[AOCT-]`), and 5-Why / Fishbone 6M RCA & lessons-learned knowledge base (`[AKBA-]`).
+- **11.18 IT Asset Management (ITAM)**: Hardware lifecycle management with NIST SP 800-88 sanitization tracking (`[ITHW-]`), software license compliance with Effective License Position ELP, surplus reclamation, and true-up calculations (`[ITSW-]`), cloud and SaaS subscription governance with FinOps cost optimization and shadow-IT discovery (`[ITCL-]`), Configuration Management Database (CMDB) multi-type directed CI dependency graph modeling (`[CMDB-]`), End-of-Life (EOL/EOS) hardware refresh cycle planning board (`it_refresh_board`), and cycle-safe CMDB blast-radius impact analysis (`cmdb_impact_analysis`).
 
 ---
 
@@ -121,6 +122,12 @@ apps/assets/
       AssetOperatingProcedures.py             <- AssetOperatingProcedure [ASOP-]
       AssetOperatorCertifications.py          <- AssetOperatorCertification [AOCT-] & is_operator_certified
       AssetKnowledgeArticles.py               <- AssetKnowledgeArticle [AKBA-]
+    ItAssetManagement/                        <- Sub-module 11.18 models
+      _validators.py                          <- Shared validate_tenant_fks & validate_masked_key_ref helpers
+      ItHardwareAssets.py                     <- ItHardwareAsset [ITHW-] (NIST SP 800-88 sanitization & EOL refresh tiers)
+      SoftwareLicenses.py                     <- SoftwareLicense [ITSW-] (ELP compliance, surplus reclaim, true-up)
+      CloudAssetSubscriptions.py              <- CloudAssetSubscription [ITCL-] (FinOps spend, seat waste, shadow-IT)
+      CmdbRelationships.py                    <- CmdbRelationship [CMDB-] (10-FK typed directed graph edges)
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -201,6 +208,12 @@ apps/assets/
       AssetOperatingProcedures.py             <- AssetOperatingProcedureForm
       AssetOperatorCertifications.py          <- AssetOperatorCertificationForm
       AssetKnowledgeArticles.py               <- AssetKnowledgeArticleForm
+    ItAssetManagement/                        <- Sub-module 11.18 forms
+      _helpers.py                             <- Shared tenant FK scoping, JSON dict normalization, masked key ref
+      ItHardwareAssets.py                     <- ItHardwareAssetForm (admin-gated NIST sanitization fields)
+      SoftwareLicenses.py                     <- SoftwareLicenseForm
+      CloudAssetSubscriptions.py              <- CloudAssetSubscriptionForm
+      CmdbRelationships.py                    <- CmdbRelationshipForm (cached CI choice queries)
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -284,6 +297,14 @@ apps/assets/
       AssetOperatingProcedures.py             <- SOP CRUD, download, print bench sheet, submit_review, activate, clone_revision, retire
       AssetOperatorCertifications.py          <- Certification CRUD, download, refresh_alerts (bulk_update), verify_activate, acknowledge_sop, renew, revoke
       AssetKnowledgeArticles.py               <- KB CRUD, download, submit_review, publish, mark_helpful, retire
+    ItAssetManagement/                        <- Sub-module 11.18 views
+      _helpers.py                             <- CSV streaming, CI label map, cycle-safe BFS impact analysis
+      ItHardwareAssets.py                     <- Hardware CRUD + deploy, stock, repair, loaner, refresh, sanitize, retire
+      SoftwareLicenses.py                     <- Software License CRUD + sync ELP, reclaim, true-up, renew, audit hold, retire
+      CloudAssetSubscriptions.py              <- Cloud Subscription CRUD + sanction, shadow-flag, sync FinOps, renew, suspend, decomm
+      CmdbRelationships.py                    <- CMDB Edge CRUD + verify, deprecate, sever
+      ItRefreshBoards.py                      <- EOL & Refresh Cycles command board (SQL KPIs, OrgUnit CapEx rollup, CSV)
+      CmdbImpactAnalyses.py                   <- CMDB Dependency & Blast-Radius impact analysis explorer
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -362,6 +383,13 @@ apps/assets/
       AssetOperatingProcedures.py
       AssetOperatorCertifications.py
       AssetKnowledgeArticles.py
+    ItAssetManagement/                        <- Sub-module 11.18 URL route definitions
+      ItHardwareAssets.py
+      SoftwareLicenses.py
+      CloudAssetSubscriptions.py
+      CmdbRelationships.py
+      ItRefreshBoards.py
+      CmdbImpactAnalyses.py
     __init__.py                               <- Root URL router concatenating all packages
   templatetags/
     asset_analytics_tags.py                   <- fmt_money tag for dynamic currency prefix + leading-sign formatting
@@ -429,6 +457,10 @@ apps/assets/
     test_asset_document_knowledge_forms.py    <- 11.16 Form exclusions, FileInput, reject_foreign, access-tier dropdowns, JSON & upload bounds
     test_asset_document_knowledge_views.py    <- 11.16 CRUD, change queue, CSV scope, print sheet, workflows, query-budget bounds
     test_asset_document_knowledge_security.py <- 11.16 Anon/IDOR (404), RBAC (403), access tiers, checkout locks, XSS/CSV/file hardening
+    test_it_asset_management_models.py        <- 11.18 Model invariants, ITHW/ITSW/ITCL/CMDB sequences, ELP, sanitization, clean()
+    test_it_asset_management_forms.py         <- 11.18 Form validations, NIST admin gating, masked keys, CI choice reuse, reject_foreign
+    test_it_asset_management_views.py         <- 11.18 CRUD, 22 workflows, AuditLog changes, 6 CSVs, refresh board, blast-radius BFS, query budgets
+    test_it_asset_management_security.py      <- 11.18 Anon (302), IDOR 404, C2 audit_hold (403), C3 suspended (403), C4 NIST tampering, locked states
 ```
 
 ---
@@ -1105,6 +1137,66 @@ Templates under `templates/assets/assetdocumentknowledge/{asset_document,asset_o
   - `assets:asset_knowledge_article_mark_helpful`: `/assets/knowledge-base/<pk>/mark-helpful/` [POST]
   - `assets:asset_knowledge_article_retire`: `/assets/knowledge-base/<pk>/retire/` [POST, Admin]
 
+### 11.18 IT Asset Management (ITAM)
+Templates under `templates/assets/itassetmanagement/{it_hardware_asset,software_license,cloud_asset_subscription,cmdb_relationship}/` (`list`, `detail`, `form`), plus `it_refresh_board.html` (End-of-Life & Refresh Cycles command board) and `cmdb_impact_analysis.html` (CMDB Dependency & Blast-Radius explorer). Seeder method `_seed_tenant_11_18(tenant)` in `seed_assets.py` creates demo IT Hardware (`ITHW-`), Software Licenses (`ITSW-`), Cloud Subscriptions (`ITCL-`), and CMDB Relationships (`CMDB-`). Migrations: `0024_asset_facility_and_itam_models` and `0025_alter_assetfacilityspace_floor_plan_image_and_more`.
+
+- **IT Hardware Assets (`ItHardwareAsset` [ITHW-]):** Reuses `scm.Asset`, `accounting.FixedAsset`, `accounting.Currency` (global), `AssetModel`, `AssetCategory`, `AssetWarranty`, `AssetRequisition`, `AssetReplacementPlan`, `AssetDisposalRequest`, `AssetScrapSalvage`, `scm.Location`, `core.Party` (`custodian_party`, `vendor_party`), `hrm.EmployeeProfile`, `core.OrgUnit`, `User`; delivers full lifecycle management (procured -> staged_in_stock -> deployed -> in_repair -> loaner_pool -> pending_refresh -> sanitized_retired -> disposed), automated `refresh_due_date` calculation with calendar month helper, 4-tier `refresh_priority` scoring (`overdue_critical`, `due_within_90d`, `planned_fy`, `healthy`), `is_eol_expired` / `is_eos_approaching` detection, and NIST SP 800-88 sanitization verification workflow with tenant admin protection.
+  - `assets:it_hardware_asset_list`: `/assets/it-hardware/`
+  - `assets:it_hardware_asset_create`: `/assets/it-hardware/new/`
+  - `assets:it_hardware_asset_export_csv`: `/assets/it-hardware/export-csv/`
+  - `assets:it_hardware_asset_detail`: `/assets/it-hardware/<pk>/`
+  - `assets:it_hardware_asset_edit`: `/assets/it-hardware/<pk>/edit/`
+  - `assets:it_hardware_asset_delete`: `/assets/it-hardware/<pk>/delete/` [POST, Admin]
+  - `assets:it_hardware_asset_deploy`: `/assets/it-hardware/<pk>/deploy/` [POST]
+  - `assets:it_hardware_asset_move_to_stock`: `/assets/it-hardware/<pk>/move-to-stock/` [POST]
+  - `assets:it_hardware_asset_send_to_repair`: `/assets/it-hardware/<pk>/send-to-repair/` [POST]
+  - `assets:it_hardware_asset_assign_to_loaner_pool`: `/assets/it-hardware/<pk>/assign-loaner/` [POST]
+  - `assets:it_hardware_asset_schedule_refresh`: `/assets/it-hardware/<pk>/schedule-refresh/` [POST]
+  - `assets:it_hardware_asset_mark_sanitized`: `/assets/it-hardware/<pk>/mark-sanitized/` [POST, Admin]
+  - `assets:it_hardware_asset_retire_decommission`: `/assets/it-hardware/<pk>/retire/` [POST, Admin]
+- **Software Licenses (`SoftwareLicense` [ITSW-]):** Reuses `accounting.Currency` (global), `scm.PurchaseOrder`, `AssetServiceContract`, `core.Party` (`publisher_party`, `reseller_party`), `core.OrgUnit`, `User`; enforces `validate_masked_key_ref` key reference protection, calculates Effective License Position (ELP) variance (`compliance_delta`), utilization percentage, estimated true-up costs, and reclaimable savings potential; handles `active_compliant`, `surplus_reclaimable`, `true_up_required`, and `@tenant_admin_required` `audit_hold` states (with non-admin hold protection and hold-preserving compliance sync).
+  - `assets:software_license_list`: `/assets/software-licenses/`
+  - `assets:software_license_create`: `/assets/software-licenses/new/`
+  - `assets:software_license_export_csv`: `/assets/software-licenses/export-csv/`
+  - `assets:software_license_detail`: `/assets/software-licenses/<pk>/`
+  - `assets:software_license_edit`: `/assets/software-licenses/<pk>/edit/`
+  - `assets:software_license_delete`: `/assets/software-licenses/<pk>/delete/` [POST, Admin]
+  - `assets:software_license_sync_compliance`: `/assets/software-licenses/<pk>/sync-compliance/` [POST]
+  - `assets:software_license_reclaim_inactive`: `/assets/software-licenses/<pk>/reclaim-inactive/` [POST]
+  - `assets:software_license_record_true_up`: `/assets/software-licenses/<pk>/true-up/` [POST, Admin]
+  - `assets:software_license_renew_term`: `/assets/software-licenses/<pk>/renew/` [POST]
+  - `assets:software_license_place_audit_hold`: `/assets/software-licenses/<pk>/audit-hold/` [POST, Admin]
+  - `assets:software_license_retire`: `/assets/software-licenses/<pk>/retire/` [POST, Admin]
+- **Cloud Asset Subscriptions (`CloudAssetSubscription` [ITCL-]):** Reuses `accounting.Currency` (global), `core.Party` (`vendor_party`), `core.OrgUnit`, `User`; manages SaaS, IaaS, and PaaS subscriptions with FinOps spend tracking, seat utilization, auto-renewal notice tracking, shadow-IT discovery flagging, JSON `resource_tags` key-value pairs, and admin-governed `suspended` lifecycle states.
+  - `assets:cloud_asset_subscription_list`: `/assets/cloud-subscriptions/`
+  - `assets:cloud_asset_subscription_create`: `/assets/cloud-subscriptions/new/`
+  - `assets:cloud_asset_subscription_export_csv`: `/assets/cloud-subscriptions/export-csv/`
+  - `assets:cloud_asset_subscription_detail`: `/assets/cloud-subscriptions/<pk>/`
+  - `assets:cloud_asset_subscription_edit`: `/assets/cloud-subscriptions/<pk>/edit/`
+  - `assets:cloud_asset_subscription_delete`: `/assets/cloud-subscriptions/<pk>/delete/` [POST, Admin]
+  - `assets:cloud_asset_subscription_sanction`: `/assets/cloud-subscriptions/<pk>/sanction/` [POST]
+  - `assets:cloud_asset_subscription_flag_shadow`: `/assets/cloud-subscriptions/<pk>/flag-shadow/` [POST]
+  - `assets:cloud_asset_subscription_sync_finops`: `/assets/cloud-subscriptions/<pk>/sync-finops/` [POST]
+  - `assets:cloud_asset_subscription_renew`: `/assets/cloud-subscriptions/<pk>/renew/` [POST]
+  - `assets:cloud_asset_subscription_suspend`: `/assets/cloud-subscriptions/<pk>/suspend/` [POST, Admin]
+  - `assets:cloud_asset_subscription_decommission`: `/assets/cloud-subscriptions/<pk>/decommission/` [POST, Admin]
+- **Configuration Management Database Relationships (`CmdbRelationship` [CMDB-]):** Connects 5 distinct CI types (`it_hardware`, `software_license`, `cloud_asset`, `facility_space`, `service_component`) across 10 typed ForeignKey pointers (`source_*` / `target_*`) into a directed enterprise topology graph; supports 12 relationship types (`runs_on`, `depends_on`, `connects_to`, `hosted_in`, `manages`, `fails_over_to`, `consumes_api`, etc.), enforces single-active-edge validation, self-loop rejection, and verification lifecycle (`planned` -> `active` -> `deprecated` -> `severed`).
+  - `assets:cmdb_relationship_list`: `/assets/cmdb/relationships/`
+  - `assets:cmdb_relationship_create`: `/assets/cmdb/relationships/new/`
+  - `assets:cmdb_relationship_export_csv`: `/assets/cmdb/relationships/export-csv/`
+  - `assets:cmdb_relationship_detail`: `/assets/cmdb/relationships/<pk>/`
+  - `assets:cmdb_relationship_edit`: `/assets/cmdb/relationships/<pk>/edit/`
+  - `assets:cmdb_relationship_delete`: `/assets/cmdb/relationships/<pk>/delete/` [POST, Admin]
+  - `assets:cmdb_relationship_verify`: `/assets/cmdb/relationships/<pk>/verify/` [POST]
+  - `assets:cmdb_relationship_mark_deprecated`: `/assets/cmdb/relationships/<pk>/deprecate/` [POST]
+  - `assets:cmdb_relationship_sever`: `/assets/cmdb/relationships/<pk>/sever/` [POST, Admin]
+- **End-of-Life & Refresh Cycles Board (`it_refresh_board`):** Aggregates hardware overdue / approaching refresh, expiring software licenses and cloud renewals, CapEx refresh budgets by `core.OrgUnit`, and NIST 800-88 sanitization backlogs in single SQL aggregate queries, supporting priority/horizon filters and CSV export.
+  - `assets:it_refresh_board`: `/assets/it-refresh-board/`
+  - `assets:it_refresh_board_export_csv`: `/assets/it-refresh-board/export-csv/`
+- **CMDB Dependency & Blast-Radius Impact Analysis (`cmdb_impact_analysis`):** Interactive topology explorer executing cycle-safe Breadth-First Search (BFS, max depth 8) to calculate upstream dependencies, downstream blast radius, and Single Point of Failure (SPOF) alerts for any selected CI, with CSV export.
+  - `assets:cmdb_impact_analysis`: `/assets/cmdb/impact-analysis/`
+  - `assets:cmdb_impact_analysis_export_csv`: `/assets/cmdb/impact-analysis/export-csv/`
+
 ---
 
 ## Conventions & Gotchas
@@ -1121,7 +1213,7 @@ Templates under `templates/assets/assetdocumentknowledge/{asset_document,asset_o
    - Badges: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`.
    - Component classes: `.table-wrap`, `.text-brand`, `.empty-state`, `.pagination`.
 5. **RBAC & Privilege Separation**:
-   - Audit variance reconciliation, write-off authorizations, 11.15 connector writes / secret rotation / GL batch execution / IntegrationApiHub deletes, and 11.16 controlled release/activation/publishing/retire/delete actions plus `AssetOperatorCertification` edits, verifications, renewals, revocations, and bulk `refresh_alerts` require `@tenant_admin_required`. Controlled `AssetDocument` `restricted_eng` / `confidential` rows enforce `readable_asset_document_q(user)` across lists, CSVs, downloads, forms, and detail views. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}` (or `can_manage`).
+   - Audit variance reconciliation, write-off authorizations, 11.15 connector writes / secret rotation / GL batch execution / IntegrationApiHub deletes, 11.16 controlled release/activation/publishing/retire/delete actions plus `AssetOperatorCertification` edits, verifications, renewals, revocations, and bulk `refresh_alerts`, and 11.18 NIST SP 800-88 sanitization mark, hardware retirement, software license audit-hold placement, software retirement, cloud subscription suspension and decommissioning, and CMDB relationship severance require `@tenant_admin_required`. Software licenses on `audit_hold` and cloud subscriptions on `suspended` block non-admin mutations with 403. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}` (or `can_manage`).
 6. **Filter-Preserving Pagination**:
    - All filter parameters (`?q=`, `?status=`, `?type=`, `?location=`, `?asset=`) are strictly preserved in pagination links.
 
@@ -1139,7 +1231,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (2,684 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, 291 tests for 11.14, 375 tests for 11.15, and 110 tests for 11.16).
+Unfiltered run on SQLite in-memory test database (2,886+ passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, 291 tests for 11.14, 375 tests for 11.15, 110 tests for 11.16, and 202 tests dedicated to 11.18).
 
 ---
 
@@ -1160,4 +1252,5 @@ Unfiltered run on SQLite in-memory test database (2,684 passing tests in full `a
 - `11.14`: Asset Lifecycle Cost Analysis (LCC) (`assets:asset_lifecycle_cost_analysis_list`), Replacement Planning & Forecasting (`assets:asset_replacement_plan_list`), Portfolio Performance Dashboards (`assets:portfolio_dashboard`), What-if Scenario Modeling (`assets:asset_portfolio_scenario_list`), Executive Reporting & KPIs (`assets:asset_executive_scorecard_list`), Scenario Comparison (`assets:scenario_compare`)
 - `11.15`: ERP Integration (`assets:asset_integration_connector_list?connector_category=erp_procurement`), IoT & SCADA Systems (`assets:asset_telemetry_stream_list`), CMMS/EAM Connectivity (`assets:asset_integration_connector_list?connector_category=cmms_eam`), Financial Systems & General Ledger (`assets:asset_gl_sync_batch_list`), GIS & Mapping Tools (`assets:asset_gis_mapping_list`), Integration Connectors (`assets:asset_integration_connector_list`)
 - `11.16`: Asset Documentation Repository (`assets:asset_document_list`), Version Control & Change Management (`assets:asset_document_change_list`), SOP & Procedure Management (`assets:asset_operating_procedure_list`), Training & Certification Records (`assets:asset_operator_certification_list`), Lessons Learned & Failure Analysis (`assets:asset_knowledge_article_list`)
+- `11.18`: Hardware Lifecycle Management (`assets:it_hardware_asset_list`), Software License Management (`assets:software_license_list`), Cloud Asset & Subscription Tracking (`assets:cloud_asset_subscription_list`), Configuration Management Database (CMDB) (`assets:cmdb_relationship_list`), End-of-Life & Refresh Cycles (`assets:it_refresh_board`), CMDB Impact Analysis (`assets:cmdb_impact_analysis`)
 
