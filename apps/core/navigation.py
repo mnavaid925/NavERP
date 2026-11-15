@@ -3377,6 +3377,13 @@ LIVE_LINKS = {
         # Extra live leaf
         "CMDB Impact Analysis": "assets:cmdb_impact_analysis",
     },
+    "11.19": {
+        "Vehicle Registration & Compliance": "assets:fleet_vehicle_list",
+        "Fuel & Mileage Tracking": "assets:vehicle_fuel_log_list",
+        "Driver Assignment & Safety": "assets:vehicle_driver_assignment_list",
+        "Maintenance & Service Scheduling": "assets:vehicle_service_schedule_list",
+        "Telematics & GPS Monitoring": "assets:fleet_telematics_board",
+    },
 
 
 
