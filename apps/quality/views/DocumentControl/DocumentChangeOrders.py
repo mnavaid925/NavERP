@@ -86,15 +86,14 @@ def document_change_order_create(request):
             with transaction.atomic():
                 dco = form.save(commit=False)
                 dco.tenant = request.tenant
-                if not dco.requested_by_id:
-                    dco.requested_by = request.user
+                dco.requested_by = request.user
                 dco.save()
                 write_audit_log(request.user, dco, "create", tenant=request.tenant)
             messages.success(request, f"Document Change Order {dco.number} created.")
             return redirect("quality:document_change_order_detail", pk=dco.pk)
     else:
         doc_id = request.GET.get("document", "")
-        initial = {"requested_by": request.user}
+        initial = {}
         if doc_id and doc_id.isdigit():
             initial["document"] = int(doc_id)
         form = DocumentChangeOrderForm(tenant=request.tenant, initial=initial)
