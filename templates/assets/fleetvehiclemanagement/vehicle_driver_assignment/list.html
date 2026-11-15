@@ -45,9 +45,25 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <div class="form-group md:col-span-2">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div class="form-group md:col-span-2 lg:col-span-2">
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search driver, license, vehicle..." class="form-input">
+            </div>
+            <div class="form-group">
+                <select name="vehicle" class="form-select">
+                    <option value="">All Vehicles</option>
+                    {% for v in vehicles %}
+                    <option value="{{ v.pk }}" {% if request.GET.vehicle == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="driver" class="form-select">
+                    <option value="">All Drivers</option>
+                    {% for d in drivers %}
+                    <option value="{{ d.pk }}" {% if request.GET.driver == d.pk|stringformat:"d" %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="form-group">
                 <select name="status" class="form-select">
