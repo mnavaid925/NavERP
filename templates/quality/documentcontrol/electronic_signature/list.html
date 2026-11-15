@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}21 CFR Part 11 Electronic Signatures | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <span>Electronic Signatures</span>
+        </div>
+        <h1 class="page-title">Electronic Signature Manifest (21 CFR Part 11)</h1>
+        <p class="text-slate-600 mt-1">Legally binding, tamper-evident audit records satisfying FDA 21 CFR § 11.50 signature requirements.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:electronic_signature_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="signature"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Signatures</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.total }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Approvals</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.approvals }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="file-check"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Reviews & Authoring</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.reviews }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="user-check"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Acknowledgments</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.acknowledgments }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search Signatures</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" placeholder="Signer, doc number, doc title, comments..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="meaning-filter">Meaning of Signature</label>
+                <select id="meaning-filter" name="meaning" class="form-select">
+                    <option value="">All Signature Meanings</option>
+                    {% for code, label in meaning_choices %}
+                    <option value="{{ code }}" {% if request.GET.meaning == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end space-x-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:electronic_signature_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Signatures Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Manifest Number</th>
+                    <th>Document</th>
+                    <th>Rev</th>
+                    <th>Signer Legal Name</th>
+                    <th>Title</th>
+                    <th>Meaning of Signature</th>
+                    <th>Execution Timestamp</th>
+                    <th>SHA-256 Digest</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sig in signatures %}
+                <tr>
+                    <td class="font-mono font-medium text-slate-900">
+                        <a href="{% url 'quality:electronic_signature_detail' sig.pk %}" class="hover:underline text-blue-600">
+                            {{ sig.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:controlled_document_detail' sig.document.pk %}" class="font-mono text-xs text-blue-600 hover:underline">
+                            {{ sig.document.number }}
+                        </a>
+                        <div class="text-xs text-slate-500 truncate max-w-xs">{{ sig.document.title }}</div>
+                    </td>
+                    <td class="font-mono text-sm">Rev {{ sig.document_revision }}</td>
+                    <td class="font-medium text-slate-800">{{ sig.signer_name }}</td>
+                    <td class="text-sm text-slate-600">{{ sig.signer_title|default:"—" }}</td>
+                    <td><span class="badge badge-green">{{ sig.get_signature_meaning_display }}</span></td>
+                    <td class="text-sm text-slate-600 font-mono">{{ sig.signature_timestamp|date:"Y-m-d H:i:s" }}</td>
+                    <td class="font-mono text-xs text-slate-500 max-w-xs truncate" title="{{ sig.signature_hash }}">
+                        {{ sig.signature_hash }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'quality:electronic_signature_detail' sig.pk %}" class="btn btn-icon" title="View Signature Manifest">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="signature" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <div class="text-base font-medium text-slate-700">No electronic signature manifests recorded</div>
+                            <p class="text-sm text-slate-500">Signatures are captured when documents and change orders are reviewed and approved.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} signature records
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.meaning %}&meaning={{ request.GET.meaning }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="btn btn-sm btn-outline text-slate-700">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.meaning %}&meaning={{ request.GET.meaning }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
