@@ -219,7 +219,12 @@ def document_acknowledgment_sign(request, pk):
     return render(
         request,
         "quality/documentcontrol/electronic_signature/form.html",
-        {"form": form, "document": ack.document, "title": f"Acknowledge & Sign {ack.document.number} Rev {ack.document_revision}"},
+        {
+            "form": form,
+            "document": ack.document,
+            "acknowledgment": ack,
+            "title": f"Acknowledge & Sign {ack.document.number} Rev {ack.document_revision}",
+        },
     )
 
 
