@@ -32,6 +32,6 @@ class ElectronicSignatureForm(forms.Form):
 
     def clean_password(self):
         password = self.cleaned_data.get("password")
-        if self.user and not self.user.check_password(password):
+        if not self.user or not self.user.check_password(password):
             raise forms.ValidationError("Invalid credentials. Electronic signature rejected per FDA 21 CFR § 11.200.")
         return password
