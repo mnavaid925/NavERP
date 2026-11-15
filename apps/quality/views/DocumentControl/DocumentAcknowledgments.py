@@ -48,12 +48,12 @@ def document_acknowledgment_list(request):
         qs = qs.filter(status=status_filter)
 
     today = timezone.now().date()
-    stats = {
-        "total": qs.count(),
-        "pending": qs.filter(status="pending").count(),
-        "acknowledged": qs.filter(status="acknowledged").count(),
-        "overdue": qs.filter(status="pending", due_date__lt=today).count(),
-    }
+    stats = qs.aggregate(
+        total=Count("id"),
+        pending=Count("id", filter=Q(status="pending")),
+        acknowledged=Count("id", filter=Q(status="acknowledged")),
+        overdue=Count("id", filter=Q(status="pending", due_date__lt=today)),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
