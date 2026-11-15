@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Maintenance &amp; Service Scheduling — Asset Management — NavERP{% endblock %}
+{% block title %}Vehicle Service Schedules — Asset Management — NavERP{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -10,9 +10,9 @@
             <span>/</span>
             <a href="{% url 'assets:fleet_vehicle_list' %}">Fleet &amp; Vehicles</a>
             <span>/</span>
-            <span>Maintenance &amp; Service Scheduling</span>
+            <span>Vehicle Service Schedules</span>
         </div>
-        <h1 class="page-title">Vehicle Maintenance Schedules</h1>
+        <h1 class="page-title">Vehicle Service Schedules</h1>
     </div>
     <div class="page-actions flex flex-wrap items-center gap-2">
         <a href="{% url 'assets:vehicle_service_schedule_export' %}?q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&service_type={{ request.GET.service_type|urlencode }}&status={{ request.GET.status|urlencode }}&priority={{ request.GET.priority|urlencode }}" class="btn btn-outline">
