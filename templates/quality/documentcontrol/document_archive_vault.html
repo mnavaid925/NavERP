@@ -118,7 +118,7 @@
                     <td>{{ doc.department.name|default:"—" }}</td>
                     <td>{{ doc.archived_at|date:"Y-m-d"|default:doc.updated_at|date:"Y-m-d" }}</td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="btn btn-icon" title="View Audit Record">
+                        <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="btn btn-icon" title="View Audit Record" aria-label="View Audit Record">
                             <i data-lucide="eye"></i>
                         </a>
                     </td>
