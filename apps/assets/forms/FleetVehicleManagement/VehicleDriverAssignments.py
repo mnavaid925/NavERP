@@ -37,11 +37,6 @@ class VehicleDriverAssignmentForm(TenantUniqueMixin, TenantModelForm):
             "license_expiration_date",
             "medical_card_expiration_date",
             "hazmat_endorsed",
-            "safety_score",
-            "speeding_event_count",
-            "harsh_braking_count",
-            "harsh_acceleration_count",
-            "incident_count",
             "duty_status",
             "supervisor_notes",
         ]
