@@ -130,12 +130,41 @@ def controlled_document_detail(request, pk):
     signatures = doc.signature_manifests.all().select_related("signer")[:20]
     acknowledgments = doc.acknowledgments.all().select_related("user")[:20]
 
-    # Find revision family
-    revision_history = (
-        ControlledDocument.objects.filter(tenant=request.tenant, title=doc.title)
-        .order_by("-created_at")
-        .exclude(pk=doc.pk)
-    )
+    # Find revision lineage family via predecessor/successor relationships
+    lineage_ids = set()
+    curr = doc.supersedes
+    while curr and curr.pk not in lineage_ids:
+        lineage_ids.add(curr.pk)
+        curr = curr.supersedes
+
+    frontier = list(doc.superseded_by_set.filter(tenant=request.tenant).values_list("pk", flat=True))
+    if doc.superseded_by_id:
+        frontier.append(doc.superseded_by_id)
+    while frontier:
+        nxt_id = frontier.pop()
+        if nxt_id not in lineage_ids and nxt_id != doc.pk:
+            lineage_ids.add(nxt_id)
+            succ = ControlledDocument.objects.filter(pk=nxt_id).first()
+            if succ:
+                for s_pk in succ.superseded_by_set.filter(tenant=request.tenant).values_list("pk", flat=True):
+                    if s_pk not in lineage_ids:
+                        frontier.append(s_pk)
+                if succ.superseded_by_id and succ.superseded_by_id not in lineage_ids:
+                    frontier.append(succ.superseded_by_id)
+
+    if lineage_ids:
+        revision_history = (
+            ControlledDocument.objects.filter(tenant=request.tenant, pk__in=lineage_ids)
+            .order_by("-created_at")
+        )
+    else:
+        revision_history = (
+            ControlledDocument.objects.filter(
+                tenant=request.tenant, title=doc.title, document_type=doc.document_type
+            )
+            .order_by("-created_at")
+            .exclude(pk=doc.pk)
+        )
 
     is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
     can_edit = not doc.is_locked
