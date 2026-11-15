@@ -243,7 +243,7 @@ def document_change_order_export(request):
 
     writer = csv.writer(response)
     writer.writerow(["Number", "Title", "Type", "Priority", "Document", "Target Rev", "Status", "CCB Decision", "Requested By", "Target Effective Date"])
-    for dco in qs:
+    for dco in qs.iterator(chunk_size=1000):
         writer.writerow([
             csv_safe(dco.number),
             csv_safe(dco.title),
