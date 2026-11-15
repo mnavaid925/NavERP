@@ -1192,7 +1192,7 @@ class FleetVehicleAdmin(admin.ModelAdmin):
         "compliance_status",
         "tenant",
     )
-    list_select_related = ("tenant", "primary_driver", "org_unit", "operational_asset", "fixed_asset")
+    list_select_related = ("tenant", "primary_driver__party", "org_unit", "operational_asset", "fixed_asset")
     list_filter = ("tenant", "status", "compliance_status", "vehicle_type", "fuel_type", "ownership_type", "engine_state", "geofence_status")
     search_fields = ("number", "name", "vin", "license_plate", "make", "model")
     readonly_fields = (
@@ -1218,7 +1218,7 @@ class VehicleFuelLogAdmin(admin.ModelAdmin):
         "efficiency_rating",
         "tenant",
     )
-    list_select_related = ("tenant", "vehicle", "driver", "fuel_vendor", "currency")
+    list_select_related = ("tenant", "vehicle", "driver__party", "fuel_vendor", "currency")
     list_filter = ("tenant", "fuel_type", "route_category", "efficiency_rating", "is_full_tank")
     search_fields = ("number", "vehicle__license_plate", "vehicle__name", "driver__party__name", "receipt_reference", "fuel_station_name")
     readonly_fields = (
@@ -1244,7 +1244,7 @@ class VehicleDriverAssignmentAdmin(admin.ModelAdmin):
         "status",
         "tenant",
     )
-    list_select_related = ("tenant", "vehicle", "driver", "user")
+    list_select_related = ("tenant", "vehicle", "driver__party", "user")
     list_filter = ("tenant", "status", "assignment_role", "license_class", "qualification_status", "duty_status", "safety_tier")
     search_fields = ("number", "vehicle__license_plate", "vehicle__name", "driver__party__name", "driver_license_number")
     readonly_fields = (
