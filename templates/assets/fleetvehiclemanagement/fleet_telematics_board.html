@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Fleet Telematics &amp; GPS Dispatch Board — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:fleet_vehicle_list' %}">Fleet &amp; Vehicles</a>
+            <span>/</span>
+            <span>Telematics &amp; GPS Monitoring</span>
+        </div>
+        <h1 class="page-title">Fleet Telematics &amp; Dispatch Board</h1>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:fleet_vehicle_list' %}" class="btn btn-outline">
+            <i data-lucide="truck" class="w-4 h-4 me-1"></i> Fleet Registry
+        </a>
+        <a href="{% url 'assets:vehicle_fuel_log_list' %}" class="btn btn-outline">
+            <i data-lucide="fuel" class="w-4 h-4 me-1"></i> Fuel Tracking
+        </a>
+        <a href="{% url 'assets:vehicle_service_schedule_list' %}" class="btn btn-outline">
+            <i data-lucide="wrench" class="w-4 h-4 me-1"></i> Maintenance Queue
+        </a>
+    </div>
+</div>
+
+<!-- Operations Telematics KPI Ribbon -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="truck"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Fleet</div>
+            <div class="stat-value text-xl">{{ total_vehicles }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="navigation"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Motion</div>
+            <div class="stat-value text-xl">{{ moving_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="pause-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Idling Units</div>
+            <div class="stat-value text-xl">{{ idling_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Shop</div>
+            <div class="stat-value text-xl">{{ in_shop }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="map-pin-off"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Geofence Alert</div>
+            <div class="stat-value text-xl">{{ geofence_breach_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">DMV Non-Compliant</div>
+            <div class="stat-value text-xl">{{ expired_compliance_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Active Fleet Telematics Feed Table -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold">Live Telematics Dispatch Feed</h2>
+            <span class="text-xs text-slate-500"><i data-lucide="radio" class="w-3.5 h-3.5 inline text-green-500 animate-pulse me-1"></i> Continuous Polling</span>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Vehicle</th>
+                        <th>Engine State</th>
+                        <th>Speed &amp; Heading</th>
+                        <th>Geofence</th>
+                        <th>Last Coordinates</th>
+                        <th>Ping Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in recent_vehicles %}
+                    <tr>
+                        <td>
+                            <div class="font-medium">
+                                <a href="{% url 'assets:fleet_vehicle_detail' v.pk %}" class="text-blue-600 hover:underline">
+                                    {{ v.name }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-500 font-mono">{{ v.license_plate }} &bull; {{ v.primary_driver|default:"Unassigned" }}</div>
+                        </td>
+                        <td>
+                            <span class="badge {{ v.engine_state_badge_class }}">
+                                {{ v.get_engine_state_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="font-mono text-sm">
+                                {% if v.current_speed_mph is not None %}{{ v.current_speed_mph }} MPH{% else %}0 MPH{% endif %}
+                            </div>
+                            {% if v.current_heading is not None %}
+                            <div class="text-xs text-slate-400">{{ v.current_heading }}&deg; heading</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ v.geofence_badge_class }}">
+                                {{ v.get_geofence_status_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if v.current_latitude and v.current_longitude %}
+                            <div class="font-mono text-xs">{{ v.current_latitude|floatformat:4 }}, {{ v.current_longitude|floatformat:4 }}</div>
+                            <div class="text-xs text-slate-400 truncate max-w-xs">{{ v.current_location_name|default:"Operating Area" }}</div>
+                            {% else %}
+                            <span class="text-xs text-slate-400">GPS Standby</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-xs text-slate-500">
+                            {% if v.last_telemetry_at %}{{ v.last_telemetry_at|date:"H:i:s" }}{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-6 text-slate-400 text-sm">No vehicles configured for telematics tracking.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Safety & Maintenance Priority Queues -->
+    <div class="space-y-6">
+        <!-- Safety Risk Alerts -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="text-sm font-semibold uppercase text-slate-700 dark:text-slate-300">Driver Safety Coaching Queue</h3>
+                <a href="{% url 'assets:vehicle_driver_assignment_list' %}" class="text-xs text-blue-600 hover:underline">View All</a>
+            </div>
+            <div class="card-body p-0">
+                <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+                    {% for d in high_risk_drivers %}
+                    <li class="p-3 flex items-center justify-between">
+                        <div>
+                            <div class="font-medium text-sm text-slate-900 dark:text-slate-100">{{ d.driver }}</div>
+                            <div class="text-xs text-slate-500">{{ d.vehicle.name|default:"No Vehicle" }} &bull; {{ d.incident_count }} incidents</div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge {{ d.safety_tier_badge_class }}">{{ d.safety_score }}/100</span>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="p-4 text-center text-xs text-slate-400">All drivers currently meet safe operating thresholds.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Overdue & Upcoming Services -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="text-sm font-semibold uppercase text-slate-700 dark:text-slate-300">Maintenance &amp; Inspection Queue</h3>
+                <a href="{% url 'assets:vehicle_service_schedule_list' %}" class="text-xs text-blue-600 hover:underline">View All</a>
+            </div>
+            <div class="card-body p-0">
+                <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+                    {% for s in upcoming_services %}
+                    <li class="p-3 flex items-center justify-between">
+                        <div>
+                            <div class="font-medium text-sm text-slate-900 dark:text-slate-100">{{ s.service_title }}</div>
+                            <div class="text-xs text-slate-500">{{ s.vehicle.name }} &bull; Due: {{ s.next_due_date|default:"Odometer" }}</div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="p-4 text-center text-xs text-slate-400">No overdue service schedules.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
