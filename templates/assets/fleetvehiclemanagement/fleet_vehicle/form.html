@@ -141,6 +141,75 @@
                 </div>
             </div>
 
+            <!-- Vehicle Specifications Section -->
+            <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3">Vehicle Specifications</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.gross_vehicle_weight_rating_lbs.id_for_label }}">GVWR (lbs)</label>
+                        <input type="number" name="{{ form.gross_vehicle_weight_rating_lbs.html_name }}" id="{{ form.gross_vehicle_weight_rating_lbs.id_for_label }}" value="{{ form.gross_vehicle_weight_rating_lbs.value|default:'' }}" class="form-input font-mono" placeholder="e.g. 9900">
+                        {% if form.gross_vehicle_weight_rating_lbs.errors %}<div class="form-error">{{ form.gross_vehicle_weight_rating_lbs.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.fuel_tank_capacity_gallons.id_for_label }}">Fuel Tank Capacity (gal)</label>
+                        <input type="number" step="0.01" name="{{ form.fuel_tank_capacity_gallons.html_name }}" id="{{ form.fuel_tank_capacity_gallons.id_for_label }}" value="{{ form.fuel_tank_capacity_gallons.value|default:'' }}" class="form-input font-mono" placeholder="e.g. 25.00">
+                        {% if form.fuel_tank_capacity_gallons.errors %}<div class="form-error">{{ form.fuel_tank_capacity_gallons.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.battery_capacity_kwh.id_for_label }}">Battery Capacity (kWh)</label>
+                        <input type="number" step="0.01" name="{{ form.battery_capacity_kwh.html_name }}" id="{{ form.battery_capacity_kwh.id_for_label }}" value="{{ form.battery_capacity_kwh.value|default:'' }}" class="form-input font-mono" placeholder="e.g. 75.00">
+                        {% if form.battery_capacity_kwh.errors %}<div class="form-error">{{ form.battery_capacity_kwh.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Asset Classification & Core Spine Links -->
+            <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3">Asset Classification &amp; Core Spine Links</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.asset_category.id_for_label }}">Asset Category</label>
+                        <select name="{{ form.asset_category.html_name }}" id="{{ form.asset_category.id_for_label }}" class="form-select">
+                            <option value="">— Select Category —</option>
+                            {% for c in form.fields.asset_category.queryset %}
+                            <option value="{{ c.pk }}" {% if form.asset_category.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.asset_model.id_for_label }}">Asset Model</label>
+                        <select name="{{ form.asset_model.html_name }}" id="{{ form.asset_model.id_for_label }}" class="form-select">
+                            <option value="">— Select Model —</option>
+                            {% for m in form.fields.asset_model.queryset %}
+                            <option value="{{ m.pk }}" {% if form.asset_model.value|stringformat:"s" == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if form.asset_model.errors %}<div class="form-error">{{ form.asset_model.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.operational_asset.id_for_label }}">SCM Operational Asset</label>
+                        <select name="{{ form.operational_asset.html_name }}" id="{{ form.operational_asset.id_for_label }}" class="form-select">
+                            <option value="">— Link Physical Asset —</option>
+                            {% for a in form.fields.operational_asset.queryset %}
+                            <option value="{{ a.pk }}" {% if form.operational_asset.value|stringformat:"s" == a.pk|stringformat:"s" %}selected{% endif %}>{{ a }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Accounting Fixed Asset</label>
+                        <select name="{{ form.fixed_asset.html_name }}" id="{{ form.fixed_asset.id_for_label }}" class="form-select">
+                            <option value="">— Link Financial Asset —</option>
+                            {% for fa in form.fields.fixed_asset.queryset %}
+                            <option value="{{ fa.pk }}" {% if form.fixed_asset.value|stringformat:"s" == fa.pk|stringformat:"s" %}selected{% endif %}>{{ fa }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
             <!-- Telematics and Assignment Section -->
             <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
                 <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3">Telematics &amp; Organization Assignment</h3>
