@@ -18,7 +18,6 @@ class ControlledDocumentForm(TenantUniqueMixin, TenantModelForm):
             "title",
             "document_type",
             "department",
-            "owner",
             "revision",
             "classification",
             "file",
@@ -33,7 +32,6 @@ class ControlledDocumentForm(TenantUniqueMixin, TenantModelForm):
             "title": forms.TextInput(attrs={"class": "form-input", "placeholder": "Standard Operating Procedure title"}),
             "document_type": forms.Select(attrs={"class": "form-select"}),
             "department": forms.Select(attrs={"class": "form-select"}),
-            "owner": forms.Select(attrs={"class": "form-select"}),
             "revision": forms.TextInput(attrs={"class": "form-input", "placeholder": "1.0"}),
             "classification": forms.Select(attrs={"class": "form-select"}),
             "file": forms.FileInput(attrs={"class": "form-input"}),
@@ -49,10 +47,8 @@ class ControlledDocumentForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if hasattr(self, "tenant") and self.tenant is not None:
             self.fields["department"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
-            self.fields["owner"].queryset = User.objects.filter(tenant=self.tenant)
         else:
             self.fields["department"].queryset = OrgUnit.objects.none()
-            self.fields["owner"].queryset = User.objects.none()
 
     def clean_file(self):
         f = self.cleaned_data.get("file")
@@ -66,7 +62,7 @@ class ControlledDocumentForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["department", "owner"])
+        reject_foreign(self, cleaned_data, ["department"])
         review_months = cleaned_data.get("review_interval_months")
         if review_months is not None and review_months < 1:
             self.add_error("review_interval_months", "Review interval must be at least 1 month.")
