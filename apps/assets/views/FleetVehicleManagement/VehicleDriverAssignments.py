@@ -195,6 +195,10 @@ def vehicle_driver_assignment_delete(request, pk):
 def vehicle_driver_assignment_complete(request, pk):
     """Mark a driver assignment completed / vehicle checked back in."""
     assignment = assets_object(request, VehicleDriverAssignment, pk)
+    if assignment.status != "active":
+        messages.error(request, f"Assignment '{assignment.number}' is not active and cannot be completed.")
+        return redirect("assets:vehicle_driver_assignment_detail", pk=assignment.pk)
+
     assignment.status = "completed"
     if not assignment.end_datetime:
         assignment.end_datetime = timezone.now()
@@ -210,6 +214,10 @@ def vehicle_driver_assignment_complete(request, pk):
 def vehicle_driver_assignment_revoke(request, pk):
     """Revoke driver assignment for safety violation."""
     assignment = assets_object(request, VehicleDriverAssignment, pk)
+    if assignment.status != "active":
+        messages.error(request, f"Assignment '{assignment.number}' is not active and cannot be revoked.")
+        return redirect("assets:vehicle_driver_assignment_detail", pk=assignment.pk)
+
     assignment.status = "revoked_safety"
     assignment.qualification_status = "suspended"
     assignment.save(update_fields=["status", "qualification_status", "updated_at"])
@@ -223,6 +231,10 @@ def vehicle_driver_assignment_revoke(request, pk):
 def vehicle_driver_assignment_record_incident(request, pk):
     """Log safety incident and re-calculate score."""
     assignment = assets_object(request, VehicleDriverAssignment, pk)
+    if assignment.status != "active":
+        messages.error(request, f"Assignment '{assignment.number}' is not active. Incidents can only be recorded on active assignments.")
+        return redirect("assets:vehicle_driver_assignment_detail", pk=assignment.pk)
+
     assignment.incident_count += 1
     assignment.safety_score = max(0, assignment.safety_score - 10)
     assignment.save()
