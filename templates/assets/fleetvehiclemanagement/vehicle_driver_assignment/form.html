@@ -137,14 +137,9 @@
                 </div>
             </div>
 
-            <!-- Safety & Telematics Metric Baseline -->
+            <!-- Duty Status -->
             <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
-                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3">Safety Baseline &amp; Duty Status</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="form-group">
-                        <label class="form-label" for="{{ form.safety_score.id_for_label }}">Safety Score (0–100)</label>
-                        <input type="number" min="0" max="100" name="{{ form.safety_score.html_name }}" id="{{ form.safety_score.id_for_label }}" value="{{ form.safety_score.value|default:100 }}" class="form-input font-mono font-semibold">
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="form-group">
                         <label class="form-label" for="{{ form.duty_status.id_for_label }}">Duty Status</label>
                         <select name="{{ form.duty_status.html_name }}" id="{{ form.duty_status.id_for_label }}" class="form-select">
@@ -152,10 +147,6 @@
                             <option value="{{ val }}" {% if form.duty_status.value == val %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="{{ form.incident_count.id_for_label }}">Logged Incidents</label>
-                        <input type="number" min="0" name="{{ form.incident_count.html_name }}" id="{{ form.incident_count.id_for_label }}" value="{{ form.incident_count.value|default:0 }}" class="form-input font-mono">
                     </div>
                 </div>
             </div>
