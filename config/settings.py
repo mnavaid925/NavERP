@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.ecommerce",
     "apps.bi",
     "apps.assets",
+    "apps.quality",
 ]
 
 MIDDLEWARE = [
