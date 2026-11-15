@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.quality.forms.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgmentForm
 from apps.quality.forms.DocumentControl.ElectronicSignatures import ElectronicSignatureForm
@@ -155,6 +156,7 @@ def document_acknowledgment_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def document_acknowledgment_delete(request, pk):
     ack = quality_object(request, DocumentAcknowledgment, pk)
     if ack.status == "acknowledged":
