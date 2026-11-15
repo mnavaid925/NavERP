@@ -157,7 +157,7 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:document_acknowledgment_detail' ack.pk %}" class="btn btn-icon" title="View Acknowledgment">
+                        <a href="{% url 'quality:document_acknowledgment_detail' ack.pk %}" class="btn btn-icon" title="View Acknowledgment" aria-label="View Acknowledgment">
                             <i data-lucide="eye"></i>
                         </a>
                         {% if ack.status == 'pending' %}
@@ -166,12 +166,12 @@
                             <i data-lucide="check"></i> Sign
                         </a>
                         {% endif %}
-                        <a href="{% url 'quality:document_acknowledgment_edit' ack.pk %}" class="btn btn-icon" title="Edit Assignment">
+                        <a href="{% url 'quality:document_acknowledgment_edit' ack.pk %}" class="btn btn-icon" title="Edit Assignment" aria-label="Edit Assignment">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'quality:document_acknowledgment_delete' ack.pk %}" class="inline" onsubmit="return confirm('Delete acknowledgment assignment {{ ack.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete" aria-label="Delete Assignment">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
