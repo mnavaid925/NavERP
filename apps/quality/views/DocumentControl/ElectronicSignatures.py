@@ -78,7 +78,13 @@ def electronic_signature_detail(request, pk):
         request,
         ElectronicSignatureRecord,
         pk,
-        select_related=["document", "change_order", "signer"],
+        select_related=[
+            "document",
+            "document__department",
+            "document__owner",
+            "change_order",
+            "signer",
+        ],
     )
 
     is_valid_hash = sig.signature_hash == sig.generate_hash()
