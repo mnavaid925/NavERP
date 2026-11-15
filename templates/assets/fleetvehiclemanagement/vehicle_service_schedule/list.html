@@ -45,8 +45,8 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <div class="form-group md:col-span-2">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div class="form-group md:col-span-2 lg:col-span-2">
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, vehicle, plate, work order..." class="form-input">
             </div>
             <div class="form-group">
@@ -58,10 +58,26 @@
                 </select>
             </div>
             <div class="form-group">
+                <select name="service_type" class="form-select">
+                    <option value="">All Service Types</option>
+                    {% for code, label in service_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.service_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
                 <select name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="priority" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for code, label in priority_choices %}
+                    <option value="{{ code }}" {% if request.GET.priority == code %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
