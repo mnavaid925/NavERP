@@ -2,6 +2,7 @@
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import redirect, render
@@ -143,9 +144,10 @@ def fleet_vehicle_detail(request, pk):
     fuel_logs = vehicle.fuel_logs.select_related("currency", "driver").order_by("-fuel_date")[:10]
     assignments = vehicle.driver_assignments.select_related("driver", "user").order_by("-start_datetime")[:10]
     service_schedules = vehicle.service_schedules.select_related("service_vendor", "currency").order_by("-created_at")[:10]
+    vehicle_ct = ContentType.objects.get_for_model(FleetVehicle)
     recent_audits = AuditLog.objects.filter(
-        tenant=request.tenant, target_model="FleetVehicle", target_id=str(vehicle.pk)
-    ).order_by("-timestamp")[:10]
+        tenant=request.tenant, content_type=vehicle_ct, object_id=vehicle.pk
+    ).order_by("-at")[:10]
 
     context = {
         "vehicle": vehicle,
