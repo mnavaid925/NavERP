@@ -62,7 +62,6 @@ class VehicleFuelLogForm(TenantUniqueMixin, TenantModelForm):
             self.add_error("quantity_gallons", "Quantity pumped must be greater than zero.")
 
         odometer = cleaned_data.get("odometer_at_fueling")
-        vehicle = cleaned_data.get("vehicle")
         if odometer is not None and odometer < 0:
             self.add_error("odometer_at_fueling", "Odometer reading cannot be negative.")
 
