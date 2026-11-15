@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Driver Assignment &amp; Safety — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:fleet_vehicle_list' %}">Fleet &amp; Vehicles</a>
+            <span>/</span>
+            <span>Driver Assignment &amp; Safety</span>
+        </div>
+        <h1 class="page-title">Driver Assignments &amp; Safety</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:vehicle_driver_assignment_export' %}?q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&driver={{ request.GET.driver|urlencode }}&status={{ request.GET.status|urlencode }}&safety_tier={{ request.GET.safety_tier|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:vehicle_driver_assignment_create' %}" class="btn btn-primary">
+            <i data-lucide="user-plus" class="w-4 h-4 me-1"></i> Assign Driver
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="user-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Dispatched Drivers</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">High-Risk Safety Standing</div>
+            <div class="stat-value">{{ high_risk_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search driver, license, vehicle..." class="form-input">
+            </div>
+            <div class="form-group">
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="safety_tier" class="form-select">
+                    <option value="">All Safety Tiers</option>
+                    {% for code, label in safety_tier_choices %}
+                    <option value="{{ code }}" {% if request.GET.safety_tier == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'assets:vehicle_driver_assignment_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Wrap -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Assignment # / Driver</th>
+                    <th>Vehicle</th>
+                    <th>Role</th>
+                    <th>Period</th>
+                    <th>Status</th>
+                    <th>Safety Score</th>
+                    <th>Qualification</th>
+                    <th>Duty Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in assignments %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">
+                            <a href="{% url 'assets:vehicle_driver_assignment_detail' a.pk %}" class="text-blue-600 hover:underline">
+                                {{ a.driver }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 font-mono">
+                            {{ a.number }} {% if a.driver_license_number %}&bull; DL: {{ a.driver_license_number }}{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if a.vehicle %}
+                        <a href="{% url 'assets:fleet_vehicle_detail' a.vehicle.pk %}" class="font-medium text-slate-900 dark:text-slate-100 hover:underline">
+                            {{ a.vehicle.name }}
+                        </a>
+                        <div class="text-xs text-slate-500 font-mono">{{ a.vehicle.license_plate }}</div>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs">{{ a.get_assignment_role_display }}</span></td>
+                    <td class="text-xs">
+                        <div>{{ a.start_datetime|date:"Y-m-d H:i" }}</div>
+                        {% if a.end_datetime %}
+                        <div class="text-slate-400">&rarr; {{ a.end_datetime|date:"Y-m-d H:i" }}</div>
+                        {% else %}
+                        <div class="text-green-600 font-medium">Present</div>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ a.status_badge_class }}">{{ a.get_status_display }}</span></td>
+                    <td>
+                        <span class="badge {{ a.safety_tier_badge_class }} font-mono">{{ a.safety_score }}/100</span>
+                        {% if a.incident_count > 0 %}
+                        <div class="text-xs text-red-500 font-medium">{{ a.incident_count }} incidents</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ a.qualification_badge_class }}">{{ a.get_qualification_status_display }}</span>
+                    </td>
+                    <td><span class="badge {{ a.duty_status_badge_class }}">{{ a.get_duty_status_display }}</span></td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:vehicle_driver_assignment_detail' a.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:vehicle_driver_assignment_edit' a.pk %}" class="btn btn-icon" title="Edit Assignment">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:vehicle_driver_assignment_delete' a.pk %}" class="inline" onsubmit="return confirm('Delete assignment \'{{ a.number }}\'?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Assignment">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="users" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold">No Driver Assignments Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Assign authorized drivers to your fleet vehicles and track safety scores.</p>
+                            <a href="{% url 'assets:vehicle_driver_assignment_create' %}" class="btn btn-primary">
+                                <i data-lucide="user-plus" class="w-4 h-4 me-1"></i> Assign Driver
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-body border-t border-slate-200 dark:border-slate-700 py-3">
+        <div class="pagination">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} assignments
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&driver={{ request.GET.driver|urlencode }}&status={{ request.GET.status|urlencode }}&safety_tier={{ request.GET.safety_tier|urlencode }}" class="btn btn-outline btn-sm">Prev</a>
+                {% else %}
+                <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
+                {% endif %}
+
+                <span class="px-3 py-1 text-sm text-slate-600 dark:text-slate-400">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&driver={{ request.GET.driver|urlencode }}&status={{ request.GET.status|urlencode }}&safety_tier={{ request.GET.safety_tier|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+                {% else %}
+                <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
