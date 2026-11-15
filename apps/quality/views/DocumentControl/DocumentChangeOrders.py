@@ -194,6 +194,10 @@ def document_change_order_submit(request, pk):
 @tenant_admin_required
 def document_change_order_ccb_decision(request, pk):
     dco = quality_object(request, DocumentChangeOrder, pk)
+    if dco.status not in {"submitted", "in_assessment", "ccb_review"}:
+        messages.error(request, f"Cannot record CCB determination on change order in '{dco.get_status_display()}' status.")
+        return redirect("quality:document_change_order_detail", pk=dco.pk)
+
     decision = request.POST.get("decision", "").strip()
     notes = request.POST.get("closure_notes", "").strip()
 
