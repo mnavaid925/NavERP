@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+
+{% block title %}{{ vehicle.name }} ({{ vehicle.number }}) — Fleet Vehicle — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:fleet_vehicle_list' %}">Fleet Vehicles</a>
+            <span>/</span>
+            <span>{{ vehicle.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ vehicle.name }}</h1>
+            <span class="badge {{ vehicle.status_badge_class }}">{{ vehicle.get_status_display }}</span>
+            <span class="badge {{ vehicle.compliance_badge_class }}">{{ vehicle.get_compliance_status_display }}</span>
+            {% if vehicle.is_telematics_enabled %}
+            <span class="badge badge-info"><i data-lucide="radio" class="w-3 h-3 inline me-1"></i> Telematics Active</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        {% if not vehicle.is_locked %}
+        <a href="{% url 'assets:fleet_vehicle_edit' vehicle.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit Vehicle
+        </a>
+        {% endif %}
+
+        <!-- Quick Workflow Actions -->
+        {% if vehicle.status != "active_in_service" and not vehicle.is_locked %}
+        <form method="post" action="{% url 'assets:fleet_vehicle_activate' vehicle.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-600 border-green-600 hover:bg-green-50">
+                <i data-lucide="play" class="w-4 h-4 me-1"></i> Activate
+            </button>
+        </form>
+        {% endif %}
+
+        {% if vehicle.status != "in_shop_maintenance" and not vehicle.is_locked %}
+        <form method="post" action="{% url 'assets:fleet_vehicle_mark_in_shop' vehicle.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600 border-amber-600 hover:bg-amber-50">
+                <i data-lucide="wrench" class="w-4 h-4 me-1"></i> Put In Shop
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:fleet_vehicle_ping_telemetry' vehicle.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Ping Telemetry
+            </button>
+        </form>
+
+        {% if not vehicle.is_locked %}
+        <form method="post" action="{% url 'assets:fleet_vehicle_decommission' vehicle.pk %}" class="inline" onsubmit="return confirm('Decommission and retire vehicle \'{{ vehicle.number }}\'?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-slate-600 hover:bg-slate-100">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Decommission
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:fleet_vehicle_delete' vehicle.pk %}" class="inline" onsubmit="return confirm('Permanently delete vehicle \'{{ vehicle.number }}\'?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Specs and Telematics Overview Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Primary Specifications Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Vehicle Specifications &amp; Registration</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Unit Number</dt>
+                    <dd class="font-mono font-medium">{{ vehicle.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>License Plate</dt>
+                    <dd class="font-mono font-semibold">{{ vehicle.license_plate }} {% if vehicle.registration_state %}({{ vehicle.registration_state }}){% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Make, Model &amp; Year</dt>
+                    <dd>{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>VIN</dt>
+                    <dd class="font-mono">{{ vehicle.vin|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Vehicle Type</dt>
+                    <dd>{{ vehicle.get_vehicle_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fuel / Powertrain</dt>
+                    <dd>{{ vehicle.get_fuel_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Ownership Type</dt>
+                    <dd>{{ vehicle.get_ownership_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Title Number</dt>
+                    <dd>{{ vehicle.title_number|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Registration Expiration</dt>
+                    <dd>
+                        {% if vehicle.registration_expiration_date %}
+                        {{ vehicle.registration_expiration_date }}
+                        {% if vehicle.is_registration_expired %}
+                        <span class="badge badge-red ms-2">Expired</span>
+                        {% elif vehicle.is_registration_due_soon %}
+                        <span class="badge badge-amber ms-2">Due Soon</span>
+                        {% endif %}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Safety Inspection Due</dt>
+                    <dd>{{ vehicle.safety_inspection_due_date|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Emissions Inspection Due</dt>
+                    <dd>{{ vehicle.emissions_inspection_due_date|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>GVWR (Gross Weight)</dt>
+                    <dd>{% if vehicle.gross_vehicle_weight_rating_lbs %}{{ vehicle.gross_vehicle_weight_rating_lbs }} lbs{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Odometer Reading</dt>
+                    <dd class="font-mono font-semibold">{{ vehicle.current_odometer }} miles</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Engine Hours</dt>
+                    <dd class="font-mono">{{ vehicle.engine_hours }} hrs</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fuel Tank / Battery</dt>
+                    <dd>
+                        {% if vehicle.fuel_tank_capacity_gallons %}{{ vehicle.fuel_tank_capacity_gallons }} gal{% endif %}
+                        {% if vehicle.battery_capacity_kwh %} / {{ vehicle.battery_capacity_kwh }} kWh{% endif %}
+                        {% if not vehicle.fuel_tank_capacity_gallons and not vehicle.battery_capacity_kwh %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Assigned Department</dt>
+                    <dd>{{ vehicle.org_unit|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Primary Assigned Driver</dt>
+                    <dd>{{ vehicle.primary_driver|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Responsible Custodian</dt>
+                    <dd>{{ vehicle.custodian_party|default:"—" }}</dd>
+                </div>
+            </dl>
+            {% if vehicle.notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h4 class="text-xs font-semibold uppercase text-slate-500 mb-1">Vehicle Notes</h4>
+                <p class="text-sm text-slate-700 dark:text-slate-300">{{ vehicle.notes|linebreaks }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Live Telematics & Location Card -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold">Live Telematics &amp; GPS</h2>
+            {% if vehicle.is_telematics_enabled %}
+            <span class="badge badge-green">Online</span>
+            {% else %}
+            <span class="badge badge-slate">Disabled</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Device ID</dt>
+                    <dd class="font-mono text-xs">{{ vehicle.telematics_device_id|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Engine State</dt>
+                    <dd><span class="badge {{ vehicle.engine_state_badge_class }}">{{ vehicle.get_engine_state_display }}</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Geofence Standing</dt>
+                    <dd><span class="badge {{ vehicle.geofence_badge_class }}">{{ vehicle.get_geofence_status_display }}</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Speed</dt>
+                    <dd class="font-mono">{% if vehicle.current_speed_mph is not None %}{{ vehicle.current_speed_mph }} MPH{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Heading</dt>
+                    <dd class="font-mono">{% if vehicle.current_heading is not None %}{{ vehicle.current_heading }}&deg;{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Current Coordinates</dt>
+                    <dd class="font-mono text-xs">
+                        {% if vehicle.current_latitude and vehicle.current_longitude %}
+                        {{ vehicle.current_latitude }}, {{ vehicle.current_longitude }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Reported Location</dt>
+                    <dd class="text-xs">{{ vehicle.current_location_name|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Last Telemetry Ping</dt>
+                    <dd class="text-xs">{% if vehicle.last_telemetry_at %}{{ vehicle.last_telemetry_at|date:"M d, Y H:i" }}{% else %}Never{% endif %}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<!-- Associated Records Tabs / Sections -->
+<div class="grid grid-cols-1 gap-6">
+    <!-- Fuel Logs Section -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="text-base font-semibold">Fuel &amp; Consumption Logs</h3>
+            <a href="{% url 'assets:vehicle_fuel_log_create' %}?vehicle={{ vehicle.pk }}" class="btn btn-outline btn-sm">
+                <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Log Fuel
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Fuel Type</th>
+                        <th>Gallons</th>
+                        <th>Odometer</th>
+                        <th>MPG</th>
+                        <th>Cost</th>
+                        <th>Efficiency</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in fuel_logs %}
+                    <tr>
+                        <td><a href="{% url 'assets:vehicle_fuel_log_detail' f.pk %}" class="text-blue-600 hover:underline font-medium">{{ f.fuel_date|date:"Y-m-d H:i" }}</a></td>
+                        <td>{{ f.get_fuel_type_display }}</td>
+                        <td class="font-mono">{{ f.quantity_gallons }}</td>
+                        <td class="font-mono">{{ f.odometer_at_fueling }}</td>
+                        <td class="font-mono">{% if f.calculated_mpg %}{{ f.calculated_mpg }}{% else %}—{% endif %}</td>
+                        <td class="font-mono font-medium">${{ f.total_cost }}</td>
+                        <td><span class="badge {{ f.efficiency_badge_class }}">{{ f.get_efficiency_rating_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-slate-400 text-sm">No fuel fill-up logs recorded for this vehicle.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Driver Assignments Section -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="text-base font-semibold">Driver Assignments &amp; Safety Scores</h3>
+            <a href="{% url 'assets:vehicle_driver_assignment_create' %}?vehicle={{ vehicle.pk }}" class="btn btn-outline btn-sm">
+                <i data-lucide="user-plus" class="w-3.5 h-3.5 me-1"></i> Assign Driver
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Driver</th>
+                        <th>Role</th>
+                        <th>Period</th>
+                        <th>Status</th>
+                        <th>Safety Score</th>
+                        <th>Duty Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in assignments %}
+                    <tr>
+                        <td><a href="{% url 'assets:vehicle_driver_assignment_detail' a.pk %}" class="text-blue-600 hover:underline font-medium">{{ a.driver }}</a></td>
+                        <td>{{ a.get_assignment_role_display }}</td>
+                        <td class="text-xs">{{ a.start_datetime|date:"M d, Y" }} &rarr; {% if a.end_datetime %}{{ a.end_datetime|date:"M d, Y" }}{% else %}Present{% endif %}</td>
+                        <td><span class="badge {{ a.status_badge_class }}">{{ a.get_status_display }}</span></td>
+                        <td><span class="badge {{ a.safety_tier_badge_class }}">{{ a.safety_score }}/100</span></td>
+                        <td><span class="badge {{ a.duty_status_badge_class }}">{{ a.get_duty_status_display }}</span></td>
+                        <td>
+                            <a href="{% url 'assets:vehicle_driver_assignment_detail' a.pk %}" class="btn btn-icon btn-sm"><i data-lucide="eye"></i></a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-slate-400 text-sm">No driver assignments recorded for this vehicle.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Service Schedules Section -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="text-base font-semibold">Maintenance &amp; Service Schedules</h3>
+            <a href="{% url 'assets:vehicle_service_schedule_create' %}?vehicle={{ vehicle.pk }}" class="btn btn-outline btn-sm">
+                <i data-lucide="calendar-plus" class="w-3.5 h-3.5 me-1"></i> Schedule Service
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Service Title</th>
+                        <th>Type</th>
+                        <th>Next Due Date</th>
+                        <th>Next Due Odometer</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in service_schedules %}
+                    <tr>
+                        <td><a href="{% url 'assets:vehicle_service_schedule_detail' s.pk %}" class="text-blue-600 hover:underline font-medium">{{ s.service_title }}</a></td>
+                        <td>{{ s.get_service_type_display }}</td>
+                        <td>
+                            {% if s.next_due_date %}
+                            {{ s.next_due_date }}
+                            {% if s.is_overdue %}<span class="badge badge-red ms-1">Overdue</span>{% endif %}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td class="font-mono">{% if s.next_due_odometer %}{{ s.next_due_odometer }} mi{% else %}—{% endif %}</td>
+                        <td><span class="badge {{ s.priority_badge_class }}">{{ s.get_priority_display }}</span></td>
+                        <td><span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span></td>
+                        <td>
+                            <a href="{% url 'assets:vehicle_service_schedule_detail' s.pk %}" class="btn btn-icon btn-sm"><i data-lucide="eye"></i></a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-slate-400 text-sm">No maintenance schedules configured for this vehicle.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
