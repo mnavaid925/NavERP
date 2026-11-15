@@ -41,7 +41,7 @@
                     <select name="{{ form.vehicle.html_name }}" id="{{ form.vehicle.id_for_label }}" class="form-select" required>
                         <option value="">— Select Fleet Vehicle —</option>
                         {% for v in form.fields.vehicle.queryset %}
-                        <option value="{{ v.pk }}" {% if form.vehicle.value == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }})</option>
+                        <option value="{{ v.pk }}" {% if form.vehicle.value|stringformat:"s" == v.pk|stringformat:"s" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }})</option>
                         {% endfor %}
                     </select>
                     {% if form.vehicle.errors %}<div class="form-error">{{ form.vehicle.errors }}</div>{% endif %}
@@ -107,7 +107,7 @@
                     <select name="{{ form.service_vendor.html_name }}" id="{{ form.service_vendor.id_for_label }}" class="form-select">
                         <option value="">— Internal Maintenance —</option>
                         {% for p in form.fields.service_vendor.queryset %}
-                        <option value="{{ p.pk }}" {% if form.service_vendor.value == p.pk|stringformat:"d" %}selected{% endif %}>{{ p }}</option>
+                        <option value="{{ p.pk }}" {% if form.service_vendor.value|stringformat:"s" == p.pk|stringformat:"s" %}selected{% endif %}>{{ p }}</option>
                         {% endfor %}
                     </select>
                 </div>
