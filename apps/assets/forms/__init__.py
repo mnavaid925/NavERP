@@ -121,6 +121,12 @@ from apps.assets.forms.ItAssetManagement import (
     ItHardwareAssetForm,
     SoftwareLicenseForm,
 )
+from apps.assets.forms.FleetVehicleManagement import (
+    FleetVehicleForm,
+    VehicleDriverAssignmentForm,
+    VehicleFuelLogForm,
+    VehicleServiceScheduleForm,
+)
 
 __all__ = [
     "TenantUniqueMixin",
@@ -210,4 +216,8 @@ __all__ = [
     "SoftwareLicenseForm",
     "CloudAssetSubscriptionForm",
     "CmdbRelationshipForm",
+    "FleetVehicleForm",
+    "VehicleFuelLogForm",
+    "VehicleDriverAssignmentForm",
+    "VehicleServiceScheduleForm",
 ]
