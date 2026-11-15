@@ -25,14 +25,14 @@
         </a>
 
         {% if assignment.status == "active" %}
-        <form method="post" action="{% url 'assets:vehicle_driver_assignment_complete' assignment.pk %}" class="inline">
+        <form method="post" action="{% url 'assets:vehicle_driver_assignment_complete' assignment.pk %}" class="inline" onsubmit="return confirm('Complete assignment \'{{ assignment.number }}\' and check in vehicle?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-green-600 border-green-600 hover:bg-green-50">
                 <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Check In / Complete
             </button>
         </form>
 
-        <form method="post" action="{% url 'assets:vehicle_driver_assignment_record_incident' assignment.pk %}" class="inline">
+        <form method="post" action="{% url 'assets:vehicle_driver_assignment_record_incident' assignment.pk %}" class="inline" onsubmit="return confirm('Log safety incident for driver \'{{ assignment.driver }}\'? This will deduct 10 safety score points.');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-amber-600 border-amber-600 hover:bg-amber-50">
                 <i data-lucide="alert-octagon" class="w-4 h-4 me-1"></i> Log Safety Incident (-10 Pts)
