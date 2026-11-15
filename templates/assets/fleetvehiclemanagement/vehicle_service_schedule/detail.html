@@ -29,7 +29,7 @@
         </a>
 
         {% if schedule.status != "in_service" %}
-        <form method="post" action="{% url 'assets:vehicle_service_schedule_mark_in_service' schedule.pk %}" class="inline">
+        <form method="post" action="{% url 'assets:vehicle_service_schedule_mark_in_service' schedule.pk %}" class="inline" onsubmit="return confirm('Mark maintenance schedule \'{{ schedule.number }}\' as In Service / At Shop?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-amber-600 border-amber-600 hover:bg-amber-50">
                 <i data-lucide="wrench" class="w-4 h-4 me-1"></i> Put In Service
@@ -38,7 +38,7 @@
         {% endif %}
 
         {% if schedule.status != "paused" %}
-        <form method="post" action="{% url 'assets:vehicle_service_schedule_pause' schedule.pk %}" class="inline">
+        <form method="post" action="{% url 'assets:vehicle_service_schedule_pause' schedule.pk %}" class="inline" onsubmit="return confirm('Pause tracking on maintenance schedule \'{{ schedule.number }}\'?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-slate-600 hover:bg-slate-100">
                 <i data-lucide="pause" class="w-4 h-4 me-1"></i> Pause
