@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ vehicle.name }}{% else %}New Fleet Vehicle{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:fleet_vehicle_list' %}">Fleet Vehicles</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ vehicle.number }}{% else %}New Vehicle{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Fleet Vehicle: {{ vehicle.name }}{% else %}Add New Fleet Vehicle{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:fleet_vehicle_detail' vehicle.pk %}{% else %}{% url 'assets:fleet_vehicle_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">{% if is_edit %}Update Vehicle Details{% else %}Vehicle Information &amp; Registration{% endif %}</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 text-red-700 text-sm border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Vehicle Designation / Name *</label>
+                    <input type="text" name="{{ form.name.html_name }}" id="{{ form.name.id_for_label }}" value="{{ form.name.value|default:'' }}" class="form-input" required placeholder="e.g. Acme Delivery Van #04">
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.license_plate.id_for_label }}">License Plate *</label>
+                    <input type="text" name="{{ form.license_plate.html_name }}" id="{{ form.license_plate.id_for_label }}" value="{{ form.license_plate.value|default:'' }}" class="form-input font-mono" required placeholder="e.g. 7XYZ890">
+                    {% if form.license_plate.errors %}<div class="form-error">{{ form.license_plate.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.registration_state.id_for_label }}">Registration State / Province</label>
+                    <input type="text" name="{{ form.registration_state.html_name }}" id="{{ form.registration_state.id_for_label }}" value="{{ form.registration_state.value|default:'' }}" class="form-input" placeholder="e.g. CA, NY, TX">
+                    {% if form.registration_state.errors %}<div class="form-error">{{ form.registration_state.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vin.id_for_label }}">VIN (17 Characters)</label>
+                    <input type="text" name="{{ form.vin.html_name }}" id="{{ form.vin.id_for_label }}" value="{{ form.vin.value|default:'' }}" class="form-input font-mono" maxlength="24" placeholder="e.g. 1FTNE2EW0KDC12345">
+                    {% if form.vin.errors %}<div class="form-error">{{ form.vin.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.make.id_for_label }}">Make *</label>
+                    <input type="text" name="{{ form.make.html_name }}" id="{{ form.make.id_for_label }}" value="{{ form.make.value|default:'' }}" class="form-input" required placeholder="e.g. Ford, Freightliner">
+                    {% if form.make.errors %}<div class="form-error">{{ form.make.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.model.id_for_label }}">Model *</label>
+                    <input type="text" name="{{ form.model.html_name }}" id="{{ form.model.id_for_label }}" value="{{ form.model.value|default:'' }}" class="form-input" required placeholder="e.g. Transit 350, Cascadia">
+                    {% if form.model.errors %}<div class="form-error">{{ form.model.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.year.id_for_label }}">Model Year *</label>
+                    <input type="number" name="{{ form.year.html_name }}" id="{{ form.year.id_for_label }}" value="{{ form.year.value|default:'' }}" class="form-input font-mono" required placeholder="e.g. 2024">
+                    {% if form.year.errors %}<div class="form-error">{{ form.year.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vehicle_type.id_for_label }}">Vehicle Type</label>
+                    <select name="{{ form.vehicle_type.html_name }}" id="{{ form.vehicle_type.id_for_label }}" class="form-select">
+                        {% for val, label in form.fields.vehicle_type.choices %}
+                        <option value="{{ val }}" {% if form.vehicle_type.value == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.vehicle_type.errors %}<div class="form-error">{{ form.vehicle_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fuel_type.id_for_label }}">Fuel / Powertrain</label>
+                    <select name="{{ form.fuel_type.html_name }}" id="{{ form.fuel_type.id_for_label }}" class="form-select">
+                        {% for val, label in form.fields.fuel_type.choices %}
+                        <option value="{{ val }}" {% if form.fuel_type.value == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.fuel_type.errors %}<div class="form-error">{{ form.fuel_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ownership_type.id_for_label }}">Ownership Structure</label>
+                    <select name="{{ form.ownership_type.html_name }}" id="{{ form.ownership_type.id_for_label }}" class="form-select">
+                        {% for val, label in form.fields.ownership_type.choices %}
+                        <option value="{{ val }}" {% if form.ownership_type.value == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.ownership_type.errors %}<div class="form-error">{{ form.ownership_type.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- DMV & Inspection Section -->
+            <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3">DMV Title &amp; Inspection Dates</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.title_number.id_for_label }}">Title Number</label>
+                        <input type="text" name="{{ form.title_number.html_name }}" id="{{ form.title_number.id_for_label }}" value="{{ form.title_number.value|default:'' }}" class="form-input font-mono">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.registration_expiration_date.id_for_label }}">Registration Expiration</label>
+                        {{ form.registration_expiration_date }}
+                        {% if form.registration_expiration_date.errors %}<div class="form-error">{{ form.registration_expiration_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.safety_inspection_due_date.id_for_label }}">Safety Inspection Due</label>
+                        {{ form.safety_inspection_due_date }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.emissions_inspection_due_date.id_for_label }}">Emissions Inspection Due</label>
+                        {{ form.emissions_inspection_due_date }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.current_odometer.id_for_label }}">Current Odometer (mi)</label>
+                        <input type="number" name="{{ form.current_odometer.html_name }}" id="{{ form.current_odometer.id_for_label }}" value="{{ form.current_odometer.value|default:0 }}" class="form-input font-mono">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.engine_hours.id_for_label }}">Engine Hours</label>
+                        <input type="number" step="0.01" name="{{ form.engine_hours.html_name }}" id="{{ form.engine_hours.id_for_label }}" value="{{ form.engine_hours.value|default:'0.00' }}" class="form-input font-mono">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telematics and Assignment Section -->
+            <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3">Telematics &amp; Organization Assignment</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.org_unit.id_for_label }}">Department / Branch</label>
+                        <select name="{{ form.org_unit.html_name }}" id="{{ form.org_unit.id_for_label }}" class="form-select">
+                            <option value="">— Select Department —</option>
+                            {% for u in form.fields.org_unit.queryset %}
+                            <option value="{{ u.pk }}" {% if form.org_unit.value == u.pk|stringformat:"d" %}selected{% endif %}>{{ u }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.primary_driver.id_for_label }}">Primary Driver</label>
+                        <select name="{{ form.primary_driver.html_name }}" id="{{ form.primary_driver.id_for_label }}" class="form-select">
+                            <option value="">— Select Driver —</option>
+                            {% for d in form.fields.primary_driver.queryset %}
+                            <option value="{{ d.pk }}" {% if form.primary_driver.value == d.pk|stringformat:"d" %}selected{% endif %}>{{ d }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.custodian_party.id_for_label }}">Custodian Party</label>
+                        <select name="{{ form.custodian_party.html_name }}" id="{{ form.custodian_party.id_for_label }}" class="form-select">
+                            <option value="">— Select Custodian —</option>
+                            {% for p in form.fields.custodian_party.queryset %}
+                            <option value="{{ p.pk }}" {% if form.custodian_party.value == p.pk|stringformat:"d" %}selected{% endif %}>{{ p }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.telematics_device_id.id_for_label }}">Telematics Device ID</label>
+                        <input type="text" name="{{ form.telematics_device_id.html_name }}" id="{{ form.telematics_device_id.id_for_label }}" value="{{ form.telematics_device_id.value|default:'' }}" class="form-input font-mono" placeholder="OBD2 / GPS Serial">
+                    </div>
+                    <div class="form-group flex items-center pt-6">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="{{ form.is_telematics_enabled.html_name }}" {% if form.is_telematics_enabled.value %}checked{% endif %} class="rounded border-slate-300 text-blue-600 shadow-sm focus:ring-blue-500">
+                            <span class="ms-2 text-sm text-slate-700 dark:text-slate-300">Enable Live GPS Telematics</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes Section -->
+            <div class="form-group mt-4">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                {{ form.notes }}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <a href="{% if is_edit %}{% url 'assets:fleet_vehicle_detail' vehicle.pk %}{% else %}{% url 'assets:fleet_vehicle_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Vehicle{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
