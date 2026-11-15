@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Fuel Log {{ fuel_log.number }}{% else %}Log Fuel Fill-Up{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:vehicle_fuel_log_list' %}">Vehicle Fuel Logs</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ fuel_log.number }}{% else %}New Fill-Up Log{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Fuel Log: {{ fuel_log.number }}{% else %}Log Vehicle Fuel Fill-Up{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:vehicle_fuel_log_detail' fuel_log.pk %}{% else %}{% url 'assets:vehicle_fuel_log_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1 rtl:rotate-180"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Fuel Transaction Information</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 text-red-700 text-sm border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.vehicle.id_for_label }}">Vehicle *</label>
+                    <select name="{{ form.vehicle.html_name }}" id="{{ form.vehicle.id_for_label }}" class="form-select" required>
+                        <option value="">— Select Fleet Vehicle —</option>
+                        {% for v in form.fields.vehicle.queryset %}
+                        <option value="{{ v.pk }}" {% if form.vehicle.value == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }}) &bull; {{ v.number }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.vehicle.errors %}<div class="form-error">{{ form.vehicle.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fuel_date.id_for_label }}">Transaction Date &amp; Time *</label>
+                    {{ form.fuel_date }}
+                    {% if form.fuel_date.errors %}<div class="form-error">{{ form.fuel_date.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.odometer_at_fueling.id_for_label }}">Odometer Reading (mi) *</label>
+                    <input type="number" name="{{ form.odometer_at_fueling.html_name }}" id="{{ form.odometer_at_fueling.id_for_label }}" value="{{ form.odometer_at_fueling.value|default:'' }}" class="form-input font-mono" required placeholder="e.g. 45280">
+                    {% if form.odometer_at_fueling.errors %}<div class="form-error">{{ form.odometer_at_fueling.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fuel_type.id_for_label }}">Fuel Type *</label>
+                    <select name="{{ form.fuel_type.html_name }}" id="{{ form.fuel_type.id_for_label }}" class="form-select">
+                        {% for val, label in form.fields.fuel_type.choices %}
+                        <option value="{{ val }}" {% if form.fuel_type.value == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.quantity_gallons.id_for_label }}">Quantity (Gallons / Units) *</label>
+                    <input type="number" step="0.001" name="{{ form.quantity_gallons.html_name }}" id="{{ form.quantity_gallons.id_for_label }}" value="{{ form.quantity_gallons.value|default:'' }}" class="form-input font-mono" required placeholder="e.g. 18.450">
+                    {% if form.quantity_gallons.errors %}<div class="form-error">{{ form.quantity_gallons.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.unit_price.id_for_label }}">Unit Price ($ / gal)</label>
+                    <input type="number" step="0.001" name="{{ form.unit_price.html_name }}" id="{{ form.unit_price.id_for_label }}" value="{{ form.unit_price.value|default:'0.000' }}" class="form-input font-mono" placeholder="3.859">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.total_cost.id_for_label }}">Total Cost ($) *</label>
+                    <input type="number" step="0.01" name="{{ form.total_cost.html_name }}" id="{{ form.total_cost.id_for_label }}" value="{{ form.total_cost.value|default:'0.00' }}" class="form-input font-mono font-semibold" required placeholder="71.20">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.driver.id_for_label }}">Driver / Custodian</label>
+                    <select name="{{ form.driver.html_name }}" id="{{ form.driver.id_for_label }}" class="form-select">
+                        <option value="">— Select Driver —</option>
+                        {% for d in form.fields.driver.queryset %}
+                        <option value="{{ d.pk }}" {% if form.driver.value == d.pk|stringformat:"d" %}selected{% endif %}>{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fuel_vendor.id_for_label }}">Fuel Vendor / Station Party</label>
+                    <select name="{{ form.fuel_vendor.html_name }}" id="{{ form.fuel_vendor.id_for_label }}" class="form-select">
+                        <option value="">— Select Vendor —</option>
+                        {% for p in form.fields.fuel_vendor.queryset %}
+                        <option value="{{ p.pk }}" {% if form.fuel_vendor.value == p.pk|stringformat:"d" %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fuel_station_name.id_for_label }}">Fuel Station Name</label>
+                    <input type="text" name="{{ form.fuel_station_name.html_name }}" id="{{ form.fuel_station_name.id_for_label }}" value="{{ form.fuel_station_name.value|default:'' }}" class="form-input" placeholder="e.g. Shell, Chevron">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.station_city_state.id_for_label }}">Station City / State</label>
+                    <input type="text" name="{{ form.station_city_state.html_name }}" id="{{ form.station_city_state.id_for_label }}" value="{{ form.station_city_state.value|default:'' }}" class="form-input" placeholder="e.g. Dallas, TX">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fuel_card_token.id_for_label }}">Fuel Card Reference / Token</label>
+                    <input type="text" name="{{ form.fuel_card_token.html_name }}" id="{{ form.fuel_card_token.id_for_label }}" value="{{ form.fuel_card_token.value|default:'' }}" class="form-input font-mono" placeholder="WEX-****-8841">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.route_category.id_for_label }}">Route Profile</label>
+                    <select name="{{ form.route_category.html_name }}" id="{{ form.route_category.id_for_label }}" class="form-select">
+                        {% for val, label in form.fields.route_category.choices %}
+                        <option value="{{ val }}" {% if form.route_category.value == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.receipt_reference.id_for_label }}">Receipt / Invoice #</label>
+                    <input type="text" name="{{ form.receipt_reference.html_name }}" id="{{ form.receipt_reference.id_for_label }}" value="{{ form.receipt_reference.value|default:'' }}" class="form-input font-mono">
+                </div>
+
+                <div class="form-group flex items-center pt-6">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="{{ form.is_full_tank.html_name }}" {% if form.is_full_tank.value %}checked{% endif %} class="rounded border-slate-300 text-blue-600 shadow-sm focus:ring-blue-500">
+                        <span class="ms-2 text-sm text-slate-700 dark:text-slate-300">Full Tank Fill (for MPG calculation)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                {{ form.notes }}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <a href="{% if is_edit %}{% url 'assets:vehicle_fuel_log_detail' fuel_log.pk %}{% else %}{% url 'assets:vehicle_fuel_log_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Record Fuel Log{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
