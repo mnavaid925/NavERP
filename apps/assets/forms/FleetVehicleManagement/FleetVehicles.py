@@ -75,7 +75,7 @@ class FleetVehicleForm(TenantUniqueMixin, TenantModelForm):
             self.fields["asset_category"].queryset = AssetCategory.objects.filter(tenant=self.tenant)
             self.fields["asset_model"].queryset = AssetModel.objects.filter(tenant=self.tenant)
             self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
-            self.fields["primary_driver"].queryset = EmployeeProfile.objects.filter(tenant=self.tenant)
+            self.fields["primary_driver"].queryset = EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
             self.fields["custodian_party"].queryset = Party.objects.filter(tenant=self.tenant)
 
     def clean(self):
