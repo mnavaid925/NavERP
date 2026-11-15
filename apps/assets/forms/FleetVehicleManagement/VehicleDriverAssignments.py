@@ -2,6 +2,7 @@
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from apps.assets.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.assets.models.FleetVehicleManagement.FleetVehicles import FleetVehicle
@@ -51,7 +52,13 @@ class VehicleDriverAssignmentForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
         if self.tenant is not None:
-            self.fields["vehicle"].queryset = FleetVehicle.objects.filter(tenant=self.tenant)
+            vehicle_qs = FleetVehicle.objects.filter(tenant=self.tenant)
+            if self.instance and self.instance.pk and getattr(self.instance, "vehicle_id", None):
+                self.fields["vehicle"].queryset = vehicle_qs.filter(
+                    Q(pk=self.instance.vehicle_id) | ~Q(status="decommissioned")
+                )
+            else:
+                self.fields["vehicle"].queryset = vehicle_qs.exclude(status="decommissioned")
             self.fields["driver"].queryset = EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
             self.fields["user"].queryset = User.objects.filter(tenant=self.tenant)
 
