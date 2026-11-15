@@ -145,7 +145,7 @@ def controlled_document_detail(request, pk):
     can_make_effective = is_admin and doc.lifecycle_state == "approved"
     can_obsolete = is_admin and doc.lifecycle_state == "effective"
     can_revise = doc.lifecycle_state == "effective"
-    can_sign = True
+    can_sign = not doc.is_locked
 
     context = {
         "document": doc,
