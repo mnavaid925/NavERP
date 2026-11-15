@@ -61,6 +61,7 @@ def controlled_document_list(request):
         qs = qs.filter(is_latest_revision=True)
     elif latest_filter == "0":
         qs = qs.filter(is_latest_revision=False)
+    # "all" preserves full revision history
 
     today = timezone.now().date()
     stats = qs.aggregate(
