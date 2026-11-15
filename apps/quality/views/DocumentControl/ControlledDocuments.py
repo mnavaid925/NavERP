@@ -138,11 +138,12 @@ def controlled_document_detail(request, pk):
         .exclude(pk=doc.pk)
     )
 
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
     can_edit = not doc.is_locked
     can_submit = doc.lifecycle_state == "draft"
-    can_approve = doc.lifecycle_state in {"in_review", "pending_approval"}
-    can_make_effective = doc.lifecycle_state == "approved"
-    can_obsolete = doc.lifecycle_state == "effective"
+    can_approve = is_admin and doc.lifecycle_state in {"in_review", "pending_approval"}
+    can_make_effective = is_admin and doc.lifecycle_state == "approved"
+    can_obsolete = is_admin and doc.lifecycle_state == "effective"
     can_revise = doc.lifecycle_state == "effective"
     can_sign = True
 
@@ -152,6 +153,7 @@ def controlled_document_detail(request, pk):
         "signatures": signatures,
         "acknowledgments": acknowledgments,
         "revision_history": revision_history,
+        "is_admin": is_admin,
         "can_edit": can_edit,
         "can_submit": can_submit,
         "can_approve": can_approve,
