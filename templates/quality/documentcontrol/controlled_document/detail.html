@@ -112,7 +112,7 @@
         </div>
     </div>
     {% if document.file %}
-    <a href="{{ document.file.url }}" target="_blank" class="btn btn-sm btn-outline bg-white">
+    <a href="{{ document.file.url }}" target="_blank" rel="noopener noreferrer" download class="btn btn-sm btn-outline bg-white">
         <i data-lucide="file-down"></i> Download Master File
     </a>
     {% endif %}
