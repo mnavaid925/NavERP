@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, asset analytics & BI — Asset Lifecycle Cost Analysis TCO/EAC (`ALCC-`), Replacement Planning & FCI Forecasting (`ARPL-`), What-if Portfolio Scenarios (`AWIF-`), Executive KPI Scorecards (`AKPI-`), and computed Portfolio Dashboard & Scenario Comparison, integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification, document & knowledge management — controlled engineering document repository & revision/MOC queue, LOTO-enabled SOP bench sheets, operator training/qualification matrix with expiry alerts, and 5-Why / Fishbone 6M RCA knowledge base, and IT asset management (ITAM) — hardware lifecycle with NIST SP 800-88 sanitization (`[ITHW-]`), software license compliance & Effective License Position ELP (`[ITSW-]`), cloud asset subscription FinOps & shadow-IT governance (`[ITCL-]`), CMDB multi-type directed CI dependency graph (`[CMDB-]`), EOL/EOS hardware refresh cycle planning board, and cycle-safe CMDB blast-radius impact analysis). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.14, 11.15, 11.16, 11.17, 11.18), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, asset analytics & BI — Asset Lifecycle Cost Analysis TCO/EAC (`ALCC-`), Replacement Planning & FCI Forecasting (`ARPL-`), What-if Portfolio Scenarios (`AWIF-`), Executive KPI Scorecards (`AKPI-`), and computed Portfolio Dashboard & Scenario Comparison, integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification, document & knowledge management — controlled engineering document repository & revision/MOC queue, LOTO-enabled SOP bench sheets, operator training/qualification matrix with expiry alerts, and 5-Why / Fishbone 6M RCA knowledge base, IT asset management (ITAM) — hardware lifecycle with NIST SP 800-88 sanitization (`[ITHW-]`), software license compliance & Effective License Position ELP (`[ITSW-]`), cloud asset subscription FinOps & shadow-IT governance (`[ITCL-]`), CMDB multi-type directed CI dependency graph (`[CMDB-]`), EOL/EOS hardware refresh cycle planning board, and cycle-safe CMDB blast-radius impact analysis, and fleet & vehicle management — DMV vehicle title/registration tracking (`[FLT-]`), fuel logs with MPG and cost-per-mile calculation (`[VFUL-]`), driver assignments with safety scoring (`[VDRV-]`), preventive vehicle service schedules (`[VSRV-]`), and real-time Fleet Telematics Command Board). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.14, 11.15, 11.16, 11.17, 11.18, 11.19), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -33,6 +33,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.15 Integration & API Hub**: ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 secret rotation & SSRF defense (`[AICN-]`), IoT/SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation (`[ATMS-]`), GL sync & reconciliation batches posting balanced `JournalEntry` rows (`[AGLS-]`), and GIS/LRS spatial coordinate & drift verification (`[AGIS-]`).
 - **11.16 Document & Knowledge Management**: Controlled engineering manuals/drawings repository with revision chains, checkout/check-in locks, access-classification tiers, and protected attachment downloads (`[ADOC-]`), controlled SOP & LOTO isolation procedures with printable shop-floor bench sheets (`[ASOP-]`), operator qualification & training certifications with bulk expiry refresh and `is_operator_certified(...)` resolver (`[AOCT-]`), and 5-Why / Fishbone 6M RCA & lessons-learned knowledge base (`[AKBA-]`).
 - **11.18 IT Asset Management (ITAM)**: Hardware lifecycle management with NIST SP 800-88 sanitization tracking (`[ITHW-]`), software license compliance with Effective License Position ELP, surplus reclamation, and true-up calculations (`[ITSW-]`), cloud and SaaS subscription governance with FinOps cost optimization and shadow-IT discovery (`[ITCL-]`), Configuration Management Database (CMDB) multi-type directed CI dependency graph modeling (`[CMDB-]`), End-of-Life (EOL/EOS) hardware refresh cycle planning board (`it_refresh_board`), and cycle-safe CMDB blast-radius impact analysis (`cmdb_impact_analysis`).
+- **11.19 Fleet & Vehicle Management**: Vehicle inventory & DMV registration/title tracking (`[FLT-]`), fuel consumption & MPG efficiency logs (`[VFUL-]`), driver assignments & safety score tracking (`[VDRV-]`), preventive maintenance & service schedules (`[VSRV-]`), and real-time Fleet Telematics Command Board (`fleet_telematics_board`).
 
 ---
 
@@ -128,6 +129,11 @@ apps/assets/
       SoftwareLicenses.py                     <- SoftwareLicense [ITSW-] (ELP compliance, surplus reclaim, true-up)
       CloudAssetSubscriptions.py              <- CloudAssetSubscription [ITCL-] (FinOps spend, seat waste, shadow-IT)
       CmdbRelationships.py                    <- CmdbRelationship [CMDB-] (10-FK typed directed graph edges)
+    FleetVehicleManagement/                   <- Sub-module 11.19 models
+      FleetVehicles.py                        <- FleetVehicle [FLT-] (VIN, license plate, DMV title/reg, telematics)
+      VehicleFuelLogs.py                      <- VehicleFuelLog [VFUL-] (fuel transactions, MPG, cost per mile)
+      VehicleDriverAssignments.py             <- VehicleDriverAssignment [VDRV-] (driver checkout/return, safety scoring)
+      VehicleServiceSchedules.py              <- VehicleServiceSchedule [VSRV-] (PM service intervals, overdue tracking)
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -214,6 +220,11 @@ apps/assets/
       SoftwareLicenses.py                     <- SoftwareLicenseForm
       CloudAssetSubscriptions.py              <- CloudAssetSubscriptionForm
       CmdbRelationships.py                    <- CmdbRelationshipForm (cached CI choice queries)
+    FleetVehicleManagement/                   <- Sub-module 11.19 forms
+      FleetVehicles.py                        <- FleetVehicleForm
+      VehicleFuelLogs.py                      <- VehicleFuelLogForm
+      VehicleDriverAssignments.py             <- VehicleDriverAssignmentForm
+      VehicleServiceSchedules.py              <- VehicleServiceScheduleForm, VehicleServiceScheduleCompleteForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -305,6 +316,12 @@ apps/assets/
       CmdbRelationships.py                    <- CMDB Edge CRUD + verify, deprecate, sever
       ItRefreshBoards.py                      <- EOL & Refresh Cycles command board (SQL KPIs, OrgUnit CapEx rollup, CSV)
       CmdbImpactAnalyses.py                   <- CMDB Dependency & Blast-Radius impact analysis explorer
+    FleetVehicleManagement/                   <- Sub-module 11.19 views
+      FleetVehicles.py                        <- Vehicle CRUD, activate, mark_in_shop, mark_loaner, mark_out_of_service, decommission, ping_telemetry, CSV
+      VehicleFuelLogs.py                      <- Fuel log CRUD, MPG & cost-per-mile calculation, CSV
+      VehicleDriverAssignments.py             <- Driver assignment CRUD, complete, revoke_safety, record_incident, CSV
+      VehicleServiceSchedules.py              <- Service schedule CRUD, complete, mark_in_service, pause_tracking, CSV
+      FleetTelematicsBoards.py                <- Real-time fleet telematics board, GPS mapping, status metrics, CSV
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -390,6 +407,12 @@ apps/assets/
       CmdbRelationships.py
       ItRefreshBoards.py
       CmdbImpactAnalyses.py
+    FleetVehicleManagement/                   <- Sub-module 11.19 URL route definitions
+      FleetVehicles.py
+      VehicleFuelLogs.py
+      VehicleDriverAssignments.py
+      VehicleServiceSchedules.py
+      FleetTelematicsBoards.py
     __init__.py                               <- Root URL router concatenating all packages
   templatetags/
     asset_analytics_tags.py                   <- fmt_money tag for dynamic currency prefix + leading-sign formatting
@@ -461,6 +484,10 @@ apps/assets/
     test_it_asset_management_forms.py         <- 11.18 Form validations, NIST admin gating, masked keys, CI choice reuse, reject_foreign
     test_it_asset_management_views.py         <- 11.18 CRUD, 22 workflows, AuditLog changes, 6 CSVs, refresh board, blast-radius BFS, query budgets
     test_it_asset_management_security.py      <- 11.18 Anon (302), IDOR 404, C2 audit_hold (403), C3 suspended (403), C4 NIST tampering, locked states
+    test_fleetvehicle_models.py               <- 11.19 Model invariants, FLT/VFUL/VDRV/VSRV sequences, properties, clean()
+    test_fleetvehicle_forms.py                <- 11.19 Form validations, currency global handling, mass-assignment exclusion, reject_foreign
+    test_fleetvehicle_views.py                <- 11.19 CRUD, 13 workflows, telematics board, CSV exports, query budgets
+    test_fleetvehicle_security.py             <- 11.19 Anon (302), IDOR (404), RBAC admin gates (403), numeric validation (L35), CSRF (403)
 ```
 
 ---
@@ -1197,6 +1224,52 @@ Templates under `templates/assets/itassetmanagement/{it_hardware_asset,software_
   - `assets:cmdb_impact_analysis`: `/assets/cmdb/impact-analysis/`
   - `assets:cmdb_impact_analysis_export_csv`: `/assets/cmdb/impact-analysis/export-csv/`
 
+### 11.19 Fleet & Vehicle Management
+
+- **Fleet Vehicles (`FleetVehicle` [FLT-]):** Enterprise vehicle master tracking VIN, license plate, DMV title/registration dates, fuel type, vehicle class, odometer/engine hours, and real-time telematics coordinates/speed/heading. Integrates with `scm.Asset` (`operational_asset`), `accounting.FixedAsset`, `assets.AssetCategory`, `assets.AssetModel`, `core.OrgUnit`, `hrm.EmployeeProfile` (`primary_driver`), and `core.Party` (`custodian_party`).
+  - `assets:fleet_vehicle_list`: `/assets/fleet/`
+  - `assets:fleet_vehicle_create`: `/assets/fleet/new/`
+  - `assets:fleet_vehicle_export_csv`: `/assets/fleet/export-csv/`
+  - `assets:fleet_vehicle_detail`: `/assets/fleet/<pk>/`
+  - `assets:fleet_vehicle_edit`: `/assets/fleet/<pk>/edit/`
+  - `assets:fleet_vehicle_delete`: `/assets/fleet/<pk>/delete/` [POST, Admin]
+  - `assets:fleet_vehicle_activate`: `/assets/fleet/<pk>/activate/` [POST]
+  - `assets:fleet_vehicle_mark_in_shop`: `/assets/fleet/<pk>/mark-in-shop/` [POST]
+  - `assets:fleet_vehicle_mark_loaner`: `/assets/fleet/<pk>/mark-loaner/` [POST]
+  - `assets:fleet_vehicle_mark_out_of_service`: `/assets/fleet/<pk>/mark-out-of-service/` [POST]
+  - `assets:fleet_vehicle_decommission`: `/assets/fleet/<pk>/decommission/` [POST, Admin]
+  - `assets:fleet_vehicle_ping_telemetry`: `/assets/fleet/<pk>/ping-telemetry/` [POST]
+- **Vehicle Fuel Logs (`VehicleFuelLog` [VFUL-]):** Fuel transactions tracking fuel type, gallons, price per gallon, total cost, odometer at fueling, MPG calculation, distance since last fuel, full-tank indicator, and vendor attribution. Integrates with `FleetVehicle`, `hrm.EmployeeProfile` (`driver`), `core.Party` (`fuel_vendor`), and `accounting.Currency` (global).
+  - `assets:vehicle_fuel_log_list`: `/assets/fleet/fuel-logs/`
+  - `assets:vehicle_fuel_log_create`: `/assets/fleet/fuel-logs/new/`
+  - `assets:vehicle_fuel_log_export_csv`: `/assets/fleet/fuel-logs/export-csv/`
+  - `assets:vehicle_fuel_log_detail`: `/assets/fleet/fuel-logs/<pk>/`
+  - `assets:vehicle_fuel_log_edit`: `/assets/fleet/fuel-logs/<pk>/edit/`
+  - `assets:vehicle_fuel_log_delete`: `/assets/fleet/fuel-logs/<pk>/delete/` [POST, Admin]
+- **Vehicle Driver Assignments (`VehicleDriverAssignment` [VDRV-]):** Driver duty cycles tracking vehicle checkout/return, start/end odometer, commercial/non-CDL license details, medical card expiry, safety scores (0–100), telemetry events (speeding, harsh braking, harsh acceleration), and safety tiers. Integrates with `FleetVehicle`, `hrm.EmployeeProfile` (`driver`), and `accounts.User`.
+  - `assets:vehicle_driver_assignment_list`: `/assets/fleet/driver-assignments/`
+  - `assets:vehicle_driver_assignment_create`: `/assets/fleet/driver-assignments/new/`
+  - `assets:vehicle_driver_assignment_export_csv`: `/assets/fleet/driver-assignments/export-csv/`
+  - `assets:vehicle_driver_assignment_detail`: `/assets/fleet/driver-assignments/<pk>/`
+  - `assets:vehicle_driver_assignment_edit`: `/assets/fleet/driver-assignments/<pk>/edit/`
+  - `assets:vehicle_driver_assignment_delete`: `/assets/fleet/driver-assignments/<pk>/delete/` [POST, Admin]
+  - `assets:vehicle_driver_assignment_complete`: `/assets/fleet/driver-assignments/<pk>/complete/` [POST]
+  - `assets:vehicle_driver_assignment_revoke_safety`: `/assets/fleet/driver-assignments/<pk>/revoke-safety/` [POST, Admin]
+  - `assets:vehicle_driver_assignment_record_incident`: `/assets/fleet/driver-assignments/<pk>/record-incident/` [POST]
+- **Vehicle Service Schedules (`VehicleServiceSchedule` [VSRV-]):** Preventive maintenance schedules with mileage and time intervals (e.g., 5,000 miles or 6 months), last/next due dates and odometers, priority, estimated vs. actual costs, warranty linkage, and work order invoice references. Integrates with `FleetVehicle`, `core.Party` (`service_vendor`), `assets.AssetWarranty`, `assets.AssetMaintenanceSchedule`, and `accounting.Currency` (global).
+  - `assets:vehicle_service_schedule_list`: `/assets/fleet/service-schedules/`
+  - `assets:vehicle_service_schedule_create`: `/assets/fleet/service-schedules/new/`
+  - `assets:vehicle_service_schedule_export_csv`: `/assets/fleet/service-schedules/export-csv/`
+  - `assets:vehicle_service_schedule_detail`: `/assets/fleet/service-schedules/<pk>/`
+  - `assets:vehicle_service_schedule_edit`: `/assets/fleet/service-schedules/<pk>/edit/`
+  - `assets:vehicle_service_schedule_delete`: `/assets/fleet/service-schedules/<pk>/delete/` [POST, Admin]
+  - `assets:vehicle_service_schedule_complete`: `/assets/fleet/service-schedules/<pk>/complete/` [POST, Admin]
+  - `assets:vehicle_service_schedule_mark_in_service`: `/assets/fleet/service-schedules/<pk>/mark-in-service/` [POST]
+  - `assets:vehicle_service_schedule_pause_tracking`: `/assets/fleet/service-schedules/<pk>/pause-tracking/` [POST]
+- **Fleet Telematics Command Board (`fleet_telematics_board`):** Real-time operational dashboard aggregating active/maintenance/decommissioned fleet counts, overdue service counts, average fleet fuel economy, telematics ping latency, driver safety leaderboard, and live vehicle location/speed/status table with CSV export.
+  - `assets:fleet_telematics_board`: `/assets/fleet/telematics-board/`
+  - `assets:fleet_telematics_board_export_csv`: `/assets/fleet/telematics-board/export-csv/`
+
 ---
 
 ## Conventions & Gotchas
@@ -1213,9 +1286,11 @@ Templates under `templates/assets/itassetmanagement/{it_hardware_asset,software_
    - Badges: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`.
    - Component classes: `.table-wrap`, `.text-brand`, `.empty-state`, `.pagination`.
 5. **RBAC & Privilege Separation**:
-   - Audit variance reconciliation, write-off authorizations, 11.15 connector writes / secret rotation / GL batch execution / IntegrationApiHub deletes, 11.16 controlled release/activation/publishing/retire/delete actions plus `AssetOperatorCertification` edits, verifications, renewals, revocations, and bulk `refresh_alerts`, and 11.18 NIST SP 800-88 sanitization mark, hardware retirement, software license audit-hold placement, software retirement, cloud subscription suspension and decommissioning, and CMDB relationship severance require `@tenant_admin_required`. Software licenses on `audit_hold` and cloud subscriptions on `suspended` block non-admin mutations with 403. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}` (or `can_manage`).
+   - Audit variance reconciliation, write-off authorizations, 11.15 connector writes / secret rotation / GL batch execution / IntegrationApiHub deletes, 11.16 controlled release/activation/publishing/retire/delete actions plus `AssetOperatorCertification` edits, verifications, renewals, revocations, and bulk `refresh_alerts`, 11.18 NIST SP 800-88 sanitization mark, hardware retirement, software license audit-hold placement, software retirement, cloud subscription suspension and decommissioning, and CMDB relationship severance, and 11.19 `FleetVehicle` decommission, `VehicleFuelLog` delete, `VehicleDriverAssignment` delete / safety revocation, and `VehicleServiceSchedule` delete / completion require `@tenant_admin_required`. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}` (or `can_manage`).
 6. **Filter-Preserving Pagination**:
-   - All filter parameters (`?q=`, `?status=`, `?type=`, `?location=`, `?asset=`) are strictly preserved in pagination links.
+   - All filter parameters (`?q=`, `?status=`, `?type=`, `?location=`, `?asset=`, `?driver=`, `?vendor=`) are strictly preserved in pagination links.
+7. **L35 Numeric Validation**:
+   - All monetary amounts (`actual_cost`, `total_cost`, `unit_price`) and odometer inputs are strictly checked for finiteness and non-negativity to prevent NaN/Infinity 500 crashes.
 
 ---
 
@@ -1231,7 +1306,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (2,886+ passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, 291 tests for 11.14, 375 tests for 11.15, 110 tests for 11.16, and 202 tests dedicated to 11.18).
+Unfiltered run on SQLite in-memory test database (3,000+ passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, 291 tests for 11.14, 375 tests for 11.15, 110 tests for 11.16, 202 tests for 11.18, and 114 tests dedicated to 11.19).
 
 ---
 
@@ -1253,4 +1328,5 @@ Unfiltered run on SQLite in-memory test database (2,886+ passing tests in full `
 - `11.15`: ERP Integration (`assets:asset_integration_connector_list?connector_category=erp_procurement`), IoT & SCADA Systems (`assets:asset_telemetry_stream_list`), CMMS/EAM Connectivity (`assets:asset_integration_connector_list?connector_category=cmms_eam`), Financial Systems & General Ledger (`assets:asset_gl_sync_batch_list`), GIS & Mapping Tools (`assets:asset_gis_mapping_list`), Integration Connectors (`assets:asset_integration_connector_list`)
 - `11.16`: Asset Documentation Repository (`assets:asset_document_list`), Version Control & Change Management (`assets:asset_document_change_list`), SOP & Procedure Management (`assets:asset_operating_procedure_list`), Training & Certification Records (`assets:asset_operator_certification_list`), Lessons Learned & Failure Analysis (`assets:asset_knowledge_article_list`)
 - `11.18`: Hardware Lifecycle Management (`assets:it_hardware_asset_list`), Software License Management (`assets:software_license_list`), Cloud Asset & Subscription Tracking (`assets:cloud_asset_subscription_list`), Configuration Management Database (CMDB) (`assets:cmdb_relationship_list`), End-of-Life & Refresh Cycles (`assets:it_refresh_board`), CMDB Impact Analysis (`assets:cmdb_impact_analysis`)
+- `11.19`: Vehicle Registration & Title Tracking (`assets:fleet_vehicle_list`), Fuel Management & Mileage Tracking (`assets:vehicle_fuel_log_list`), Driver Assignment & History (`assets:vehicle_driver_assignment_list`), Vehicle Maintenance Scheduling (`assets:vehicle_service_schedule_list`), Fleet Telematics & GPS Tracking (`assets:fleet_telematics_board`)
 
