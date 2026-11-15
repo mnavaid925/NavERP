@@ -63,15 +63,15 @@ def controlled_document_list(request):
         qs = qs.filter(is_latest_revision=False)
 
     today = timezone.now().date()
-    stats = {
-        "total": qs.count(),
-        "effective": qs.filter(lifecycle_state="effective").count(),
-        "in_review": qs.filter(lifecycle_state__in=["in_review", "pending_approval"]).count(),
-        "draft": qs.filter(lifecycle_state="draft").count(),
-        "overdue_reviews": qs.filter(
-            lifecycle_state="effective", next_review_date__lt=today
-        ).count(),
-    }
+    stats = qs.aggregate(
+        total=Count("id"),
+        effective=Count("id", filter=Q(lifecycle_state="effective")),
+        in_review=Count("id", filter=Q(lifecycle_state__in=["in_review", "pending_approval"])),
+        draft=Count("id", filter=Q(lifecycle_state="draft")),
+        overdue_reviews=Count(
+            "id", filter=Q(lifecycle_state="effective", next_review_date__lt=today)
+        ),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
@@ -382,12 +382,12 @@ def document_archive_vault(request):
             | Q(description__icontains=q)
         )
 
-    stats = {
-        "total_vault": qs.count(),
-        "superseded": qs.filter(lifecycle_state="superseded").count(),
-        "obsolete": qs.filter(lifecycle_state="obsolete").count(),
-        "archived": qs.filter(lifecycle_state="archived").count(),
-    }
+    stats = qs.aggregate(
+        total_vault=Count("id"),
+        superseded=Count("id", filter=Q(lifecycle_state="superseded")),
+        obsolete=Count("id", filter=Q(lifecycle_state="obsolete")),
+        archived=Count("id", filter=Q(lifecycle_state="archived")),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
