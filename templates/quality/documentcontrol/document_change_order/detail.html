@@ -149,7 +149,7 @@
                     </div>
                     <div class="detail-item">
                         <dt>Decided By</dt>
-                        <dd>{{ change_order.ccb_decision_by.get_full_name|default:change_order.ccb_decision_by.username }}</dd>
+                        <dd>{% if change_order.ccb_decision_by %}{{ change_order.ccb_decision_by.get_full_name|default:change_order.ccb_decision_by.username }}{% else %}—{% endif %}</dd>
                     </div>
                 </dl>
                 {% if change_order.closure_notes %}
