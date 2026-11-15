@@ -51,13 +51,13 @@ def document_change_order_list(request):
     if type_filter:
         qs = qs.filter(change_type=type_filter)
 
-    stats = {
-        "total": qs.count(),
-        "active": qs.exclude(status__in=["implemented", "cancelled", "rejected"]).count(),
-        "ccb_pending": qs.filter(status="ccb_review").count(),
-        "approved": qs.filter(status="approved").count(),
-        "implemented": qs.filter(status="implemented").count(),
-    }
+    stats = qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=~Q(status__in=["implemented", "cancelled", "rejected"])),
+        ccb_pending=Count("id", filter=Q(status="ccb_review")),
+        approved=Count("id", filter=Q(status="approved")),
+        implemented=Count("id", filter=Q(status="implemented")),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
