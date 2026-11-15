@@ -52,7 +52,7 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div class="form-group md:col-span-2">
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, vehicle, station, card..." class="form-input">
             </div>
@@ -61,6 +61,14 @@
                     <option value="">All Vehicles</option>
                     {% for v in vehicles %}
                     <option value="{{ v.pk }}" {% if request.GET.vehicle == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="fuel_type" class="form-select">
+                    <option value="">All Fuel Types</option>
+                    {% for code, label in fuel_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.fuel_type == code %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
