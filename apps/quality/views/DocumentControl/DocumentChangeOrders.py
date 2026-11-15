@@ -117,14 +117,16 @@ def document_change_order_detail(request, pk):
 
     signatures = dco.signatures.all().select_related("signer")
 
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
     can_edit = dco.status in {"draft", "submitted"}
     can_submit = dco.status == "draft"
-    can_ccb_approve = dco.status in {"submitted", "in_assessment", "ccb_review"}
+    can_ccb_approve = is_admin and dco.status in {"submitted", "in_assessment", "ccb_review"}
 
     context = {
         "change_order": dco,
         "document": dco.document,
         "signatures": signatures,
+        "is_admin": is_admin,
         "can_edit": can_edit,
         "can_submit": can_submit,
         "can_ccb_approve": can_ccb_approve,
