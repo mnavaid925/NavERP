@@ -49,7 +49,7 @@ class VehicleFuelLogForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, tenant=tenant, **kwargs)
         if self.tenant is not None:
             self.fields["vehicle"].queryset = FleetVehicle.objects.filter(tenant=self.tenant)
-            self.fields["driver"].queryset = EmployeeProfile.objects.filter(tenant=self.tenant)
+            self.fields["driver"].queryset = EmployeeProfile.objects.filter(tenant=self.tenant).select_related("party")
             self.fields["fuel_vendor"].queryset = Party.objects.filter(tenant=self.tenant)
 
         # Global Currency - do NOT pass to reject_foreign
