@@ -174,7 +174,7 @@ def electronic_signature_export(request):
 
     writer = csv.writer(response)
     writer.writerow(["Signature Number", "Document", "Revision", "Signer Name", "Title", "Meaning", "Timestamp", "SHA-256 Digest", "IP Address"])
-    for sig in qs:
+    for sig in qs.iterator(chunk_size=1000):
         writer.writerow([
             csv_safe(sig.number),
             csv_safe(sig.document.number if sig.document else ""),
