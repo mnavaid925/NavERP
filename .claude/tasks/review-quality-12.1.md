@@ -57,3 +57,19 @@ None.
 - [ ] **FR-M1**: `templates/quality/documentcontrol/electronic_signature/detail.html:82-87` — Invalid markup: `<dt>` and `<dd>` tags used outside of a parent `<dl>` list. Fix: wrap with `<dl>` or convert to `<div>` layout.
 - [ ] **FR-M2**: `templates/quality/documentcontrol/vault/document_archive_vault.html:70` — Missing accessible `<label>` or `aria-label` for vault search input. Fix: add `aria-label="Search vault archives"`.
 - [ ] **FR-M3**: `templates/quality/documentcontrol/*/list.html` — Icon-only action links missing `aria-label` or `.sr-only` text for screen readers. Fix: add explicit `aria-label` attributes to table action links.
+
+---
+
+## Review Pass 4 — `performance-reviewer`
+
+### Critical
+None.
+
+### Important
+- [ ] **PR-I1**: `apps/quality/forms/DocumentControl/DocumentAcknowledgments.py:37` — N+1 query loop on `DocumentAcknowledgmentForm` via `EmployeeProfile.__str__`. When rendering the employee `<select>`, accessing `party.name` triggers N+1 queries without `select_related("party")`. Fix: add `.select_related("party")` to employee queryset in `DocumentAcknowledgmentForm.__init__`.
+- [ ] **PR-I2**: `apps/quality/views/DocumentControl/DocumentChangeOrders.py:111-116`, `DocumentAcknowledgments.py:102-108`, `ElectronicSignatures.py:76-82` — Missing nested `select_related` on target document foreign keys in detail views (`document__department`, `document__owner`). Fix: expand `select_related` lists to include `document__department` and `document__owner`.
+- [ ] **PR-I3**: `apps/quality/views/DocumentControl/ControlledDocuments.py:66-74,383-388`, `DocumentChangeOrders.py:54-60`, `DocumentAcknowledgments.py:51-56`, `ElectronicSignatures.py:49-56` — Multiple redundant `COUNT(*)` queries for KPI stat cards (4 to 5 count queries per view). Fix: consolidate into single `.aggregate(Count("id", filter=Q(...)))` per view.
+- [ ] **PR-I4**: `apps/quality/models/DocumentControl/ElectronicSignatures.py:43` & `DocumentChangeOrders.py:70-71` — Missing database indexes on high-frequency filter and aggregation columns (`signature_meaning`, `change_type`, `priority`). Fix: add `models.Index` in `Meta.indexes`.
+
+### Minor
+- [ ] **PR-M1**: `apps/quality/views/DocumentControl/*.py` — CSV export views load full querysets into memory directly instead of batch streaming. Fix: use `qs.iterator(chunk_size=1000)` in export views.
