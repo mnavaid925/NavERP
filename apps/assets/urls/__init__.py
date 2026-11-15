@@ -54,6 +54,9 @@ from apps.assets.urls.SpaceFacilityAsset import (
 from apps.assets.urls.ItAssetManagement import (
     urlpatterns as it_asset_management_urlpatterns,
 )
+from apps.assets.urls.FleetVehicleManagement import (
+    urlpatterns as fleet_vehicle_management_urlpatterns,
+)
 from apps.assets.views.overview import overview
 
 app_name = "assets"
@@ -80,4 +83,5 @@ urlpatterns = (
     + asset_document_knowledge_urlpatterns
     + space_facility_asset_urlpatterns
     + it_asset_management_urlpatterns
+    + fleet_vehicle_management_urlpatterns
 )
