@@ -46,14 +46,21 @@ def electronic_signature_list(request):
     if meaning_filter:
         qs = qs.filter(signature_meaning=meaning_filter)
 
-    stats = {
-        "total": qs.count(),
-        "approvals": qs.filter(
-            signature_meaning__in=["quality_approval", "management_approval", "ccb_approval"]
-        ).count(),
-        "reviews": qs.filter(signature_meaning__in=["authored", "reviewed"]).count(),
-        "acknowledgments": qs.filter(signature_meaning="acknowledgment").count(),
-    }
+    stats = qs.aggregate(
+        total=Count("id"),
+        approvals=Count(
+            "id",
+            filter=Q(
+                signature_meaning__in=[
+                    "quality_approval",
+                    "management_approval",
+                    "ccb_approval",
+                ]
+            ),
+        ),
+        reviews=Count("id", filter=Q(signature_meaning__in=["authored", "reviewed"])),
+        acknowledgments=Count("id", filter=Q(signature_meaning="acknowledgment")),
+    )
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
