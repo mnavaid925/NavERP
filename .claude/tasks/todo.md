@@ -41,9 +41,9 @@
 ## Models (from research — 4)
 
 ### 1. `FleetVehicle` (`FLT-`)
-- [ ] **File**: `apps/assets/models/FleetVehicleManagement/FleetVehicles.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "FLT"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/assets/models/FleetVehicleManagement/FleetVehicles.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "FLT"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `name`: `CharField(max_length=150)`
   - `vin`: `CharField(max_length=24, blank=True)`
   - `license_plate`: `CharField(max_length=32)`
@@ -77,21 +77,21 @@
   - `geofence_status`: `CharField(max_length=28, choices=GEOFENCE_STATUS_CHOICES, default="inside_zone")`
   - Verified FKs: `operational_asset` (`scm.Asset`), `fixed_asset` (`accounting.FixedAsset`), `asset_category` (`assets.AssetCategory`), `asset_model` (`assets.AssetModel`), `org_unit` (`core.OrgUnit`), `primary_driver` (`hrm.EmployeeProfile`), `custodian_party` (`core.Party`)
   - `notes`: `TextField(blank=True)`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="assets_flt_ten_num_uniq")` (23)
   - `Index(fields=["tenant", "status"], name="idx_flt_ten_stat")` (16)
   - `Index(fields=["tenant", "vehicle_type"], name="idx_flt_ten_vtype")` (17)
   - `Index(fields=["tenant", "license_plate"], name="idx_flt_ten_plate")` (17)
   - `Index(fields=["tenant", "registration_expiration_date"], name="idx_flt_ten_regexp")` (18)
-- [ ] **Form (`FleetVehicleForm`)**:
+- [x] **Form (`FleetVehicleForm`)**:
   - Excluded: `tenant`, `number`, `status`, `compliance_status`, `last_telemetry_at`, `created_at`, `updated_at`
   - `clean()`: validate `year >= 1900` and `<= current_year + 2`; `reject_foreign(...)` on all tenant FKs.
-- [ ] **Workflow actions**: `activate`, `mark_in_shop`, `mark_loaner`, `mark_out_of_service`, `decommission` (`@tenant_admin_required`), `ping_telemetry`.
+- [x] **Workflow actions**: `activate`, `mark_in_shop`, `mark_loaner`, `mark_out_of_service`, `decommission` (`@tenant_admin_required`), `ping_telemetry`.
 
 ### 2. `VehicleFuelLog` (`VFUL-`)
-- [ ] **File**: `apps/assets/models/FleetVehicleManagement/VehicleFuelLogs.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VFUL"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/assets/models/FleetVehicleManagement/VehicleFuelLogs.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VFUL"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `vehicle`: `ForeignKey("assets.FleetVehicle", on_delete=CASCADE, related_name="fuel_logs")`
   - `driver`: `ForeignKey("hrm.EmployeeProfile", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_fuel_logs")`
   - `fuel_vendor`: `ForeignKey("core.Party", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_fuel_sales")`
@@ -112,18 +112,18 @@
   - `efficiency_rating`: `CharField(max_length=28, choices=EFFICIENCY_RATING_CHOICES, default="optimal")`
   - `receipt_reference`: `CharField(max_length=80, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="assets_vful_ten_num_uniq")` (24)
   - `Index(fields=["tenant", "vehicle", "fuel_date"], name="idx_vful_ten_veh_date")` (21)
   - `Index(fields=["tenant", "fuel_date"], name="idx_vful_ten_fdate")` (18)
-- [ ] **Form (`VehicleFuelLogForm`)**:
+- [x] **Form (`VehicleFuelLogForm`)**:
   - Excluded: `tenant`, `number`, `distance_since_last_fuel`, `calculated_mpg`, `efficiency_rating`, `created_at`, `updated_at`
   - `clean()`: validate `quantity_gallons > 0`, `odometer_at_fueling >= 0`; `reject_foreign(...)` on tenant FKs (excluding `currency`).
 
 ### 3. `VehicleDriverAssignment` (`VDRV-`)
-- [ ] **File**: `apps/assets/models/FleetVehicleManagement/VehicleDriverAssignments.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VDRV"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/assets/models/FleetVehicleManagement/VehicleDriverAssignments.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VDRV"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `vehicle`: `ForeignKey("assets.FleetVehicle", on_delete=CASCADE, related_name="driver_assignments")`
   - `driver`: `ForeignKey("hrm.EmployeeProfile", on_delete=CASCADE, related_name="vehicle_driver_assignments")`
   - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="assigned_vehicle_records")`
@@ -148,20 +148,20 @@
   - `duty_status`: `CharField(max_length=24, choices=DUTY_STATUS_CHOICES, default="off_duty")`
   - `safety_tier`: `CharField(max_length=20, choices=SAFETY_TIER_CHOICES, default="exemplary")`
   - `supervisor_notes`: `TextField(blank=True)`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="assets_vdrv_ten_num_uniq")` (24)
   - `Index(fields=["tenant", "vehicle", "status"], name="idx_vdrv_ten_veh_stat")` (21)
   - `Index(fields=["tenant", "driver", "status"], name="idx_vdrv_ten_drv_stat")` (21)
   - `Index(fields=["tenant", "safety_tier"], name="idx_vdrv_ten_stier")` (18)
-- [ ] **Form (`VehicleDriverAssignmentForm`)**:
+- [x] **Form (`VehicleDriverAssignmentForm`)**:
   - Excluded: `tenant`, `number`, `status`, `qualification_status`, `safety_tier`, `created_at`, `updated_at`
   - `clean()`: validate `end_datetime >= start_datetime` if provided; `reject_foreign(...)` on tenant FKs.
-- [ ] **Workflow actions**: `complete_assignment`, `revoke_safety` (`@tenant_admin_required`), `record_incident`.
+- [x] **Workflow actions**: `complete_assignment`, `revoke_safety` (`@tenant_admin_required`), `record_incident`.
 
 ### 4. `VehicleServiceSchedule` (`VSRV-`)
-- [ ] **File**: `apps/assets/models/FleetVehicleManagement/VehicleServiceSchedules.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VSRV"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/assets/models/FleetVehicleManagement/VehicleServiceSchedules.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VSRV"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `vehicle`: `ForeignKey("assets.FleetVehicle", on_delete=CASCADE, related_name="service_schedules")`
   - `service_title`: `CharField(max_length=150)`
   - `service_type`: `CharField(max_length=32, choices=SERVICE_TYPE_CHOICES, default="engine_oil_filter")`
@@ -182,37 +182,37 @@
   - `is_warranty_covered`: `BooleanField(default=False)`
   - `work_order_invoice_ref`: `CharField(max_length=80, blank=True)`
   - `technician_resolution_notes`: `TextField(blank=True)`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="assets_vsrv_ten_num_uniq")` (24)
   - `Index(fields=["tenant", "vehicle", "status"], name="idx_vsrv_ten_veh_stat")` (21)
   - `Index(fields=["tenant", "status"], name="idx_vsrv_ten_stat")` (17)
   - `Index(fields=["tenant", "next_due_date"], name="idx_vsrv_ten_ndate")` (18)
   - `Index(fields=["tenant", "next_due_odometer"], name="idx_vsrv_ten_nodom")` (18)
-- [ ] **Form (`VehicleServiceScheduleForm`)**:
+- [x] **Form (`VehicleServiceScheduleForm`)**:
   - Excluded: `tenant`, `number`, `status`, `actual_cost`, `created_at`, `updated_at`
   - `clean()`: validate `interval_mileage >= 0` and `interval_months >= 0`; `reject_foreign(...)` on tenant FKs (excluding `currency`).
-- [ ] **Workflow actions**: `complete_service` (`@tenant_admin_required`), `mark_in_service`, `pause_tracking`.
+- [x] **Workflow actions**: `complete_service` (`@tenant_admin_required`), `mark_in_service`, `pause_tracking`.
 
 ---
 
 ## Backend (apps/assets/{models,forms,views,urls}/FleetVehicleManagement/)
-- [ ] `models/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`
-- [ ] `forms/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`
-- [ ] `views/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`, `FleetTelematicsBoards.py`
-- [ ] `urls/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`, `FleetTelematicsBoards.py`
-- [ ] Re-export blocks in:
+- [x] `models/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`
+- [x] `forms/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`
+- [x] `views/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`, `FleetTelematicsBoards.py`
+- [x] `urls/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`, `FleetTelematicsBoards.py`
+- [x] Re-export blocks in:
   - `apps/assets/models/__init__.py`
   - `apps/assets/forms/__init__.py`
   - `apps/assets/views/__init__.py`
   - `apps/assets/urls/__init__.py`
-- [ ] `admin.py` registration for all 4 models
-- [ ] Migration: incremental `makemigrations assets` (claims `0026_...`)
-- [ ] Extend `seed_assets.py` with idempotent Fleet & Vehicle records
+- [x] `admin.py` registration for all 4 models
+- [x] Migration: incremental `makemigrations assets` (claims `0026_...`)
+- [x] Extend `seed_assets.py` with idempotent Fleet & Vehicle records
 
 ---
 
 ## Wire-up
-- [ ] `apps/core/navigation.py`: add `LIVE_LINKS["11.19"]` mapping all 5 `NavERP.md` bullets:
+- [x] `apps/core/navigation.py`: add `LIVE_LINKS["11.19"]` mapping all 5 `NavERP.md` bullets:
   - `"Vehicle Registration & Compliance": "assets:fleet_vehicle_list"`
   - `"Fuel & Mileage Tracking": "assets:vehicle_fuel_log_list"`
   - `"Driver Assignment & Safety": "assets:vehicle_driver_assignment_list"`
@@ -222,24 +222,37 @@
 ---
 
 ## Frontend (templates/assets/fleetvehiclemanagement/)
-- [ ] `templates/assets/fleetvehiclemanagement/fleet_vehicle/{list,detail,form}.html`
-- [ ] `templates/assets/fleetvehiclemanagement/vehicle_fuel_log/{list,detail,form}.html`
-- [ ] `templates/assets/fleetvehiclemanagement/vehicle_driver_assignment/{list,detail,form}.html`
-- [ ] `templates/assets/fleetvehiclemanagement/vehicle_service_schedule/{list,detail,form}.html`
-- [ ] `templates/assets/fleetvehiclemanagement/fleet_telematics_board.html`
+- [x] `templates/assets/fleetvehiclemanagement/fleet_vehicle/{list,detail,form}.html`
+- [x] `templates/assets/fleetvehiclemanagement/vehicle_fuel_log/{list,detail,form}.html`
+- [x] `templates/assets/fleetvehiclemanagement/vehicle_driver_assignment/{list,detail,form}.html`
+- [x] `templates/assets/fleetvehiclemanagement/vehicle_service_schedule/{list,detail,form}.html`
+- [x] `templates/assets/fleetvehiclemanagement/fleet_telematics_board.html`
 
 ---
 
 ## Verification & Close-out
-- [ ] Run `python manage.py makemigrations assets`
-- [ ] Run `python manage.py migrate`
-- [ ] Run `python manage.py seed_assets` twice (idempotence verification)
-- [ ] Run `python manage.py check`
-- [ ] Smoke tests via test client: HTTP 200/302, content assertions, IDOR 404
-- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-assets-11.19.md`
-- [ ] Phase 5: `code-fixer` agent burns down all findings
-- [ ] Phase 6: Tests (`test_fleetvehicle_models.py`, `test_fleetvehicle_forms.py`, `test_fleetvehicle_views.py`, `test_fleetvehicle_security.py`)
-- [ ] Phase 7: Update `.claude/skills/assets/SKILL.md` and `README.md`, declare gaps register `.agents/tasks/gaps-assets-11.19.md`
+- [x] Run `python manage.py makemigrations assets`
+- [x] Run `python manage.py migrate`
+- [x] Run `python manage.py seed_assets` twice (idempotence verification)
+- [x] Run `python manage.py check`
+- [x] Smoke tests via test client: HTTP 200/302, content assertions, IDOR 404
+- [x] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-assets-11.19.md`
+- [x] Phase 5: `code-fixer` agent burns down all findings
+- [x] Phase 6: Tests (`test_fleetvehicle_models.py`, `test_fleetvehicle_forms.py`, `test_fleetvehicle_views.py`, `test_fleetvehicle_security.py`)
+- [x] Phase 7: Update `.claude/skills/assets/SKILL.md` and `README.md`, declare gaps register `.agents/tasks/gaps-assets-11.19.md`
+
+## Review notes
+- **Completed**: 2026-11-15
+- **Gaps Register**: Explicitly documented in `.agents/tasks/gaps-assets-11.19.md` (0 gaps, 3 deferred roadmap items: `GAP-assets-11.19-01` through `GAP-assets-11.19-03`).
+- **Phases 0–7 completed strictly serially**:
+  - Phase 0: Base claimed (`ea963d45d116e6de04be6456c2a52c603195a1fc`), untracked pre-existing file preserved per L45.
+  - Phase 1: Research documented in `.claude/tasks/research-assets-11.19.md` (commit `118810a4`).
+  - Phase 2: Todo checkable plan documented in `.claude/tasks/todo.md` (commit `b46a7c5f`).
+  - Phase 3: Contract frozen in `.claude/tasks/contract-assets-11.19.md` (commit `91679adf`), all 4 entities + telematics board built, integrated, migrated (`0026_...` and `0027_...`), seeded twice cleanly (`seed_assets`), and smoke verified (70/70 green).
+  - Phase 4: Six specialist reviewers run serially (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) yielding consolidated register in `.claude/tasks/review-assets-11.19.md` (commit `7c0f6480`).
+  - Phase 5: `code-fixer` agent burned down all 25 findings (`C1`–`C4`, `I1`–`I10`, `M1`–`M11`) with 0 left open, 0 skipped, committing one file per commit across 44 commits (commit `fabfa44c`).
+  - Phase 6: Extended `conftest.py` with 11.19 fixtures, wrote and verified 4 test modules (`test_fleetvehicle_models.py` 23 passed, `_forms.py` 29 passed, `_views.py` 29 passed, `_security.py` 33 passed = 114 passed, 100% green), and confirmed 0 regressions on tracked test suite.
+  - Phase 7: Per-module skill updated in `.claude/skills/assets/SKILL.md` (commit `9b18d4c3`), `README.md` marked complete (commit `6b5376ce`), `.agents/tasks/gaps-assets-11.19.md` registered (commit `ecf525f5`), and `todo.md` updated.
 
 ---
 # Sub-module 11.18: IT Asset Management (ITAM) (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.18.md` (2026-11-12)
