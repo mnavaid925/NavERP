@@ -80,7 +80,12 @@ from apps.assets.models import (
     AssetBuildingSystem,
     AssetFurnitureFixture,
     AssetSpaceChargeback,
+    FleetVehicle,
+    VehicleFuelLog,
+    VehicleDriverAssignment,
+    VehicleServiceSchedule,
 )
+from apps.hrm.models import EmployeeProfile
 
 
 @pytest.fixture
@@ -4697,3 +4702,270 @@ def sfa_chargeback_b(
     cb.full_clean()
     cb.save()
     return cb
+
+
+# ==============================================================================
+# Module 11.19 Fleet & Vehicle Management Fixtures
+# ==============================================================================
+
+
+@pytest.fixture
+def driver_profile_a(db, tenant_a):
+    party = Party.objects.create(
+        tenant=tenant_a,
+        name="John Fleet Driver",
+        kind="person",
+    )
+    return EmployeeProfile.objects.create(
+        tenant=tenant_a,
+        party=party,
+    )
+
+
+@pytest.fixture
+def driver_profile_b(db, tenant_b):
+    party = Party.objects.create(
+        tenant=tenant_b,
+        name="Jane Globex Driver",
+        kind="person",
+    )
+    return EmployeeProfile.objects.create(
+        tenant=tenant_b,
+        party=party,
+    )
+
+
+@pytest.fixture
+def fleet_vehicle_a(db, tenant_a, org_unit_a, driver_profile_a, vendor_party_a):
+    today = timezone.localdate()
+    now = timezone.now()
+    veh = FleetVehicle(
+        tenant=tenant_a,
+        name="Ford Transit Van 101",
+        vin="1FTNE3Y89PKB10101",
+        license_plate="VAN-101",
+        registration_state="CA",
+        registration_expiration_date=today + timedelta(days=320),
+        safety_inspection_due_date=today + timedelta(days=180),
+        emissions_inspection_due_date=today + timedelta(days=365),
+        make="Ford",
+        model="Transit 250",
+        year=2023,
+        vehicle_type="cargo_van",
+        fuel_type="gasoline",
+        ownership_type="owned",
+        status="active_in_service",
+        compliance_status="compliant",
+        title_number="TIT-CA-992341",
+        current_odometer=42350,
+        engine_hours=Decimal("1420.50"),
+        gross_vehicle_weight_rating_lbs=9070,
+        fuel_tank_capacity_gallons=Decimal("25.00"),
+        is_telematics_enabled=True,
+        telematics_device_id="TEL-VAN-101",
+        current_latitude=Decimal("37.774929"),
+        current_longitude=Decimal("-122.419416"),
+        current_location_name="San Francisco Depot",
+        current_speed_mph=Decimal("0.00"),
+        current_heading=180,
+        last_telemetry_at=now,
+        engine_state="engine_off",
+        geofence_status="inside_zone",
+        org_unit=org_unit_a,
+        primary_driver=driver_profile_a,
+        custodian_party=vendor_party_a,
+        notes="Primary parcel delivery van.",
+    )
+    veh.full_clean()
+    veh.save()
+    return veh
+
+
+@pytest.fixture
+def fleet_vehicle_b(db, tenant_b, org_unit_b, driver_profile_b, vendor_party_b):
+    today = timezone.localdate()
+    now = timezone.now()
+    veh = FleetVehicle(
+        tenant=tenant_b,
+        name="Globex Freight Semi",
+        vin="1FUJGLDR9NLB20202",
+        license_plate="TRK-999",
+        registration_state="NV",
+        registration_expiration_date=today + timedelta(days=150),
+        safety_inspection_due_date=today + timedelta(days=90),
+        make="Freightliner",
+        model="Cascadia",
+        year=2022,
+        vehicle_type="semi_tractor",
+        fuel_type="diesel",
+        ownership_type="leased",
+        status="active_in_service",
+        compliance_status="compliant",
+        current_odometer=150000,
+        engine_hours=Decimal("3800.00"),
+        is_telematics_enabled=True,
+        telematics_device_id="TEL-TRK-999",
+        org_unit=org_unit_b,
+        primary_driver=driver_profile_b,
+        custodian_party=vendor_party_b,
+    )
+    veh.full_clean()
+    veh.save()
+    return veh
+
+
+@pytest.fixture
+def fuel_log_a(db, tenant_a, fleet_vehicle_a, driver_profile_a, vendor_party_a, currency_usd):
+    now = timezone.now()
+    log = VehicleFuelLog(
+        tenant=tenant_a,
+        vehicle=fleet_vehicle_a,
+        driver=driver_profile_a,
+        fuel_vendor=vendor_party_a,
+        fuel_date=now - timedelta(days=2),
+        odometer_at_fueling=42000,
+        fuel_type="regular_gasoline",
+        quantity_gallons=Decimal("20.000"),
+        unit_price=Decimal("4.500"),
+        total_cost=Decimal("90.00"),
+        currency=currency_usd,
+        is_full_tank=True,
+        fuel_card_token="CARD-****-1234",
+        fuel_station_name="Chevron #101",
+        station_city_state="San Francisco, CA",
+        route_category="mixed_delivery",
+        efficiency_rating="optimal",
+        receipt_reference="RCP-CHV-101",
+        notes="Standard fill-up.",
+    )
+    log.full_clean()
+    log.save()
+    return log
+
+
+@pytest.fixture
+def fuel_log_b(db, tenant_b, fleet_vehicle_b, driver_profile_b, vendor_party_b, currency_usd):
+    now = timezone.now()
+    log = VehicleFuelLog(
+        tenant=tenant_b,
+        vehicle=fleet_vehicle_b,
+        driver=driver_profile_b,
+        fuel_vendor=vendor_party_b,
+        fuel_date=now - timedelta(days=1),
+        odometer_at_fueling=149000,
+        fuel_type="diesel_ultra_low_sulfur",
+        quantity_gallons=Decimal("100.000"),
+        unit_price=Decimal("4.800"),
+        total_cost=Decimal("480.00"),
+        currency=currency_usd,
+        is_full_tank=True,
+        notes="Globex diesel refill.",
+    )
+    log.full_clean()
+    log.save()
+    return log
+
+
+@pytest.fixture
+def driver_assignment_a(db, tenant_a, fleet_vehicle_a, driver_profile_a, user_a):
+    now = timezone.now()
+    today = timezone.localdate()
+    assign = VehicleDriverAssignment(
+        tenant=tenant_a,
+        vehicle=fleet_vehicle_a,
+        driver=driver_profile_a,
+        user=user_a,
+        assignment_role="primary_assigned",
+        status="active",
+        start_datetime=now - timedelta(days=10),
+        start_odometer=40000,
+        driver_license_number="CA-DL-992211",
+        driver_license_state="CA",
+        license_class="standard_non_cdl",
+        license_expiration_date=today + timedelta(days=500),
+        medical_card_expiration_date=today + timedelta(days=300),
+        safety_score=95,
+        duty_status="driving",
+        safety_tier="exemplary",
+        supervisor_notes="Regular delivery driver assignment.",
+    )
+    assign.full_clean()
+    assign.save()
+    return assign
+
+
+@pytest.fixture
+def driver_assignment_b(db, tenant_b, fleet_vehicle_b, driver_profile_b, user_b):
+    now = timezone.now()
+    today = timezone.localdate()
+    assign = VehicleDriverAssignment(
+        tenant=tenant_b,
+        vehicle=fleet_vehicle_b,
+        driver=driver_profile_b,
+        user=user_b,
+        assignment_role="primary_assigned",
+        status="active",
+        start_datetime=now - timedelta(days=5),
+        start_odometer=145000,
+        driver_license_number="NV-CDL-441199",
+        driver_license_state="NV",
+        license_class="class_a_cdl",
+        license_expiration_date=today + timedelta(days=400),
+        safety_score=90,
+        duty_status="driving",
+        safety_tier="exemplary",
+    )
+    assign.full_clean()
+    assign.save()
+    return assign
+
+
+@pytest.fixture
+def service_schedule_a(db, tenant_a, fleet_vehicle_a, vendor_party_a, currency_usd):
+    today = timezone.localdate()
+    srv = VehicleServiceSchedule(
+        tenant=tenant_a,
+        vehicle=fleet_vehicle_a,
+        service_title="45,000 Mile Service PM-B",
+        service_type="engine_oil_filter",
+        service_vendor=vendor_party_a,
+        interval_mileage=5000,
+        interval_months=6,
+        last_service_date=today - timedelta(days=90),
+        last_service_odometer=40000,
+        next_due_date=today + timedelta(days=14),
+        next_due_odometer=45000,
+        priority="scheduled_pm",
+        status="active_tracking",
+        estimated_cost=Decimal("200.00"),
+        actual_cost=Decimal("0.00"),
+        currency=currency_usd,
+        is_warranty_covered=False,
+        technician_resolution_notes="Routine lube, oil and filter.",
+    )
+    srv.full_clean()
+    srv.save()
+    return srv
+
+
+@pytest.fixture
+def service_schedule_b(db, tenant_b, fleet_vehicle_b, vendor_party_b, currency_usd):
+    today = timezone.localdate()
+    srv = VehicleServiceSchedule(
+        tenant=tenant_b,
+        vehicle=fleet_vehicle_b,
+        service_title="Globex Annual DOT Inspection",
+        service_type="annual_dot_inspection",
+        service_vendor=vendor_party_b,
+        interval_mileage=25000,
+        interval_months=12,
+        next_due_date=today + timedelta(days=30),
+        priority="high_priority",
+        status="due_soon",
+        estimated_cost=Decimal("450.00"),
+        currency=currency_usd,
+    )
+    srv.full_clean()
+    srv.save()
+    return srv
+
