@@ -144,6 +144,7 @@ class VehicleDriverAssignment(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="assets_vdrv_ten_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "status"], name="idx_vdrv_ten_stat"),
             models.Index(fields=["tenant", "vehicle", "status"], name="idx_vdrv_ten_veh_stat"),
             models.Index(fields=["tenant", "driver", "status"], name="idx_vdrv_ten_drv_stat"),
             models.Index(fields=["tenant", "safety_tier"], name="idx_vdrv_ten_stier"),
