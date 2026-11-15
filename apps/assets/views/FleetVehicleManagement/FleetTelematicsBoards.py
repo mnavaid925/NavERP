@@ -33,8 +33,24 @@ def fleet_telematics_board(request):
         Q(status="overdue") | Q(next_due_date__lt=today)
     ).count()
 
+    vehicles_display_qs = vehicles_qs
+    q = request.GET.get("q", "").strip()
+    if q:
+        vehicles_display_qs = vehicles_display_qs.filter(
+            Q(name__icontains=q)
+            | Q(license_plate__icontains=q)
+            | Q(vin__icontains=q)
+            | Q(number__icontains=q)
+        )
+    engine_state_param = request.GET.get("engine_state", "").strip()
+    if engine_state_param:
+        vehicles_display_qs = vehicles_display_qs.filter(engine_state=engine_state_param)
+    status_param = request.GET.get("status", "").strip()
+    if status_param:
+        vehicles_display_qs = vehicles_display_qs.filter(status=status_param)
+
     recent_vehicles = (
-        vehicles_qs.select_related("primary_driver__party", "org_unit")
+        vehicles_display_qs.select_related("primary_driver__party", "org_unit")
         .order_by("-last_telemetry_at", "-updated_at")[:10]
     )
 
@@ -60,15 +76,19 @@ def fleet_telematics_board(request):
     context = {
         "total_vehicles": aggregates["total_vehicles"] or 0,
         "active_in_service": aggregates["active_in_service"] or 0,
+        "active_telematics_count": aggregates["active_in_service"] or 0,
         "in_shop": aggregates["in_shop"] or 0,
         "moving_count": aggregates["moving_count"] or 0,
         "idling_count": aggregates["idling_count"] or 0,
+        "speeding_count": 0,
         "geofence_breach_count": aggregates["geofence_breach_count"] or 0,
+        "geofence_alerts_count": aggregates["geofence_breach_count"] or 0,
         "overdue_service_count": overdue_service_count,
         "expired_compliance_count": aggregates["expired_compliance_count"] or 0,
         "recent_vehicles": recent_vehicles,
         "high_risk_drivers": high_risk_drivers,
         "recent_fuel_logs": recent_fuel_logs,
         "upcoming_services": upcoming_services,
+        "maintenance_queue": upcoming_services,
     }
     return render(request, "assets/fleetvehiclemanagement/fleet_telematics_board.html", context)
