@@ -35,6 +35,16 @@
             <i data-lucide="pencil"></i> Edit
         </a>
         {% endif %}
+        {% if acknowledgment.status != 'acknowledged' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'quality:document_acknowledgment_delete' acknowledgment.pk %}" class="inline" onsubmit="return confirm('Delete acknowledgment assignment {{ acknowledgment.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 border-red-300 hover:bg-red-50">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
     </div>
 </div>
 
