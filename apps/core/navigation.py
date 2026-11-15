@@ -3384,6 +3384,13 @@ LIVE_LINKS = {
         "Maintenance & Service Scheduling": "assets:vehicle_service_schedule_list",
         "Telematics & GPS Monitoring": "assets:fleet_telematics_board",
     },
+    "12.1": {
+        "Document Creation & Authoring": "quality:controlled_document_list",
+        "Review & Approval Workflows": "quality:electronic_signature_list",
+        "Document Distribution & Obsolescence": "quality:document_acknowledgment_list",
+        "Change Request & Revision Control": "quality:document_change_order_list",
+        "Archive & Retrieval": "quality:document_archive_vault",
+    },
 
 
 
