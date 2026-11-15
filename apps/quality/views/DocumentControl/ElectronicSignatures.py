@@ -115,6 +115,12 @@ def controlled_document_sign(request, pk):
     if request.method == "POST":
         form = ElectronicSignatureForm(request.POST, user=request.user)
         if form.is_valid():
+            meaning = form.cleaned_data["signature_meaning"]
+            is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+            if meaning in {"quality_approval", "management_approval", "ccb_approval"} and not is_admin:
+                messages.error(request, "Administrative authorization is required to sign with an approval authority role.")
+                return redirect("quality:controlled_document_detail", pk=doc.pk)
+
             with transaction.atomic():
                 legal_name = request.user.get_full_name() or request.user.username
                 sig = ElectronicSignatureRecord(
