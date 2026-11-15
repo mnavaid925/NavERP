@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -60,6 +61,7 @@ class ElectronicSignatureRecord(TenantNumbered):
             models.Index(fields=["tenant", "document", "-signature_timestamp"], name="idx_qsig_ten_doc_time"),
             models.Index(fields=["tenant", "signer", "-signature_timestamp"], name="idx_qsig_ten_sig_time"),
             models.Index(fields=["tenant", "signature_hash"], name="idx_qsig_ten_hash"),
+            models.Index(fields=["tenant", "signature_meaning"], name="idx_qsig_ten_meaning"),
         ]
 
     def __str__(self):
@@ -67,8 +69,8 @@ class ElectronicSignatureRecord(TenantNumbered):
 
     def generate_hash(self):
         secret = getattr(settings, "SECRET_KEY", "nav_erp_qms_sig_secret")
-        raw = f"{self.tenant_id}:{self.document_id}:{self.document_revision}:{self.signer_id}:{self.signature_meaning}:{secret}"
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        payload = f"{self.tenant_id}:{self.document_id}:{self.document_revision}:{self.signer_id}:{self.signature_meaning}"
+        return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
     def save(self, *args, **kwargs):
         if not self.signature_hash:
