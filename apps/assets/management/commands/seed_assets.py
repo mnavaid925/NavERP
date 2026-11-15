@@ -5888,6 +5888,16 @@ class Command(BaseCommand):
         user = User.objects.filter(tenant=tenant).first()
         currency = Currency.objects.filter(is_active=True).first()
         driver_emp = EmployeeProfile.objects.filter(tenant=tenant).first()
+        if driver_emp is None:
+            person_party = (
+                Party.objects.filter(tenant=tenant, kind="person").first()
+                or Party.objects.filter(tenant=tenant).first()
+            )
+            if person_party:
+                driver_emp, _ = EmployeeProfile.objects.get_or_create(
+                    tenant=tenant,
+                    party=person_party,
+                )
         departments = list(OrgUnit.objects.filter(tenant=tenant).order_by("id"))
         dept_ops = departments[0] if departments else None
         dept_logistics = departments[1] if len(departments) > 1 else dept_ops
@@ -6192,89 +6202,92 @@ class Command(BaseCommand):
             )
 
             # 3. Vehicle Driver Assignments
-            VehicleDriverAssignment.objects.create(
-                tenant=tenant,
-                vehicle=v_sedan,
-                driver=driver_emp,
-                user=user,
-                assignment_role="primary_assigned",
-                status="active",
-                start_datetime=now - timezone.timedelta(days=30),
-                end_datetime=None,
-                start_odometer=12000,
-                end_odometer=None,
-                driver_license_number="CA-DL-9844201",
-                driver_license_state="CA",
-                license_class="standard_non_cdl",
-                license_expiration_date=today + timezone.timedelta(days=700),
-                medical_card_expiration_date=today + timezone.timedelta(days=350),
-                hazmat_endorsed=False,
-                qualification_status="qualified",
-                safety_score=96,
-                speeding_event_count=0,
-                harsh_braking_count=1,
-                harsh_acceleration_count=0,
-                incident_count=0,
-                duty_status="driving",
-                safety_tier="exemplary",
-                supervisor_notes="Executive Transportation and Field Audit Visits assignment.",
-            )
+            if driver_emp:
+                VehicleDriverAssignment.objects.create(
+                    tenant=tenant,
+                    vehicle=v_sedan,
+                    driver=driver_emp,
+                    user=user,
+                    assignment_role="primary_assigned",
+                    status="active",
+                    start_datetime=now - timezone.timedelta(days=30),
+                    end_datetime=None,
+                    start_odometer=12000,
+                    end_odometer=None,
+                    driver_license_number="CA-DL-9844201",
+                    driver_license_state="CA",
+                    license_class="standard_non_cdl",
+                    license_expiration_date=today + timezone.timedelta(days=700),
+                    medical_card_expiration_date=today + timezone.timedelta(days=350),
+                    hazmat_endorsed=False,
+                    qualification_status="qualified",
+                    safety_score=96,
+                    speeding_event_count=0,
+                    harsh_braking_count=1,
+                    harsh_acceleration_count=0,
+                    incident_count=0,
+                    duty_status="driving",
+                    safety_tier="exemplary",
+                    supervisor_notes="Executive Transportation and Field Audit Visits assignment.",
+                )
 
-            VehicleDriverAssignment.objects.create(
-                tenant=tenant,
-                vehicle=v_semi,
-                driver=driver_emp,
-                user=user,
-                assignment_role="primary_assigned",
-                status="active",
-                start_datetime=now - timezone.timedelta(days=3),
-                end_datetime=now + timezone.timedelta(days=2),
-                start_odometer=184000,
-                end_odometer=None,
-                driver_license_number="CA-CDL-110293",
-                driver_license_state="CA",
-                license_class="class_a_cdl",
-                license_expiration_date=today + timezone.timedelta(days=500),
-                medical_card_expiration_date=today + timezone.timedelta(days=180),
-                hazmat_endorsed=True,
-                qualification_status="qualified",
-                safety_score=92,
-                speeding_event_count=1,
-                harsh_braking_count=2,
-                harsh_acceleration_count=0,
-                incident_count=0,
-                duty_status="driving",
-                safety_tier="exemplary",
-                supervisor_notes="Northern California Distribution Center Freight Run.",
-            )
+                VehicleDriverAssignment.objects.create(
+                    tenant=tenant,
+                    vehicle=v_semi,
+                    driver=driver_emp,
+                    user=user,
+                    assignment_role="primary_assigned",
+                    status="active",
+                    start_datetime=now - timezone.timedelta(days=3),
+                    end_datetime=now + timezone.timedelta(days=2),
+                    start_odometer=184000,
+                    end_odometer=None,
+                    driver_license_number="CA-CDL-110293",
+                    driver_license_state="CA",
+                    license_class="class_a_cdl",
+                    license_expiration_date=today + timezone.timedelta(days=500),
+                    medical_card_expiration_date=today + timezone.timedelta(days=180),
+                    hazmat_endorsed=True,
+                    qualification_status="qualified",
+                    safety_score=92,
+                    speeding_event_count=1,
+                    harsh_braking_count=2,
+                    harsh_acceleration_count=0,
+                    incident_count=0,
+                    duty_status="driving",
+                    safety_tier="exemplary",
+                    supervisor_notes="Northern California Distribution Center Freight Run.",
+                )
 
-            VehicleDriverAssignment.objects.create(
-                tenant=tenant,
-                vehicle=v_van,
-                driver=driver_emp,
-                user=user,
-                assignment_role="pool_driver",
-                status="completed",
-                start_datetime=now - timezone.timedelta(days=10),
-                end_datetime=now - timezone.timedelta(days=5),
-                start_odometer=41500,
-                end_odometer=42100,
-                driver_license_number="CA-DL-7731200",
-                driver_license_state="CA",
-                license_class="standard_non_cdl",
-                license_expiration_date=today + timezone.timedelta(days=400),
-                medical_card_expiration_date=None,
-                hazmat_endorsed=False,
-                qualification_status="qualified",
-                safety_score=88,
-                speeding_event_count=0,
-                harsh_braking_count=0,
-                harsh_acceleration_count=1,
-                incident_count=0,
-                duty_status="off_duty",
-                safety_tier="good",
-                supervisor_notes="Client Technology Hardware Installations SOMA Route. Returned clean.",
-            )
+                VehicleDriverAssignment.objects.create(
+                    tenant=tenant,
+                    vehicle=v_van,
+                    driver=driver_emp,
+                    user=user,
+                    assignment_role="pool_driver",
+                    status="completed",
+                    start_datetime=now - timezone.timedelta(days=10),
+                    end_datetime=now - timezone.timedelta(days=5),
+                    start_odometer=41500,
+                    end_odometer=42100,
+                    driver_license_number="CA-DL-7731200",
+                    driver_license_state="CA",
+                    license_class="standard_non_cdl",
+                    license_expiration_date=today + timezone.timedelta(days=400),
+                    medical_card_expiration_date=None,
+                    hazmat_endorsed=False,
+                    qualification_status="qualified",
+                    safety_score=88,
+                    speeding_event_count=0,
+                    harsh_braking_count=0,
+                    harsh_acceleration_count=1,
+                    incident_count=0,
+                    duty_status="off_duty",
+                    safety_tier="good",
+                    supervisor_notes="Client Technology Hardware Installations SOMA Route. Returned clean.",
+                )
+            else:
+                self.stdout.write(f"[{tenant.name}] Warning: No EmployeeProfile available; skipping driver assignments.")
 
             # 4. Vehicle Service Schedules
             VehicleServiceSchedule.objects.create(
