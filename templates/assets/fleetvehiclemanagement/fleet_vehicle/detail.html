@@ -308,7 +308,7 @@
                         <td><span class="badge {{ a.safety_tier_badge_class }}">{{ a.safety_score }}/100</span></td>
                         <td><span class="badge {{ a.duty_status_badge_class }}">{{ a.get_duty_status_display }}</span></td>
                         <td>
-                            <a href="{% url 'assets:vehicle_driver_assignment_detail' a.pk %}" class="btn btn-icon btn-sm"><i data-lucide="eye"></i></a>
+                            <a href="{% url 'assets:vehicle_driver_assignment_detail' a.pk %}" class="btn btn-icon btn-sm" title="View driver assignment" aria-label="View driver assignment"><i data-lucide="eye"></i></a>
                         </td>
                     </tr>
                     {% empty %}
@@ -357,7 +357,7 @@
                         <td><span class="badge {{ s.priority_badge_class }}">{{ s.get_priority_display }}</span></td>
                         <td><span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span></td>
                         <td>
-                            <a href="{% url 'assets:vehicle_service_schedule_detail' s.pk %}" class="btn btn-icon btn-sm"><i data-lucide="eye"></i></a>
+                            <a href="{% url 'assets:vehicle_service_schedule_detail' s.pk %}" class="btn btn-icon btn-sm" title="View service schedule" aria-label="View service schedule"><i data-lucide="eye"></i></a>
                         </td>
                     </tr>
                     {% empty %}
