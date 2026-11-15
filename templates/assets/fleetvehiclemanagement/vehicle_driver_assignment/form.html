@@ -41,7 +41,7 @@
                     <select name="{{ form.vehicle.html_name }}" id="{{ form.vehicle.id_for_label }}" class="form-select" required>
                         <option value="">— Select Fleet Vehicle —</option>
                         {% for v in form.fields.vehicle.queryset %}
-                        <option value="{{ v.pk }}" {% if form.vehicle.value == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }})</option>
+                        <option value="{{ v.pk }}" {% if form.vehicle.value|stringformat:"s" == v.pk|stringformat:"s" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }})</option>
                         {% endfor %}
                     </select>
                     {% if form.vehicle.errors %}<div class="form-error">{{ form.vehicle.errors }}</div>{% endif %}
@@ -52,7 +52,7 @@
                     <select name="{{ form.driver.html_name }}" id="{{ form.driver.id_for_label }}" class="form-select" required>
                         <option value="">— Select Driver Profile —</option>
                         {% for d in form.fields.driver.queryset %}
-                        <option value="{{ d.pk }}" {% if form.driver.value == d.pk|stringformat:"d" %}selected{% endif %}>{{ d }}</option>
+                        <option value="{{ d.pk }}" {% if form.driver.value|stringformat:"s" == d.pk|stringformat:"s" %}selected{% endif %}>{{ d }}</option>
                         {% endfor %}
                     </select>
                     {% if form.driver.errors %}<div class="form-error">{{ form.driver.errors }}</div>{% endif %}
@@ -72,7 +72,7 @@
                     <select name="{{ form.user.html_name }}" id="{{ form.user.id_for_label }}" class="form-select">
                         <option value="">— Link User Account —</option>
                         {% for u in form.fields.user.queryset %}
-                        <option value="{{ u.pk }}" {% if form.user.value == u.pk|stringformat:"d" %}selected{% endif %}>{{ u }}</option>
+                        <option value="{{ u.pk }}" {% if form.user.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u }}</option>
                         {% endfor %}
                     </select>
                 </div>
