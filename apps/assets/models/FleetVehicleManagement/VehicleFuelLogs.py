@@ -140,6 +140,16 @@ class VehicleFuelLog(TenantNumbered):
                 if dist > 0:
                     self.distance_since_last_fuel = dist
                     self.calculated_mpg = (Decimal(dist) / self.quantity_gallons).quantize(Decimal("0.01"))
+                    if self.fuel_type != "ev_kwh_charging" and self.calculated_mpg > Decimal("120.0"):
+                        self.efficiency_rating = "anomalous"
+                    elif self.calculated_mpg >= Decimal("22.0"):
+                        self.efficiency_rating = "optimal"
+                    elif self.calculated_mpg >= Decimal("14.0"):
+                        self.efficiency_rating = "acceptable"
+                    elif self.calculated_mpg >= Decimal("8.0"):
+                        self.efficiency_rating = "excessive_consumption"
+                    else:
+                        self.efficiency_rating = "anomalous"
 
         # Update vehicle odometer if higher
         if self.vehicle and self.odometer_at_fueling > self.vehicle.current_odometer:
