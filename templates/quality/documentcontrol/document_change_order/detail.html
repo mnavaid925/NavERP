@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}{{ change_order.number }} - {{ change_order.title }} | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:document_change_order_list' %}">Change Orders</a>
+            <span>/</span>
+            <span>{{ change_order.number }}</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">{{ change_order.number }}</h1>
+            {% if change_order.status == 'approved' or change_order.status == 'implemented' %}
+            <span class="badge badge-green text-sm">{{ change_order.get_status_display }}</span>
+            {% elif change_order.status == 'rejected' or change_order.status == 'cancelled' %}
+            <span class="badge badge-red text-sm">{{ change_order.get_status_display }}</span>
+            {% else %}
+            <span class="badge badge-amber text-sm">{{ change_order.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-info text-sm">{{ change_order.get_change_type_display }}</span>
+            {% if change_order.priority == 'critical_urgent' %}
+            <span class="badge badge-red text-sm">Critical / Urgent</span>
+            {% elif change_order.priority == 'high' %}
+            <span class="badge badge-amber text-sm">High Priority</span>
+            {% endif %}
+        </div>
+        <p class="text-slate-600 mt-1 text-lg font-medium">{{ change_order.title }}</p>
+    </div>
+    <div class="page-actions">
+        {% if can_edit %}
+        <a href="{% url 'quality:document_change_order_edit' change_order.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit DCO
+        </a>
+        {% endif %}
+
+        {% if can_submit %}
+        <form method="post" action="{% url 'quality:document_change_order_submit' change_order.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="send"></i> Submit to CCB
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Main Details Card -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div class="md:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-bold text-slate-800">Change Request Details</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>DCO Number</dt>
+                        <dd class="font-mono font-bold">{{ change_order.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Change Type</dt>
+                        <dd>{{ change_order.get_change_type_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Revision</dt>
+                        <dd class="font-mono">Rev {{ change_order.target_revision }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Priority</dt>
+                        <dd>{{ change_order.get_priority_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Requested By</dt>
+                        <dd>{{ change_order.requested_by.get_full_name|default:change_order.requested_by.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Effective Date</dt>
+                        <dd>{{ change_order.target_effective_date|default:"TBD" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Regulatory Impact</dt>
+                        <dd>
+                            {% if change_order.regulatory_impact %}
+                            <span class="badge badge-red text-xs">Yes — Regulatory Filing Required</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">No Regulatory Impact</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Retraining Trigger</dt>
+                        <dd>
+                            {% if change_order.training_required %}
+                            <span class="badge badge-amber text-xs">Mandatory Retraining Required</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">No Retraining Required</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Reason for Change (Regulatory / Quality Rationale)</h3>
+                    <p class="text-sm text-slate-600 whitespace-pre-line">{{ change_order.reason_for_change }}</p>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Change Description & Modification Scope</h3>
+                    <p class="text-sm text-slate-600 whitespace-pre-line">{{ change_order.change_description }}</p>
+                </div>
+
+                {% if change_order.impact_assessment %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Process / Equipment / Validation Impact Assessment</h3>
+                    <p class="text-sm text-slate-600 whitespace-pre-line">{{ change_order.impact_assessment }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- CCB Review & Approval Panel -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-bold text-slate-800">Change Control Board (CCB) Review</h2>
+                {% if change_order.ccb_decision == 'approved' %}
+                <span class="badge badge-green">CCB Approved</span>
+                {% elif change_order.ccb_decision == 'rejected' %}
+                <span class="badge badge-red">CCB Rejected</span>
+                {% elif change_order.ccb_decision == 'waived' %}
+                <span class="badge badge-slate">CCB Waived</span>
+                {% else %}
+                <span class="badge badge-amber">Pending CCB Decision</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if change_order.ccb_decision_date %}
+                <dl class="detail-grid mb-4">
+                    <div class="detail-item">
+                        <dt>Decision Outcome</dt>
+                        <dd class="font-bold">{{ change_order.get_ccb_decision_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Decision Date</dt>
+                        <dd>{{ change_order.ccb_decision_date }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Decided By</dt>
+                        <dd>{{ change_order.ccb_decision_by.get_full_name|default:change_order.ccb_decision_by.username }}</dd>
+                    </div>
+                </dl>
+                {% if change_order.closure_notes %}
+                <div class="pt-3 border-t border-slate-200">
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">CCB Deliberation / Closure Notes</h3>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ change_order.closure_notes }}</p>
+                </div>
+                {% endif %}
+                {% endif %}
+
+                {% if can_ccb_approve %}
+                <div class="p-4 rounded-lg bg-slate-50 border border-slate-200 mt-2">
+                    <h3 class="text-sm font-bold text-slate-800 mb-2">Record Change Control Board Determination</h3>
+                    <form method="post" action="{% url 'quality:document_change_order_ccb_decision' change_order.pk %}">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label" for="ccb-decision-select">Determination <span class="text-red-500">*</span></label>
+                            <select id="ccb-decision-select" name="decision" class="form-select" required>
+                                <option value="">Select CCB Decision...</option>
+                                <option value="approved">Approve Change Request</option>
+                                <option value="rejected">Reject Change Request</option>
+                                <option value="waived">Waive Formal CCB Review</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="ccb-closure-notes">Closure Notes / Action Items</label>
+                            <textarea id="ccb-closure-notes" name="closure_notes" rows="2" class="form-textarea" placeholder="Mandatory rationale or conditional action items..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary" onsubmit="return confirm('Record this official CCB determination?');">
+                            <i data-lucide="check"></i> Submit CCB Decision
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: Target Document Link Card -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-bold text-slate-800">Target Controlled Document</h2>
+            </div>
+            <div class="card-body">
+                <div class="font-mono text-sm font-bold text-blue-600 mb-1">
+                    <a href="{% url 'quality:controlled_document_detail' document.pk %}" class="hover:underline">
+                        {{ document.number }} Rev {{ document.revision }}
+                    </a>
+                </div>
+                <div class="text-sm font-medium text-slate-800 mb-3">{{ document.title }}</div>
+                <div class="text-xs text-slate-500 space-y-1">
+                    <div>Type: <span class="text-slate-700 font-medium">{{ document.get_document_type_display }}</span></div>
+                    <div>Current State: <span class="badge badge-info text-xs">{{ document.get_lifecycle_state_display }}</span></div>
+                    <div>Department: <span class="text-slate-700 font-medium">{{ document.department.name|default:"—" }}</span></div>
+                    <div>Owner: <span class="text-slate-700 font-medium">{{ document.owner.username }}</span></div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-200">
+                    <a href="{% url 'quality:controlled_document_detail' document.pk %}" class="btn btn-sm btn-outline w-full justify-center">
+                        <i data-lucide="file-text"></i> Open Document View
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
