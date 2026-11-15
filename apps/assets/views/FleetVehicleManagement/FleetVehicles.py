@@ -305,6 +305,10 @@ def fleet_vehicle_decommission(request, pk):
 def fleet_vehicle_ping_telemetry(request, pk):
     """Simulate or record a telematics ping update."""
     vehicle = assets_object(request, FleetVehicle, pk)
+    if vehicle.is_locked:
+        messages.error(request, f"Vehicle '{vehicle.number}' is decommissioned / locked and cannot receive telematics updates.")
+        return redirect("assets:fleet_vehicle_detail", pk=vehicle.pk)
+
     vehicle.last_telemetry_at = timezone.now()
     vehicle.is_telematics_enabled = True
     vehicle.save(update_fields=["last_telemetry_at", "is_telematics_enabled", "updated_at"])
