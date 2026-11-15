@@ -112,7 +112,13 @@ def document_change_order_detail(request, pk):
         request,
         DocumentChangeOrder,
         pk,
-        select_related=["document", "requested_by", "ccb_decision_by"],
+        select_related=[
+            "document",
+            "document__department",
+            "document__owner",
+            "requested_by",
+            "ccb_decision_by",
+        ],
     )
 
     signatures = dco.signatures.all().select_related("signer")
