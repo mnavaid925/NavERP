@@ -369,5 +369,34 @@
             </table>
         </div>
     </div>
+
+    <!-- Audit History Section -->
+    {% if recent_audits %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="text-base font-semibold">Audit &amp; Change History</h3>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>User</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_audits %}
+                    <tr>
+                        <td class="font-mono text-xs">{{ log.at|date:"Y-m-d H:i" }}</td>
+                        <td>{{ log.user|default:"System" }}</td>
+                        <td><span class="badge badge-info">{{ log.action }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
