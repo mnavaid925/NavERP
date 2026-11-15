@@ -470,28 +470,28 @@
 
 ## Computed Workbenches (2 — covering NavERP bullets 4 & 5)
 
-- [ ] **EOL & Refresh Cycles Command Board (`it_refresh_board`)** — `apps/assets/views/ItAssetManagement/ItRefreshBoards.py` + `urls/ItAssetManagement/ItRefreshBoards.py` (`it_refresh_board`, `it_refresh_board_export_csv`):
+- [x] **EOL & Refresh Cycles Command Board (`it_refresh_board`)** — `apps/assets/views/ItAssetManagement/ItRefreshBoards.py` + `urls/ItAssetManagement/ItRefreshBoards.py` (`it_refresh_board`, `it_refresh_board_export_csv`):
   - Aggregates hardware items overdue/due within 90d/EOL-expired, software & cloud items approaching `vendor_eol_date` / `renewal_date`, CapEx refresh budget totals by `core.OrgUnit`, pending NIST SP 800-88 data-sanitization backlog (`pending_wipe`), and active CMDB downstream dependency counts per EOL CI (single-query edge map, zero N+1). Supports `org_unit`, `priority`, `horizon_days`, and CSV export (`csv_safe`).
-- [ ] **CMDB Dependency & Blast-Radius Impact Analysis (`cmdb_impact_analysis`)** — `apps/assets/views/ItAssetManagement/CmdbImpactAnalyses.py` + `urls/ItAssetManagement/CmdbImpactAnalyses.py` (`cmdb_impact_analysis`, `cmdb_impact_analysis_export_csv`):
+- [x] **CMDB Dependency & Blast-Radius Impact Analysis (`cmdb_impact_analysis`)** — `apps/assets/views/ItAssetManagement/CmdbImpactAnalyses.py` + `urls/ItAssetManagement/CmdbImpactAnalyses.py` (`cmdb_impact_analysis`, `cmdb_impact_analysis_export_csv`):
   - Loads active/planned tenant `CmdbRelationship` edges in 1 query with `select_related(...)` across all 10 typed CI pointers, lets the user pick any CI (`ci_type` + `ci_id`, or `CmdbRelationship` focus) + `environment` filter, and executes a cycle-safe BFS traversal returning **Upstream Dependencies**, **Downstream Blast Radius** (all impacted services/hosts/apps with hop distance & criticality), **SPOF Alerts**, and CSV export (`csv_safe`).
 
 ---
 
 ## Backend (`apps/assets/{models,forms,views,urls}/ItAssetManagement/`)
 
-- [ ] **Models package**: `apps/assets/models/ItAssetManagement/__init__.py` + `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`
-- [ ] **Forms package**: `apps/assets/forms/ItAssetManagement/__init__.py` + `_helpers.py`, `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`
-- [ ] **Views package**: `apps/assets/views/ItAssetManagement/__init__.py` + `_helpers.py` (`csv_safe`, BFS impact helpers, EOL priority helpers), `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`, `ItRefreshBoards.py`, `CmdbImpactAnalyses.py`
+- [x] **Models package**: `apps/assets/models/ItAssetManagement/__init__.py` + `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`
+- [x] **Forms package**: `apps/assets/forms/ItAssetManagement/__init__.py` + `_helpers.py`, `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`
+- [x] **Views package**: `apps/assets/views/ItAssetManagement/__init__.py` + `_helpers.py` (`csv_safe`, BFS impact helpers, EOL priority helpers), `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`, `ItRefreshBoards.py`, `CmdbImpactAnalyses.py`
   - Every entity view provides full CRUD (`list`, `create`, `detail`, `edit`, `delete`), `export_csv`, search + dropdown filters (all `*_choices` + tenant FK querysets passed in context, `.isdigit()` validated), pagination (`has_previous`/`has_next`), single-query KPI `.aggregate(...)`, `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`, and POST workflow actions.
-- [ ] **URLs package**: `apps/assets/urls/ItAssetManagement/__init__.py` + `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`, `ItRefreshBoards.py`, `CmdbImpactAnalyses.py` (all literal paths `new/`, `export-csv/`, `refresh-board/`, `cmdb/impact-analysis/` registered BEFORE `<int:pk>/`)
-- [ ] **Re-export blocks** added surgically to `apps/assets/models/__init__.py`, `apps/assets/forms/__init__.py`, `apps/assets/views/__init__.py`, `apps/assets/urls/__init__.py`
-- [ ] **Admin registration**: register `ItHardwareAsset`, `SoftwareLicense`, `CloudAssetSubscription`, `CmdbRelationship` in `apps/assets/admin.py` with `list_display`, `list_filter`, `search_fields`, `readonly_fields` (matching `editable=False` & auto `number`/`created_at`/`updated_at`)
-- [ ] **Incremental migration (`0024_...`)**: `venv\Scripts\python.exe manage.py makemigrations assets`
-- [ ] **Extend idempotent seeder (`apps/assets/management/commands/seed_assets.py`)**: reuse existing Acme/Demo `Tenant`, `OrgUnit`, `Party`, `User`, `Currency`, `GLAccount`, `scm.Asset`, `scm.Location`, `scm.PurchaseOrder`, `accounting.FixedAsset`, `core.ServiceComponent`, `hrm.EmployeeProfile`, and `assets` sibling records (`AssetCategory`, `AssetModel`, `AssetWarranty`, `AssetServiceContract`, `AssetRequisition`, `AssetReplacementPlan`, `AssetDisposalRequest`, `AssetScrapSalvage`); seed realistic IT hardware (laptops, production servers, core firewall/switch with EOL/sanitization states), software licenses (compliant, surplus reclaimable, true-up shortfall), cloud/SaaS subscriptions (sanctioned AWS/M365, shadow-IT flagged SaaS, underutilized seats), and CMDB directed dependency graph (services -> DB/cluster -> hardware/cloud with SPOF edge).
+- [x] **URLs package**: `apps/assets/urls/ItAssetManagement/__init__.py` + `ItHardwareAssets.py`, `SoftwareLicenses.py`, `CloudAssetSubscriptions.py`, `CmdbRelationships.py`, `ItRefreshBoards.py`, `CmdbImpactAnalyses.py` (all literal paths `new/`, `export-csv/`, `refresh-board/`, `cmdb/impact-analysis/` registered BEFORE `<int:pk>/`)
+- [x] **Re-export blocks** added surgically to `apps/assets/models/__init__.py`, `apps/assets/forms/__init__.py`, `apps/assets/views/__init__.py`, `apps/assets/urls/__init__.py`
+- [x] **Admin registration**: register `ItHardwareAsset`, `SoftwareLicense`, `CloudAssetSubscription`, `CmdbRelationship` in `apps/assets/admin.py` with `list_display`, `list_filter`, `search_fields`, `readonly_fields` (matching `editable=False` & auto `number`/`created_at`/`updated_at`)
+- [x] **Incremental migration (`0024_...`)**: `venv\Scripts\python.exe manage.py makemigrations assets`
+- [x] **Extend idempotent seeder (`apps/assets/management/commands/seed_assets.py`)**: reuse existing Acme/Demo `Tenant`, `OrgUnit`, `Party`, `User`, `Currency`, `GLAccount`, `scm.Asset`, `scm.Location`, `scm.PurchaseOrder`, `accounting.FixedAsset`, `core.ServiceComponent`, `hrm.EmployeeProfile`, and `assets` sibling records (`AssetCategory`, `AssetModel`, `AssetWarranty`, `AssetServiceContract`, `AssetRequisition`, `AssetReplacementPlan`, `AssetDisposalRequest`, `AssetScrapSalvage`); seed realistic IT hardware (laptops, production servers, core firewall/switch with EOL/sanitization states), software licenses (compliant, surplus reclaimable, true-up shortfall), cloud/SaaS subscriptions (sanctioned AWS/M365, shadow-IT flagged SaaS, underutilized seats), and CMDB directed dependency graph (services -> DB/cluster -> hardware/cloud with SPOF edge).
 
 ## Wire-up
 
-- [ ] **`apps/core/navigation.py` (`LIVE_LINKS["11.18"]`)**:
+- [x] **`apps/core/navigation.py` (`LIVE_LINKS["11.18"]`)**:
   - `"Hardware Lifecycle Management": "assets:it_hardware_asset_list"`
   - `"Software License Management": "assets:software_license_list"`
   - `"Cloud Asset & Subscription Tracking": "assets:cloud_asset_subscription_list"`
@@ -501,36 +501,46 @@
 
 ## Templates (`templates/assets/itassetmanagement/`)
 
-- [ ] `templates/assets/itassetmanagement/it_hardware_asset/{list,detail,form}.html` — filter bar reflecting `request.GET` (search, `status`, `device_class`, `environment`, `disk_encryption_status`, `org_unit`, `eol_state`), KPI cards, Actions column (view/edit/delete POST+confirm+csrf), detail `<dl class="detail-grid">`, NIST sanitization & workflow action buttons, related CMDB edges panel
-- [ ] `templates/assets/itassetmanagement/software_license/{list,detail,form}.html` — filter bar (search, `status`, `software_category`, `license_type`, `license_metric`, `org_unit`), ELP delta & true-up exposure KPI cards, Actions column, `reclaim_inactive` / `record_true_up` / `sync_compliance_status` / `renew_term` POST actions
-- [ ] `templates/assets/itassetmanagement/cloud_asset_subscription/{list,detail,form}.html` — filter bar (search, `status`, `asset_kind`, `provider`, `approval_status`, `sso_status`, `org_unit`), FinOps spend/waste/shadow-IT KPI cards, resource tags & seat utilization panel, `sanction_app` / `flag_shadow_it` / `sync_finops_status` / `decommission` POST actions
-- [ ] `templates/assets/itassetmanagement/cmdb_relationship/{list,detail,form}.html` — filter bar (search, `status`, `relationship_type`, `environment`, `criticality`, `spof`), CI source -> verb -> target table, detail upstream/downstream 1-hop context & `verify_edge` / `mark_deprecated` / `sever_relationship` POST actions
-- [ ] `templates/assets/itassetmanagement/it_refresh_board.html` — EOL & Refresh Cycles workbench (filters, CapEx by OrgUnit summary, overdue/approaching hardware/software/cloud tables with CMDB downstream dependency count, NIST 800-88 sanitization backlog, CSV export)
-- [ ] `templates/assets/itassetmanagement/cmdb_impact_analysis.html` — CMDB Dependency & Blast-Radius explorer (CI selector, environment filter, Upstream Dependencies table, Downstream Blast Radius hop table, SPOF alerts, CSV export)
+- [x] `templates/assets/itassetmanagement/it_hardware_asset/{list,detail,form}.html` — filter bar reflecting `request.GET` (search, `status`, `device_class`, `environment`, `disk_encryption_status`, `org_unit`, `eol_state`), KPI cards, Actions column (view/edit/delete POST+confirm+csrf), detail `<dl class="detail-grid">`, NIST sanitization & workflow action buttons, related CMDB edges panel
+- [x] `templates/assets/itassetmanagement/software_license/{list,detail,form}.html` — filter bar (search, `status`, `software_category`, `license_type`, `license_metric`, `org_unit`), ELP delta & true-up exposure KPI cards, Actions column, `reclaim_inactive` / `record_true_up` / `sync_compliance_status` / `renew_term` POST actions
+- [x] `templates/assets/itassetmanagement/cloud_asset_subscription/{list,detail,form}.html` — filter bar (search, `status`, `asset_kind`, `provider`, `approval_status`, `sso_status`, `org_unit`), FinOps spend/waste/shadow-IT KPI cards, resource tags & seat utilization panel, `sanction_app` / `flag_shadow_it` / `sync_finops_status` / `decommission` POST actions
+- [x] `templates/assets/itassetmanagement/cmdb_relationship/{list,detail,form}.html` — filter bar (search, `status`, `relationship_type`, `environment`, `criticality`, `spof`), CI source -> verb -> target table, detail upstream/downstream 1-hop context & `verify_edge` / `mark_deprecated` / `sever_relationship` POST actions
+- [x] `templates/assets/itassetmanagement/it_refresh_board.html` — EOL & Refresh Cycles workbench (filters, CapEx by OrgUnit summary, overdue/approaching hardware/software/cloud tables with CMDB downstream dependency count, NIST 800-88 sanitization backlog, CSV export)
+- [x] `templates/assets/itassetmanagement/cmdb_impact_analysis.html` — CMDB Dependency & Blast-Radius explorer (CI selector, environment filter, Upstream Dependencies table, Downstream Blast Radius hop table, SPOF alerts, CSV export)
 
 ## Verify
 
-- [ ] `venv\Scripts\python.exe manage.py migrate` (migration `0024_*` clean)
-- [ ] `venv\Scripts\python.exe manage.py seed_assets` run **twice** (strictly idempotent — zero duplicate rows or IntegrityError)
-- [ ] `venv\Scripts\python.exe manage.py check` (zero issues)
-- [ ] `temp/` smoke sweep as `admin_acme` / `password`: all new `assets:*` URLs return 200/302, real seeded records & titles present, zero `{#` / `{% comment` template leaks, junk-param list & page-2 pagination work, cross-tenant IDOR returns 404, POST workflow actions & CSV export verified
-- [ ] Sidebar shows all 5 `11.18` NavERP.md bullets + `CMDB Impact Analysis` Live (no `On the roadmap` placeholder left for `11.18`)
+- [x] `venv\Scripts\python.exe manage.py migrate` (migration `0024_*` clean)
+- [x] `venv\Scripts\python.exe manage.py seed_assets` run **twice** (strictly idempotent — zero duplicate rows or IntegrityError)
+- [x] `venv\Scripts\python.exe manage.py check` (zero issues)
+- [x] `temp/` smoke sweep as `admin_acme` / `password`: all new `assets:*` URLs return 200/302, real seeded records & titles present, zero `{#` / `{% comment` template leaks, junk-param list & page-2 pagination work, cross-tenant IDOR returns 404, POST workflow actions & CSV export verified
+- [x] Sidebar shows all 5 `11.18` NavERP.md bullets + `CMDB Impact Analysis` Live (no `On the roadmap` placeholder left for `11.18`)
 
 ## Close-out
 
-- [ ] Phase 4 review agents run strictly serially (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) -> `.claude/tasks/review-assets-11.18.md`
-- [ ] Phase 5 `code-fixer` agent burns down all findings in `.claude/tasks/review-assets-11.18.md`
-- [ ] Phase 6 tests (`conftest.py` + `test_itam_models.py`, `test_itam_forms.py`, `test_itam_views.py`, `test_itam_security.py`) + full unfiltered `apps/assets` suite green
-- [ ] Phase 7 update `.claude/skills/assets/SKILL.md` and `README.md` (and record any remaining items in `.agents/tasks/gaps-assets-11.18.md` or declare `Gaps: None`)
+- [x] Phase 4 review agents run strictly serially (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) -> `.claude/tasks/review-assets-11.18.md`
+- [x] Phase 5 `code-fixer` agent burns down all findings in `.claude/tasks/review-assets-11.18.md`
+- [x] Phase 6 tests (`conftest.py` + `test_it_asset_management_models.py`, `test_it_asset_management_forms.py`, `test_it_asset_management_views.py`, `test_it_asset_management_security.py`) + full unfiltered `apps/assets` suite green (202 dedicated 11.18 tests, 2,886+ full suite passing)
+- [x] Phase 7 update `.claude/skills/assets/SKILL.md` and `README.md` (and record any remaining items in `.agents/tasks/gaps-assets-11.18.md` or declare `Gaps: None`)
 
 ## Later passes / deferred
-- Agentless network & endpoint discovery scanners (WMI/SSH/SNMP sweeps and Intune/Jamf/Kandji MDM webhooks via `11.15` connectors)
-- Automated AWS CUR / Azure EA / GCP BigQuery billing ingestion & Okta/Entra ID SCIM user activity sync (`11.15` / `0.4`)
-- Interactive force-directed SVG/WebGL CMDB topology canvas & automated CAB Change Request gating in `Module 18` (`apps/itsm`)
-- ITAD certified recycler EDI / automated NIST SP 800-88 wipe-log & CoD PDF ingestion
+- Agentless network & endpoint discovery scanners (WMI/SSH/SNMP sweeps and Intune/Jamf/Kandji MDM webhooks via `11.15` connectors) -> see `GAP-ASSETS-11.18-01`
+- Automated AWS CUR / Azure EA / GCP BigQuery billing ingestion & Okta/Entra ID SCIM user activity sync (`11.15` / `0.4`) -> see `GAP-ASSETS-11.18-02`
+- Interactive force-directed SVG/WebGL CMDB topology canvas & automated CAB Change Request gating in `Module 18` (`apps/itsm`) -> see `GAP-ASSETS-11.18-03`
+- ITAD certified recycler EDI / automated NIST SP 800-88 wipe-log & CoD PDF ingestion -> see `GAP-ASSETS-11.18-04`
 
 ## Review notes
-(filled in at the end)
+- **Completed**: 2026-11-15
+- **Gaps Register**: Explicitly documented in `.agents/tasks/gaps-assets-11.18.md` (4 deferred items: `GAP-ASSETS-11.18-01` through `GAP-ASSETS-11.18-04`).
+- **Phases 0–7 completed strictly serially**:
+  - Phase 0: Base claimed.
+  - Phase 1: Research documented in `.claude/tasks/research-assets-11.18.md`.
+  - Phase 2: Todo checkable plan documented in `.claude/tasks/todo.md`.
+  - Phase 3: Contract frozen in `.claude/tasks/contract-assets-11.18.md`, all 4 entities + 2 workbenches built, integrated, migrated (`0024`), seeded twice cleanly, and smoke verified (84/84 green).
+  - Phase 4: Six specialist reviewers run serially (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) yielding consolidated register in `.claude/tasks/review-assets-11.18.md`.
+  - Phase 5: `code-fixer` agent burned down all 28 findings (`C1`–`C4`, `I1`–`I12`, `M1`–`M12`) with 0 left open, 0 skipped, committing one file per commit. Migration `0025` added composite indexes and `MinValueValidator`.
+  - Phase 6: Extended `conftest.py` with 8 shared fixtures, wrote and verified 4 test modules (`test_it_asset_management_models.py` 16 passed, `_forms.py` 15 passed, `_views.py` 23 passed, `_security.py` 148 passed = 202 passed), and confirmed 100% green pass on full tracked `apps/assets/tests/` suite.
+  - Phase 7: Per-module skill updated in `.claude/skills/assets/SKILL.md`, `README.md` marked complete, `.agents/tasks/gaps-assets-11.18.md` created, and `todo.md` updated.
 
 ---
 # Sub-module 11.15: Integration & API Hub (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.15.md` (2026-11-11)
