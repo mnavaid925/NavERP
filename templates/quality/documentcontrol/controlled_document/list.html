@@ -208,18 +208,18 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="btn btn-icon" title="View Details">
+                        <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="btn btn-icon" title="View Details" aria-label="View Details">
                             <i data-lucide="eye"></i>
                         </a>
                         {% if not doc.is_locked %}
-                        <a href="{% url 'quality:controlled_document_edit' doc.pk %}" class="btn btn-icon" title="Edit Document">
+                        <a href="{% url 'quality:controlled_document_edit' doc.pk %}" class="btn btn-icon" title="Edit Document" aria-label="Edit Document">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% endif %}
                         {% if not doc.is_effective and not doc.is_locked %}
                         <form method="post" action="{% url 'quality:controlled_document_delete' doc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete draft document {{ doc.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Document">
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Document" aria-label="Delete Document">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
