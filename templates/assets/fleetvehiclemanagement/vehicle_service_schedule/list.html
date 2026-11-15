@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Maintenance &amp; Service Scheduling — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:fleet_vehicle_list' %}">Fleet &amp; Vehicles</a>
+            <span>/</span>
+            <span>Maintenance &amp; Service Scheduling</span>
+        </div>
+        <h1 class="page-title">Vehicle Maintenance Schedules</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:vehicle_service_schedule_export' %}?q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&service_type={{ request.GET.service_type|urlencode }}&status={{ request.GET.status|urlencode }}&priority={{ request.GET.priority|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:vehicle_service_schedule_create' %}" class="btn btn-primary">
+            <i data-lucide="calendar-plus" class="w-4 h-4 me-1"></i> Schedule Service
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Services Overdue</div>
+            <div class="stat-value">{{ overdue_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Services Due Soon (&le; 14 Days)</div>
+            <div class="stat-value">{{ due_soon_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, vehicle, plate, work order..." class="form-input">
+            </div>
+            <div class="form-group">
+                <select name="vehicle" class="form-select">
+                    <option value="">All Vehicles</option>
+                    {% for v in vehicles %}
+                    <option value="{{ v.pk }}" {% if request.GET.vehicle == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'assets:vehicle_service_schedule_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Wrap -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Schedule # / Service Title</th>
+                    <th>Vehicle</th>
+                    <th>Service Type</th>
+                    <th>Next Due Date</th>
+                    <th>Next Due Odometer</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Vendor / Shop</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in schedules %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">
+                            <a href="{% url 'assets:vehicle_service_schedule_detail' s.pk %}" class="text-blue-600 hover:underline">
+                                {{ s.service_title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 font-mono">{{ s.number }}</div>
+                    </td>
+                    <td>
+                        {% if s.vehicle %}
+                        <a href="{% url 'assets:fleet_vehicle_detail' s.vehicle.pk %}" class="font-medium text-slate-900 dark:text-slate-100 hover:underline">
+                            {{ s.vehicle.name }}
+                        </a>
+                        <div class="text-xs text-slate-500 font-mono">{{ s.vehicle.license_plate }}</div>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs">{{ s.get_service_type_display }}</span></td>
+                    <td>
+                        {% if s.next_due_date %}
+                        <div class="font-medium text-sm">{{ s.next_due_date }}</div>
+                        {% if s.is_overdue %}
+                        <span class="badge badge-red text-xs">Overdue</span>
+                        {% elif s.is_due_soon %}
+                        <span class="badge badge-amber text-xs">Due Soon</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-xs text-slate-400">— Mileage only —</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if s.next_due_odometer %}
+                        <div class="font-mono text-sm">{{ s.next_due_odometer }} mi</div>
+                        {% if s.vehicle and s.vehicle.current_odometer >= s.next_due_odometer %}
+                        <span class="badge badge-red text-xs">Mil. Overdue</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-xs text-slate-400">— Date only —</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ s.priority_badge_class }}">{{ s.get_priority_display }}</span></td>
+                    <td><span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span></td>
+                    <td>
+                        <div class="text-xs">{{ s.service_vendor|default:"Internal / In-House" }}</div>
+                        {% if s.is_warranty_covered %}
+                        <span class="badge badge-green text-xs">Warranty</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:vehicle_service_schedule_detail' s.pk %}" class="btn btn-icon" title="View Schedule">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:vehicle_service_schedule_edit' s.pk %}" class="btn btn-icon" title="Edit Schedule">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:vehicle_service_schedule_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete schedule \'{{ s.number }}\'?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Schedule">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="wrench" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold">No Maintenance Schedules Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Set up recurring oil changes, tire rotations and annual DOT inspections.</p>
+                            <a href="{% url 'assets:vehicle_service_schedule_create' %}" class="btn btn-primary">
+                                <i data-lucide="calendar-plus" class="w-4 h-4 me-1"></i> Schedule Service
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-body border-t border-slate-200 dark:border-slate-700 py-3">
+        <div class="pagination">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} schedules
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&service_type={{ request.GET.service_type|urlencode }}&status={{ request.GET.status|urlencode }}&priority={{ request.GET.priority|urlencode }}" class="btn btn-outline btn-sm">Prev</a>
+                {% else %}
+                <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
+                {% endif %}
+
+                <span class="px-3 py-1 text-sm text-slate-600 dark:text-slate-400">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&service_type={{ request.GET.service_type|urlencode }}&status={{ request.GET.status|urlencode }}&priority={{ request.GET.priority|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+                {% else %}
+                <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
