@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ schedule.service_title }} — Service Schedule — NavERP{% endblock %}
+{% block title %}{{ schedule.service_title }} — Vehicle Service Schedule — NavERP{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -8,7 +8,7 @@
         <div class="breadcrumb">
             <a href="{% url 'assets:overview' %}">Assets</a>
             <span>/</span>
-            <a href="{% url 'assets:vehicle_service_schedule_list' %}">Maintenance Schedules</a>
+            <a href="{% url 'assets:vehicle_service_schedule_list' %}">Vehicle Service Schedules</a>
             <span>/</span>
             <span>{{ schedule.number }}</span>
         </div>
