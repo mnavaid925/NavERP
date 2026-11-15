@@ -32,9 +32,13 @@ class DocumentAcknowledgmentForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if hasattr(self, "tenant") and self.tenant is not None:
-            self.fields["document"].queryset = ControlledDocument.objects.filter(tenant=self.tenant)
+            self.fields["document"].queryset = ControlledDocument.objects.filter(
+                tenant=self.tenant, lifecycle_state="effective"
+            )
             self.fields["user"].queryset = User.objects.filter(tenant=self.tenant)
-            self.fields["employee"].queryset = EmployeeProfile.objects.filter(tenant=self.tenant)
+            self.fields["employee"].queryset = EmployeeProfile.objects.filter(
+                tenant=self.tenant
+            ).select_related("party")
         else:
             self.fields["document"].queryset = ControlledDocument.objects.none()
             self.fields["user"].queryset = User.objects.none()
