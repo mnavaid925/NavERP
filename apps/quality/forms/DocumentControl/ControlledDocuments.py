@@ -1,6 +1,9 @@
+import os
+
 from django import forms
 from django.contrib.auth import get_user_model
 
+from apps.core.forms._common import ALLOWED_DOC_EXTENSIONS, MAX_UPLOAD_BYTES
 from apps.core.models import OrgUnit
 from apps.quality.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDocument
@@ -51,6 +54,16 @@ class ControlledDocumentForm(TenantUniqueMixin, TenantModelForm):
             self.fields["department"].queryset = OrgUnit.objects.none()
             self.fields["owner"].queryset = User.objects.none()
 
+    def clean_file(self):
+        f = self.cleaned_data.get("file")
+        if f and hasattr(f, "name"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_DOC_EXTENSIONS:
+                raise forms.ValidationError(f"File type '{ext}' is not allowed.")
+            if getattr(f, "size", 0) and f.size > MAX_UPLOAD_BYTES:
+                raise forms.ValidationError("File exceeds the 20 MB limit.")
+        return f
+
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["department", "owner"])
@@ -78,3 +91,13 @@ class ControlledDocumentRevisionForm(TenantUniqueMixin, TenantModelForm):
             "file": forms.FileInput(attrs={"class": "form-input"}),
             "description": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Updated scope or description (optional)..."}),
         }
+
+    def clean_file(self):
+        f = self.cleaned_data.get("file")
+        if f and hasattr(f, "name"):
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_DOC_EXTENSIONS:
+                raise forms.ValidationError(f"File type '{ext}' is not allowed.")
+            if getattr(f, "size", 0) and f.size > MAX_UPLOAD_BYTES:
+                raise forms.ValidationError("File exceeds the 20 MB limit.")
+        return f
