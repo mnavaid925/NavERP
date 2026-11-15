@@ -5891,7 +5891,10 @@ class Command(BaseCommand):
         departments = list(OrgUnit.objects.filter(tenant=tenant).order_by("id"))
         dept_ops = departments[0] if departments else None
         dept_logistics = departments[1] if len(departments) > 1 else dept_ops
-        vendor = Party.objects.filter(tenant=tenant, is_vendor=True).first() or Party.objects.filter(tenant=tenant).first()
+        vendor = (
+            Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).distinct().first()
+            or Party.objects.filter(tenant=tenant).first()
+        )
         asset = Asset.objects.filter(tenant=tenant).first()
 
         today = timezone.now().date()
