@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:controlled_document_list' %}">Controlled Documents</a>
+            <span>/</span>
+            <a href="{% url 'quality:controlled_document_detail' document.pk %}">{{ document.number }}</a>
+            <span>/</span>
+            <span>Execute Signature</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="text-slate-600 mt-1">Executing a formal electronic signature on {{ document.number }} Rev {{ document.revision }}.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:controlled_document_detail' document.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-2xl mx-auto border-emerald-300 shadow-sm">
+    <div class="card-header bg-emerald-50/50 border-b border-emerald-100 flex items-center space-x-2">
+        <i data-lucide="shield-check" class="w-5 h-5 text-emerald-600"></i>
+        <div>
+            <h2 class="text-base font-bold text-slate-800">21 CFR Part 11 Electronic Signature Gate</h2>
+            <p class="text-xs text-slate-500">Your electronic signature is legally equivalent to your handwritten signature.</p>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Target Document Summary Pill -->
+        <div class="mb-4 p-3 bg-slate-50 rounded border border-slate-200 text-sm">
+            <div class="flex justify-between items-center mb-1">
+                <span class="font-mono font-bold text-blue-600">{{ document.number }} Rev {{ document.revision }}</span>
+                <span class="badge badge-info text-xs">{{ document.get_document_type_display }}</span>
+            </div>
+            <div class="text-slate-800 font-medium">{{ document.title }}</div>
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="mb-4 p-4 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signature_meaning.id_for_label }}">Meaning of Signature (Legal Intent) <span class="text-red-500">*</span></label>
+                    {{ form.signature_meaning }}
+                    {% if form.signature_meaning.errors %}<div class="form-error">{{ form.signature_meaning.errors.0 }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Per 21 CFR § 11.50(a)(2), you must state your exact legal intent in signing.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signer_title.id_for_label }}">Signer Professional Title</label>
+                    {{ form.signer_title }}
+                    {% if form.signer_title.errors %}<div class="form-error">{{ form.signer_title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.comments.id_for_label }}">Comments / Review Rationale</label>
+                    {{ form.comments }}
+                    {% if form.comments.errors %}<div class="form-error">{{ form.comments.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group pt-2 border-t border-slate-200">
+                    <label class="form-label font-bold text-slate-800" for="{{ form.password.id_for_label }}">Password Re-Authentication <span class="text-red-500">*</span></label>
+                    {{ form.password }}
+                    {% if form.password.errors %}<div class="form-error">{{ form.password.errors.0 }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">FDA 21 CFR § 11.200 requires dual-identification (password re-entry) to execute an electronic signature.</span>
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                <a href="{% url 'quality:controlled_document_detail' document.pk %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700" onsubmit="return confirm('Execute legally binding electronic signature?');">
+                    <i data-lucide="award"></i> Sign & Seal Document
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
