@@ -7,6 +7,241 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.19: Fleet & Vehicle Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.19.md` (2026-11-15)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.18.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0025_alter_assetfacilityspace_floor_plan_image_and_more.py`, so **11.19 claims `0026_...`** (L43).
+> Plan written from `.claude/tasks/research-assets-11.19.md` (Phase 1) and `NavERP.md` (`### 11.19 Fleet & Vehicle Management`).
+> Package folder name: `apps/assets/{models,forms,views,urls}/FleetVehicleManagement/<Entity>.py` (`FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`, plus workbench module `FleetTelematicsBoards.py` in `views/` & `urls/`)
+> Template folder name: `templates/assets/fleetvehiclemanagement/{fleet_vehicle,vehicle_fuel_log,vehicle_driver_assignment,vehicle_service_schedule}/{list,detail,form}.html` + `templates/assets/fleetvehiclemanagement/fleet_telematics_board.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`FLT`** (`FleetVehicle`), **`VFUL`** (`VehicleFuelLog`), **`VDRV`** (`VehicleDriverAssignment`), **`VSRV`** (`VehicleServiceSchedule`), all four model class names, and all URL stems (`fleet_vehicle_*`, `vehicle_fuel_log_*`, `vehicle_driver_assignment_*`, `vehicle_service_schedule_*`, `fleet_telematics_board`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped EXCEPT `accounting.Currency`): `scm.Asset` (`apps/scm/models/AssetManagement/Assets.py`), `scm.Location` (`apps/scm/models/InventoryManagement/Locations.py`), `accounting.FixedAsset` (`apps/accounting/models/FixedAssets/FixedAssetsRegister.py`), `accounting.GLAccount` (`apps/accounting/models/GeneralLedger/GLAccounts.py`), `core.Party` (`apps/core/models/Party.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `hrm.EmployeeProfile` (`apps/hrm/models/EmployeeManagement/EmployeeProfiles.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - `assets` siblings (all tenant-scoped): `assets.AssetCategory`, `assets.AssetModel`, `assets.AssetWarranty`, `assets.AssetMaintenanceSchedule`.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - `accounting.Currency` is GLOBAL (no `tenant` FK). Queryset in `VehicleFuelLogForm` and `VehicleServiceScheduleForm` MUST filter `Currency.objects.filter(is_active=True)` ONLY and MUST NOT be passed to `reject_foreign(...)`.
+  - All tenant-scoped FKs (`scm.Asset`, `accounting.FixedAsset`, `assets.AssetCategory`, `assets.AssetModel`, `assets.AssetWarranty`, `assets.AssetMaintenanceSchedule`, `core.OrgUnit`, `core.Party`, `hrm.EmployeeProfile`, `accounts.User`, `assets.FleetVehicle`) MUST be populated in `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Workflow state & read-only timestamp hygiene (L20, L22, L25)**:
+  - System/telemetry timestamps (`last_telemetry_at`, `created_at`, `updated_at`), workflow-controlled statuses (`status`, `compliance_status`, `qualification_status`, `safety_tier`), and derived metrics MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Derived/computed KPIs (`is_registration_expired`, `is_registration_due_soon`, `calculated_mpg`, `cost_per_mile`, `is_license_expired`, `is_license_expiring_soon`, `is_overdue`, `is_due_soon`, `days_until_due`, `miles_until_due`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view (`create`, `edit`, `delete`, and every custom POST workflow action) calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Stat icon colors ONLY from `.stat-icon.{blue,green,orange,purple,slate,red}`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; privileged actions use `@tenant_admin_required`; `confirm(...)` uses system `number` with `\'` escaped apostrophes (L42); paginators guard `has_previous` / `has_next` (L9); CSV exports use `csv_safe(...)` formula neutralization.
+
+---
+
+## Models (from research — 4)
+
+### 1. `FleetVehicle` (`FLT-`)
+- [ ] **File**: `apps/assets/models/FleetVehicleManagement/FleetVehicles.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "FLT"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `name`: `CharField(max_length=150)`
+  - `vin`: `CharField(max_length=24, blank=True)`
+  - `license_plate`: `CharField(max_length=32)`
+  - `registration_state`: `CharField(max_length=32, blank=True)`
+  - `make`: `CharField(max_length=60)`
+  - `model`: `CharField(max_length=60)`
+  - `year`: `PositiveSmallIntegerField()`
+  - `vehicle_type`: `CharField(max_length=28, choices=VEHICLE_TYPE_CHOICES, default="cargo_van")`
+  - `fuel_type`: `CharField(max_length=24, choices=FUEL_TYPE_CHOICES, default="gasoline")`
+  - `ownership_type`: `CharField(max_length=24, choices=OWNERSHIP_TYPE_CHOICES, default="owned")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="staged_available")`
+  - `compliance_status`: `CharField(max_length=28, choices=COMPLIANCE_STATUS_CHOICES, default="compliant")`
+  - `title_number`: `CharField(max_length=64, blank=True)`
+  - `registration_expiration_date`: `DateField(null=True, blank=True)`
+  - `safety_inspection_due_date`: `DateField(null=True, blank=True)`
+  - `emissions_inspection_due_date`: `DateField(null=True, blank=True)`
+  - `current_odometer`: `PositiveIntegerField(default=0)`
+  - `engine_hours`: `DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))`
+  - `gross_vehicle_weight_rating_lbs`: `PositiveIntegerField(null=True, blank=True)`
+  - `fuel_tank_capacity_gallons`: `DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)`
+  - `battery_capacity_kwh`: `DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)`
+  - `is_telematics_enabled`: `BooleanField(default=False)`
+  - `telematics_device_id`: `CharField(max_length=80, blank=True)`
+  - `current_latitude`: `DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)`
+  - `current_longitude`: `DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)`
+  - `current_location_name`: `CharField(max_length=255, blank=True)`
+  - `current_speed_mph`: `DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)`
+  - `current_heading`: `PositiveSmallIntegerField(null=True, blank=True)`
+  - `last_telemetry_at`: `DateTimeField(null=True, blank=True, editable=False)`
+  - `engine_state`: `CharField(max_length=24, choices=ENGINE_STATE_CHOICES, default="engine_off")`
+  - `geofence_status`: `CharField(max_length=28, choices=GEOFENCE_STATUS_CHOICES, default="inside_zone")`
+  - Verified FKs: `operational_asset` (`scm.Asset`), `fixed_asset` (`accounting.FixedAsset`), `asset_category` (`assets.AssetCategory`), `asset_model` (`assets.AssetModel`), `org_unit` (`core.OrgUnit`), `primary_driver` (`hrm.EmployeeProfile`), `custodian_party` (`core.Party`)
+  - `notes`: `TextField(blank=True)`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_flt_ten_num_uniq")` (23)
+  - `Index(fields=["tenant", "status"], name="idx_flt_ten_stat")` (16)
+  - `Index(fields=["tenant", "vehicle_type"], name="idx_flt_ten_vtype")` (17)
+  - `Index(fields=["tenant", "license_plate"], name="idx_flt_ten_plate")` (17)
+  - `Index(fields=["tenant", "registration_expiration_date"], name="idx_flt_ten_regexp")` (18)
+- [ ] **Form (`FleetVehicleForm`)**:
+  - Excluded: `tenant`, `number`, `status`, `compliance_status`, `last_telemetry_at`, `created_at`, `updated_at`
+  - `clean()`: validate `year >= 1900` and `<= current_year + 2`; `reject_foreign(...)` on all tenant FKs.
+- [ ] **Workflow actions**: `activate`, `mark_in_shop`, `mark_loaner`, `mark_out_of_service`, `decommission` (`@tenant_admin_required`), `ping_telemetry`.
+
+### 2. `VehicleFuelLog` (`VFUL-`)
+- [ ] **File**: `apps/assets/models/FleetVehicleManagement/VehicleFuelLogs.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VFUL"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `vehicle`: `ForeignKey("assets.FleetVehicle", on_delete=CASCADE, related_name="fuel_logs")`
+  - `driver`: `ForeignKey("hrm.EmployeeProfile", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_fuel_logs")`
+  - `fuel_vendor`: `ForeignKey("core.Party", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_fuel_sales")`
+  - `fuel_date`: `DateTimeField()`
+  - `odometer_at_fueling`: `PositiveIntegerField()`
+  - `fuel_type`: `CharField(max_length=28, choices=FUEL_TYPE_CHOICES, default="regular_gasoline")`
+  - `quantity_gallons`: `DecimalField(max_digits=9, decimal_places=3)`
+  - `unit_price`: `DecimalField(max_digits=10, decimal_places=3, default=Decimal("0.000"))`
+  - `total_cost`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `currency`: `ForeignKey("accounting.Currency", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_fuel_logs")` (GLOBAL)
+  - `is_full_tank`: `BooleanField(default=True)`
+  - `fuel_card_token`: `CharField(max_length=64, blank=True)`
+  - `fuel_station_name`: `CharField(max_length=120, blank=True)`
+  - `station_city_state`: `CharField(max_length=120, blank=True)`
+  - `distance_since_last_fuel`: `PositiveIntegerField(null=True, blank=True)`
+  - `calculated_mpg`: `DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)`
+  - `route_category`: `CharField(max_length=24, choices=ROUTE_CATEGORY_CHOICES, default="mixed_delivery")`
+  - `efficiency_rating`: `CharField(max_length=28, choices=EFFICIENCY_RATING_CHOICES, default="optimal")`
+  - `receipt_reference`: `CharField(max_length=80, blank=True)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_vful_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "vehicle", "fuel_date"], name="idx_vful_ten_veh_date")` (21)
+  - `Index(fields=["tenant", "fuel_date"], name="idx_vful_ten_fdate")` (18)
+- [ ] **Form (`VehicleFuelLogForm`)**:
+  - Excluded: `tenant`, `number`, `distance_since_last_fuel`, `calculated_mpg`, `efficiency_rating`, `created_at`, `updated_at`
+  - `clean()`: validate `quantity_gallons > 0`, `odometer_at_fueling >= 0`; `reject_foreign(...)` on tenant FKs (excluding `currency`).
+
+### 3. `VehicleDriverAssignment` (`VDRV-`)
+- [ ] **File**: `apps/assets/models/FleetVehicleManagement/VehicleDriverAssignments.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VDRV"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `vehicle`: `ForeignKey("assets.FleetVehicle", on_delete=CASCADE, related_name="driver_assignments")`
+  - `driver`: `ForeignKey("hrm.EmployeeProfile", on_delete=CASCADE, related_name="vehicle_driver_assignments")`
+  - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="assigned_vehicle_records")`
+  - `assignment_role`: `CharField(max_length=24, choices=ASSIGNMENT_ROLE_CHOICES, default="primary_assigned")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="active")`
+  - `start_datetime`: `DateTimeField()`
+  - `end_datetime`: `DateTimeField(null=True, blank=True)`
+  - `start_odometer`: `PositiveIntegerField(default=0)`
+  - `end_odometer`: `PositiveIntegerField(null=True, blank=True)`
+  - `driver_license_number`: `CharField(max_length=48, blank=True)`
+  - `driver_license_state`: `CharField(max_length=32, blank=True)`
+  - `license_class`: `CharField(max_length=24, choices=LICENSE_CLASS_CHOICES, default="standard_non_cdl")`
+  - `license_expiration_date`: `DateField(null=True, blank=True)`
+  - `medical_card_expiration_date`: `DateField(null=True, blank=True)`
+  - `hazmat_endorsed`: `BooleanField(default=False)`
+  - `qualification_status`: `CharField(max_length=28, choices=QUALIFICATION_STATUS_CHOICES, default="qualified")`
+  - `safety_score`: `PositiveSmallIntegerField(default=100)`
+  - `speeding_event_count`: `PositiveIntegerField(default=0)`
+  - `harsh_braking_count`: `PositiveIntegerField(default=0)`
+  - `harsh_acceleration_count`: `PositiveIntegerField(default=0)`
+  - `incident_count`: `PositiveIntegerField(default=0)`
+  - `duty_status`: `CharField(max_length=24, choices=DUTY_STATUS_CHOICES, default="off_duty")`
+  - `safety_tier`: `CharField(max_length=20, choices=SAFETY_TIER_CHOICES, default="exemplary")`
+  - `supervisor_notes`: `TextField(blank=True)`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_vdrv_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "vehicle", "status"], name="idx_vdrv_ten_veh_stat")` (21)
+  - `Index(fields=["tenant", "driver", "status"], name="idx_vdrv_ten_drv_stat")` (21)
+  - `Index(fields=["tenant", "safety_tier"], name="idx_vdrv_ten_stier")` (18)
+- [ ] **Form (`VehicleDriverAssignmentForm`)**:
+  - Excluded: `tenant`, `number`, `status`, `qualification_status`, `safety_tier`, `created_at`, `updated_at`
+  - `clean()`: validate `end_datetime >= start_datetime` if provided; `reject_foreign(...)` on tenant FKs.
+- [ ] **Workflow actions**: `complete_assignment`, `revoke_safety` (`@tenant_admin_required`), `record_incident`.
+
+### 4. `VehicleServiceSchedule` (`VSRV-`)
+- [ ] **File**: `apps/assets/models/FleetVehicleManagement/VehicleServiceSchedules.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "VSRV"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `vehicle`: `ForeignKey("assets.FleetVehicle", on_delete=CASCADE, related_name="service_schedules")`
+  - `service_title`: `CharField(max_length=150)`
+  - `service_type`: `CharField(max_length=32, choices=SERVICE_TYPE_CHOICES, default="engine_oil_filter")`
+  - `service_vendor`: `ForeignKey("core.Party", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_service_contracts")`
+  - `warranty`: `ForeignKey("assets.AssetWarranty", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_services")`
+  - `maintenance_schedule`: `ForeignKey("assets.AssetMaintenanceSchedule", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_service_schedules")`
+  - `interval_mileage`: `PositiveIntegerField(default=5000)`
+  - `interval_months`: `PositiveSmallIntegerField(default=6)`
+  - `last_service_date`: `DateField(null=True, blank=True)`
+  - `last_service_odometer`: `PositiveIntegerField(null=True, blank=True)`
+  - `next_due_date`: `DateField(null=True, blank=True)`
+  - `next_due_odometer`: `PositiveIntegerField(null=True, blank=True)`
+  - `priority`: `CharField(max_length=20, choices=PRIORITY_CHOICES, default="scheduled_pm")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="active_tracking")`
+  - `estimated_cost`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `actual_cost`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `currency`: `ForeignKey("accounting.Currency", on_delete=SET_NULL, null=True, blank=True, related_name="vehicle_service_schedules")` (GLOBAL)
+  - `is_warranty_covered`: `BooleanField(default=False)`
+  - `work_order_invoice_ref`: `CharField(max_length=80, blank=True)`
+  - `technician_resolution_notes`: `TextField(blank=True)`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="assets_vsrv_ten_num_uniq")` (24)
+  - `Index(fields=["tenant", "vehicle", "status"], name="idx_vsrv_ten_veh_stat")` (21)
+  - `Index(fields=["tenant", "status"], name="idx_vsrv_ten_stat")` (17)
+  - `Index(fields=["tenant", "next_due_date"], name="idx_vsrv_ten_ndate")` (18)
+  - `Index(fields=["tenant", "next_due_odometer"], name="idx_vsrv_ten_nodom")` (18)
+- [ ] **Form (`VehicleServiceScheduleForm`)**:
+  - Excluded: `tenant`, `number`, `status`, `actual_cost`, `created_at`, `updated_at`
+  - `clean()`: validate `interval_mileage >= 0` and `interval_months >= 0`; `reject_foreign(...)` on tenant FKs (excluding `currency`).
+- [ ] **Workflow actions**: `complete_service` (`@tenant_admin_required`), `mark_in_service`, `pause_tracking`.
+
+---
+
+## Backend (apps/assets/{models,forms,views,urls}/FleetVehicleManagement/)
+- [ ] `models/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`
+- [ ] `forms/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`
+- [ ] `views/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`, `FleetTelematicsBoards.py`
+- [ ] `urls/FleetVehicleManagement/__init__.py` & `FleetVehicles.py`, `VehicleFuelLogs.py`, `VehicleDriverAssignments.py`, `VehicleServiceSchedules.py`, `FleetTelematicsBoards.py`
+- [ ] Re-export blocks in:
+  - `apps/assets/models/__init__.py`
+  - `apps/assets/forms/__init__.py`
+  - `apps/assets/views/__init__.py`
+  - `apps/assets/urls/__init__.py`
+- [ ] `admin.py` registration for all 4 models
+- [ ] Migration: incremental `makemigrations assets` (claims `0026_...`)
+- [ ] Extend `seed_assets.py` with idempotent Fleet & Vehicle records
+
+---
+
+## Wire-up
+- [ ] `apps/core/navigation.py`: add `LIVE_LINKS["11.19"]` mapping all 5 `NavERP.md` bullets:
+  - `"Vehicle Registration & Compliance": "assets:fleet_vehicle_list"`
+  - `"Fuel & Mileage Tracking": "assets:vehicle_fuel_log_list"`
+  - `"Driver Assignment & Safety": "assets:vehicle_driver_assignment_list"`
+  - `"Maintenance & Service Scheduling": "assets:vehicle_service_schedule_list"`
+  - `"Telematics & GPS Monitoring": "assets:fleet_telematics_board"`
+
+---
+
+## Frontend (templates/assets/fleetvehiclemanagement/)
+- [ ] `templates/assets/fleetvehiclemanagement/fleet_vehicle/{list,detail,form}.html`
+- [ ] `templates/assets/fleetvehiclemanagement/vehicle_fuel_log/{list,detail,form}.html`
+- [ ] `templates/assets/fleetvehiclemanagement/vehicle_driver_assignment/{list,detail,form}.html`
+- [ ] `templates/assets/fleetvehiclemanagement/vehicle_service_schedule/{list,detail,form}.html`
+- [ ] `templates/assets/fleetvehiclemanagement/fleet_telematics_board.html`
+
+---
+
+## Verification & Close-out
+- [ ] Run `python manage.py makemigrations assets`
+- [ ] Run `python manage.py migrate`
+- [ ] Run `python manage.py seed_assets` twice (idempotence verification)
+- [ ] Run `python manage.py check`
+- [ ] Smoke tests via test client: HTTP 200/302, content assertions, IDOR 404
+- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-assets-11.19.md`
+- [ ] Phase 5: `code-fixer` agent burns down all findings
+- [ ] Phase 6: Tests (`test_fleetvehicle_models.py`, `test_fleetvehicle_forms.py`, `test_fleetvehicle_views.py`, `test_fleetvehicle_security.py`)
+- [ ] Phase 7: Update `.claude/skills/assets/SKILL.md` and `README.md`, declare gaps register `.agents/tasks/gaps-assets-11.19.md`
+
+---
 # Sub-module 11.18: IT Asset Management (ITAM) (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.18.md` (2026-11-12)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.16 (`11.17` unbuilt).
