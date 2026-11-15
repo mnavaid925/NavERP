@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Fuel &amp; Mileage Tracking — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:fleet_vehicle_list' %}">Fleet &amp; Vehicles</a>
+            <span>/</span>
+            <span>Fuel &amp; Mileage Tracking</span>
+        </div>
+        <h1 class="page-title">Vehicle Fuel Logs</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:vehicle_fuel_log_export' %}?q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&fuel_type={{ request.GET.fuel_type|urlencode }}&efficiency_rating={{ request.GET.efficiency_rating|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:vehicle_fuel_log_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Log Fuel Fill-Up
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Fuel Expenditure</div>
+            <div class="stat-value">${{ total_cost_sum }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="fuel"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Volume Dispensed</div>
+            <div class="stat-value">{{ total_gallons_sum }} gal</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="gauge"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Average Fleet MPG</div>
+            <div class="stat-value">{{ avg_mpg }} MPG</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, vehicle, station, card..." class="form-input">
+            </div>
+            <div class="form-group">
+                <select name="vehicle" class="form-select">
+                    <option value="">All Vehicles</option>
+                    {% for v in vehicles %}
+                    <option value="{{ v.pk }}" {% if request.GET.vehicle == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }} ({{ v.license_plate }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="efficiency_rating" class="form-select">
+                    <option value="">All Efficiency Ratings</option>
+                    {% for code, label in efficiency_choices %}
+                    <option value="{{ code }}" {% if request.GET.efficiency_rating == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'assets:vehicle_fuel_log_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Wrap -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Log # / Date</th>
+                    <th>Vehicle</th>
+                    <th>Odometer</th>
+                    <th>Volume</th>
+                    <th>Total Spend</th>
+                    <th>Calculated MPG</th>
+                    <th>Station &amp; Driver</th>
+                    <th>Efficiency</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in fuel_logs %}
+                <tr>
+                    <td>
+                        <div class="font-medium">
+                            <a href="{% url 'assets:vehicle_fuel_log_detail' f.pk %}" class="text-blue-600 hover:underline">
+                                {{ f.number }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500">{{ f.fuel_date|date:"Y-m-d H:i" }}</div>
+                    </td>
+                    <td>
+                        {% if f.vehicle %}
+                        <a href="{% url 'assets:fleet_vehicle_detail' f.vehicle.pk %}" class="font-medium text-slate-900 dark:text-slate-100 hover:underline">
+                            {{ f.vehicle.name }}
+                        </a>
+                        <div class="text-xs text-slate-500 font-mono">{{ f.vehicle.license_plate }}</div>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono text-sm">{{ f.odometer_at_fueling }} mi</span>
+                        {% if f.distance_since_last_fuel %}
+                        <div class="text-xs text-slate-400">+{{ f.distance_since_last_fuel }} mi</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono font-medium">{{ f.quantity_gallons }} gal</span>
+                        <div class="text-xs text-slate-400">{{ f.get_fuel_type_display }}</div>
+                    </td>
+                    <td>
+                        <div class="font-mono font-semibold">${{ f.total_cost }}</div>
+                        {% if f.unit_price > 0 %}
+                        <div class="text-xs text-slate-400">${{ f.unit_price }}/gal</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if f.calculated_mpg %}
+                        <span class="font-mono font-semibold text-sm">{{ f.calculated_mpg }} MPG</span>
+                        {% if f.cost_per_mile %}
+                        <div class="text-xs text-slate-400">${{ f.cost_per_mile }}/mi</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-xs text-slate-400">— N/A —</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ f.fuel_station_name|default:"Station N/A" }}</div>
+                        <div class="text-xs text-slate-500">{{ f.driver|default:"No driver" }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ f.efficiency_badge_class }}">
+                            {{ f.get_efficiency_rating_display }}
+                        </span>
+                    </td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:vehicle_fuel_log_detail' f.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:vehicle_fuel_log_edit' f.pk %}" class="btn btn-icon" title="Edit Log">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:vehicle_fuel_log_delete' f.pk %}" class="inline" onsubmit="return confirm('Delete fuel log \'{{ f.number }}\'?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Log">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="fuel" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold">No Fuel Logs Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Record your fleet vehicle fuel purchases and track consumption metrics.</p>
+                            <a href="{% url 'assets:vehicle_fuel_log_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Log Fuel Fill-Up
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-body border-t border-slate-200 dark:border-slate-700 py-3">
+        <div class="pagination">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} logs
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&fuel_type={{ request.GET.fuel_type|urlencode }}&efficiency_rating={{ request.GET.efficiency_rating|urlencode }}" class="btn btn-outline btn-sm">Prev</a>
+                {% else %}
+                <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
+                {% endif %}
+
+                <span class="px-3 py-1 text-sm text-slate-600 dark:text-slate-400">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&vehicle={{ request.GET.vehicle|urlencode }}&fuel_type={{ request.GET.fuel_type|urlencode }}&efficiency_rating={{ request.GET.efficiency_rating|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+                {% else %}
+                <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
