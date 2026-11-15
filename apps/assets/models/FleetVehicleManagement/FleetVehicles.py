@@ -213,6 +213,7 @@ class FleetVehicle(TenantNumbered):
             models.Index(fields=["tenant", "vehicle_type"], name="idx_flt_ten_vtype"),
             models.Index(fields=["tenant", "license_plate"], name="idx_flt_ten_plate"),
             models.Index(fields=["tenant", "registration_expiration_date"], name="idx_flt_ten_regexp"),
+            models.Index(fields=["tenant", "-last_telemetry_at"], name="idx_flt_ten_last_tel"),
         ]
 
     def __str__(self):
