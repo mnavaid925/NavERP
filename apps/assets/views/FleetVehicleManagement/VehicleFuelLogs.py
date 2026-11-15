@@ -69,7 +69,9 @@ def vehicle_fuel_log_list(request):
         "fuel_type_choices": VehicleFuelLog.FUEL_TYPE_CHOICES,
         "efficiency_choices": VehicleFuelLog.EFFICIENCY_RATING_CHOICES,
         "total_cost_sum": aggregates["total_cost_sum"] or 0,
+        "total_spend": aggregates["total_cost_sum"] or 0,
         "total_gallons_sum": aggregates["total_gallons_sum"] or 0,
+        "total_gallons": aggregates["total_gallons_sum"] or 0,
         "avg_mpg": round(aggregates["avg_mpg"], 1) if aggregates["avg_mpg"] else 0,
     }
     return render(request, "assets/fleetvehiclemanagement/vehicle_fuel_log/list.html", context)
