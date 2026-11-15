@@ -219,7 +219,7 @@
                         <select name="{{ form.org_unit.html_name }}" id="{{ form.org_unit.id_for_label }}" class="form-select">
                             <option value="">— Select Department —</option>
                             {% for u in form.fields.org_unit.queryset %}
-                            <option value="{{ u.pk }}" {% if form.org_unit.value == u.pk|stringformat:"d" %}selected{% endif %}>{{ u }}</option>
+                            <option value="{{ u.pk }}" {% if form.org_unit.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -228,7 +228,7 @@
                         <select name="{{ form.primary_driver.html_name }}" id="{{ form.primary_driver.id_for_label }}" class="form-select">
                             <option value="">— Select Driver —</option>
                             {% for d in form.fields.primary_driver.queryset %}
-                            <option value="{{ d.pk }}" {% if form.primary_driver.value == d.pk|stringformat:"d" %}selected{% endif %}>{{ d }}</option>
+                            <option value="{{ d.pk }}" {% if form.primary_driver.value|stringformat:"s" == d.pk|stringformat:"s" %}selected{% endif %}>{{ d }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -237,7 +237,7 @@
                         <select name="{{ form.custodian_party.html_name }}" id="{{ form.custodian_party.id_for_label }}" class="form-select">
                             <option value="">— Select Custodian —</option>
                             {% for p in form.fields.custodian_party.queryset %}
-                            <option value="{{ p.pk }}" {% if form.custodian_party.value == p.pk|stringformat:"d" %}selected{% endif %}>{{ p }}</option>
+                            <option value="{{ p.pk }}" {% if form.custodian_party.value|stringformat:"s" == p.pk|stringformat:"s" %}selected{% endif %}>{{ p }}</option>
                             {% endfor %}
                         </select>
                     </div>
