@@ -1220,7 +1220,7 @@ class VehicleFuelLogAdmin(admin.ModelAdmin):
     )
     list_select_related = ("tenant", "vehicle", "driver", "fuel_vendor", "currency")
     list_filter = ("tenant", "fuel_type", "route_category", "efficiency_rating", "is_full_tank")
-    search_fields = ("number", "vehicle__license_plate", "vehicle__name", "driver__first_name", "driver__last_name", "receipt_reference", "fuel_station_name")
+    search_fields = ("number", "vehicle__license_plate", "vehicle__name", "driver__party__name", "receipt_reference", "fuel_station_name")
     readonly_fields = (
         "number",
         "created_at",
@@ -1246,7 +1246,7 @@ class VehicleDriverAssignmentAdmin(admin.ModelAdmin):
     )
     list_select_related = ("tenant", "vehicle", "driver", "user")
     list_filter = ("tenant", "status", "assignment_role", "license_class", "qualification_status", "duty_status", "safety_tier")
-    search_fields = ("number", "vehicle__license_plate", "vehicle__name", "driver__first_name", "driver__last_name", "driver_license_number")
+    search_fields = ("number", "vehicle__license_plate", "vehicle__name", "driver__party__name", "driver_license_number")
     readonly_fields = (
         "number",
         "created_at",
