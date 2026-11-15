@@ -36,6 +36,12 @@
         <p class="text-slate-600 mt-1 text-lg font-medium">{{ document.title }}</p>
     </div>
     <div class="page-actions">
+        {% if can_sign %}
+        <a href="{% url 'quality:controlled_document_sign' document.pk %}" class="btn btn-primary">
+            <i data-lucide="award"></i> Sign Document
+        </a>
+        {% endif %}
+
         {% if can_edit %}
         <a href="{% url 'quality:controlled_document_edit' document.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i> Edit
