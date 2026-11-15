@@ -1,6 +1,7 @@
 """Form for Vehicle Service Scheduling and Preventive Maintenance (11.19)."""
 
 from django import forms
+from django.db.models import Q
 
 from apps.accounting.models.GeneralLedger.Currencies import Currency
 from apps.assets.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -52,7 +53,13 @@ class VehicleServiceScheduleForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
         if self.tenant is not None:
-            self.fields["vehicle"].queryset = FleetVehicle.objects.filter(tenant=self.tenant)
+            vehicle_qs = FleetVehicle.objects.filter(tenant=self.tenant)
+            if self.instance and self.instance.pk and getattr(self.instance, "vehicle_id", None):
+                self.fields["vehicle"].queryset = vehicle_qs.filter(
+                    Q(pk=self.instance.vehicle_id) | ~Q(status="decommissioned")
+                )
+            else:
+                self.fields["vehicle"].queryset = vehicle_qs.exclude(status="decommissioned")
             self.fields["service_vendor"].queryset = Party.objects.filter(tenant=self.tenant)
             self.fields["warranty"].queryset = AssetWarranty.objects.filter(tenant=self.tenant)
             self.fields["maintenance_schedule"].queryset = AssetMaintenanceSchedule.objects.filter(tenant=self.tenant)
