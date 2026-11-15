@@ -45,6 +45,17 @@
             </button>
         </form>
         {% endif %}
+
+        {% if change_order.status == 'draft' or change_order.status == 'submitted' or change_order.status == 'rejected' or change_order.status == 'cancelled' %}
+        {% if is_admin or change_order.requested_by == request.user %}
+        <form method="post" action="{% url 'quality:document_change_order_delete' change_order.pk %}" class="inline" onsubmit="return confirm('Permanently delete change order {{ change_order.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 border-red-300 hover:bg-red-50">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
     </div>
 </div>
 
