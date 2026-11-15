@@ -141,8 +141,8 @@ def fleet_vehicle_detail(request, pk):
     vehicle = assets_object(request, FleetVehicle, pk, select_related=_VEHICLE_SELECT_RELATED)
     vehicle.refresh_compliance_status()
 
-    fuel_logs = vehicle.fuel_logs.select_related("currency", "driver").order_by("-fuel_date")[:10]
-    assignments = vehicle.driver_assignments.select_related("driver", "user").order_by("-start_datetime")[:10]
+    fuel_logs = vehicle.fuel_logs.select_related("currency", "driver__party").order_by("-fuel_date")[:10]
+    assignments = vehicle.driver_assignments.select_related("driver__party", "user").order_by("-start_datetime")[:10]
     service_schedules = vehicle.service_schedules.select_related("service_vendor", "currency").order_by("-created_at")[:10]
     vehicle_ct = ContentType.objects.get_for_model(FleetVehicle)
     recent_audits = AuditLog.objects.filter(
