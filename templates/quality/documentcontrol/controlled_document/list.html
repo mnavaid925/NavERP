@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Controlled Documents | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <span>Controlled Documents</span>
+        </div>
+        <h1 class="page-title">Controlled Documents</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:document_archive_vault' %}" class="btn btn-outline">
+            <i data-lucide="archive"></i> Archive Vault
+        </a>
+        <a href="{% url 'quality:controlled_document_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:controlled_document_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Document
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Documents</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.total }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Effective</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.effective }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">In Review</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.in_review }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="edit-3"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Drafts</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.draft }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Overdue Reviews</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.overdue_reviews }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" placeholder="Number, title, revision..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Lifecycle State</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All States</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="type-filter">Document Type</label>
+                <select id="type-filter" name="type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for code, label in type_choices %}
+                    <option value="{{ code }}" {% if request.GET.type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="dept-filter">Department</label>
+                <select id="dept-filter" name="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in department_choices %}
+                    <option value="{{ dept.pk }}" {% if request.GET.department == dept.pk|stringformat:"d" %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end space-x-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:controlled_document_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Documents Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Doc Number</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Revision</th>
+                    <th>State</th>
+                    <th>Department</th>
+                    <th>Owner</th>
+                    <th>Effective Date</th>
+                    <th>Next Review</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr>
+                    <td class="font-mono font-medium text-slate-900">
+                        <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="hover:underline text-blue-600">
+                            {{ doc.number }}
+                        </a>
+                        {% if not doc.is_latest_revision %}
+                        <span class="badge badge-amber text-xs ml-1">Superseded</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-medium text-slate-800">
+                        {{ doc.title }}
+                        {% if doc.is_template %}
+                        <span class="badge badge-slate text-xs ml-1">Template</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ doc.get_document_type_display }}</span>
+                    </td>
+                    <td class="font-mono text-sm">Rev {{ doc.revision }}</td>
+                    <td>
+                        {% if doc.lifecycle_state == 'draft' %}
+                        <span class="badge badge-slate">Draft</span>
+                        {% elif doc.lifecycle_state == 'in_review' %}
+                        <span class="badge badge-amber">In Review</span>
+                        {% elif doc.lifecycle_state == 'pending_approval' %}
+                        <span class="badge badge-info">Pending Approval</span>
+                        {% elif doc.lifecycle_state == 'approved' %}
+                        <span class="badge badge-info">Approved</span>
+                        {% elif doc.lifecycle_state == 'effective' %}
+                        <span class="badge badge-green">Effective</span>
+                        {% elif doc.lifecycle_state == 'superseded' %}
+                        <span class="badge badge-amber">Superseded</span>
+                        {% elif doc.lifecycle_state == 'obsolete' %}
+                        <span class="badge badge-red">Obsolete</span>
+                        {% elif doc.lifecycle_state == 'archived' %}
+                        <span class="badge badge-muted">Archived</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ doc.get_lifecycle_state_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ doc.department.name|default:"—" }}</td>
+                    <td>{{ doc.owner.get_full_name|default:doc.owner.username }}</td>
+                    <td>{{ doc.effective_date|default:"—" }}</td>
+                    <td>
+                        {% if doc.next_review_date %}
+                            {% if doc.is_overdue_review %}
+                            <span class="text-red-600 font-medium flex items-center">
+                                <i data-lucide="alert-circle" class="w-3.5 h-3.5 mr-1 inline"></i>{{ doc.next_review_date }}
+                            </span>
+                            {% else %}
+                            {{ doc.next_review_date }}
+                            {% endif %}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if not doc.is_locked %}
+                        <a href="{% url 'quality:controlled_document_edit' doc.pk %}" class="btn btn-icon" title="Edit Document">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        {% if not doc.is_effective and not doc.is_locked %}
+                        <form method="post" action="{% url 'quality:controlled_document_delete' doc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete draft document {{ doc.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Document">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="file-question" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <div class="text-base font-medium text-slate-700">No controlled documents found</div>
+                            <p class="text-sm text-slate-500 mb-4">Get started by creating your first Standard Operating Procedure or Policy.</p>
+                            <a href="{% url 'quality:controlled_document_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i> New Document
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} documents
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="btn btn-sm btn-outline text-slate-700">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
