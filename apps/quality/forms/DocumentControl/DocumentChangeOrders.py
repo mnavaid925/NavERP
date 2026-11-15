@@ -22,7 +22,6 @@ class DocumentChangeOrderForm(TenantUniqueMixin, TenantModelForm):
             "regulatory_impact",
             "training_required",
             "impact_assessment",
-            "requested_by",
             "target_effective_date",
         ]
         widgets = {
@@ -36,7 +35,6 @@ class DocumentChangeOrderForm(TenantUniqueMixin, TenantModelForm):
             "regulatory_impact": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "training_required": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "impact_assessment": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Scope of equipment, processes, or validation affected..."}),
-            "requested_by": forms.Select(attrs={"class": "form-select"}),
             "target_effective_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
         }
 
@@ -46,12 +44,10 @@ class DocumentChangeOrderForm(TenantUniqueMixin, TenantModelForm):
             self.fields["document"].queryset = ControlledDocument.objects.filter(
                 tenant=self.tenant, is_latest_revision=True
             )
-            self.fields["requested_by"].queryset = User.objects.filter(tenant=self.tenant)
         else:
             self.fields["document"].queryset = ControlledDocument.objects.none()
-            self.fields["requested_by"].queryset = User.objects.none()
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["document", "requested_by"])
+        reject_foreign(self, cleaned_data, ["document"])
         return cleaned_data
