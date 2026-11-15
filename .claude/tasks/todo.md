@@ -47,9 +47,9 @@
 ## Models (from research — 4)
 
 ### 1. `ControlledDocument` (`QDOC-`)
-- [ ] **File**: `apps/quality/models/DocumentControl/ControlledDocuments.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QDOC"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/DocumentControl/ControlledDocuments.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QDOC"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255)`
   - `document_type`: `CharField(max_length=24, choices=DOCUMENT_TYPE_CHOICES, default="sop")` — `"sop"`, `"wi"`, `"policy"`, `"manual"`, `"spec"`, `"form"`, `"protocol"`, `"record"` (longest: 8)
   - `department`: `ForeignKey("core.OrgUnit", on_delete=SET_NULL, null=True, blank=True, related_name="controlled_documents")`
@@ -69,26 +69,26 @@
   - `superseded_by`: `ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="supersedes_set")`
   - `is_template`: `BooleanField(default=False)`
   - `archived_at`: `DateTimeField(null=True, blank=True, editable=False)`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qdoc_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "lifecycle_state"], name="idx_qdoc_ten_state")` (18)
   - `Index(fields=["tenant", "document_type"], name="idx_qdoc_ten_dtype")` (18)
   - `Index(fields=["tenant", "is_latest_revision"], name="idx_qdoc_ten_latest")` (19)
   - `Index(fields=["tenant", "effective_date"], name="idx_qdoc_ten_effdate")` (20)
   - `Index(fields=["tenant", "next_review_date"], name="idx_qdoc_ten_revdate")` (20)
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `watermark`: dynamic string badge ("DRAFT", "IN REVIEW", "PENDING APPROVAL", "EFFECTIVE - CONTROLLED COPY", "SUPERSEDED", "OBSOLETE", "ARCHIVED")
   - `is_effective`: `lifecycle_state == "effective" and (effective_date is None or effective_date <= timezone.now().date())`
   - `is_overdue_review`: `next_review_date is not None and next_review_date < timezone.now().date()`
-- [ ] **Form (`ControlledDocumentForm`)**:
+- [x] **Form (`ControlledDocumentForm`)**:
   - Excluded: `tenant`, `number`, `is_latest_revision`, `superseded_by`, `archived_at`, `created_at`, `updated_at`
   - `clean()`: validate `department`, `owner`, `supersedes` via `reject_foreign(...)`
-- [ ] **Workflow actions**: `submit_for_review`, `approve_document`, `make_effective` (auto-supersedes `supersedes` link), `mark_obsolete`, `archive_document`.
+- [x] **Workflow actions**: `submit_for_review`, `approve_document`, `make_effective` (auto-supersedes `supersedes` link), `mark_obsolete`, `archive_document`.
 
 ### 2. `DocumentChangeOrder` (`QDCR-`)
-- [ ] **File**: `apps/quality/models/DocumentControl/DocumentChangeOrders.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QDCR"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/DocumentControl/DocumentChangeOrders.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QDCR"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255)`
   - `target_document`: `ForeignKey("quality.ControlledDocument", on_delete=CASCADE, related_name="change_orders")`
   - `change_type`: `CharField(max_length=28, choices=CHANGE_TYPE_CHOICES, default="major_revision")` — `"new_document"`, `"major_revision"`, `"minor_revision"`, `"obsoletion"`, `"emergency_change"` (longest: 16)
@@ -105,21 +105,21 @@
   - `ccb_approver`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True, blank=True, related_name="ccb_approved_orders")`
   - `closure_notes`: `TextField(blank=True)`
   - `closed_at`: `DateTimeField(null=True, blank=True, editable=False)`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qdcr_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qdcr_ten_status")` (19)
   - `Index(fields=["tenant", "change_type"], name="idx_qdcr_ten_ctype")` (19)
   - `Index(fields=["tenant", "target_document"], name="idx_qdcr_ten_doc")` (17)
   - `Index(fields=["tenant", "requested_by"], name="idx_qdcr_ten_reqby")` (19)
-- [ ] **Form (`DocumentChangeOrderForm`)**:
+- [x] **Form (`DocumentChangeOrderForm`)**:
   - Excluded: `tenant`, `number`, `status`, `ccb_decision`, `ccb_decision_date`, `ccb_approver`, `closure_notes`, `closed_at`, `created_at`, `updated_at`
   - `clean()`: validate `target_document`, `requested_by` via `reject_foreign(...)`
-- [ ] **Workflow actions**: `submit_change_order`, `route_to_ccb`, `ccb_decision` (`approve`/`reject`), `implement_change`, `close_change_order`.
+- [x] **Workflow actions**: `submit_change_order`, `route_to_ccb`, `ccb_decision` (`approve`/`reject`), `implement_change`, `close_change_order`.
 
 ### 3. `ElectronicSignatureRecord` (`QSIG-`)
-- [ ] **File**: `apps/quality/models/DocumentControl/ElectronicSignatures.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QSIG"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/DocumentControl/ElectronicSignatures.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QSIG"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `document`: `ForeignKey("quality.ControlledDocument", on_delete=CASCADE, null=True, blank=True, related_name="signatures")`
   - `change_order`: `ForeignKey("quality.DocumentChangeOrder", on_delete=CASCADE, null=True, blank=True, related_name="signatures")`
   - `signer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=PROTECT, related_name="quality_signatures")`
@@ -131,22 +131,22 @@
   - `user_agent`: `CharField(max_length=255, blank=True)`
   - `signature_hash`: `CharField(max_length=64, editable=False, help_text="SHA-256 digest binding signer, timestamp, meaning, and record")`
   - `comments`: `TextField(blank=True)`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qsig_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "document"], name="idx_qsig_ten_doc")` (17)
   - `Index(fields=["tenant", "change_order"], name="idx_qsig_ten_dcr")` (17)
   - `Index(fields=["tenant", "signer"], name="idx_qsig_ten_signer")` (20)
   - `Index(fields=["tenant", "meaning_of_signature"], name="idx_qsig_ten_meaning")` (21)
-- [ ] **Form & Modal (`ElectronicSignatureForm`)**:
+- [x] **Form & Modal (`ElectronicSignatureForm`)**:
   - Excluded: `tenant`, `number`, `signature_timestamp`, `ip_address`, `user_agent`, `signature_hash`, `created_at`, `updated_at`
   - `clean()`: validate either `document` or `change_order` is set; dual-credential re-authentication check against user password; `reject_foreign(...)` on tenant FKs.
   - `save()`: computes and stores immutable SHA-256 hash.
-- [ ] **Workflow actions**: `verify_signature_hash`, `export_manifest`.
+- [x] **Workflow actions**: `verify_signature_hash`, `export_manifest`.
 
 ### 4. `DocumentAcknowledgment` (`QACK-`)
-- [ ] **File**: `apps/quality/models/DocumentControl/DocumentAcknowledgments.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QACK"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/DocumentControl/DocumentAcknowledgments.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QACK"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `document`: `ForeignKey("quality.ControlledDocument", on_delete=CASCADE, related_name="acknowledgments")`
   - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=PROTECT, related_name="quality_acknowledgments")`
   - `employee_profile`: `ForeignKey("hrm.EmployeeProfile", on_delete=SET_NULL, null=True, blank=True, related_name="document_acknowledgments")`
@@ -156,57 +156,57 @@
   - `acknowledged_at`: `DateTimeField(null=True, blank=True, editable=False)`
   - `comprehension_confirmed`: `BooleanField(default=False, help_text="Affirmation of comprehension and agreement to follow")`
   - `comments`: `TextField(blank=True)`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qack_ten_num_uniq")` (25)
   - `UniqueConstraint(fields=["tenant", "document", "user"], name="quality_qack_ten_doc_usr_uniq")` (30)
   - `Index(fields=["tenant", "status"], name="idx_qack_ten_status")` (19)
   - `Index(fields=["tenant", "user", "status"], name="idx_qack_ten_usr_stat")` (21)
   - `Index(fields=["tenant", "document", "status"], name="idx_qack_ten_doc_stat")` (21)
   - `Index(fields=["tenant", "due_date"], name="idx_qack_ten_duedate")` (20)
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `is_overdue`: `status == "pending" and due_date < timezone.now().date()`
-- [ ] **Form (`DocumentAcknowledgmentForm`)**:
+- [x] **Form (`DocumentAcknowledgmentForm`)**:
   - Excluded: `tenant`, `number`, `status`, `acknowledged_at`, `created_at`, `updated_at`
   - `clean()`: validate `document`, `user`, `employee_profile` via `reject_foreign(...)`
-- [ ] **Workflow actions**: `sign_acknowledgment` (records e-signature and updates status), `waive_acknowledgment` (`@tenant_admin_required`), `bulk_assign_acknowledgments`.
+- [x] **Workflow actions**: `sign_acknowledgment` (records e-signature and updates status), `waive_acknowledgment` (`@tenant_admin_required`), `bulk_assign_acknowledgments`.
 
 ---
 
 ## Brand-New App Scaffolding (`apps/quality/`)
-- [ ] `apps/quality/apps.py` (`QualityConfig`, `name = "apps.quality"`, `verbose_name = "Quality Management System"`)
-- [ ] `apps/quality/__init__.py`
-- [ ] `apps/quality/migrations/__init__.py`
-- [ ] `apps/quality/models/__init__.py` & `_base.py` (`TenantOwned`, `TenantNumbered`)
-- [ ] `apps/quality/forms/__init__.py` & `_common.py` (`reject_foreign`, `TenantUniqueMixin`)
-- [ ] `apps/quality/views/__init__.py` & `_common.py` (`quality_scope`, `quality_object`, `safe_parse_date`)
-- [ ] `apps/quality/urls/__init__.py` (`app_name = "quality"`)
-- [ ] `apps/quality/admin.py` (registration for all 4 models)
-- [ ] `apps/quality/management/__init__.py`
-- [ ] `apps/quality/management/commands/__init__.py`
-- [ ] `apps/quality/management/commands/seed_quality.py`
+- [x] `apps/quality/apps.py` (`QualityConfig`, `name = "apps.quality"`, `verbose_name = "Quality Management System"`)
+- [x] `apps/quality/__init__.py`
+- [x] `apps/quality/migrations/__init__.py`
+- [x] `apps/quality/models/__init__.py` & `_base.py` (`TenantOwned`, `TenantNumbered`)
+- [x] `apps/quality/forms/__init__.py` & `_common.py` (`reject_foreign`, `TenantUniqueMixin`)
+- [x] `apps/quality/views/__init__.py` & `_common.py` (`quality_scope`, `quality_object`, `safe_parse_date`)
+- [x] `apps/quality/urls/__init__.py` (`app_name = "quality"`)
+- [x] `apps/quality/admin.py` (registration for all 4 models)
+- [x] `apps/quality/management/__init__.py`
+- [x] `apps/quality/management/commands/__init__.py`
+- [x] `apps/quality/management/commands/seed_quality.py`
 
 ---
 
 ## Backend (apps/quality/{models,forms,views,urls}/DocumentControl/)
-- [ ] `models/DocumentControl/__init__.py` & `ControlledDocuments.py`, `DocumentChangeOrders.py`, `ElectronicSignatures.py`, `DocumentAcknowledgments.py`
-- [ ] `forms/DocumentControl/__init__.py` & `ControlledDocuments.py`, `DocumentChangeOrders.py`, `ElectronicSignatures.py`, `DocumentAcknowledgments.py`
-- [ ] `views/DocumentControl/__init__.py` & `ControlledDocuments.py`, `DocumentChangeOrders.py`, `ElectronicSignatures.py`, `DocumentAcknowledgments.py`, `DocumentArchiveVault.py`
-- [ ] `urls/DocumentControl/__init__.py` & `ControlledDocuments.py`, `DocumentChangeOrders.py`, `ElectronicSignatures.py`, `DocumentAcknowledgments.py`, `DocumentArchiveVault.py`
-- [ ] Re-export blocks in:
+- [x] `models/DocumentControl/__init__.py` & `ControlledDocuments.py`, `DocumentChangeOrders.py`, `ElectronicSignatures.py`, `DocumentAcknowledgments.py`
+- [x] `forms/DocumentControl/__init__.py` & `ControlledDocuments.py`, `DocumentChangeOrders.py`, `ElectronicSignatures.py`, `DocumentAcknowledgments.py`
+- [x] `views/DocumentControl/__init__.py` & `ControlledDocuments.py`, `DocumentChangeOrders.py`, `ElectronicSignatures.py`, `DocumentAcknowledgments.py`, `DocumentArchiveVault.py`
+- [x] `urls/DocumentControl/__init__.py` & `ControlledDocuments.py`, `DocumentChangeOrders.py`, `ElectronicSignatures.py`, `DocumentAcknowledgments.py`, `DocumentArchiveVault.py`
+- [x] Re-export blocks in:
   - `apps/quality/models/__init__.py`
   - `apps/quality/forms/__init__.py`
   - `apps/quality/views/__init__.py`
   - `apps/quality/urls/__init__.py`
-- [ ] `admin.py` registration for all 4 models
-- [ ] Initial migration: `makemigrations quality` (creates `0001_initial.py`)
-- [ ] Author `seed_quality.py` with idempotent seed data (SOPs, DCOs, e-signatures, acknowledgments for ACME tenant)
+- [x] `admin.py` registration for all 4 models
+- [x] Initial migration: `makemigrations quality` (creates `0001_initial.py`)
+- [x] Author `seed_quality.py` with idempotent seed data (SOPs, DCOs, e-signatures, acknowledgments for ACME tenant)
 
 ---
 
 ## Wire-up
-- [ ] `config/settings.py`: add `'apps.quality'` to `INSTALLED_APPS` (right after `'apps.assets'`)
-- [ ] `config/urls.py`: add `path('quality/', include('apps.quality.urls'))`
-- [ ] `apps/core/navigation.py`: add `LIVE_LINKS["12.1"]` mapping all 5 `NavERP.md` bullets:
+- [x] `config/settings.py`: add `'apps.quality'` to `INSTALLED_APPS` (right after `'apps.assets'`)
+- [x] `config/urls.py`: add `path('quality/', include('apps.quality.urls'))`
+- [x] `apps/core/navigation.py`: add `LIVE_LINKS["12.1"]` mapping all 5 `NavERP.md` bullets:
   - `"Document Creation & Authoring": "quality:controlled_document_list"`
   - `"Review & Approval Workflows": "quality:electronic_signature_list"`
   - `"Document Distribution & Obsolescence": "quality:document_acknowledgment_list"`
@@ -216,25 +216,25 @@
 ---
 
 ## Frontend (templates/quality/documentcontrol/)
-- [ ] `templates/quality/documentcontrol/controlled_document/{list,detail,form}.html`
-- [ ] `templates/quality/documentcontrol/document_change_order/{list,detail,form}.html`
-- [ ] `templates/quality/documentcontrol/electronic_signature/{list,detail,form}.html`
-- [ ] `templates/quality/documentcontrol/document_acknowledgment/{list,detail,form}.html`
-- [ ] `templates/quality/documentcontrol/document_archive_vault.html`
-- [ ] `templates/quality/documentcontrol/e_signature_modal.html`
+- [x] `templates/quality/documentcontrol/controlled_document/{list,detail,form}.html`
+- [x] `templates/quality/documentcontrol/document_change_order/{list,detail,form}.html`
+- [x] `templates/quality/documentcontrol/electronic_signature/{list,detail,form}.html`
+- [x] `templates/quality/documentcontrol/document_acknowledgment/{list,detail,form}.html`
+- [x] `templates/quality/documentcontrol/document_archive_vault.html`
+- [x] Dedicated e-signature signing workflow page `templates/quality/documentcontrol/electronic_signature/form.html`
 
 ---
 
 ## Verification & Close-out
-- [ ] Run `python manage.py makemigrations quality`
-- [ ] Run `python manage.py migrate`
-- [ ] Run `python manage.py seed_quality` twice (idempotence verification)
-- [ ] Run `python manage.py check`
-- [ ] Smoke tests via test client: HTTP 200/302, content assertions, IDOR 404
-- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-quality-12.1.md`
-- [ ] Phase 5: `code-fixer` agent burns down all findings
-- [ ] Phase 6: Tests (`test_documentcontrol_models.py`, `test_documentcontrol_forms.py`, `test_documentcontrol_views.py`, `test_documentcontrol_security.py`)
-- [ ] Phase 7: Author `.claude/skills/quality/SKILL.md` and update `README.md`, declare gaps register `.agents/tasks/gaps-quality-12.1.md`
+- [x] Run `python manage.py makemigrations quality`
+- [x] Run `python manage.py migrate`
+- [x] Run `python manage.py seed_quality` twice (idempotence verification)
+- [x] Run `python manage.py check`
+- [x] Smoke tests via test client: HTTP 200/302, content assertions, IDOR 404
+- [x] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-quality-12.1.md`
+- [x] Phase 5: `code-fixer` agent burns down all findings
+- [x] Phase 6: Tests (`test_documentcontrol_models.py`, `test_documentcontrol_forms.py`, `test_documentcontrol_views.py`, `test_documentcontrol_security.py`)
+- [x] Phase 7: Author `.claude/skills/quality/SKILL.md` and update `README.md`, declare gaps register `.agents/tasks/gaps-quality-12.1.md`
 
 ---
 
@@ -250,8 +250,24 @@
 
 ---
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.1 Close-out (2026-11-15)
+- **Delivery Unit**: Brand-new app `apps/quality/` (Module 12: Quality Management System) — Sub-module 12.1: Document Control & Management.
+- **Models**: 4 tenant-scoped models subclasses of `TenantNumbered`:
+  - `ControlledDocument` [`QDOC-`]
+  - `DocumentChangeOrder` [`QDCR-`]
+  - `ElectronicSignatureRecord` [`QSIG-`]
+  - `DocumentAcknowledgment` [`QACK-`]
+- **Forms**: 6 ModelForms + 1 21 CFR Part 11 Electronic Signature Form (`ElectronicSignatureForm`) with dual-credential password verification.
+- **Views & Routes**: 31 FBV views across 4 entities + Document Archive Vault workbench (`document_archive_vault`).
+- **Templates**: 13 responsive Tailwind templates under `templates/quality/documentcontrol/`.
+- **Wire-up**: `LIVE_LINKS["12.1"]` (all 5 `NavERP.md` bullets live), `INSTALLED_APPS` (`'apps.quality'`), root `config/urls.py` (`path('quality/', ...)`).
+- **Migrations**: `0001_initial.py` + `0002_documentchangeorder_idx_qdcr_ten_type_and_more.py`.
+- **Seeder**: `manage.py seed_quality` creates realistic GxP demo records; tested twice and verified 100% idempotent.
+- **Phase 4 Review**: 6 sequential reviewer passes completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+- **Phase 5 Fixes**: `code-fixer` burned down all 33 findings (3 Critical, 16 Important, 14 Minor); all marked `[x] fixed` in `.claude/tasks/review-quality-12.1.md`. 0 open, 0 skipped.
+- **Phase 6 Tests**: 125 tests across 4 test modules (`test_documentcontrol_models.py`, `test_documentcontrol_forms.py`, `test_documentcontrol_views.py`, `test_documentcontrol_security.py`) — 100% passing green in 47.24s.
+- **Phase 7 Docs & Gaps**: Authored `.claude/skills/quality/SKILL.md`, updated `README.md`, and registered 4 future architecture roadmap items in `.agents/tasks/gaps-quality-12.1.md`.
+- **Gaps**: None in current 12.1 scope (0 open defects, 0 incomplete features). 4 deferred enterprise roadmap items cataloged in `.agents/tasks/gaps-quality-12.1.md`.
 
 ---
 # Sub-module 11.19: Fleet & Vehicle Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.19.md` (2026-11-15)
