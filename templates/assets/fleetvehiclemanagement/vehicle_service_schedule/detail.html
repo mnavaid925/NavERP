@@ -144,6 +144,7 @@
     </div>
 
     <!-- Quick Complete & Roll Forward Modal/Card -->
+    {% if user.is_superuser or user.is_tenant_admin %}
     <div class="card">
         <div class="card-header">
             <h3 class="text-base font-semibold">Log Service Completion</h3>
@@ -176,5 +177,6 @@
             </p>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
