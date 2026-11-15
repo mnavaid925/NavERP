@@ -1,7 +1,6 @@
 """Shared filter and CSV export helpers for Fleet & Vehicle Management (11.19)."""
 
 import csv
-from itertools import islice
 
 from django.http import HttpResponse
 
