@@ -95,6 +95,9 @@ def electronic_signature_detail(request, pk):
 @login_required
 def controlled_document_sign(request, pk):
     doc = quality_object(request, ControlledDocument, pk)
+    if doc.is_locked:
+        messages.error(request, f"Document {doc.number} Rev {doc.revision} is '{doc.get_lifecycle_state_display()}' and locked against signature execution.")
+        return redirect("quality:controlled_document_detail", pk=doc.pk)
 
     if request.method == "POST":
         form = ElectronicSignatureForm(request.POST, user=request.user)
