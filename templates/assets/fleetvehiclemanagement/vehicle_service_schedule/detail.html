@@ -153,20 +153,20 @@
             <form method="post" action="{% url 'assets:vehicle_service_schedule_complete' schedule.pk %}">
                 {% csrf_token %}
                 <div class="form-group mb-3">
-                    <label class="form-label">Completion Date</label>
-                    <input type="date" name="completion_date" value="{% now 'Y-m-d' %}" class="form-input" required>
+                    <label class="form-label" for="id_completion_date">Completion Date</label>
+                    <input type="date" name="completion_date" id="id_completion_date" value="{% now 'Y-m-d' %}" class="form-input" required>
                 </div>
                 <div class="form-group mb-3">
-                    <label class="form-label">Odometer at Completion (mi)</label>
-                    <input type="number" name="odometer" value="{{ schedule.vehicle.current_odometer }}" class="form-input font-mono" required>
+                    <label class="form-label" for="id_completion_odometer">Odometer at Completion (mi)</label>
+                    <input type="number" name="odometer" id="id_completion_odometer" value="{{ schedule.vehicle.current_odometer }}" class="form-input font-mono" required>
                 </div>
                 <div class="form-group mb-3">
-                    <label class="form-label">Actual Total Cost ($)</label>
-                    <input type="number" step="0.01" name="actual_cost" value="{{ schedule.estimated_cost }}" class="form-input font-mono">
+                    <label class="form-label" for="id_completion_actual_cost">Actual Total Cost ($)</label>
+                    <input type="number" step="0.01" name="actual_cost" id="id_completion_actual_cost" value="{{ schedule.estimated_cost }}" class="form-input font-mono">
                 </div>
                 <div class="form-group mb-4">
-                    <label class="form-label">Technician Notes</label>
-                    <textarea name="technician_notes" rows="2" class="form-textarea" placeholder="Oil grade, filter part #, mechanic sign-off..."></textarea>
+                    <label class="form-label" for="id_completion_technician_notes">Technician Notes</label>
+                    <textarea name="technician_notes" id="id_completion_technician_notes" rows="2" class="form-textarea" placeholder="Oil grade, filter part #, mechanic sign-off..."></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary w-full">
                     <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Record &amp; Roll Forward
