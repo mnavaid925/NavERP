@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}{{ schedule.service_title }} — Service Schedule — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:vehicle_service_schedule_list' %}">Maintenance Schedules</a>
+            <span>/</span>
+            <span>{{ schedule.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ schedule.service_title }}</h1>
+            <span class="badge {{ schedule.status_badge_class }}">{{ schedule.get_status_display }}</span>
+            <span class="badge {{ schedule.priority_badge_class }}">{{ schedule.get_priority_display }}</span>
+            {% if schedule.is_overdue %}
+            <span class="badge badge-red">Overdue</span>
+            {% elif schedule.is_due_soon %}
+            <span class="badge badge-amber">Due Soon</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:vehicle_service_schedule_edit' schedule.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit Schedule
+        </a>
+
+        {% if schedule.status != "in_service" %}
+        <form method="post" action="{% url 'assets:vehicle_service_schedule_mark_in_service' schedule.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600 border-amber-600 hover:bg-amber-50">
+                <i data-lucide="wrench" class="w-4 h-4 me-1"></i> Put In Service
+            </button>
+        </form>
+        {% endif %}
+
+        {% if schedule.status != "paused" %}
+        <form method="post" action="{% url 'assets:vehicle_service_schedule_pause' schedule.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-slate-600 hover:bg-slate-100">
+                <i data-lucide="pause" class="w-4 h-4 me-1"></i> Pause
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:vehicle_service_schedule_delete' schedule.pk %}" class="inline" onsubmit="return confirm('Delete maintenance schedule \'{{ schedule.number }}\'?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Service Information Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Service Schedule Details</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Schedule Ref</dt>
+                    <dd class="font-mono font-medium">{{ schedule.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Target Vehicle</dt>
+                    <dd class="font-medium">
+                        {% if schedule.vehicle %}
+                        <a href="{% url 'assets:fleet_vehicle_detail' schedule.vehicle.pk %}" class="text-blue-600 hover:underline">
+                            {{ schedule.vehicle.name }} ({{ schedule.vehicle.license_plate }})
+                        </a>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Service Category</dt>
+                    <dd>{{ schedule.get_service_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Recurrence Interval</dt>
+                    <dd>Every {{ schedule.interval_months }} months or {{ schedule.interval_mileage }} miles</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Next Due Date</dt>
+                    <dd class="font-medium">
+                        {% if schedule.next_due_date %}
+                        {{ schedule.next_due_date }}
+                        {% if schedule.is_overdue %}<span class="badge badge-red ms-2">Date Overdue</span>{% endif %}
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Next Due Odometer</dt>
+                    <dd class="font-mono font-medium">
+                        {% if schedule.next_due_odometer %}
+                        {{ schedule.next_due_odometer }} miles
+                        {% if schedule.vehicle and schedule.vehicle.current_odometer >= schedule.next_due_odometer %}
+                        <span class="badge badge-red ms-2">Mileage Overdue</span>
+                        {% endif %}
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Last Completed Date</dt>
+                    <dd>{{ schedule.last_service_date|default:"Never performed" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Last Completed Odometer</dt>
+                    <dd class="font-mono">{% if schedule.last_service_odometer %}{{ schedule.last_service_odometer }} miles{% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Assigned Vendor / Shop</dt>
+                    <dd>{{ schedule.service_vendor|default:"Internal / In-House Maintenance" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Estimated Cost</dt>
+                    <dd class="font-mono font-medium">${{ schedule.estimated_cost }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Actual Cost (Last Run)</dt>
+                    <dd class="font-mono font-semibold">${{ schedule.actual_cost }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Warranty Coverage</dt>
+                    <dd>{% if schedule.is_warranty_covered %}<span class="badge badge-green">Covered</span>{% else %}<span class="badge badge-slate">Out-of-Pocket</span>{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Work Order / Invoice #</dt>
+                    <dd class="font-mono">{{ schedule.work_order_invoice_ref|default:"—" }}</dd>
+                </div>
+            </dl>
+            {% if schedule.technician_resolution_notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h4 class="text-xs font-semibold uppercase text-slate-500 mb-1">Technician Notes &amp; History</h4>
+                <p class="text-sm text-slate-700 dark:text-slate-300">{{ schedule.technician_resolution_notes|linebreaks }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Complete & Roll Forward Modal/Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="text-base font-semibold">Log Service Completion</h3>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{% url 'assets:vehicle_service_schedule_complete' schedule.pk %}">
+                {% csrf_token %}
+                <div class="form-group mb-3">
+                    <label class="form-label">Completion Date</label>
+                    <input type="date" name="completion_date" value="{% now 'Y-m-d' %}" class="form-input" required>
+                </div>
+                <div class="form-group mb-3">
+                    <label class="form-label">Odometer at Completion (mi)</label>
+                    <input type="number" name="odometer" value="{{ schedule.vehicle.current_odometer }}" class="form-input font-mono" required>
+                </div>
+                <div class="form-group mb-3">
+                    <label class="form-label">Actual Total Cost ($)</label>
+                    <input type="number" step="0.01" name="actual_cost" value="{{ schedule.estimated_cost }}" class="form-input font-mono">
+                </div>
+                <div class="form-group mb-4">
+                    <label class="form-label">Technician Notes</label>
+                    <textarea name="technician_notes" rows="2" class="form-textarea" placeholder="Oil grade, filter part #, mechanic sign-off..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Record &amp; Roll Forward
+                </button>
+            </form>
+            <p class="text-xs text-slate-400 mt-3 text-center">
+                Submitting updates the last service record and automatically computes the next interval due date and odometer.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
