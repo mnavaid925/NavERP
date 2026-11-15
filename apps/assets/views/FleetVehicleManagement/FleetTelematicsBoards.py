@@ -34,20 +34,20 @@ def fleet_telematics_board(request):
     ).count()
 
     recent_vehicles = (
-        vehicles_qs.select_related("primary_driver", "org_unit")
+        vehicles_qs.select_related("primary_driver__party", "org_unit")
         .order_by("-last_telemetry_at", "-updated_at")[:10]
     )
 
     high_risk_drivers = (
         assets_scope(VehicleDriverAssignment.objects, request)
         .filter(status="active", safety_tier__in=["high_risk", "needs_coaching"])
-        .select_related("driver", "vehicle")
+        .select_related("driver__party", "vehicle")
         .order_by("safety_score")[:5]
     )
 
     recent_fuel_logs = (
         assets_scope(VehicleFuelLog.objects, request)
-        .select_related("vehicle", "driver")
+        .select_related("vehicle", "driver__party")
         .order_by("-fuel_date")[:5]
     )
 
