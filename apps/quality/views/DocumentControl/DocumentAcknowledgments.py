@@ -237,7 +237,7 @@ def document_acknowledgment_export(request):
 
     writer = csv.writer(response)
     writer.writerow(["Number", "Document", "Revision", "User", "Due Date", "Status", "Acknowledged At"])
-    for a in qs:
+    for a in qs.iterator(chunk_size=1000):
         writer.writerow([
             csv_safe(a.number),
             csv_safe(a.document.number if a.document else ""),
