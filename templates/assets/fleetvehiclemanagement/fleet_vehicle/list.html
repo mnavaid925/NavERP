@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Fleet Vehicles — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Fleet &amp; Vehicle Management</span>
+            <span>/</span>
+            <span>Vehicle Registration &amp; Compliance</span>
+        </div>
+        <h1 class="page-title">Fleet Vehicles</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <a href="{% url 'assets:fleet_telematics_board' %}" class="btn btn-outline">
+            <i data-lucide="radio" class="w-4 h-4 me-1"></i> Telematics Board
+        </a>
+        <a href="{% url 'assets:fleet_vehicle_export' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&vehicle_type={{ request.GET.vehicle_type|urlencode }}&fuel_type={{ request.GET.fuel_type|urlencode }}&compliance_status={{ request.GET.compliance_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:fleet_vehicle_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Add Vehicle
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="truck"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Fleet Units</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active In Service</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Shop / Maintenance</div>
+            <div class="stat-value">{{ in_shop_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Non-Compliant DMV</div>
+            <div class="stat-value">{{ expired_compliance_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div class="form-group md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search name, plate, VIN, make..." class="form-input">
+            </div>
+            <div class="form-group">
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="vehicle_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for code, label in vehicle_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.vehicle_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="compliance_status" class="form-select">
+                    <option value="">DMV Compliance</option>
+                    {% for code, label in compliance_choices %}
+                    <option value="{{ code }}" {% if request.GET.compliance_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'assets:fleet_vehicle_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Wrap -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Unit / License Plate</th>
+                    <th>Make &amp; Model</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>DMV Compliance</th>
+                    <th>Odometer</th>
+                    <th>Driver / Custodian</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in vehicles %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">
+                            <a href="{% url 'assets:fleet_vehicle_detail' v.pk %}" class="hover:underline text-blue-600 dark:text-blue-400">
+                                {{ v.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 font-mono">
+                            {{ v.license_plate }} {% if v.registration_state %}({{ v.registration_state }}){% endif %} &bull; {{ v.number }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ v.year }} {{ v.make }} {{ v.model }}</div>
+                        {% if v.vin %}
+                        <div class="text-xs text-slate-500 font-mono">VIN: {{ v.vin }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs">{{ v.get_vehicle_type_display }}</span>
+                        <div class="text-xs text-slate-400">{{ v.get_fuel_type_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ v.status_badge_class }}">
+                            {{ v.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ v.compliance_badge_class }}">
+                            {{ v.get_compliance_status_display }}
+                        </span>
+                        {% if v.registration_expiration_date %}
+                        <div class="text-xs text-slate-400 mt-0.5">Exp: {{ v.registration_expiration_date }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono text-sm">{{ v.current_odometer }} mi</span>
+                        {% if v.engine_hours > 0 %}
+                        <div class="text-xs text-slate-400">{{ v.engine_hours }} hrs</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if v.primary_driver %}
+                        <div class="text-sm">{{ v.primary_driver }}</div>
+                        {% elif v.custodian_party %}
+                        <div class="text-sm">{{ v.custodian_party }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-xs">— Unassigned —</span>
+                        {% endif %}
+                        {% if v.org_unit %}
+                        <div class="text-xs text-slate-500">{{ v.org_unit }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:fleet_vehicle_detail' v.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:fleet_vehicle_edit' v.pk %}" class="btn btn-icon" title="Edit Vehicle">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:fleet_vehicle_delete' v.pk %}" class="inline" onsubmit="return confirm('Delete vehicle \'{{ v.number }}\'?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Vehicle">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="truck" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold">No Fleet Vehicles Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Add your first commercial fleet vehicle or adjust search criteria.</p>
+                            <a href="{% url 'assets:fleet_vehicle_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Add Vehicle
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-body border-t border-slate-200 dark:border-slate-700 py-3">
+        <div class="pagination">
+            <div class="text-sm text-slate-500">
+                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} vehicles
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&vehicle_type={{ request.GET.vehicle_type|urlencode }}&fuel_type={{ request.GET.fuel_type|urlencode }}&compliance_status={{ request.GET.compliance_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline btn-sm">Prev</a>
+                {% else %}
+                <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
+                {% endif %}
+
+                <span class="px-3 py-1 text-sm text-slate-600 dark:text-slate-400">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&vehicle_type={{ request.GET.vehicle_type|urlencode }}&fuel_type={{ request.GET.fuel_type|urlencode }}&compliance_status={{ request.GET.compliance_status|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+                {% else %}
+                <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
