@@ -223,6 +223,11 @@ def controlled_document_edit(request, pk):
 @require_POST
 def controlled_document_delete(request, pk):
     doc = quality_object(request, ControlledDocument, pk)
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    if doc.owner != request.user and not is_admin:
+        messages.error(request, "Only the document owner or an administrator can delete this document.")
+        return redirect("quality:controlled_document_detail", pk=doc.pk)
+
     if doc.is_effective or doc.is_locked:
         messages.error(request, f"Cannot delete document in '{doc.get_lifecycle_state_display()}' state.")
         return redirect("quality:controlled_document_detail", pk=doc.pk)
