@@ -108,6 +108,8 @@ class DocumentChangeOrder(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_qdcr_ten_status"),
             models.Index(fields=["tenant", "document", "status"], name="idx_qdcr_ten_doc_stat"),
             models.Index(fields=["tenant", "requested_by"], name="idx_qdcr_ten_reqby"),
+            models.Index(fields=["tenant", "change_type"], name="idx_qdcr_ten_type"),
+            models.Index(fields=["tenant", "priority"], name="idx_qdcr_ten_prio"),
         ]
 
     def __str__(self):
