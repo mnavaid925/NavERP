@@ -109,6 +109,12 @@ from apps.assets.models.ItAssetManagement import (
     ItHardwareAsset,
     SoftwareLicense,
 )
+from apps.assets.models.FleetVehicleManagement import (
+    FleetVehicle,
+    VehicleDriverAssignment,
+    VehicleFuelLog,
+    VehicleServiceSchedule,
+)
 
 __all__ = [
     "TenantOwned",
@@ -186,4 +192,8 @@ __all__ = [
     "SoftwareLicense",
     "CloudAssetSubscription",
     "CmdbRelationship",
+    "FleetVehicle",
+    "VehicleFuelLog",
+    "VehicleDriverAssignment",
+    "VehicleServiceSchedule",
 ]
