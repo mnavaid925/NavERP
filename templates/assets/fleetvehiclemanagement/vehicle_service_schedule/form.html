@@ -118,6 +118,17 @@
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    <select name="{{ form.currency.html_name }}" id="{{ form.currency.id_for_label }}" class="form-select">
+                        <option value="">— Select Currency —</option>
+                        {% for cur in form.fields.currency.queryset %}
+                        <option value="{{ cur.pk }}" {% if form.currency.value|stringformat:"s" == cur.pk|stringformat:"s" %}selected{% endif %}>{{ cur.code }} ({{ cur.symbol }})</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
                     <label class="form-label" for="{{ form.work_order_invoice_ref.id_for_label }}">Work Order / Invoice Reference</label>
                     <input type="text" name="{{ form.work_order_invoice_ref.html_name }}" id="{{ form.work_order_invoice_ref.id_for_label }}" value="{{ form.work_order_invoice_ref.value|default:'' }}" class="form-input font-mono">
                 </div>
