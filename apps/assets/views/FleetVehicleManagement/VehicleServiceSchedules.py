@@ -206,11 +206,18 @@ def vehicle_service_schedule_complete(request, pk):
     completion_date = safe_parse_date(comp_date_raw) or timezone.now().date()
 
     odometer_raw = request.POST.get("odometer")
-    odometer = int(odometer_raw) if odometer_raw and odometer_raw.isdigit() else schedule.vehicle.current_odometer
+    try:
+        odometer = int(odometer_raw) if odometer_raw and odometer_raw.strip().isdigit() else schedule.vehicle.current_odometer
+        if odometer < 0 or odometer > 9999999:
+            odometer = schedule.vehicle.current_odometer
+    except (ValueError, TypeError):
+        odometer = schedule.vehicle.current_odometer
 
     cost_raw = request.POST.get("actual_cost")
     try:
         cost = Decimal(cost_raw) if cost_raw else Decimal("0.00")
+        if not cost.is_finite() or cost < Decimal("0.00") or cost > Decimal("9999999999.99"):
+            cost = Decimal("0.00")
     except Exception:
         cost = Decimal("0.00")
 
