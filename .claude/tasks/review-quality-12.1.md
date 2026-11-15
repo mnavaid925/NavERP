@@ -73,3 +73,26 @@ None.
 
 ### Minor
 - [ ] **PR-M1**: `apps/quality/views/DocumentControl/*.py` — CSV export views load full querysets into memory directly instead of batch streaming. Fix: use `qs.iterator(chunk_size=1000)` in export views.
+
+---
+
+## Review Pass 5 — `qa-smoke-tester`
+
+### Critical
+- [ ] **QA-C1**: `templates/quality/documentcontrol/document_change_order/detail.html:152` — Unhandled nullable ForeignKey in template filter argument `default:change_order.ccb_decision_by.username` raises `django.template.base.VariableDoesNotExist` (`Failed lookup for key [username] in None`), crashing the page with HTTP 500 when `ccb_decision_date` is set without an assigned user (Lesson L10). (Duplicate of CR-I2 / FR-C1).
+- [ ] **QA-C2**: `apps/quality/views/DocumentControl/DocumentAcknowledgments.py:165` & `templates/quality/documentcontrol/document_acknowledgment/list.html:163` — Missing user authorization check in `document_acknowledgment_sign`. Verified via smoke test: unauthorized user successfully posted and executed a binding electronic signature for an acknowledgment assigned to another user. (Duplicate of CR-C1).
+
+### Important
+- [ ] **QA-I1**: `apps/quality/views/DocumentControl/DocumentChangeOrders.py:195` — Missing status check in `document_change_order_ccb_decision`. Verified via smoke test: a POST to `ccb-decision` directly approved a draft change order, bypassing submission and review. (Duplicate of CR-I1).
+- [ ] **QA-I2**: `apps/quality/forms/DocumentControl/ElectronicSignatures.py:35` — `ElectronicSignatureForm.clean_password` silently skips credential verification if `self.user` is `None`, bypassing 21 CFR Part 11 authentication. (Duplicate of CR-M4).
+- [ ] **QA-I3**: `apps/quality/views/DocumentControl/ElectronicSignatures.py:96` — `controlled_document_sign` lacks a lifecycle state guard, returning HTTP 200 and rendering the signature form even for locked, superseded, or obsolete documents. (Duplicate of CR-I5).
+- [ ] **QA-I4**: `templates/quality/documentcontrol/controlled_document/detail.html:39-86` & `apps/quality/views/DocumentControl/ControlledDocuments.py:147` — View calculates and passes `can_sign=True` and route exists, but the detail actions bar omits the "Sign Document" button entirely. (Duplicate of EX-I1 / FR-I2).
+- [ ] **QA-I5**: `apps/quality/views/DocumentControl/ControlledDocuments.py:143` & `apps/quality/views/DocumentControl/DocumentChangeOrders.py:122` — Detail views set `can_approve`, `can_make_effective`, `can_obsolete`, and `can_ccb_approve` based strictly on entity status without checking tenant admin permissions. (Duplicate of CR-I3).
+- [ ] **QA-I6**: `templates/quality/documentcontrol/controlled_document/detail.html:38`, `templates/quality/documentcontrol/document_change_order/detail.html:33`, `templates/quality/documentcontrol/document_acknowledgment/detail.html:27` — Missing POST-only Delete action forms on all three detail templates. (Duplicate of CR-I4 / FR-I3).
+
+### Minor
+- [ ] **QA-M1**: `templates/quality/documentcontrol/document_change_order/list.html:79` & `apps/quality/views/DocumentControl/DocumentChangeOrders.py:50` — Filter `change_type` is implemented in the view and passed in context, but template filter bar omits `<select name="change_type">`. (Duplicate of EX-M1).
+- [ ] **QA-M2**: `templates/quality/documentcontrol/controlled_document/list.html:82` & `apps/quality/views/DocumentControl/ControlledDocuments.py:59` — Filter `latest` defaults to `"1"` in the view but has no select dropdown in the list template and is not persisted across pagination links. (Duplicate of CR-M5).
+- [ ] **QA-M3**: `apps/quality/views/DocumentControl/DocumentAcknowledgments.py:205` & `templates/quality/documentcontrol/electronic_signature/form.html:13,21,85` — View fails to pass `"acknowledgment": ack` in context, causing Cancel and breadcrumbs in `electronic_signature/form.html` to target document detail instead of acknowledgment detail. (Duplicate of EX-M2).
+- [ ] **QA-M4**: `templates/quality/documentcontrol/electronic_signature/form.html:88` — Invalid HTML markup: `onsubmit` placed on `<button>` element instead of parent `<form>` element. (Duplicate of FR-I1).
+- [ ] **QA-M5**: `templates/quality/documentcontrol/electronic_signature/detail.html:83-86` — Invalid HTML markup: `<dt>` and `<dd>` used inside a `<div>` without a parent `<dl>` list. (Duplicate of FR-M1).
