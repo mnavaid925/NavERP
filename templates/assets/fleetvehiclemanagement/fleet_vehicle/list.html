@@ -62,8 +62,8 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <div class="form-group md:col-span-2">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            <div class="form-group md:col-span-2 lg:col-span-2">
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search name, plate, VIN, make..." class="form-input">
             </div>
             <div class="form-group">
@@ -79,6 +79,22 @@
                     <option value="">All Types</option>
                     {% for code, label in vehicle_type_choices %}
                     <option value="{{ code }}" {% if request.GET.vehicle_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="fuel_type" class="form-select">
+                    <option value="">All Fuel Types</option>
+                    {% for code, label in fuel_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.fuel_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <select name="org_unit" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for u in org_units %}
+                    <option value="{{ u.pk }}" {% if request.GET.org_unit == u.pk|stringformat:"d" %}selected{% endif %}>{{ u }}</option>
                     {% endfor %}
                 </select>
             </div>
