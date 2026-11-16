@@ -6,6 +6,10 @@ from django.utils import timezone
 
 from apps.core.models import OrgUnit, Tenant
 from apps.hrm.models.EmployeeManagement.EmployeeProfiles import EmployeeProfile
+from apps.quality.models.DesignControls.DesignInputs import DesignInput
+from apps.quality.models.DesignControls.DesignProjects import DesignProject
+from apps.quality.models.DesignControls.DesignReviews import DesignReview
+from apps.quality.models.DesignControls.DesignVerifications import DesignVerification
 from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDocument
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
@@ -27,6 +31,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            DesignVerification.objects.all().delete()
+            DesignReview.objects.all().delete()
+            DesignInput.objects.all().delete()
+            DesignProject.objects.all().delete()
             DocumentAcknowledgment.objects.all().delete()
             ElectronicSignatureRecord.objects.all().delete()
             DocumentChangeOrder.objects.all().delete()
@@ -41,6 +49,7 @@ class Command(BaseCommand):
 
         for tenant in tenants:
             self._seed_submodule_12_1(tenant)
+            self._seed_submodule_12_2(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
         self.stdout.write(
@@ -317,3 +326,224 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.1 Document Control seeded successfully."))
+
+    def _seed_submodule_12_2(self, tenant):
+        if DesignProject.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.2 Design Controls data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.2 Design Controls & Development...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not admin_user:
+            return
+
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
+        reviewer_user = users[1] if len(users) > 1 else admin_user
+
+        qa_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="quality").order_by("pk").first()
+        if not qa_dept:
+            qa_dept = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
+
+        doc_sop = ControlledDocument.objects.filter(tenant=tenant, document_type="sop").order_by("pk").first()
+
+        today = timezone.now().date()
+
+        with transaction.atomic():
+            # 1. Active Design Project: Smart Infusion Pump System
+            project_active = DesignProject.objects.create(
+                tenant=tenant,
+                title="NextGen Smart Infusion Pump System",
+                device_name="InfuseFlow Pro 3000",
+                device_class="class_ii",
+                regulatory_pathway="510k",
+                intended_use="Controlled volumetric administration of intravenous fluids and medications to adult and pediatric patients.",
+                current_phase="output_verification",
+                status="active",
+                project_lead=admin_user,
+                quality_lead=reviewer_user,
+                department=qa_dept,
+                target_completion_date=today + datetime.timedelta(days=120),
+                dhf_location="DHF-VOL-01 / Central QMS Cloud Vault",
+                dhf_locked=False,
+                description="Electromechanical large volume pump with dedicated drug library, wireless telemetry, and closed-loop occlusion pressure monitoring.",
+            )
+
+            # 2. Completed / Locked Design Project: Sterile Disposable Syringe Set
+            project_locked = DesignProject.objects.create(
+                tenant=tenant,
+                title="Sterile Disposable Syringe Set Development",
+                device_name="AccuInject 5mL Safety Syringe",
+                device_class="class_ii",
+                regulatory_pathway="510k",
+                intended_use="General purpose sterile piston syringe with integrated needle retract mechanism for aspiration and injection.",
+                current_phase="closed",
+                status="completed",
+                project_lead=admin_user,
+                quality_lead=reviewer_user,
+                department=qa_dept,
+                target_completion_date=today - datetime.timedelta(days=60),
+                actual_completion_date=today - datetime.timedelta(days=45),
+                dhf_location="DHF-ARCHIVE-ACCUINJECT-01",
+                dhf_locked=True,
+                description="Commercialized safety needle syringe. DHF frozen post manufacturing transfer.",
+            )
+
+            # 3. Design Inputs for Active Project
+            un_01 = DesignInput.objects.create(
+                tenant=tenant,
+                project=project_active,
+                identifier="UN-001",
+                title="Clinician Flow Rate Accuracy",
+                input_type="user_need",
+                priority="critical",
+                status="approved",
+                description="The clinician must be able to administer liquid medications at programmed flow rates without dangerous under- or over-infusion.",
+                acceptance_criteria="Flow delivery rate deviation within +/- 2.0% across all programmed flow rates from 0.1 mL/hr to 1200 mL/hr.",
+                rationale="Prevent patient medication dosage error and hemodynamic instability.",
+                owner=admin_user,
+                version="1.0",
+            )
+
+            di_flow_01 = DesignInput.objects.create(
+                tenant=tenant,
+                project=project_active,
+                identifier="DI-FLOW-01",
+                title="Volumetric Motor Step Precision",
+                input_type="functional",
+                priority="critical",
+                status="verified",
+                description="The stepper motor lead-screw mechanism shall deliver precise bolus volumes conforming to target flow rate.",
+                acceptance_criteria="Volumetric displacement variance shall not exceed 1.5% at nominal back-pressure.",
+                rationale="Directly derives from User Need UN-001 clinician accuracy requirement.",
+                user_need_parent=un_01,
+                controlled_document=doc_sop,
+                owner=admin_user,
+                version="1.0",
+            )
+
+            di_flow_02 = DesignInput.objects.create(
+                tenant=tenant,
+                project=project_active,
+                identifier="DI-FLOW-02",
+                title="Battery Runtime Under High Flow",
+                input_type="performance",
+                priority="major",
+                status="verified",
+                description="The internal rechargeable lithium-ion battery shall power continuous delivery at maximum rated flow for at least 8 hours.",
+                acceptance_criteria="Battery duration >= 8.0 hours continuous at 125 mL/hr flow rate without AC mains connection.",
+                rationale="Supports safe patient intra-hospital transport per IEC 60601-2-24.",
+                user_need_parent=un_01,
+                owner=admin_user,
+                version="1.0",
+            )
+
+            di_safe_01 = DesignInput.objects.create(
+                tenant=tenant,
+                project=project_active,
+                identifier="DI-SAFE-01",
+                title="Air-in-Line Ultrasonic Detection & Alarm",
+                input_type="safety",
+                priority="critical",
+                status="in_review",
+                description="The system shall detect micro air bubbles in the administration line and halt pumping with audible and visual alarms.",
+                acceptance_criteria="Single bubble >= 50 microliters or cumulative 100 microliters/15min triggers immediate pump stop within 200ms.",
+                rationale="Mitigates life-threatening air embolism hazard per ISO 14971 risk analysis.",
+                user_need_parent=un_01,
+                owner=reviewer_user,
+                version="1.0",
+            )
+
+            # 4. Stage-Gate Design Reviews for Active Project
+            sig_review = ElectronicSignatureRecord.objects.filter(tenant=tenant).order_by("pk").first()
+
+            rev_gate_1 = DesignReview.objects.create(
+                tenant=tenant,
+                project=project_active,
+                title="Design Input Freeze Stage Gate",
+                review_stage="input_freeze",
+                review_date=today - datetime.timedelta(days=30),
+                status="approved",
+                lead_reviewer=admin_user,
+                independent_reviewer=reviewer_user,
+                agenda="Multidisciplinary review of User Needs (UN-001), engineering functional inputs, and IEC 60601 compliance standards.",
+                discussion_summary="All clinical user needs verified against human factors data. Flow rate accuracy thresholds approved by biomedical engineering.",
+                conclusions="Design inputs are complete, unambiguous, and testable. Input Freeze Gate approved.",
+                action_items="All preliminary inputs approved with consensus.",
+                action_items_resolved=True,
+                electronic_signature=sig_review,
+            )
+
+            rev_gate_2 = DesignReview.objects.create(
+                tenant=tenant,
+                project=project_active,
+                title="Verification & Architecture Gate Review",
+                review_stage="verification_gate",
+                review_date=today - datetime.timedelta(days=5),
+                status="conditional",
+                lead_reviewer=admin_user,
+                independent_reviewer=reviewer_user,
+                agenda="Review of verification test protocols for flow rate and ultrasonic air detection.",
+                discussion_summary="Flow rate bench test passed. Air-in-line sensor testing shows sensitivity near tolerance threshold.",
+                conclusions="Conditional approval granted pending completion of extended bubble test matrix.",
+                action_items="Execute remaining 12 bubble calibration tests with blood analog solution.",
+                action_items_resolved=False,
+            )
+
+            # 5. Design Verifications for Active Project
+            ver_01 = DesignVerification.objects.create(
+                tenant=tenant,
+                project=project_active,
+                primary_input=di_flow_01,
+                title="Volumetric Infusion Rate Bench Testing",
+                activity_type="verification",
+                status="passed",
+                test_method="lab_test",
+                acceptance_criteria="Calculated flow rate error <= +/- 2% across 15 trial runs using calibrated analytical balance.",
+                sample_size=15,
+                results_summary="Mean flow deviation observed was +0.68% (sigma = 0.22%). Criteria satisfied.",
+                pass_fail_result="pass",
+                deviation_notes="",
+                executed_by=admin_user,
+                execution_date=today - datetime.timedelta(days=10),
+                protocol_document=doc_sop,
+            )
+
+            ver_02 = DesignVerification.objects.create(
+                tenant=tenant,
+                project=project_active,
+                primary_input=di_flow_02,
+                title="Battery Endurance Test Under 125 mL/hr Load",
+                activity_type="verification",
+                status="passed",
+                test_method="lab_test",
+                acceptance_criteria="Continuous pump operation >= 8 hours without low battery alarm shutdown.",
+                sample_size=10,
+                results_summary="All 10 test units sustained minimum 9 hours 14 minutes continuous delivery before low-battery trigger.",
+                pass_fail_result="pass",
+                deviation_notes="",
+                executed_by=admin_user,
+                execution_date=today - datetime.timedelta(days=8),
+            )
+
+            ver_03 = DesignVerification.objects.create(
+                tenant=tenant,
+                project=project_active,
+                primary_input=di_safe_01,
+                title="Air-in-Line Ultrasonic Sensor Calibration Protocol",
+                activity_type="verification",
+                status="testing",
+                test_method="lab_test",
+                acceptance_criteria="Detection of 50 uL air bubble within 200 ms with audible alarm >= 65 dBA.",
+                sample_size=12,
+                results_summary="First 6 units detected bubbles successfully; remaining 6 in progress.",
+                pass_fail_result="pending",
+                deviation_notes="Bench temperature held at 22C +/- 1C.",
+                executed_by=reviewer_user,
+                execution_date=today - datetime.timedelta(days=2),
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.2 Design Controls & Development seeded successfully."))
