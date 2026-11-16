@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Requirements Traceability Matrix (RTM) | Design Controls{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_list' %}">Design Projects</a>
+            <span>/</span>
+            <span>Traceability Matrix (RTM)</span>
+        </div>
+        <h1 class="page-title">Requirements Traceability Matrix (RTM)</h1>
+    </div>
+    <div class="page-actions">
+        {% if selected_project %}
+        <a href="{% url 'quality:design_project_dhf' selected_project.pk %}" class="btn btn-outline">
+            <i data-lucide="book-open"></i> Full DHF Dossier
+        </a>
+        <a href="{% url 'quality:traceability_matrix_export' %}?project={{ selected_project.pk }}" class="btn btn-primary">
+            <i data-lucide="download"></i> Export RTM (CSV)
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Project Selector & Coverage Stat Cards -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <label for="matrix-project-select" class="form-label mb-0 font-medium whitespace-nowrap">Target Design Project:</label>
+                <select id="matrix-project-select" name="project" class="form-select max-w-md" onchange="this.form.submit()">
+                    {% for p in projects %}
+                    <option value="{{ p.pk }}" {% if selected_project and selected_project.pk == p.pk %}selected{% endif %}>
+                        {{ p.number }} — {{ p.title }} ({{ p.device_name }})
+                    </option>
+                    {% empty %}
+                    <option value="">No projects available</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if selected_project %}
+            <div class="text-xs text-slate-500 font-mono">
+                Device Class: <span class="badge {{ selected_project.device_class_css }}">{{ selected_project.get_device_class_display }}</span> |
+                Status: <span class="badge {{ selected_project.status_css }}">{{ selected_project.get_status_display }}</span>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+{% if selected_project %}
+<!-- RTM KPI Banner -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="list-checks"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Design Inputs</div>
+            <div class="text-2xl font-bold text-slate-800">{{ total_inputs }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Verified & Satisfied</div>
+            <div class="text-2xl font-bold text-slate-800">{{ verified_inputs }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if gap_count == 0 %}green{% else %}orange{% endif %}">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Traceability Gaps</div>
+            <div class="text-2xl font-bold text-slate-800">{{ gap_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div class="w-full">
+            <div class="text-sm text-slate-500 font-medium">Verification Coverage</div>
+            <div class="text-2xl font-bold text-slate-800 mb-1">{{ coverage_percentage }}%</div>
+            <div class="w-full bg-slate-200 rounded-full h-1.5">
+                <div class="bg-purple-600 h-1.5 rounded-full" style="width: {{ coverage_percentage }}%"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Traceability Matrix Table -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Bi-directional Traceability Matrix</h2>
+            <p class="text-xs text-slate-500">User Needs &rarr; Functional Design Inputs &rarr; Verification Protocols &rarr; Test Evidence</p>
+        </div>
+        <span class="text-xs text-slate-500 font-mono">FDA 21 CFR § 820.30 & ISO 13485:2016 7.3</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th class="w-1/6">User Need</th>
+                    <th class="w-1/4">Design Input Specification</th>
+                    <th class="w-1/4">Acceptance Criteria</th>
+                    <th class="w-1/4">Verification Protocol & Result</th>
+                    <th class="text-center w-24">Coverage</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in matrix_rows %}
+                <tr class="{% if not row.is_verified %}bg-amber-50/40{% elif row.has_failures %}bg-red-50/40{% endif %}">
+                    <!-- User Need -->
+                    <td class="align-top">
+                        {% if row.user_need %}
+                        <div class="font-mono text-xs font-semibold text-purple-700">
+                            <a href="{% url 'quality:design_input_detail' row.user_need.pk %}" class="hover:underline">
+                                {{ row.user_need.identifier }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-600 mt-1">{{ row.user_need.title }}</div>
+                        {% else %}
+                        <span class="text-xs text-slate-400 italic">Direct Functional Input</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Design Input -->
+                    <td class="align-top">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono text-xs font-semibold text-blue-700">
+                                <a href="{% url 'quality:design_input_detail' row.input.pk %}" class="hover:underline">
+                                    {{ row.input.identifier }}
+                                </a>
+                            </span>
+                            <span class="badge {{ row.input.input_type_css }} text-[10px] py-0 px-1.5">{{ row.input.get_input_type_display }}</span>
+                        </div>
+                        <div class="font-medium text-slate-900 text-sm mt-0.5">{{ row.input.title }}</div>
+                        <div class="text-xs text-slate-500 mt-1">{{ row.input.description|truncatechars:100 }}</div>
+                    </td>
+
+                    <!-- Acceptance Criteria -->
+                    <td class="align-top text-xs font-mono text-slate-700 whitespace-pre-line bg-slate-50/70 p-2 rounded">
+                        {{ row.input.acceptance_criteria }}
+                    </td>
+
+                    <!-- Verification Protocols -->
+                    <td class="align-top">
+                        {% if row.verifications %}
+                        <div class="space-y-2">
+                            {% for v in row.verifications %}
+                            <div class="p-2 rounded border border-slate-200 bg-white text-xs">
+                                <div class="flex items-center justify-between">
+                                    <a href="{% url 'quality:design_verification_detail' v.pk %}" class="font-mono font-semibold text-blue-600 hover:underline">
+                                        {{ v.number }}
+                                    </a>
+                                    <span class="badge {{ v.result_css }} text-[10px] py-0 px-1.5">{{ v.get_pass_fail_result_display }}</span>
+                                </div>
+                                <div class="font-medium text-slate-800 mt-0.5">{{ v.title }}</div>
+                                <div class="text-[11px] text-slate-500">{{ v.get_test_method_display }} &bull; n={{ v.sample_size }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="p-2 rounded border border-dashed border-amber-300 bg-amber-50/50 text-xs text-amber-800">
+                            <i data-lucide="alert-circle" class="w-3.5 h-3.5 inline mr-1 text-amber-600"></i>
+                            No verification protocol assigned.
+                            {% if not selected_project.dhf_locked %}
+                            <div class="mt-1">
+                                <a href="{% url 'quality:design_verification_create' %}?input={{ row.input.pk }}" class="text-blue-600 hover:underline font-medium">
+                                    + Create Protocol
+                                </a>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </td>
+
+                    <!-- Coverage Status Badge -->
+                    <td class="align-top text-center">
+                        {% if row.has_failures %}
+                        <span class="badge badge-red">Failing</span>
+                        {% elif row.is_verified %}
+                        <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Satisfied</span>
+                        {% else %}
+                        <span class="badge badge-amber"><i data-lucide="alert-triangle" class="w-3 h-3 inline"></i> Gap</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-8 text-slate-500">
+                        No design inputs registered for this project yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <i data-lucide="network" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+        <h3 class="text-base font-semibold text-slate-800">No Design Project Selected</h3>
+        <p class="text-sm text-slate-500 mb-4">Initialize a design project to build and view its Requirements Traceability Matrix.</p>
+        <a href="{% url 'quality:design_project_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Design Project
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
