@@ -1,3 +1,18 @@
+from apps.quality.urls.DesignControls.DesignInputs import (
+    urlpatterns as design_inputs_urls,
+)
+from apps.quality.urls.DesignControls.DesignProjects import (
+    urlpatterns as design_projects_urls,
+)
+from apps.quality.urls.DesignControls.DesignReviews import (
+    urlpatterns as design_reviews_urls,
+)
+from apps.quality.urls.DesignControls.DesignVerifications import (
+    urlpatterns as design_verifications_urls,
+)
+from apps.quality.urls.DesignControls.TraceabilityMatrix import (
+    urlpatterns as traceability_matrix_urls,
+)
 from apps.quality.urls.DocumentControl.ControlledDocuments import (
     urlpatterns as controlled_documents_urls,
 )
@@ -18,4 +33,9 @@ urlpatterns = (
     + document_change_orders_urls
     + electronic_signatures_urls
     + document_acknowledgments_urls
+    + design_projects_urls
+    + design_inputs_urls
+    + design_reviews_urls
+    + design_verifications_urls
+    + traceability_matrix_urls
 )
