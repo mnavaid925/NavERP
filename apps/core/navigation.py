@@ -3391,6 +3391,13 @@ LIVE_LINKS = {
         "Change Request & Revision Control": "quality:document_change_order_list",
         "Archive & Retrieval": "quality:document_archive_vault",
     },
+    "12.2": {
+        "Design Planning & Inputs": "quality:design_project_list",
+        "Design Reviews & Verification": "quality:design_review_list",
+        "Design Validation & Transfer": "quality:design_verification_list",
+        "Design History File (DHF)": "quality:traceability_matrix",
+        "Design Changes & Configuration Management": "quality:design_input_list",
+    },
 
 
 
