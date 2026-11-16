@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}{{ input_obj.identifier }} — {{ input_obj.title }} | Design Controls{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_list' %}">Design Projects</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_detail' input_obj.project.pk %}">{{ input_obj.project.number }}</a>
+            <span>/</span>
+            <span>{{ input_obj.identifier }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ input_obj.identifier }} — {{ input_obj.title }}</h1>
+            <span class="badge {{ input_obj.status_css }}">{{ input_obj.get_status_display }}</span>
+            <span class="badge {{ input_obj.input_type_css }}">{{ input_obj.get_input_type_display }}</span>
+            <span class="badge {{ input_obj.priority_css }}">{{ input_obj.get_priority_display }}</span>
+            {% if input_obj.is_verified %}
+            <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Verified</span>
+            {% else %}
+            <span class="badge badge-amber"><i data-lucide="alert-circle" class="w-3 h-3 inline"></i> Unverified</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if not input_obj.project.dhf_locked %}
+        <a href="{% url 'quality:design_verification_create' %}?input={{ input_obj.pk }}" class="btn btn-outline">
+            <i data-lucide="flask-conical"></i> Add V&V Protocol
+        </a>
+        <a href="{% url 'quality:design_input_edit' input_obj.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Requirement
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Overview Grid -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Requirement Specification Details</h2>
+        <span class="text-xs text-slate-500 font-mono">{{ input_obj.number }} (Rev {{ input_obj.version }})</span>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Design Project</dt>
+                <dd>
+                    <a href="{% url 'quality:design_project_detail' input_obj.project.pk %}" class="text-blue-600 font-medium hover:underline">
+                        {{ input_obj.project.number }} — {{ input_obj.project.title }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Requirement Owner</dt>
+                <dd>{{ input_obj.owner.get_full_name|default:input_obj.owner.username }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Parent User Need</dt>
+                <dd>
+                    {% if input_obj.user_need_parent %}
+                    <a href="{% url 'quality:design_input_detail' input_obj.user_need_parent.pk %}" class="text-blue-600 font-mono text-xs hover:underline">
+                        {{ input_obj.user_need_parent.identifier }} — {{ input_obj.user_need_parent.title }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">None (Primary / Root Need)</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Controlled Specification (SOP / Spec)</dt>
+                <dd>
+                    {% if input_obj.controlled_document %}
+                    <a href="{% url 'quality:controlled_document_detail' input_obj.controlled_document.pk %}" class="text-blue-600 font-mono text-xs hover:underline">
+                        {{ input_obj.controlled_document.number }} Rev {{ input_obj.controlled_document.revision }} ({{ input_obj.controlled_document.title }})
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">—</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item md:col-span-2">
+                <dt>Requirement Statement (21 CFR § 820.30(c))</dt>
+                <dd class="text-slate-800 whitespace-pre-line text-sm">{{ input_obj.description }}</dd>
+            </div>
+            <div class="detail-item md:col-span-2">
+                <dt>Predetermined Acceptance Criteria</dt>
+                <dd class="text-slate-800 whitespace-pre-line text-sm bg-slate-50 p-3 rounded border border-slate-100 font-mono">{{ input_obj.acceptance_criteria }}</dd>
+            </div>
+            {% if input_obj.rationale %}
+            <div class="detail-item md:col-span-2">
+                <dt>Clinical / Engineering Rationale</dt>
+                <dd class="text-slate-600 whitespace-pre-line text-sm">{{ input_obj.rationale }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+<!-- Derived Inputs Section (if this is a parent user need) -->
+{% if derived_inputs %}
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Derived Engineering Specifications</h2>
+        <p class="text-xs text-slate-500">Functional and performance requirements derived from this user need</p>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Identifier</th>
+                    <th>Specification Title</th>
+                    <th>Type</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Verified</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for der in derived_inputs %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'quality:design_input_detail' der.pk %}" class="text-blue-600 hover:underline">
+                            {{ der.identifier }}
+                        </a>
+                    </td>
+                    <td>{{ der.title }}</td>
+                    <td><span class="badge {{ der.input_type_css }}">{{ der.get_input_type_display }}</span></td>
+                    <td><span class="badge {{ der.priority_css }}">{{ der.get_priority_display }}</span></td>
+                    <td><span class="badge {{ der.status_css }}">{{ der.get_status_display }}</span></td>
+                    <td>
+                        {% if der.is_verified %}
+                        <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Yes</span>
+                        {% else %}
+                        <span class="badge badge-slate">No</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Verification Protocols & Evidence -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Verification & Validation Test Protocols</h2>
+            <p class="text-xs text-slate-500">Test protocols and executions satisfying this requirement per 21 CFR § 820.30(f)</p>
+        </div>
+        {% if not input_obj.project.dhf_locked %}
+        <a href="{% url 'quality:design_verification_create' %}?input={{ input_obj.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i> Add Test Protocol
+        </a>
+        {% endif %}
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Protocol #</th>
+                    <th>Title</th>
+                    <th>Activity Type</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>Result</th>
+                    <th>Executed By</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ver in verifications %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'quality:design_verification_detail' ver.pk %}" class="text-blue-600 hover:underline">
+                            {{ ver.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-800">{{ ver.title }}</td>
+                    <td><span class="badge {{ ver.activity_type_css }}">{{ ver.get_activity_type_display }}</span></td>
+                    <td class="text-sm text-slate-600">{{ ver.get_test_method_display }}</td>
+                    <td><span class="badge {{ ver.status_css }}">{{ ver.get_status_display }}</span></td>
+                    <td><span class="badge {{ ver.result_css }}">{{ ver.get_pass_fail_result_display }}</span></td>
+                    <td class="text-sm text-slate-600">{{ ver.executed_by.get_full_name|default:ver.executed_by.username|default:"—" }}</td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'quality:design_verification_detail' ver.pk %}" class="btn btn-icon">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-slate-500 text-sm">
+                        No verification protocols linked to this design input yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
