@@ -1,0 +1,28 @@
+# Review Findings — Sub-module 12.2: Design Controls & Development (`apps/quality/`)
+
+Changeset reviewed: `8ade3ec32bae7a7208579153bcfb73e15a836f6f...HEAD` (Base from Phase 0 to current build).
+
+---
+
+## 1. Code Reviewer Pass (`code-reviewer`)
+
+### Critical
+1. `templates/quality/designcontrols/design_input/detail.html:189` — `{{ ver.executed_by.get_full_name|default:ver.executed_by.username|default:"—" }}` 500s with `VariableDoesNotExist` when optional FK `executed_by` is None. Fix: Guard with `{% if ver.executed_by %}{{ ver.executed_by.get_full_name|default:ver.executed_by.username }}{% else %}—{% endif %}` (L10).
+2. `templates/quality/designcontrols/design_verification/detail.html:63` — `{{ verification.executed_by.get_full_name|default:verification.executed_by.username|default:"Pending Execution" }}` 500s with `VariableDoesNotExist` when optional FK `executed_by` is None. Fix: Guard with `{% if verification.executed_by %}{{ verification.executed_by.get_full_name|default:verification.executed_by.username }}{% else %}Pending Execution{% endif %}` (L10).
+3. `apps/quality/views/DesignControls/DesignProjects.py:213` — `phase_order` includes `"transfer"`, which does not exist in `DesignProject.CURRENT_PHASE_CHOICES`, corrupting model phase state and causing subsequent form edits to fail validation. Fix: Change `phase_order` to `["planning", "input", "output_verification", "validation", "commercial_closure", "closed"]`.
+
+### Important
+4. `apps/quality/views/DesignControls/DesignProjects.py:211` — `design_project_advance_phase` lacks a view-level status check for locked projects (`dhf_locked=True`) or closed projects. Fix: Add guard `if project.dhf_locked: messages.error(request, "Cannot advance phase on a locked Design History File."); return redirect("quality:design_project_detail", pk=project.pk)`.
+5. `apps/quality/views/DesignControls/DesignReviews.py:193` — `design_review_approve_gate` lacks view-level status guards for locked projects or already-approved reviews. Fix: Add guard `if review.project.dhf_locked or review.status == "approved": messages.error(request, "Review cannot be approved in its current state."); return redirect("quality:design_review_detail", pk=review.pk)`.
+6. `apps/quality/views/DesignControls/DesignVerifications.py:135` & `apps/quality/views/DesignControls/DesignVerifications.py:180` — Multi-table database writes updating both `DesignVerification` and `DesignInput` (`ver.primary_input.status = "verified"`) are not wrapped in `transaction.atomic()`. Fix: Wrap the form save and `primary_input.save()` in `with transaction.atomic():`.
+7. `templates/quality/designcontrols/design_project/detail.html:45` — Detail page omits POST-only Delete action in `page-actions`, violating the CRUD completeness contract. Fix: Add a status-conditional POST-only Delete form with `{% csrf_token %}` and `confirm(...)` to the detail page header.
+8. `templates/quality/designcontrols/design_input/detail.html:30` — Detail page omits POST-only Delete action in `page-actions`. Fix: Add a status-conditional POST-only Delete form with `{% csrf_token %}` and `confirm(...)` to the detail page header.
+9. `templates/quality/designcontrols/design_review/detail.html:35` — Detail page omits POST-only Delete action in `page-actions`. Fix: Add a status-conditional POST-only Delete form with `{% csrf_token %}` and `confirm(...)` to the detail page header.
+10. `templates/quality/designcontrols/design_verification/detail.html:24` — Detail page omits POST-only Delete action in `page-actions`. Fix: Add a status-conditional POST-only Delete form with `{% csrf_token %}` and `confirm(...)` to the detail page header.
+11. `apps/quality/models/DesignControls/DesignProjects.py:64` & `apps/quality/models/DesignControls/DesignInputs.py:53, 59` & `apps/quality/models/DesignControls/DesignReviews.py:44` & `apps/quality/models/DesignControls/DesignVerifications.py:58` — CSS maps use non-existent classes `badge-purple` and `badge-blue` (not present in `theme.css`), rendering badges unstyled (L33). Fix: Map `"badge-purple"` to `"badge-info"` or `"badge-slate"`, and `"badge-blue"` to `"badge-info"`.
+12. `templates/quality/designcontrols/design_project/list.html:155` & `templates/quality/designcontrols/design_project/detail.html:21` & `templates/quality/designcontrols/dhf_dossier.html:20, 223` — Templates use non-existent class `badge-purple`. Fix: Replace `badge-purple` with a supported theme class (`badge-slate` or `badge-info`).
+
+### Minor
+13. `templates/quality/designcontrols/dhf_dossier.html:299` — `doc.lifecycle_css` references a non-existent property on `ControlledDocument`, resulting in empty CSS class for specifications. Fix: Replace `badge {{ doc.lifecycle_css }}` with `badge badge-info` or add `@property def lifecycle_css` to `ControlledDocument`.
+14. `apps/quality/views/DesignControls/DesignVerifications.py:182` — Editing a verification protocol from `"pass"` to `"fail"` or deleting it does not check if `primary_input.status` should revert back to `"approved"` if no other passing test exists. Fix: Recalculate `primary_input.status` when test result is modified or deleted.
+15. `apps/quality/views/DesignControls/DesignProjects.py:234` — `design_project_lock_dhf` re-executes redundant lock updates if already locked. Fix: Check `if project.dhf_locked:` and return early.
