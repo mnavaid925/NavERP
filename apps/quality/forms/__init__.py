@@ -1,3 +1,7 @@
+from apps.quality.forms.DesignControls.DesignInputs import DesignInputForm
+from apps.quality.forms.DesignControls.DesignProjects import DesignProjectForm
+from apps.quality.forms.DesignControls.DesignReviews import DesignReviewForm
+from apps.quality.forms.DesignControls.DesignVerifications import DesignVerificationForm
 from apps.quality.forms.DocumentControl.ControlledDocuments import (
     ControlledDocumentForm,
     ControlledDocumentRevisionForm,
@@ -12,4 +16,8 @@ __all__ = [
     "DocumentChangeOrderForm",
     "ElectronicSignatureForm",
     "DocumentAcknowledgmentForm",
+    "DesignProjectForm",
+    "DesignInputForm",
+    "DesignReviewForm",
+    "DesignVerificationForm",
 ]
