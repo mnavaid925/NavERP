@@ -26,3 +26,25 @@ Changeset reviewed: `8ade3ec32bae7a7208579153bcfb73e15a836f6f...HEAD` (Base from
 13. `templates/quality/designcontrols/dhf_dossier.html:299` — `doc.lifecycle_css` references a non-existent property on `ControlledDocument`, resulting in empty CSS class for specifications. Fix: Replace `badge {{ doc.lifecycle_css }}` with `badge badge-info` or add `@property def lifecycle_css` to `ControlledDocument`.
 14. `apps/quality/views/DesignControls/DesignVerifications.py:182` — Editing a verification protocol from `"pass"` to `"fail"` or deleting it does not check if `primary_input.status` should revert back to `"approved"` if no other passing test exists. Fix: Recalculate `primary_input.status` when test result is modified or deleted.
 15. `apps/quality/views/DesignControls/DesignProjects.py:234` — `design_project_lock_dhf` re-executes redundant lock updates if already locked. Fix: Check `if project.dhf_locked:` and return early.
+
+---
+
+## 2. Explorer Pass (`explorer`)
+
+### Critical
+- Confirmed C1: `templates/quality/designcontrols/design_input/detail.html:189` — `{{ ver.executed_by.get_full_name|default:ver.executed_by.username|default:"—" }}` throws `VariableDoesNotExist` when optional FK `executed_by` is None.
+- Confirmed C2: `templates/quality/designcontrols/design_verification/detail.html:63` — `{{ verification.executed_by.get_full_name|default:verification.executed_by.username|default:"Pending Execution" }}` throws `VariableDoesNotExist` when optional FK `executed_by` is None.
+- Confirmed C3: `apps/quality/views/DesignControls/DesignProjects.py:213` — `phase_order` includes non-existent `"transfer"` phase, corrupting model state on phase advance.
+
+### Important
+- Confirmed I4: `apps/quality/models/DesignControls/DesignProjects.py:64` and related models — CSS maps define non-existent `badge-purple` and `badge-blue` classes (L33).
+- Confirmed I5: Templates hardcode non-existent `badge-purple` class.
+- Confirmed I6: `apps/quality/views/DesignControls/DesignProjects.py:211` — `design_project_advance_phase` lacks DHF lock guard.
+- Confirmed I7: `apps/quality/views/DesignControls/DesignReviews.py:193` — `design_review_approve_gate` lacks DHF lock guard and redundant approval check.
+- Confirmed I8: `apps/quality/views/DesignControls/DesignVerifications.py:135, 180` — Multi-table updates across `DesignVerification` and `DesignInput` lack `transaction.atomic()`.
+- Confirmed I9: `templates/quality/designcontrols/{design_project,design_input,design_review,design_verification}/detail.html` — Detail page headers lack POST-only delete actions.
+
+### Minor
+- Confirmed M10: `templates/quality/designcontrols/dhf_dossier.html:299` — `doc.lifecycle_css` missing property method on `ControlledDocument`.
+- Confirmed M11: `apps/quality/views/DesignControls/DesignVerifications.py:180, 200` — Asymmetric verification status sync when tests fail or are deleted.
+- Confirmed M12: `apps/quality/views/DesignControls/DesignProjects.py:234` — Idempotence check missing in `design_project_lock_dhf`.
