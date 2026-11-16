@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}{{ verification.number }} — {{ verification.title }} | Design Controls{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_list' %}">Design Projects</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_detail' verification.project.pk %}">{{ verification.project.number }}</a>
+            <span>/</span>
+            <span>{{ verification.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ verification.number }} — {{ verification.title }}</h1>
+            <span class="badge {{ verification.status_css }}">{{ verification.get_status_display }}</span>
+            <span class="badge {{ verification.activity_type_css }}">{{ verification.get_activity_type_display }}</span>
+            <span class="badge {{ verification.result_css }}">{{ verification.get_pass_fail_result_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if not verification.project.dhf_locked %}
+        <a href="{% url 'quality:design_verification_edit' verification.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Protocol
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Overview Card -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Protocol & Test Execution Record</h2>
+        <span class="text-xs text-slate-500 font-mono">Sample Size: n={{ verification.sample_size }}</span>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Design Project</dt>
+                <dd>
+                    <a href="{% url 'quality:design_project_detail' verification.project.pk %}" class="text-blue-600 font-medium hover:underline">
+                        {{ verification.project.number }} — {{ verification.project.title }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Target Design Input / Requirement</dt>
+                <dd>
+                    <a href="{% url 'quality:design_input_detail' verification.primary_input.pk %}" class="text-blue-600 font-medium hover:underline font-mono text-xs">
+                        {{ verification.primary_input.identifier }} — {{ verification.primary_input.title }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Verification Test Method</dt>
+                <dd class="font-medium text-slate-800">{{ verification.get_test_method_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Test Operator / Executed By</dt>
+                <dd>{{ verification.executed_by.get_full_name|default:verification.executed_by.username|default:"Pending Execution" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Execution Date</dt>
+                <dd>{{ verification.execution_date|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Controlled Protocol SOP (12.1)</dt>
+                <dd>
+                    {% if verification.protocol_document %}
+                    <a href="{% url 'quality:controlled_document_detail' verification.protocol_document.pk %}" class="text-blue-600 font-mono text-xs hover:underline">
+                        {{ verification.protocol_document.number }} Rev {{ verification.protocol_document.revision }} ({{ verification.protocol_document.title }})
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">—</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Controlled Test Report (12.1)</dt>
+                <dd>
+                    {% if verification.report_document %}
+                    <a href="{% url 'quality:controlled_document_detail' verification.report_document.pk %}" class="text-blue-600 font-mono text-xs hover:underline">
+                        {{ verification.report_document.number }} Rev {{ verification.report_document.revision }} ({{ verification.report_document.title }})
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">—</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item md:col-span-2">
+                <dt>Predetermined Acceptance Criteria (21 CFR § 820.30(f))</dt>
+                <dd class="text-slate-800 whitespace-pre-line text-sm bg-slate-50 p-3 rounded border border-slate-100 font-mono">{{ verification.acceptance_criteria }}</dd>
+            </div>
+            {% if verification.results_summary %}
+            <div class="detail-item md:col-span-2">
+                <dt>Observed Testing Results & Quantitative Data</dt>
+                <dd class="text-slate-800 whitespace-pre-line text-sm bg-white p-3 rounded border border-slate-200 font-mono">{{ verification.results_summary }}</dd>
+            </div>
+            {% endif %}
+            {% if verification.deviation_notes %}
+            <div class="detail-item md:col-span-2">
+                <dt>Test Anomalies & Protocol Deviation Notes</dt>
+                <dd class="text-red-700 bg-red-50 p-3 rounded border border-red-200 whitespace-pre-line text-sm">{{ verification.deviation_notes }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+{% endblock %}
