@@ -1,9 +1,87 @@
 from django.contrib import admin
 
+from apps.quality.models.DesignControls.DesignInputs import DesignInput
+from apps.quality.models.DesignControls.DesignProjects import DesignProject
+from apps.quality.models.DesignControls.DesignReviews import DesignReview
+from apps.quality.models.DesignControls.DesignVerifications import DesignVerification
 from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDocument
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
+
+
+@admin.register(DesignProject)
+class DesignProjectAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "device_name",
+        "device_class",
+        "regulatory_pathway",
+        "current_phase",
+        "status",
+        "project_lead",
+        "dhf_locked",
+        "tenant",
+    )
+    list_filter = ("device_class", "regulatory_pathway", "current_phase", "status", "dhf_locked", "tenant")
+    search_fields = ("number", "title", "device_name", "project_lead__username")
+    list_select_related = ("tenant", "project_lead", "quality_lead", "department")
+
+
+@admin.register(DesignInput)
+class DesignInputAdmin(admin.ModelAdmin):
+    list_display = (
+        "identifier",
+        "number",
+        "title",
+        "project",
+        "input_type",
+        "priority",
+        "status",
+        "owner",
+        "tenant",
+    )
+    list_filter = ("input_type", "priority", "status", "tenant")
+    search_fields = ("identifier", "number", "title", "project__number", "project__title")
+    list_select_related = ("tenant", "project", "owner", "user_need_parent", "controlled_document")
+
+
+@admin.register(DesignReview)
+class DesignReviewAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "project",
+        "review_stage",
+        "review_date",
+        "status",
+        "lead_reviewer",
+        "independent_reviewer",
+        "action_items_resolved",
+        "tenant",
+    )
+    list_filter = ("review_stage", "status", "action_items_resolved", "tenant")
+    search_fields = ("number", "title", "project__number", "lead_reviewer__username", "independent_reviewer__username")
+    list_select_related = ("tenant", "project", "lead_reviewer", "independent_reviewer", "electronic_signature")
+
+
+@admin.register(DesignVerification)
+class DesignVerificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "project",
+        "primary_input",
+        "activity_type",
+        "test_method",
+        "pass_fail_result",
+        "status",
+        "tenant",
+    )
+    list_filter = ("activity_type", "test_method", "pass_fail_result", "status", "tenant")
+    search_fields = ("number", "title", "primary_input__identifier", "project__number")
+    list_select_related = ("tenant", "project", "primary_input", "executed_by", "protocol_document", "report_document")
 
 
 @admin.register(ControlledDocument)
