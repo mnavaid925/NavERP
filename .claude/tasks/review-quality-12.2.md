@@ -64,3 +64,18 @@ Changeset reviewed: `8ade3ec32bae7a7208579153bcfb73e15a836f6f...HEAD` (Base from
 ### Minor
 - Confirmed M10: `templates/quality/designcontrols/dhf_dossier.html:299` — `doc.lifecycle_css` renders empty.
 - M16: `templates/quality/designcontrols/design_project/detail.html:187, 254, 320` & `design_input/detail.html:191` — Icon-only action buttons in embedded tables lack `title` or `aria-label` attributes. Fix: Add `title="View ..."` attributes.
+
+---
+
+## 4. Performance Reviewer Pass (`performance-reviewer`)
+
+### Critical
+- C17: `apps/quality/models/DesignControls/DesignInputs.py:107` — `DesignInput.is_verified` property calls `self.verifications.filter(pass_fail_result="pass").exists()`. This forces a new SQL query per row, bypassing Django's prefetch cache in list templates, RTM matrix, and DHF dossier (`1 + N` queries). Fix: Check `_prefetched_objects_cache` before querying, or evaluate from prefetched list.
+
+### Important
+- I18: `templates/quality/designcontrols/dhf_dossier.html:81, 85, 89` — Calling `.count` on QuerySets in template right before iterating over them issues redundant SQL `SELECT COUNT(*)` queries. Fix: Use `|length`.
+- I19: `apps/quality/views/DesignControls/DesignProjects.py:49-51, 140-153` and related list/detail views — Multiple individual `.count()` queries execute for KPI stat cards instead of unified conditional aggregates (`aggregate(Count("id", filter=Q(...)))`).
+
+### Minor
+- Confirmed I8 / M1: `apps/quality/views/DesignControls/DesignVerifications.py:133-143, 179-186` — Multi-model writes (`DesignVerification` + `DesignInput`) lack `with transaction.atomic():`.
+- M20: `apps/quality/models/DesignControls/DesignProjects.py:103` — Recommend compound index `(tenant, -created_at)` for fast sorting on large project datasets.
