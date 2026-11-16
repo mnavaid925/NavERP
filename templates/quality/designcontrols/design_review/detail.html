@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}{{ review.number }} — {{ review.get_review_stage_display }} | Design Controls{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_list' %}">Design Projects</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_detail' review.project.pk %}">{{ review.project.number }}</a>
+            <span>/</span>
+            <span>{{ review.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ review.number }} — {{ review.get_review_stage_display }}</h1>
+            <span class="badge {{ review.status_css }}">{{ review.get_status_display }}</span>
+            <span class="badge {{ review.stage_css }}">{{ review.title }}</span>
+            {% if review.is_cleared %}
+            <span class="badge badge-green"><i data-lucide="check-check" class="w-3 h-3 inline"></i> Gate Cleared</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if review.status != "approved" and not review.project.dhf_locked %}
+        <form method="post" action="{% url 'quality:design_review_approve_gate' review.pk %}" class="inline" onsubmit="return confirm('Authorize and approve stage-gate clearance for {{ review.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700 hover:bg-green-50" title="Approve stage-gate review">
+                <i data-lucide="check-circle"></i> Clear & Approve Gate
+            </button>
+        </form>
+        {% endif %}
+        {% if not review.project.dhf_locked %}
+        <a href="{% url 'quality:design_review_edit' review.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Review
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Review Overview -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Stage-Gate Design Review Record</h2>
+        <span class="text-xs text-slate-500 font-mono">Date: {{ review.review_date }}</span>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Design Project</dt>
+                <dd>
+                    <a href="{% url 'quality:design_project_detail' review.project.pk %}" class="text-blue-600 font-medium hover:underline">
+                        {{ review.project.number }} — {{ review.project.title }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Review Stage</dt>
+                <dd class="font-medium text-slate-800">{{ review.get_review_stage_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Lead Reviewer</dt>
+                <dd>{{ review.lead_reviewer.get_full_name|default:review.lead_reviewer.username }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Independent Reviewer (21 CFR § 820.30(e))</dt>
+                <dd>
+                    <div class="font-medium text-slate-900 flex items-center gap-1.5">
+                        <i data-lucide="shield-check" class="w-4 h-4 text-blue-600"></i>
+                        {{ review.independent_reviewer.get_full_name|default:review.independent_reviewer.username }}
+                    </div>
+                    <div class="text-[11px] text-slate-400">Independent evaluator without direct stage responsibility</div>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Action Items Status</dt>
+                <dd>
+                    {% if review.action_items_resolved %}
+                    <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Resolved</span>
+                    {% elif review.action_items %}
+                    <span class="badge badge-amber"><i data-lucide="clock" class="w-3 h-3 inline"></i> Open Action Items</span>
+                    {% else %}
+                    <span class="badge badge-slate">None Assigned</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Part 11 Electronic Signature</dt>
+                <dd>
+                    {% if review.electronic_signature %}
+                    <a href="{% url 'quality:electronic_signature_detail' review.electronic_signature.pk %}" class="text-blue-600 font-mono text-xs hover:underline flex items-center gap-1">
+                        <i data-lucide="award" class="w-3.5 h-3.5 text-purple-600"></i>
+                        {{ review.electronic_signature.number }} ({{ review.electronic_signature.signer_name }})
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">Pending Gate Authorization</span>
+                    {% endif %}
+                </dd>
+            </div>
+            {% if review.agenda %}
+            <div class="detail-item md:col-span-2">
+                <dt>Meeting Agenda & Multidisciplinary Attendees</dt>
+                <dd class="text-slate-800 whitespace-pre-line text-sm">{{ review.agenda }}</dd>
+            </div>
+            {% endif %}
+            {% if review.discussion_summary %}
+            <div class="detail-item md:col-span-2">
+                <dt>Design Discussion & Technical Findings</dt>
+                <dd class="text-slate-800 whitespace-pre-line text-sm bg-slate-50 p-3 rounded border border-slate-100">{{ review.discussion_summary }}</dd>
+            </div>
+            {% endif %}
+            {% if review.conclusions %}
+            <div class="detail-item md:col-span-2">
+                <dt>Review Conclusions & Gate Clearance Rationale</dt>
+                <dd class="text-slate-800 whitespace-pre-line text-sm font-medium">{{ review.conclusions }}</dd>
+            </div>
+            {% endif %}
+            {% if review.action_items %}
+            <div class="detail-item md:col-span-2">
+                <dt>Assigned Action Items & Resolution Due Dates</dt>
+                <dd class="text-amber-800 bg-amber-50 p-3 rounded border border-amber-200 whitespace-pre-line text-sm font-mono">{{ review.action_items }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+{% endblock %}
