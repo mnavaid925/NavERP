@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | Design Controls{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_verification_list' %}">Verifications</a>
+            <span>/</span>
+            <span>{{ title }}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Verification & Validation Test Protocol Specification</h2>
+        <p class="text-xs text-slate-500">Define test methodology, sample size, acceptance criteria, and execution results per 21 CFR § 820.30(f) & (g)</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Project -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.project.id_for_label }}">Design Project *</label>
+                    {{ form.project }}
+                    {% if form.project.errors %}<div class="form-error">{{ form.project.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Primary Input -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.primary_input.id_for_label }}">Target Design Input / Need *</label>
+                    {{ form.primary_input }}
+                    {% if form.primary_input.errors %}<div class="form-error">{{ form.primary_input.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Title -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Test Protocol Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Activity Type -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.activity_type.id_for_label }}">Activity Type *</label>
+                    {{ form.activity_type }}
+                    {% if form.activity_type.errors %}<div class="form-error">{{ form.activity_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Test Method -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.test_method.id_for_label }}">Test Method *</label>
+                    {{ form.test_method }}
+                    {% if form.test_method.errors %}<div class="form-error">{{ form.test_method.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Sample Size -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sample_size.id_for_label }}">Sample Size (Units Tested) *</label>
+                    {{ form.sample_size }}
+                    {% if form.sample_size.errors %}<div class="form-error">{{ form.sample_size.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Status -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Protocol Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Pass/Fail Result -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.pass_fail_result.id_for_label }}">Pass / Fail Result *</label>
+                    {{ form.pass_fail_result }}
+                    {% if form.pass_fail_result.errors %}<div class="form-error">{{ form.pass_fail_result.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Execution Date -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.execution_date.id_for_label }}">Execution Date</label>
+                    {{ form.execution_date }}
+                    {% if form.execution_date.errors %}<div class="form-error">{{ form.execution_date.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Executed By -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.executed_by.id_for_label }}">Test Operator / Executed By</label>
+                    {{ form.executed_by }}
+                    {% if form.executed_by.errors %}<div class="form-error">{{ form.executed_by.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Protocol Document Link -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.protocol_document.id_for_label }}">Controlled Protocol Document (12.1)</label>
+                    {{ form.protocol_document }}
+                    {% if form.protocol_document.errors %}<div class="form-error">{{ form.protocol_document.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Report Document Link -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.report_document.id_for_label }}">Controlled Test Report Document (12.1)</label>
+                    {{ form.report_document }}
+                    {% if form.report_document.errors %}<div class="form-error">{{ form.report_document.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Acceptance Criteria -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.acceptance_criteria.id_for_label }}">Predetermined Acceptance Criteria *</label>
+                    {{ form.acceptance_criteria }}
+                    {% if form.acceptance_criteria.errors %}<div class="form-error">{{ form.acceptance_criteria.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Results Summary -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.results_summary.id_for_label }}">Observed Results Summary & Quantitative Data</label>
+                    {{ form.results_summary }}
+                    {% if form.results_summary.errors %}<div class="form-error">{{ form.results_summary.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Deviation Notes -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.deviation_notes.id_for_label }}">Protocol Deviations & Failure Notes</label>
+                    {{ form.deviation_notes }}
+                    {% if form.deviation_notes.errors %}<div class="form-error">{{ form.deviation_notes.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if verification %}{% url 'quality:design_verification_detail' verification.pk %}{% else %}{% url 'quality:design_verification_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {{ action }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
