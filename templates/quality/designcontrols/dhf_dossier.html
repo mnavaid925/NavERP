@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Design History File (DHF) — {{ project.number }} | Design Controls{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_list' %}">Design Projects</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_project_detail' project.pk %}">{{ project.number }}</a>
+            <span>/</span>
+            <span>Design History File Dossier</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Design History File (DHF) Dossier</h1>
+            {% if project.dhf_locked %}
+            <span class="badge badge-purple"><i data-lucide="lock" class="w-3.5 h-3.5 inline"></i> DHF Frozen & Locked</span>
+            {% elif is_dhf_complete %}
+            <span class="badge badge-green"><i data-lucide="check-circle" class="w-3.5 h-3.5 inline"></i> Ready for Transfer Freeze</span>
+            {% else %}
+            <span class="badge badge-amber"><i data-lucide="clock" class="w-3.5 h-3.5 inline"></i> In Development</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:traceability_matrix' %}?project={{ project.pk }}" class="btn btn-outline">
+            <i data-lucide="network"></i> View RTM
+        </a>
+        <a href="{% url 'quality:design_project_dhf_export' project.pk %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export DHF Index
+        </a>
+        {% if not project.dhf_locked %}
+        <form method="post" action="{% url 'quality:design_project_lock_dhf' project.pk %}" class="inline" onsubmit="return confirm('Freeze and lock Design History File for {{ project.number|escapejs }}? Post-freeze modifications require a formal Document Change Order.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" title="Freeze DHF">
+                <i data-lucide="lock"></i> Freeze & Lock DHF
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- DHF Compliance Banner -->
+<div class="card mb-6 bg-slate-900 text-white">
+    <div class="card-body">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <div class="text-xs font-mono uppercase tracking-wider text-slate-400">Design History File per 21 CFR § 820.30(j) & ISO 13485:2016 7.3.10</div>
+                <div class="text-2xl font-bold text-white mt-1">{{ project.device_name }} ({{ project.number }})</div>
+                <div class="text-sm text-slate-300 mt-1">{{ project.title }}</div>
+            </div>
+            <div class="flex items-center gap-6">
+                <div>
+                    <div class="text-xs text-slate-400">Regulatory Pathway</div>
+                    <div class="font-semibold text-white">{{ project.get_regulatory_pathway_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-400">Device Class</div>
+                    <div class="font-semibold text-white">{{ project.get_device_class_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-400">Current Phase</div>
+                    <div class="font-semibold text-white">{{ project.get_current_phase_display }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Table of Contents / DHF Sections Navigation -->
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+    <a href="#section-1" class="card p-4 hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-mono">DHF Section 1</div>
+        <div class="font-semibold text-slate-800 text-sm mt-1">Design Plan (DDP)</div>
+    </a>
+    <a href="#section-2" class="card p-4 hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-mono">DHF Section 2</div>
+        <div class="font-semibold text-slate-800 text-sm mt-1">Design Inputs ({{ inputs.count }})</div>
+    </a>
+    <a href="#section-3" class="card p-4 hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-mono">DHF Section 3</div>
+        <div class="font-semibold text-slate-800 text-sm mt-1">Stage Reviews ({{ reviews.count }})</div>
+    </a>
+    <a href="#section-4" class="card p-4 hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-mono">DHF Section 4</div>
+        <div class="font-semibold text-slate-800 text-sm mt-1">V&V Protocols ({{ verifications.count }})</div>
+    </a>
+    <a href="#section-5" class="card p-4 hover:border-blue-400 transition">
+        <div class="text-xs text-slate-500 font-mono">DHF Section 5</div>
+        <div class="font-semibold text-slate-800 text-sm mt-1">Transfer Specs ({{ specifications|length }})</div>
+    </a>
+</div>
+
+<!-- Section 1: Design & Development Plan -->
+<div id="section-1" class="card mb-6">
+    <div class="card-header flex justify-between items-center bg-slate-50">
+        <div>
+            <span class="text-xs font-mono text-slate-500 uppercase tracking-wider">Section 1</span>
+            <h2 class="text-base font-semibold text-slate-800">Design & Development Plan (DDP)</h2>
+        </div>
+        <span class="badge badge-info">21 CFR § 820.30(b)</span>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>DHF Identifier & Storage Location</dt>
+                <dd class="font-mono text-sm">{{ project.dhf_location|default:"Digital QMS Central Vault" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Plan Lead & Quality Oversight</dt>
+                <dd>{{ project.project_lead.get_full_name|default:project.project_lead.username }} (R&D Lead) &bull; {{ project.quality_lead.get_full_name|default:project.quality_lead.username }} (QA Lead)</dd>
+            </div>
+            <div class="detail-item md:col-span-2">
+                <dt>Indications for Use & Clinical Intended Purpose</dt>
+                <dd class="text-slate-800 text-sm whitespace-pre-line">{{ project.intended_use }}</dd>
+            </div>
+            {% if project.description %}
+            <div class="detail-item md:col-span-2">
+                <dt>Product Architecture & System Boundary</dt>
+                <dd class="text-slate-600 text-sm whitespace-pre-line">{{ project.description }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+<!-- Section 2: Design Inputs -->
+<div id="section-2" class="card mb-6">
+    <div class="card-header flex justify-between items-center bg-slate-50">
+        <div>
+            <span class="text-xs font-mono text-slate-500 uppercase tracking-wider">Section 2</span>
+            <h2 class="text-base font-semibold text-slate-800">Approved Design Inputs & Requirements Specification</h2>
+        </div>
+        <span class="badge badge-info">21 CFR § 820.30(c)</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Specification Title</th>
+                    <th>Type</th>
+                    <th>Priority</th>
+                    <th>Acceptance Criteria</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inp in inputs %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-blue-700">
+                        <a href="{% url 'quality:design_input_detail' inp.pk %}" class="hover:underline">{{ inp.identifier }}</a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 text-sm">{{ inp.title }}</div>
+                        <div class="text-xs text-slate-500">{{ inp.description|truncatechars:80 }}</div>
+                    </td>
+                    <td><span class="badge {{ inp.input_type_css }}">{{ inp.get_input_type_display }}</span></td>
+                    <td><span class="badge {{ inp.priority_css }}">{{ inp.get_priority_display }}</span></td>
+                    <td class="text-xs font-mono text-slate-700">{{ inp.acceptance_criteria|truncatechars:60 }}</td>
+                    <td>
+                        {% if inp.is_verified %}
+                        <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Verified</span>
+                        {% else %}
+                        <span class="badge badge-amber">Unverified</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center py-4 text-slate-400">No design inputs recorded.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Section 3: Design Reviews -->
+<div id="section-3" class="card mb-6">
+    <div class="card-header flex justify-between items-center bg-slate-50">
+        <div>
+            <span class="text-xs font-mono text-slate-500 uppercase tracking-wider">Section 3</span>
+            <h2 class="text-base font-semibold text-slate-800">Documented Stage-Gate Design Reviews</h2>
+        </div>
+        <span class="badge badge-info">21 CFR § 820.30(e)</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Review #</th>
+                    <th>Stage & Title</th>
+                    <th>Review Date</th>
+                    <th>Lead Reviewer</th>
+                    <th>Independent Reviewer</th>
+                    <th>Gate Status</th>
+                    <th>Part 11 Signature</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in reviews %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'quality:design_review_detail' rev.pk %}" class="text-blue-600 hover:underline">{{ rev.number }}</a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 text-sm">{{ rev.get_review_stage_display }}</div>
+                        <div class="text-xs text-slate-500">{{ rev.title }}</div>
+                    </td>
+                    <td class="text-sm text-slate-600">{{ rev.review_date }}</td>
+                    <td class="text-sm text-slate-600">{{ rev.lead_reviewer.get_full_name|default:rev.lead_reviewer.username }}</td>
+                    <td class="text-sm text-slate-600">
+                        <span class="inline-flex items-center gap-1">
+                            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-600"></i>
+                            {{ rev.independent_reviewer.get_full_name|default:rev.independent_reviewer.username }}
+                        </span>
+                    </td>
+                    <td><span class="badge {{ rev.status_css }}">{{ rev.get_status_display }}</span></td>
+                    <td>
+                        {% if rev.electronic_signature %}
+                        <span class="badge badge-purple font-mono text-[10px]"><i data-lucide="award" class="w-3 h-3 inline"></i> {{ rev.electronic_signature.number }}</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">Pending</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-4 text-slate-400">No stage-gate design reviews held.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Section 4: V&V Protocols -->
+<div id="section-4" class="card mb-6">
+    <div class="card-header flex justify-between items-center bg-slate-50">
+        <div>
+            <span class="text-xs font-mono text-slate-500 uppercase tracking-wider">Section 4</span>
+            <h2 class="text-base font-semibold text-slate-800">Design Verification & Validation Test Evidence</h2>
+        </div>
+        <span class="badge badge-info">21 CFR § 820.30(f) & (g)</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Protocol #</th>
+                    <th>Protocol Title</th>
+                    <th>Primary Input</th>
+                    <th>Activity Type</th>
+                    <th>Method & Sample</th>
+                    <th>Result</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ver in verifications %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'quality:design_verification_detail' ver.pk %}" class="text-blue-600 hover:underline">{{ ver.number }}</a>
+                    </td>
+                    <td class="font-medium text-slate-900 text-sm">{{ ver.title }}</td>
+                    <td class="font-mono text-xs text-slate-600">{{ ver.primary_input.identifier }}</td>
+                    <td><span class="badge {{ ver.activity_type_css }}">{{ ver.get_activity_type_display }}</span></td>
+                    <td class="text-xs text-slate-600">{{ ver.get_test_method_display }} (n={{ ver.sample_size }})</td>
+                    <td><span class="badge {{ ver.result_css }}">{{ ver.get_pass_fail_result_display }}</span></td>
+                    <td><span class="badge {{ ver.status_css }}">{{ ver.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-4 text-slate-400">No verification protocols logged.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Section 5: Controlled Specifications & DMR Linkages -->
+<div id="section-5" class="card mb-6">
+    <div class="card-header flex justify-between items-center bg-slate-50">
+        <div>
+            <span class="text-xs font-mono text-slate-500 uppercase tracking-wider">Section 5</span>
+            <h2 class="text-base font-semibold text-slate-800">Controlled Specifications & Design Transfer Package</h2>
+        </div>
+        <span class="badge badge-info">21 CFR § 820.30(h)</span>
+    </div>
+    <div class="card-body">
+        {% if specifications %}
+        <ul class="divide-y divide-slate-100">
+            {% for doc in specifications %}
+            <li class="py-3 flex items-center justify-between">
+                <div>
+                    <a href="{% url 'quality:controlled_document_detail' doc.pk %}" class="font-mono text-xs font-semibold text-blue-600 hover:underline">
+                        {{ doc.number }} Rev {{ doc.revision }}
+                    </a>
+                    <span class="font-medium text-slate-800 text-sm ml-2">{{ doc.title }}</span>
+                    <span class="badge {{ doc.lifecycle_css }} text-[10px] ml-2">{{ doc.get_lifecycle_state_display }}</span>
+                </div>
+                <div class="text-xs text-slate-500">
+                    Dept: {{ doc.department.name|default:"Quality" }} &bull; Effective: {{ doc.effective_date|default:"Pending" }}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-slate-500">No controlled SOPs or specifications directly linked to this DHF yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
