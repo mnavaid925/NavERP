@@ -34,7 +34,7 @@ def design_verification_list(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(number__icontains(q)) | Q(title__icontains(q)) | Q(acceptance_criteria__icontains(q)) | Q(results_summary__icontains(q))
+            Q(number__icontains=q) | Q(title__icontains=q) | Q(acceptance_criteria__icontains=q) | Q(results_summary__icontains=q)
         )
 
     selected_project = request.GET.get("project", "").strip()
