@@ -48,3 +48,19 @@ Changeset reviewed: `8ade3ec32bae7a7208579153bcfb73e15a836f6f...HEAD` (Base from
 - Confirmed M10: `templates/quality/designcontrols/dhf_dossier.html:299` — `doc.lifecycle_css` missing property method on `ControlledDocument`.
 - Confirmed M11: `apps/quality/views/DesignControls/DesignVerifications.py:180, 200` — Asymmetric verification status sync when tests fail or are deleted.
 - Confirmed M12: `apps/quality/views/DesignControls/DesignProjects.py:234` — Idempotence check missing in `design_project_lock_dhf`.
+
+---
+
+## 3. Frontend Reviewer Pass (`frontend-reviewer`)
+
+### Critical
+- Confirmed C1: `templates/quality/designcontrols/design_input/detail.html:189` — `ver.executed_by` None lookup crash (L10).
+- Confirmed C2: `templates/quality/designcontrols/design_verification/detail.html:63` — `verification.executed_by` None lookup crash (L10).
+
+### Important
+- Confirmed I4 / I5: Model CSS maps and templates define/hardcode non-existent `badge-purple` and `badge-blue` classes (L33).
+- Confirmed I9: `templates/quality/designcontrols/{design_project,design_input,design_review,design_verification}/detail.html` — Detail page headers lack POST-only delete actions.
+
+### Minor
+- Confirmed M10: `templates/quality/designcontrols/dhf_dossier.html:299` — `doc.lifecycle_css` renders empty.
+- M16: `templates/quality/designcontrols/design_project/detail.html:187, 254, 320` & `design_input/detail.html:191` — Icon-only action buttons in embedded tables lack `title` or `aria-label` attributes. Fix: Add `title="View ..."` attributes.
