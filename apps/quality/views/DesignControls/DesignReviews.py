@@ -33,7 +33,7 @@ def design_review_list(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(number__icontains(q)) | Q(title__icontains(q)) | Q(conclusions__icontains(q))
+            Q(number__icontains=q) | Q(title__icontains=q) | Q(conclusions__icontains=q)
         )
 
     selected_project = request.GET.get("project", "").strip()
