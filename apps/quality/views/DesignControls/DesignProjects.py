@@ -31,7 +31,7 @@ def design_project_list(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(number__icontains(q)) | Q(title__icontains(q)) | Q(device_name__icontains(q))
+            Q(number__icontains=q) | Q(title__icontains=q) | Q(device_name__icontains=q)
         )
 
     selected_class = request.GET.get("device_class", "").strip()
