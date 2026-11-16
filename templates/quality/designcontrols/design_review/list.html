@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Stage-Gate Design Reviews | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <span>Design Controls</span>
+            <span>/</span>
+            <span>Design Reviews</span>
+        </div>
+        <h1 class="page-title">Stage-Gate Design Reviews (21 CFR § 820.30(e))</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:design_review_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:design_review_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Schedule Review
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-check"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Stage Reviews</div>
+            <div class="text-2xl font-bold text-slate-800">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Approved & Cleared Gates</div>
+            <div class="text-2xl font-bold text-slate-800">{{ approved_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Pending Gate Reviews</div>
+            <div class="text-2xl font-bold text-slate-800">{{ pending_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" placeholder="Review #, title, conclusions..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="project-filter">Project</label>
+                <select id="project-filter" name="project" class="form-select">
+                    <option value="">All Projects</option>
+                    {% for p in projects %}
+                    <option value="{{ p.pk }}" {% if selected_project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} — {{ p.title|truncatechars:25 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="stage-filter">Review Stage</label>
+                <select id="stage-filter" name="stage" class="form-select">
+                    <option value="">All Stages</option>
+                    {% for code, label in stage_choices %}
+                    <option value="{{ code }}" {% if selected_stage == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Gate Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if q or selected_project or selected_stage or selected_status %}
+                <a href="{% url 'quality:design_review_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Review #</th>
+                    <th>Stage & Title</th>
+                    <th>Project</th>
+                    <th>Date</th>
+                    <th>Lead Reviewer</th>
+                    <th>Independent Reviewer</th>
+                    <th>Gate Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rev in reviews %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-800">
+                        <a href="{% url 'quality:design_review_detail' rev.pk %}" class="text-blue-600 hover:underline">
+                            {{ rev.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ rev.get_review_stage_display }}</div>
+                        <div class="text-xs text-slate-500">{{ rev.title }}</div>
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        <a href="{% url 'quality:design_project_detail' rev.project.pk %}" class="text-slate-800 hover:text-blue-600">
+                            {{ rev.project.number }}
+                        </a>
+                    </td>
+                    <td class="text-sm text-slate-600">{{ rev.review_date }}</td>
+                    <td class="text-sm text-slate-600">{{ rev.lead_reviewer.get_full_name|default:rev.lead_reviewer.username }}</td>
+                    <td class="text-sm text-slate-600">
+                        <span class="inline-flex items-center gap-1">
+                            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-600"></i>
+                            {{ rev.independent_reviewer.get_full_name|default:rev.independent_reviewer.username }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ rev.status_css }}">{{ rev.get_status_display }}</span>
+                        {% if rev.action_items and not rev.action_items_resolved %}
+                        <span class="badge badge-amber" title="Open action items pending resolution">Actions Open</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'quality:design_review_detail' rev.pk %}" class="btn btn-icon" title="View Review">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if not rev.project.dhf_locked %}
+                        <a href="{% url 'quality:design_review_edit' rev.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:design_review_delete' rev.pk %}" class="inline" onsubmit="return confirm('Delete design review {{ rev.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="calendar-search" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Stage-Gate Reviews Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Schedule a multidisciplinary design review meeting.</p>
+                            <a href="{% url 'quality:design_review_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i> Schedule Review
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if reviews.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-sm text-slate-500">
+            Showing {{ reviews.start_index }} to {{ reviews.end_index }} of {{ reviews.paginator.count }} reviews
+        </div>
+        <div class="flex items-center gap-1">
+            {% if reviews.has_previous %}
+            <a href="?page={{ reviews.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_stage %}&stage={{ selected_stage }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="px-3 text-sm text-slate-600 font-medium">Page {{ reviews.number }} of {{ reviews.paginator.num_pages }}</span>
+            {% if reviews.has_next %}
+            <a href="?page={{ reviews.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_stage %}&stage={{ selected_stage }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
