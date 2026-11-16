@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | Design Controls{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:design_input_list' %}">Design Inputs</a>
+            <span>/</span>
+            <span>{{ title }}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Design Requirement / Input Specification</h2>
+        <p class="text-xs text-slate-500">Define user needs, functional specs, safety requirements, and acceptance criteria per 21 CFR § 820.30(c)</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Project -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.project.id_for_label }}">Design Project *</label>
+                    {{ form.project }}
+                    {% if form.project.errors %}<div class="form-error">{{ form.project.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Identifier -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.identifier.id_for_label }}">Requirement Identifier *</label>
+                    {{ form.identifier }}
+                    {% if form.identifier.errors %}<div class="form-error">{{ form.identifier.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Title -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Specification Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Type -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.input_type.id_for_label }}">Input / Requirement Type *</label>
+                    {{ form.input_type }}
+                    {% if form.input_type.errors %}<div class="form-error">{{ form.input_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Priority -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.priority.id_for_label }}">Engineering Priority *</label>
+                    {{ form.priority }}
+                    {% if form.priority.errors %}<div class="form-error">{{ form.priority.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Status -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Requirement Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Version -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">Specification Revision *</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}<div class="form-error">{{ form.version.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Owner -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Requirement Owner *</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Parent User Need -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.user_need_parent.id_for_label }}">Parent User Need (Traceability)</label>
+                    {{ form.user_need_parent }}
+                    {% if form.user_need_parent.errors %}<div class="form-error">{{ form.user_need_parent.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Controlled Document Link -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.controlled_document.id_for_label }}">Controlled Specification Document (Module 12.1)</label>
+                    {{ form.controlled_document }}
+                    {% if form.controlled_document.errors %}<div class="form-error">{{ form.controlled_document.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Description -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Requirement Statement (Shall Statement) *</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Acceptance Criteria -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.acceptance_criteria.id_for_label }}">Predetermined Acceptance Criteria (Testable Threshold) *</label>
+                    {{ form.acceptance_criteria }}
+                    {% if form.acceptance_criteria.errors %}<div class="form-error">{{ form.acceptance_criteria.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Rationale -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.rationale.id_for_label }}">Engineering, Risk or Regulatory Rationale</label>
+                    {{ form.rationale }}
+                    {% if form.rationale.errors %}<div class="form-error">{{ form.rationale.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if input_obj %}{% url 'quality:design_input_detail' input_obj.pk %}{% else %}{% url 'quality:design_input_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {{ action }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
