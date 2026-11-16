@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Design Inputs & Requirements | Quality Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <span>Design Controls</span>
+            <span>/</span>
+            <span>Design Inputs</span>
+        </div>
+        <h1 class="page-title">Design Inputs & Requirements</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:traceability_matrix' %}" class="btn btn-outline">
+            <i data-lucide="network"></i> RTM Traceability
+        </a>
+        <a href="{% url 'quality:design_input_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:design_input_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Design Input
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="list-checks"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Requirements</div>
+            <div class="text-2xl font-bold text-slate-800">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Verified & Satisfied</div>
+            <div class="text-2xl font-bold text-slate-800">{{ verified_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Verification Coverage Gaps</div>
+            <div class="text-2xl font-bold text-slate-800">{{ unverified_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" placeholder="Identifier, title, description..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="project-filter">Project</label>
+                <select id="project-filter" name="project" class="form-select">
+                    <option value="">All Projects</option>
+                    {% for p in projects %}
+                    <option value="{{ p.pk }}" {% if selected_project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} — {{ p.title|truncatechars:25 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="type-filter">Type</label>
+                <select id="type-filter" name="input_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for code, label in input_type_choices %}
+                    <option value="{{ code }}" {% if selected_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="priority-filter">Priority</label>
+                <select id="priority-filter" name="priority" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for code, label in priority_choices %}
+                    <option value="{{ code }}" {% if selected_priority == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if q or selected_project or selected_type or selected_priority or selected_status %}
+                <a href="{% url 'quality:design_input_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Identifier</th>
+                    <th>Title & Description</th>
+                    <th>Project</th>
+                    <th>Type</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Coverage</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inp in inputs %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-800">
+                        <a href="{% url 'quality:design_input_detail' inp.pk %}" class="text-blue-600 hover:underline">
+                            {{ inp.identifier }}
+                        </a>
+                        <div class="text-[11px] text-slate-400">{{ inp.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ inp.title }}</div>
+                        <div class="text-xs text-slate-500 truncate max-w-sm">{{ inp.description|truncatechars:70 }}</div>
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        <a href="{% url 'quality:design_project_detail' inp.project.pk %}" class="text-slate-800 hover:text-blue-600">
+                            {{ inp.project.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge {{ inp.input_type_css }}">{{ inp.get_input_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ inp.priority_css }}">{{ inp.get_priority_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ inp.status_css }}">{{ inp.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {% if inp.is_verified %}
+                        <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Verified</span>
+                        {% else %}
+                        <span class="badge badge-amber"><i data-lucide="alert-triangle" class="w-3 h-3 inline"></i> Unverified</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'quality:design_input_detail' inp.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if not inp.project.dhf_locked %}
+                        <a href="{% url 'quality:design_input_edit' inp.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:design_input_delete' inp.pk %}" class="inline" onsubmit="return confirm('Delete design input {{ inp.identifier|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="file-question" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Design Inputs Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Create a new requirement, user need, or specification.</p>
+                            <a href="{% url 'quality:design_input_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i> New Design Input
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if inputs.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-sm text-slate-500">
+            Showing {{ inputs.start_index }} to {{ inputs.end_index }} of {{ inputs.paginator.count }} requirements
+        </div>
+        <div class="flex items-center gap-1">
+            {% if inputs.has_previous %}
+            <a href="?page={{ inputs.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_type %}&input_type={{ selected_type }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="px-3 text-sm text-slate-600 font-medium">Page {{ inputs.number }} of {{ inputs.paginator.num_pages }}</span>
+            {% if inputs.has_next %}
+            <a href="?page={{ inputs.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_type %}&input_type={{ selected_type }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
