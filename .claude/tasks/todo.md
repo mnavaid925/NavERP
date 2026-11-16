@@ -7,6 +7,279 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 12.2: Design Controls & Development (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.2.md` (2026-11-16)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-module 12.1 (Document Control & Management).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0002_documentchangeorder_idx_qdcr_ten_type_and_more.py`, so **12.2 claims `0003_...`** (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QDPL`** (`DesignProject`), **`QINP`** (`DesignInput`), **`QREV`** (`DesignReview`), **`QVER`** (`DesignVerification`).
+> Plan written from `.claude/tasks/research-quality-12.2.md` (Phase 1) and `NavERP.md` (`### 12.2 Design Controls & Development`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/DesignControls/<Entity>.py` (`DesignProjects.py`, `DesignInputs.py`, `DesignReviews.py`, `DesignVerifications.py`, plus dedicated workbench module `TraceabilityMatrix.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/designcontrols/{design_project,design_input,design_review,design_verification}/{list,detail,form}.html` + `templates/quality/designcontrols/{traceability_matrix.html,dhf_dossier.html}`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QDPL`** (`DesignProject`), **`QINP`** (`DesignInput`), **`QREV`** (`DesignReview`), **`QVER`** (`DesignVerification`), all 4 model classes, and all URL stems (`design_project_*`, `design_input_*`, `design_review_*`, `design_verification_*`, `traceability_matrix`, `dhf_dossier`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - Module 12 siblings: `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.ElectronicSignatureRecord` (`apps/quality/models/DocumentControl/ElectronicSignatures.py`).
+  - Self-referencing FK on `DesignInput` (`user_need_parent`) links functional/engineering specifications back to parent User Needs.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`core.OrgUnit`, `accounts.User`, `DesignProject`, `DesignInput`, `ControlledDocument`, `ElectronicSignatureRecord`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **FDA 21 CFR § 820.30 & ISO 13485:2016 Regulatory Alignment**:
+  - § 820.30(b) Design & Development Planning: `DesignProject` governs scope, device classification, intended use, and milestones.
+  - § 820.30(c) Design Inputs: `DesignInput` captures unambiguous, testable user needs, functional, safety, and regulatory requirements with parent-child linkage.
+  - § 820.30(e) Design Reviews: `DesignReview` mandates an independent reviewer (`independent_reviewer`) with no direct responsibility for the stage, action item tracking, and formal gate decision.
+  - § 820.30(f) Design Verification & § 820.30(g) Design Validation: `DesignVerification` documents protocols, acceptance criteria, sample size, test methods, pass/fail results, and links to controlled protocol/report documents.
+  - § 820.30(j) Design History File: Live compiled DHF dossier and bidirectional Requirements Traceability Matrix (RTM) bridging User Needs → Design Inputs → Verification Protocols → Test Results.
+  - 21 CFR Part 11: Gate clearance integrates cryptographic electronic signatures (`ElectronicSignatureRecord`) with re-authentication.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `execution_date`), workflow flags (`dhf_locked`), and auto-numbers (`number`) MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_dhf_ready`, `is_verified`, `is_cleared`, `is_passed`, `open_reviews_count`, `unverified_inputs_count`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view (`create`, `edit`, `delete`, and every custom POST workflow action) calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Stat icon colors ONLY from `.stat-icon.{blue,green,orange,purple,slate,red}`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; privileged actions use `@tenant_admin_required`; `confirm(...)` uses system `number` with `\'` escaped apostrophes (L42); paginators guard `has_previous` / `has_next` (L9); CSV exports use `csv_safe(...)` formula neutralization.
+
+---
+
+## Models (from research — 4)
+
+### 1. `DesignProject` (`QDPL-`)
+- [ ] **File**: `apps/quality/models/DesignControls/DesignProjects.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QDPL"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `device_name`: `CharField(max_length=200, help_text="Commercial or code name of the medical device / product")`
+  - `device_class`: `CharField(max_length=24, choices=DEVICE_CLASS_CHOICES, default="class_ii")` — `"class_i"`, `"class_ii"`, `"class_iii"`, `"class_a"`, `"class_b"`, `"class_c"`, `"class_d"`, `"unclassified"` (longest: 12)
+  - `regulatory_pathway`: `CharField(max_length=24, choices=REGULATORY_PATHWAY_CHOICES, default="510k")` — `"510k"`, `"pma"`, `"de_novo"`, `"ce_mdr"`, `"ce_ivdr"`, `"health_canada"`, `"exempt"`, `"other"` (longest: 13)
+  - `intended_use`: `TextField(help_text="Clinical intended use and indications for use per 21 CFR § 820.30(c)")`
+  - `current_phase`: `CharField(max_length=28, choices=PHASE_CHOICES, default="planning", db_index=True)` — `"planning"`, `"input"`, `"output_verification"`, `"validation"`, `"transfer"`, `"commercial_closure"`, `"closed"` (longest: 19)
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"`, `"active"`, `"gate_review"`, `"on_hold"`, `"completed"`, `"cancelled"` (longest: 11)
+  - `project_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="led_design_projects")`
+  - `quality_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="quality_design_projects")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="design_projects")`
+  - `target_completion_date`: `DateField(null=True, blank=True)`
+  - `actual_completion_date`: `DateField(null=True, blank=True)`
+  - `dhf_location`: `CharField(max_length=255, blank=True, help_text="Physical or digital DHF repository reference identifier")`
+  - `dhf_locked`: `BooleanField(default=False, help_text="DHF frozen upon design transfer / commercial release")`
+  - `description`: `TextField(blank=True)`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qdpl_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qdpl_ten_status")` (19)
+  - `Index(fields=["tenant", "current_phase"], name="idx_qdpl_ten_phase")` (18)
+  - `Index(fields=["tenant", "device_class"], name="idx_qdpl_ten_class")` (18)
+- [ ] **Properties & Methods**:
+  - `is_dhf_ready`: checks verification and gate reviews completeness
+  - `open_reviews_count`: count of open reviews
+  - `unverified_inputs_count`: count of unverified active inputs
+- [ ] **Form (`DesignProjectForm`)**:
+  - Excluded: `tenant`, `number`, `actual_completion_date`, `dhf_locked`, `created_at`, `updated_at`
+  - `clean()`: validate `department`, `project_lead`, `quality_lead` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `advance_phase`, `lock_dhf` (`@require_POST`, `@tenant_admin_required`).
+
+### 2. `DesignInput` (`QINP-`)
+- [ ] **File**: `apps/quality/models/DesignControls/DesignInputs.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QINP"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `project`: `ForeignKey("quality.DesignProject", on_delete=models.CASCADE, related_name="inputs")`
+  - `identifier`: `CharField(max_length=50, help_text="Engineering item identifier, e.g. UN-001, DI-ENG-004, PR-SAFETY-002")`
+  - `title`: `CharField(max_length=255)`
+  - `input_type`: `CharField(max_length=24, choices=INPUT_TYPE_CHOICES, default="functional", db_index=True)` — `"user_need"`, `"functional"`, `"performance"`, `"safety"`, `"regulatory"`, `"human_factors"`, `"software"`, `"interface"`, `"packaging"` (longest: 13)
+  - `priority`: `CharField(max_length=16, choices=PRIORITY_CHOICES, default="major")` — `"critical"`, `"major"`, `"minor"` (longest: 8)
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"`, `"in_review"`, `"approved"`, `"verified"`, `"deferred"`, `"obsolete"` (longest: 9)
+  - `description`: `TextField(help_text="Unambiguous, objective, and testable requirement statement")`
+  - `acceptance_criteria`: `TextField(help_text="Quantitative or qualitative threshold required for verification pass")`
+  - `rationale`: `TextField(blank=True, help_text="Clinical, regulatory, or engineering rationale")`
+  - `user_need_parent`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="derived_inputs", help_text="Links functional design input back to originating high-level User Need")`
+  - `controlled_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="design_inputs", help_text="Links to source specification or SOP in Document Control")`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_design_inputs")`
+  - `version`: `CharField(max_length=20, default="1.0")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qinp_ten_num_uniq")` (25)
+  - `UniqueConstraint(fields=["tenant", "project", "identifier"], name="quality_qinp_ten_prj_id_uniq")` (28)
+  - `Index(fields=["tenant", "project", "input_type"], name="idx_qinp_ten_prj_type")` (21)
+  - `Index(fields=["tenant", "status"], name="idx_qinp_ten_status")` (19)
+- [ ] **Properties & Methods**:
+  - `is_verified`: returns True if associated with at least one `DesignVerification` with `pass_fail_result="pass"`
+- [ ] **Form (`DesignInputForm`)**:
+  - Excluded: `tenant`, `number`, `created_at`, `updated_at`
+  - `clean()`: validate `project`, `user_need_parent`, `controlled_document`, `owner` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `approve_input` (`@require_POST`).
+
+### 3. `DesignReview` (`QREV-`)
+- [ ] **File**: `apps/quality/models/DesignControls/DesignReviews.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QREV"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `project`: `ForeignKey("quality.DesignProject", on_delete=models.CASCADE, related_name="reviews")`
+  - `title`: `CharField(max_length=255)`
+  - `review_stage`: `CharField(max_length=28, choices=REVIEW_STAGE_CHOICES, default="input_freeze", db_index=True)` — `"planning"`, `"concept"`, `"input_freeze"`, `"detailed_design"`, `"verification_gate"`, `"validation_gate"`, `"transfer_gate"`, `"post_launch"` (longest: 17)
+  - `review_date`: `DateField()`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="scheduled", db_index=True)` — `"scheduled"`, `"in_progress"`, `"approved"`, `"conditional"`, `"rejected"`, `"cancelled"` (longest: 11)
+  - `lead_reviewer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="led_design_reviews")`
+  - `independent_reviewer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="independent_design_reviews", help_text="Independent reviewer with no direct responsibility for the design stage being reviewed per 21 CFR § 820.30(e)")`
+  - `agenda`: `TextField(blank=True)`
+  - `discussion_summary`: `TextField(blank=True)`
+  - `conclusions`: `TextField(blank=True)`
+  - `action_items`: `TextField(blank=True, help_text="Assigned action items and due dates required before full gate closure")`
+  - `action_items_resolved`: `BooleanField(default=False)`
+  - `electronic_signature`: `ForeignKey("quality.ElectronicSignatureRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="design_reviews", help_text="21 CFR Part 11 signature manifest authorizing gate closure")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrev_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "project", "review_stage"], name="idx_qrev_ten_prj_stage")` (22)
+  - `Index(fields=["tenant", "status"], name="idx_qrev_ten_status")` (19)
+  - `Index(fields=["tenant", "review_date"], name="idx_qrev_ten_revdate")` (20)
+- [ ] **Properties & Methods**:
+  - `is_cleared`: returns True if `status == "approved"` and (`action_items_resolved` or not `action_items`)
+- [ ] **Form (`DesignReviewForm`)**:
+  - Excluded: `tenant`, `number`, `electronic_signature`, `created_at`, `updated_at`
+  - `clean()`: validate `project`, `lead_reviewer`, `independent_reviewer` via `reject_foreign(...)`; enforce `lead_reviewer != independent_reviewer`
+- [ ] **Workflow actions**: `sign_gate_review` (links 21 CFR Part 11 `ElectronicSignatureRecord`), `resolve_action_items` (`@require_POST`).
+
+### 4. `DesignVerification` (`QVER-`)
+- [ ] **File**: `apps/quality/models/DesignControls/DesignVerifications.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QVER"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `project`: `ForeignKey("quality.DesignProject", on_delete=models.CASCADE, related_name="verifications")`
+  - `primary_input`: `ForeignKey("quality.DesignInput", on_delete=models.CASCADE, related_name="verifications", help_text="Target design input or user need being verified or validated")`
+  - `number`: `CharField(max_length=32, auto-numbered e.g. QVER-00001)`
+  - `title`: `CharField(max_length=255)`
+  - `activity_type`: `CharField(max_length=28, choices=ACTIVITY_TYPE_CHOICES, default="verification", db_index=True)` — `"verification"`, `"validation"`, `"usability"`, `"process_validation"` (longest: 18)
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"`, `"approved_protocol"`, `"testing"`, `"passed"`, `"failed"`, `"waived"` (longest: 17)
+  - `test_method`: `CharField(max_length=24, choices=TEST_METHOD_CHOICES, default="lab_test")` — `"inspection"`, `"lab_test"`, `"analysis"`, `"clinical_trial"`, `"demonstration"` (longest: 14)
+  - `acceptance_criteria`: `TextField(help_text="Predetermined objective acceptance criteria")`
+  - `sample_size`: `PositiveIntegerField(default=1, help_text="Number of test units with statistical rationale")`
+  - `results_summary`: `TextField(blank=True, help_text="Observed testing data and statistical summary")`
+  - `pass_fail_result`: `CharField(max_length=12, choices=PASS_FAIL_CHOICES, default="pending", db_index=True)` — `"pending"`, `"pass"`, `"fail"` (longest: 7)
+  - `deviation_notes`: `TextField(blank=True, help_text="Test anomalies, protocol deviations, or unexpected results")`
+  - `executed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="executed_design_tests")`
+  - `execution_date`: `DateField(null=True, blank=True)`
+  - `protocol_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="verification_protocols", help_text="Formal controlled protocol document in Document Control")`
+  - `report_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="verification_reports", help_text="Formal controlled test report in Document Control")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qver_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "project", "activity_type"], name="idx_qver_ten_prj_act")` (20)
+  - `Index(fields=["tenant", "primary_input"], name="idx_qver_ten_input")` (18)
+  - `Index(fields=["tenant", "status"], name="idx_qver_ten_status")` (19)
+  - `Index(fields=["tenant", "pass_fail_result"], name="idx_qver_ten_result")` (19)
+- [ ] **Properties & Methods**:
+  - `is_passed`: True if `pass_fail_result == "pass"` and `status == "passed"`
+- [ ] **Form (`DesignVerificationForm`)**:
+  - Excluded: `tenant`, `number`, `created_at`, `updated_at`
+  - `clean()`: validate `project`, `primary_input`, `executed_by`, `protocol_document`, `report_document` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `record_results` (`@require_POST`).
+
+---
+
+## Backend Packages (`apps/quality/{models,forms,views,urls}/DesignControls/`)
+
+- [ ] **Models**:
+  - `apps/quality/models/DesignControls/DesignProjects.py`
+  - `apps/quality/models/DesignControls/DesignInputs.py`
+  - `apps/quality/models/DesignControls/DesignReviews.py`
+  - `apps/quality/models/DesignControls/DesignVerifications.py`
+  - Re-export `DesignProject`, `DesignInput`, `DesignReview`, `DesignVerification` in `apps/quality/models/__init__.py`
+- [ ] **Forms**:
+  - `apps/quality/forms/DesignControls/DesignProjects.py` (`DesignProjectForm`)
+  - `apps/quality/forms/DesignControls/DesignInputs.py` (`DesignInputForm`)
+  - `apps/quality/forms/DesignControls/DesignReviews.py` (`DesignReviewForm`)
+  - `apps/quality/forms/DesignControls/DesignVerifications.py` (`DesignVerificationForm`)
+  - Re-export forms in `apps/quality/forms/__init__.py`
+- [ ] **Views**:
+  - `apps/quality/views/DesignControls/DesignProjects.py` (`design_project_list`, `design_project_create`, `design_project_detail`, `design_project_edit`, `design_project_delete`, `design_project_advance_phase`, `design_project_lock_dhf`)
+  - `apps/quality/views/DesignControls/DesignInputs.py` (`design_input_list`, `design_input_create`, `design_input_detail`, `design_input_edit`, `design_input_delete`, `design_input_approve`)
+  - `apps/quality/views/DesignControls/DesignReviews.py` (`design_review_list`, `design_review_create`, `design_review_detail`, `design_review_edit`, `design_review_delete`, `design_review_sign`, `design_review_resolve_actions`)
+  - `apps/quality/views/DesignControls/DesignVerifications.py` (`design_verification_list`, `design_verification_create`, `design_verification_detail`, `design_verification_edit`, `design_verification_delete`, `design_verification_record_results`)
+  - `apps/quality/views/DesignControls/TraceabilityMatrix.py` (`traceability_matrix`, `traceability_matrix_export`, `dhf_dossier`)
+  - Re-export views in `apps/quality/views/__init__.py`
+- [ ] **URLs**:
+  - `apps/quality/urls/DesignControls/DesignProjects.py`
+  - `apps/quality/urls/DesignControls/DesignInputs.py`
+  - `apps/quality/urls/DesignControls/DesignReviews.py`
+  - `apps/quality/urls/DesignControls/DesignVerifications.py`
+  - `apps/quality/urls/DesignControls/TraceabilityMatrix.py`
+  - Wire all URL modules in `apps/quality/urls/__init__.py`
+- [ ] **Admin**: Register `DesignProject`, `DesignInput`, `DesignReview`, `DesignVerification` in `apps/quality/admin.py`
+- [ ] **Migration**: Run `makemigrations quality` generating `0003_...`
+- [ ] **Seeder**: Extend `apps/quality/management/commands/seed_quality.py` with idempotent medical device design projects, user needs, engineering inputs, gate reviews, and verification tests
+
+---
+
+## Wire-up
+
+- [ ] **Navigation (`apps/core/navigation.py`)**: Add `LIVE_LINKS["12.2"]` mapping exact `NavERP.md` 12.2 bullets:
+  - `"Design Planning & Inputs": "quality:design_project_list"`
+  - `"Design Reviews & Verification": "quality:design_review_list"`
+  - `"Design Validation & Transfer": "quality:design_verification_list"`
+  - `"Design History File (DHF)": "quality:traceability_matrix"`
+  - `"Design Changes & Configuration Management": "quality:design_input_list"`
+
+---
+
+## Templates (`templates/quality/designcontrols/`)
+
+- [ ] **Design Projects**:
+  - `templates/quality/designcontrols/design_project/list.html`
+  - `templates/quality/designcontrols/design_project/detail.html`
+  - `templates/quality/designcontrols/design_project/form.html`
+- [ ] **Design Inputs**:
+  - `templates/quality/designcontrols/design_input/list.html`
+  - `templates/quality/designcontrols/design_input/detail.html`
+  - `templates/quality/designcontrols/design_input/form.html`
+- [ ] **Design Reviews**:
+  - `templates/quality/designcontrols/design_review/list.html`
+  - `templates/quality/designcontrols/design_review/detail.html`
+  - `templates/quality/designcontrols/design_review/form.html`
+- [ ] **Design Verifications**:
+  - `templates/quality/designcontrols/design_verification/list.html`
+  - `templates/quality/designcontrols/design_verification/detail.html`
+  - `templates/quality/designcontrols/design_verification/form.html`
+- [ ] **Workbenches & Dossier**:
+  - `templates/quality/designcontrols/traceability_matrix.html` (Interactive Requirements Traceability Matrix)
+  - `templates/quality/designcontrols/dhf_dossier.html` (Design History File Dossier & Audit Index)
+
+---
+
+## Verify
+
+- [ ] Run `python manage.py makemigrations quality`
+- [ ] Run `python manage.py migrate`
+- [ ] Run `python manage.py seed_quality` twice (idempotence verification)
+- [ ] Run `python manage.py check`
+- [ ] Smoke tests via test client (`temp/` script): HTTP 200/302 for all 12.2 routes, content assertions, IDOR 404
+- [ ] Sidebar verification: `12.2` Live links functional
+
+---
+
+## Close-out
+
+- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-quality-12.2.md`
+- [ ] Phase 5: `code-fixer` agent burns down all findings
+- [ ] Phase 6: Tests (`test_designcontrols_models.py`, `test_designcontrols_forms.py`, `test_designcontrols_views.py`, `test_designcontrols_security.py`)
+- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` and `README.md`, declare gaps register in `.agents/tasks/gaps-quality-12.2.md`
+
+---
+
+## Later passes / deferred
+
+- **Parked sibling sub-modules (12.3–12.19)**: Risk Management / FMEA (12.3), CAPA (12.4), Non-Conformance / NCR (12.5), Supplier Quality (12.6), Inspection Controls IQC/IPQC/FQC (12.7–12.9), Calibration / MSA (12.10), Audit Management (12.11), Full Training Matrix (12.12), Complaints (12.13), Management Review (12.14), Process Validation (12.15), EHS (12.16), Regulatory Submissions (12.17), Traceability & Serialization (12.18), LIMS (12.19).
+- **Advanced deferred features from research**:
+  - Automated Jira / GitHub / GitLab webhook synchronization for SaMD software issues.
+  - Interactive 2D D3.js node-link graph visualization of the V-model hierarchy.
+  - Native 3D CAD STEP / WebGL viewer embedded in DHF outputs.
+  - Direct regulatory gateway electronic submissions (FDA eSTAR / Health Canada XML export).
+  - Automated statistical sample size calculators for test protocols.
+
+---
+
+## Review notes — Sub-module 12.2 Close-out (pending build)
+(To be filled in at completion of Phase 7)
+
+---
 # Sub-module 12.1: Document Control & Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.1.md` (2026-11-15)
 
 > **This plan SCAFFOLDS A BRAND-NEW APP.** `apps/quality/` does NOT exist yet. This is Module 12's very first sub-module.
