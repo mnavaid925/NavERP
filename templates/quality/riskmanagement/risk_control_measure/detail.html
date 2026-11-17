@@ -82,7 +82,7 @@
                     <dt>Implementation Due Date</dt>
                     <dd>{{ control_measure.due_date|default:"—" }}</dd>
                 </div>
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Mitigation Description</dt>
                     <dd class="text-sm text-slate-700 whitespace-pre-line">{{ control_measure.description }}</dd>
                 </div>
@@ -112,7 +112,7 @@
                         {% endif %}
                     </dd>
                 </div>
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Verification Test Protocol (V&V)</dt>
                     <dd>
                         {% if control_measure.design_verification %}
@@ -126,7 +126,7 @@
                 </div>
 
                 <!-- Objective Verification Evidence -->
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Verification of Implementation & Effectiveness (Clause 7.2)</dt>
                     <dd class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded">
                         {{ control_measure.verification_notes|default:"No verification evidence notes recorded yet." }}
@@ -135,7 +135,7 @@
 
                 <!-- Introduces New Hazard Gate -->
                 {% if control_measure.introduces_new_hazard %}
-                <div class="detail-item col-span-2 bg-amber-50 p-4 rounded border border-amber-200">
+                <div class="detail-item sm:col-span-2 bg-amber-50 p-4 rounded border border-amber-200">
                     <dt class="text-amber-800 font-semibold mb-1">Clause 7.3 Warning: Introduces Secondary Hazard</dt>
                     <dd class="text-sm text-slate-800 whitespace-pre-line">{{ control_measure.new_hazard_details|default:"Secondary hazard flagged without details. Please log corresponding risk item." }}</dd>
                 </div>
