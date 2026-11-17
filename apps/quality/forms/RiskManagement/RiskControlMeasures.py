@@ -71,4 +71,28 @@ class RiskControlMeasureForm(TenantUniqueMixin, TenantModelForm):
             cleaned,
             ["risk_assessment", "assigned_to", "design_input", "controlled_document", "design_verification"],
         )
+
+        impl_verified = cleaned.get("implementation_verified")
+        eff_verified = cleaned.get("effectiveness_verified")
+        notes = (cleaned.get("verification_notes") or "").strip()
+        protocol = cleaned.get("design_verification")
+
+        if (impl_verified or eff_verified) and not (notes or protocol):
+            msg = "Verification notes or a design verification test protocol are required when marking implementation or effectiveness as verified."
+            if impl_verified:
+                self.add_error("implementation_verified", msg)
+            if eff_verified:
+                self.add_error("effectiveness_verified", msg)
+
+        risk_assessment = cleaned.get("risk_assessment")
+        design_input = cleaned.get("design_input")
+        if risk_assessment and design_input:
+            plan_project_id = risk_assessment.plan.design_project_id
+            input_project_id = design_input.project_id
+            if plan_project_id and input_project_id and plan_project_id != input_project_id:
+                self.add_error(
+                    "design_input",
+                    f"Selected Design Input belongs to Project #{design_input.project.number}, but the Risk Plan belongs to Project #{risk_assessment.plan.design_project.number}.",
+                )
+
         return cleaned
