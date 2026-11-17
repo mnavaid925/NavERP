@@ -10,6 +10,10 @@ from apps.quality.models import (
     DocumentChangeOrder,
     ElectronicSignatureRecord,
     DocumentAcknowledgment,
+    DesignProject,
+    DesignInput,
+    DesignReview,
+    DesignVerification,
 )
 
 
@@ -195,3 +199,166 @@ def quality_ack_b(db, tenant_b, admin_b, quality_employee_b, quality_doc_b):
         status="pending",
         due_date=timezone.now().date() + timedelta(days=7),
     )
+
+
+# --- Sub-module 12.2: Design Controls & Development Fixtures ---
+
+@pytest.fixture
+def design_project_a(db, tenant_a, admin_user, quality_department):
+    return DesignProject.objects.create(
+        tenant=tenant_a,
+        title="NextGen Smart Infusion Pump",
+        device_name="InfuseFlow Pro 3000",
+        device_class="class_ii",
+        regulatory_pathway="510k",
+        intended_use="Controlled volumetric administration of IV fluids.",
+        current_phase="planning",
+        status="active",
+        project_lead=admin_user,
+        quality_lead=admin_user,
+        department=quality_department,
+        dhf_locked=False,
+    )
+
+
+@pytest.fixture
+def design_project_locked(db, tenant_a, admin_user, quality_department):
+    return DesignProject.objects.create(
+        tenant=tenant_a,
+        title="Disposable Safety Syringe",
+        device_name="AccuInject 5mL",
+        device_class="class_ii",
+        regulatory_pathway="510k",
+        intended_use="Subcutaneous injection.",
+        current_phase="commercial_closure",
+        status="completed",
+        project_lead=admin_user,
+        quality_lead=admin_user,
+        department=quality_department,
+        dhf_locked=True,
+    )
+
+
+@pytest.fixture
+def design_project_b(db, tenant_b, admin_b, quality_department_b):
+    return DesignProject.objects.create(
+        tenant=tenant_b,
+        title="Globex Surgical Laser System",
+        device_name="Globex Beam 500",
+        device_class="class_iii",
+        regulatory_pathway="pma",
+        intended_use="Laser surgical tissue ablation.",
+        current_phase="planning",
+        status="active",
+        project_lead=admin_b,
+        quality_lead=admin_b,
+        department=quality_department_b,
+        dhf_locked=False,
+    )
+
+
+@pytest.fixture
+def design_input_need(db, tenant_a, admin_user, design_project_a):
+    return DesignInput.objects.create(
+        tenant=tenant_a,
+        project=design_project_a,
+        identifier="UN-001",
+        title="Battery Backup Requirement",
+        input_type="user_need",
+        priority="high",
+        status="approved",
+        owner=admin_user,
+        acceptance_criteria="Continuous infusion for minimum 8 hours during patient transit.",
+    )
+
+
+@pytest.fixture
+def design_input_spec(db, tenant_a, admin_user, design_project_a, design_input_need):
+    return DesignInput.objects.create(
+        tenant=tenant_a,
+        project=design_project_a,
+        identifier="DI-001",
+        title="Lithium-Ion Battery Capacity",
+        input_type="functional",
+        priority="high",
+        status="approved",
+        owner=admin_user,
+        user_need_parent=design_input_need,
+        acceptance_criteria="Battery rating must exceed 4500mAh with charge protection circuit.",
+    )
+
+
+@pytest.fixture
+def design_input_b(db, tenant_b, admin_b, design_project_b):
+    return DesignInput.objects.create(
+        tenant=tenant_b,
+        project=design_project_b,
+        identifier="UN-GLX-001",
+        title="Globex Optical Sensor Spec",
+        input_type="user_need",
+        priority="critical",
+        status="approved",
+        owner=admin_b,
+        acceptance_criteria="Laser beam alignment deviation must be under 0.05mm.",
+    )
+
+
+@pytest.fixture
+def design_review_a(db, tenant_a, admin_user, design_project_a):
+    return DesignReview.objects.create(
+        tenant=tenant_a,
+        project=design_project_a,
+        title="Phase 1 Design Planning Gate Review",
+        review_stage="planning_gate",
+        review_date=timezone.now().date(),
+        status="scheduled",
+        lead_reviewer=admin_user,
+    )
+
+
+@pytest.fixture
+def design_review_b(db, tenant_b, admin_b, design_project_b):
+    return DesignReview.objects.create(
+        tenant=tenant_b,
+        project=design_project_b,
+        title="Globex Phase 1 Review",
+        review_stage="planning_gate",
+        review_date=timezone.now().date(),
+        status="scheduled",
+        lead_reviewer=admin_b,
+    )
+
+
+@pytest.fixture
+def design_verification_a(db, tenant_a, admin_user, design_project_a, design_input_spec):
+    return DesignVerification.objects.create(
+        tenant=tenant_a,
+        project=design_project_a,
+        primary_input=design_input_spec,
+        title="Battery Run-Time Verification Protocol",
+        activity_type="design_verification",
+        status="draft",
+        test_method="lab_testing",
+        sample_size=5,
+        pass_fail_result="pending",
+        acceptance_criteria="All 5 units run for >= 8 hours under full occlusion pressure.",
+        results_summary="Protocol prepared for bench testing.",
+    )
+
+
+@pytest.fixture
+def design_verification_b(db, tenant_b, admin_b, design_project_b, design_input_b):
+    return DesignVerification.objects.create(
+        tenant=tenant_b,
+        project=design_project_b,
+        primary_input=design_input_b,
+        title="Globex Beam Calibration Test",
+        activity_type="design_verification",
+        status="draft",
+        test_method="lab_testing",
+        sample_size=3,
+        pass_fail_result="pending",
+        acceptance_criteria="Optical sensor detects spot alignment within tolerance.",
+        results_summary="Globex protocol initialized.",
+    )
+
