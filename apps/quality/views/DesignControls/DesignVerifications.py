@@ -3,6 +3,7 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -132,14 +133,15 @@ def design_verification_create(request):
     if request.method == "POST":
         form = DesignVerificationForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            ver = form.save(commit=False)
-            ver.tenant = request.tenant
-            ver.save()
-            # If test is passed and status is passed, auto-verify primary design input
-            if ver.pass_fail_result == "pass" and ver.status == "passed":
-                ver.primary_input.status = "verified"
-                ver.primary_input.save(update_fields=["status", "updated_at"])
-            write_audit_log(request.user, ver, "create", tenant=request.tenant)
+            with transaction.atomic():
+                ver = form.save(commit=False)
+                ver.tenant = request.tenant
+                ver.save()
+                # If test is passed and status is passed, auto-verify primary design input
+                if ver.pass_fail_result == "pass" and ver.status == "passed":
+                    ver.primary_input.status = "verified"
+                    ver.primary_input.save(update_fields=["status", "updated_at"])
+                write_audit_log(request.user, ver, "create", tenant=request.tenant)
             messages.success(request, f"Verification protocol {ver.number} created successfully.")
             return redirect("quality:design_verification_detail", pk=ver.pk)
     else:
@@ -178,11 +180,12 @@ def design_verification_edit(request, pk):
     if request.method == "POST":
         form = DesignVerificationForm(request.POST, instance=verification, tenant=request.tenant)
         if form.is_valid():
-            verification = form.save()
-            if verification.pass_fail_result == "pass" and verification.status == "passed":
-                verification.primary_input.status = "verified"
-                verification.primary_input.save(update_fields=["status", "updated_at"])
-            write_audit_log(request.user, verification, "update", tenant=request.tenant)
+            with transaction.atomic():
+                verification = form.save()
+                if verification.pass_fail_result == "pass" and verification.status == "passed":
+                    verification.primary_input.status = "verified"
+                    verification.primary_input.save(update_fields=["status", "updated_at"])
+                write_audit_log(request.user, verification, "update", tenant=request.tenant)
             messages.success(request, f"Verification protocol {verification.number} updated successfully.")
             return redirect("quality:design_verification_detail", pk=verification.pk)
     else:
