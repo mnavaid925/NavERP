@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}{{ control_measure.number }} — Risk Control Measure | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_control_measure_list' %}">Control Measures</a>
+            <span>/</span>
+            <span>{{ control_measure.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ control_measure.number }} — {{ control_measure.title }}</h1>
+            <span class="badge {{ control_measure.control_hierarchy_badge }}">{{ control_measure.get_control_hierarchy_display }}</span>
+            <span class="badge {{ control_measure.status_badge }}">{{ control_measure.get_status_display }}</span>
+            {% if control_measure.is_fully_verified %}
+            <span class="badge badge-green"><i data-lucide="shield-check" class="w-3 h-3 inline"></i> Fully Verified</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if not control_measure.implementation_verified %}
+        <form method="post" action="{% url 'quality:risk_control_measure_verify_impl' control_measure.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700 hover:bg-green-50" title="Verify Implementation per ISO 14971 Clause 7.2">
+                <i data-lucide="check"></i> Verify Implementation
+            </button>
+        </form>
+        {% endif %}
+        {% if not control_measure.effectiveness_verified %}
+        <form method="post" action="{% url 'quality:risk_control_measure_verify_eff' control_measure.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700 hover:bg-green-50" title="Verify Effectiveness per ISO 14971 Clause 7.2">
+                <i data-lucide="check-check"></i> Verify Effectiveness
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'quality:risk_control_measure_edit' control_measure.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Control
+        </a>
+        <form method="post" action="{% url 'quality:risk_control_measure_delete' control_measure.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Risk Control Measure {{ control_measure.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 hover:border-red-200" title="Delete Control">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Control Measure Details Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">ISO 14971 Clause 7.1 Risk Control Specifications</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Associated Risk Item</dt>
+                    <dd>
+                        <a href="{% url 'quality:risk_assessment_detail' control_measure.risk_assessment.pk %}" class="text-brand hover:underline font-mono">
+                            {{ control_measure.risk_assessment.number }} — {{ control_measure.risk_assessment.hazard_description|default:control_measure.risk_assessment.failure_mode }}
+                        </a>
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Hierarchy Order of Precedence</dt>
+                    <dd>
+                        <span class="badge {{ control_measure.control_hierarchy_badge }}">{{ control_measure.get_control_hierarchy_display }}</span>
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Assigned Engineer / Owner</dt>
+                    <dd>{{ control_measure.assigned_to.get_full_name|default:control_measure.assigned_to.username|default:"Unassigned" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Implementation Due Date</dt>
+                    <dd>{{ control_measure.due_date|default:"—" }}</dd>
+                </div>
+                <div class="detail-item col-span-2">
+                    <dt>Mitigation Description</dt>
+                    <dd class="text-sm text-slate-700 whitespace-pre-line">{{ control_measure.description }}</dd>
+                </div>
+
+                <!-- Traceability Links -->
+                <div class="detail-item">
+                    <dt>Design Requirement (Design Input)</dt>
+                    <dd>
+                        {% if control_measure.design_input %}
+                        <a href="{% url 'quality:design_input_detail' control_measure.design_input.pk %}" class="text-brand hover:underline font-mono">
+                            {{ control_measure.design_input.identifier }} ({{ control_measure.design_input.number }})
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>SOP / IFU (Controlled Document)</dt>
+                    <dd>
+                        {% if control_measure.controlled_document %}
+                        <a href="{% url 'quality:controlled_document_detail' control_measure.controlled_document.pk %}" class="text-brand hover:underline font-mono">
+                            {{ control_measure.controlled_document.number }} — {{ control_measure.controlled_document.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item col-span-2">
+                    <dt>Verification Test Protocol (V&V)</dt>
+                    <dd>
+                        {% if control_measure.design_verification %}
+                        <a href="{% url 'quality:design_verification_detail' control_measure.design_verification.pk %}" class="text-brand hover:underline font-mono">
+                            {{ control_measure.design_verification.number }} — {{ control_measure.design_verification.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">Not linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+
+                <!-- Objective Verification Evidence -->
+                <div class="detail-item col-span-2">
+                    <dt>Verification of Implementation & Effectiveness (Clause 7.2)</dt>
+                    <dd class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded">
+                        {{ control_measure.verification_notes|default:"No verification evidence notes recorded yet." }}
+                    </dd>
+                </div>
+
+                <!-- Introduces New Hazard Gate -->
+                {% if control_measure.introduces_new_hazard %}
+                <div class="detail-item col-span-2 bg-amber-50 p-4 rounded border border-amber-200">
+                    <dt class="text-amber-800 font-semibold mb-1">Clause 7.3 Warning: Introduces Secondary Hazard</dt>
+                    <dd class="text-sm text-slate-800 whitespace-pre-line">{{ control_measure.new_hazard_details|default:"Secondary hazard flagged without details. Please log corresponding risk item." }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+    </div>
+
+    <!-- Verification Status Checklist Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">ISO 14971 Safety Gates</h2>
+        </div>
+        <div class="card-body flex flex-col gap-4">
+            <div class="p-3 rounded border {% if control_measure.implementation_verified %}bg-green-50 border-green-200{% else %}bg-slate-50 border-slate-200{% endif %}">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold {% if control_measure.implementation_verified %}text-green-800{% else %}text-slate-700{% endif %}">
+                        Implementation Verified
+                    </span>
+                    {% if control_measure.implementation_verified %}
+                    <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Yes</span>
+                    {% else %}
+                    <span class="badge badge-slate">Pending</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Confirmed mitigation is built into production design, bill of materials, or active procedures.</p>
+            </div>
+
+            <div class="p-3 rounded border {% if control_measure.effectiveness_verified %}bg-green-50 border-green-200{% else %}bg-slate-50 border-slate-200{% endif %}">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold {% if control_measure.effectiveness_verified %}text-green-800{% else %}text-slate-700{% endif %}">
+                        Effectiveness Verified
+                    </span>
+                    {% if control_measure.effectiveness_verified %}
+                    <span class="badge badge-green"><i data-lucide="check-check" class="w-3 h-3 inline"></i> Yes</span>
+                    {% else %}
+                    <span class="badge badge-slate">Pending</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Confirmed test protocol results demonstrate objective reduction in risk probability or severity.</p>
+            </div>
+
+            <div class="p-3 rounded border {% if control_measure.introduces_new_hazard %}bg-red-50 border-red-200{% else %}bg-green-50 border-green-200{% endif %}">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold {% if control_measure.introduces_new_hazard %}text-red-800{% else %}text-green-800{% endif %}">
+                        New Hazards Evaluated
+                    </span>
+                    {% if control_measure.introduces_new_hazard %}
+                    <span class="badge badge-red">New Hazard Created</span>
+                    {% else %}
+                    <span class="badge badge-green">No New Hazards</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500 mt-1">ISO 14971 Clause 7.3 requires review whether control creates new hazardous situations.</p>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-400 mb-2">Metadata</div>
+                <div class="text-xs text-slate-500 mb-1">Created: {{ control_measure.created_at|date:"Y-m-d H:i" }}</div>
+                <div class="text-xs text-slate-500">Updated: {{ control_measure.updated_at|date:"Y-m-d H:i" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
