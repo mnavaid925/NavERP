@@ -7,6 +7,10 @@ from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDo
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
+from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
+from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
+from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
+from apps.quality.models.RiskManagement.RiskReviewRecords import RiskReviewRecord
 
 __all__ = [
     "TenantOwned",
@@ -19,4 +23,9 @@ __all__ = [
     "DesignInput",
     "DesignReview",
     "DesignVerification",
+    "RiskManagementPlan",
+    "RiskAssessment",
+    "RiskControlMeasure",
+    "RiskReviewRecord",
 ]
+
