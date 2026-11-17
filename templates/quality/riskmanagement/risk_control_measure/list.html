@@ -112,7 +112,7 @@
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if q or selected_hierarchy or selected_status or selected_plan %}
-                <a href="{% url 'quality:risk_control_measure_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'quality:risk_control_measure_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -196,15 +196,15 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions justify-end">
-                            <a href="{% url 'quality:risk_control_measure_detail' c.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'quality:risk_control_measure_detail' c.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'quality:risk_control_measure_edit' c.pk %}" class="btn btn-icon" title="Edit Control">
+                            <a href="{% url 'quality:risk_control_measure_edit' c.pk %}" class="btn btn-icon" title="Edit Control" aria-label="Edit Control">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'quality:risk_control_measure_delete' c.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Risk Control Measure {{ c.number|escapejs }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red" title="Delete Control">
+                                <button type="submit" class="btn btn-icon text-red" title="Delete Control" aria-label="Delete Control">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
