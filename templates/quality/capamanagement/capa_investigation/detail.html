@@ -185,7 +185,7 @@
                                 {% endif %}
                             </td>
                             <td class="table-actions">
-                                <a href="{% url 'quality:capa_action_detail' action.pk %}" class="btn btn-icon"><i data-lucide="eye"></i></a>
+                                <a href="{% url 'quality:capa_action_detail' action.pk %}" class="btn btn-icon" title="View Action"><i data-lucide="eye"></i></a>
                             </td>
                         </tr>
                         {% empty %}
@@ -241,7 +241,7 @@
                             </td>
                             <td><span class="badge {{ review.status_badge }}">{{ review.get_status_display }}</span></td>
                             <td class="table-actions">
-                                <a href="{% url 'quality:capa_effectiveness_review_detail' review.pk %}" class="btn btn-icon"><i data-lucide="eye"></i></a>
+                                <a href="{% url 'quality:capa_effectiveness_review_detail' review.pk %}" class="btn btn-icon" title="View Review"><i data-lucide="eye"></i></a>
                             </td>
                         </tr>
                         {% empty %}
