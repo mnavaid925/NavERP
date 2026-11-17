@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block title %}{{ capa.number }}: {{ capa.title }} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Investigations</a>
+            <span>/</span>
+            <span>{{ capa.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ capa.number }}: {{ capa.title }}</h1>
+            <span class="badge {{ capa.status_badge }}">{{ capa.get_status_display }}</span>
+            <span class="badge {{ capa.risk_priority_badge }}">{{ capa.get_risk_priority_display }}</span>
+            <span class="badge {{ capa.action_type_badge }}">{{ capa.get_action_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_investigation_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to List
+        </a>
+        {% if capa.status != "closed" %}
+        <a href="{% url 'quality:capa_investigation_edit' capa.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit CAPA
+        </a>
+        {% endif %}
+        <a href="{% url 'quality:root_cause_analysis_create' %}?capa={{ capa.pk }}" class="btn btn-outline">
+            <i data-lucide="git-pull-request"></i> Add RCA
+        </a>
+        <a href="{% url 'quality:capa_action_create' %}?capa={{ capa.pk }}" class="btn btn-outline">
+            <i data-lucide="check-square"></i> Add Action
+        </a>
+        <a href="{% url 'quality:capa_effectiveness_review_create' %}?capa={{ capa.pk }}" class="btn btn-outline">
+            <i data-lucide="award"></i> Schedule Review
+        </a>
+    </div>
+</div>
+
+<!-- CAPA Overview Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Problem Statement & Containment -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">Problem Description & Containment</h2>
+                {% if capa.is_escalated %}
+                <span class="badge badge-red flex items-center gap-1">
+                    <i data-lucide="alert-octagon" class="w-3.5 h-3.5"></i> Management Review Escalation
+                </span>
+                {% endif %}
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Issue Summary</h3>
+                    <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">{{ capa.issue_summary }}</p>
+                </div>
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Containment & Quarantine Actions</h3>
+                    {% if capa.containment_actions %}
+                    <p class="text-sm text-slate-700 bg-amber-50 p-3 rounded border border-amber-200 whitespace-pre-wrap">{{ capa.containment_actions }}</p>
+                    <div class="flex items-center gap-4 text-xs text-slate-600 mt-2">
+                        <span>Status: <strong>{% if capa.containment_implemented %}<span class="text-emerald-700 font-semibold">Implemented</span>{% else %}<span class="text-amber-700 font-semibold">Pending Execution</span>{% endif %}</strong></span>
+                        {% if capa.containment_date %}
+                        <span>Executed: <strong>{{ capa.containment_date|date:"Y-m-d" }}</strong></span>
+                        {% endif %}
+                        {% if capa.containment_verified_by %}
+                        <span>Verified By: <strong>{{ capa.containment_verified_by.username }}</strong></span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-slate-400 italic">No immediate containment or quarantine actions recorded.</p>
+                    {% endif %}
+                </div>
+                {% if capa.escalation_reason %}
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-red-600 mb-1">Escalation Justification</h3>
+                    <p class="text-sm text-red-800 bg-red-50 p-3 rounded border border-red-200 whitespace-pre-wrap">{{ capa.escalation_reason }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Root Cause Analyses (RCA) -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">Root Cause Analyses (RCA)</h2>
+                <a href="{% url 'quality:root_cause_analysis_create' %}?capa={{ capa.pk }}" class="btn btn-outline text-xs">
+                    <i data-lucide="plus"></i> New RCA
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>RCA Number</th>
+                            <th>Method</th>
+                            <th>Category</th>
+                            <th>Problem Statement</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rca in rcas %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'quality:root_cause_analysis_detail' rca.pk %}" class="text-blue-600 hover:underline">
+                                    {{ rca.number }}
+                                </a>
+                            </td>
+                            <td><span class="badge {{ rca.method_badge }}">{{ rca.get_rca_method_display }}</span></td>
+                            <td><span class="badge {{ rca.category_badge }}">{{ rca.get_root_cause_category_display }}</span></td>
+                            <td class="text-xs text-slate-700 truncate max-w-xs">{{ rca.problem_statement|truncatechars:60 }}</td>
+                            <td><span class="badge {{ rca.status_badge }}">{{ rca.get_status_display }}</span></td>
+                            <td class="table-actions">
+                                <a href="{% url 'quality:root_cause_analysis_detail' rca.pk %}" class="btn btn-icon" title="View RCA"><i data-lucide="eye"></i></a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-sm text-slate-400">No root cause analysis recorded for this CAPA yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Action Items -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">Action Plan (Containment, Corrective, Preventive)</h2>
+                <a href="{% url 'quality:capa_action_create' %}?capa={{ capa.pk }}" class="btn btn-outline text-xs">
+                    <i data-lucide="plus"></i> New Action
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Action #</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Assigned To</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Verified</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for action in actions %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'quality:capa_action_detail' action.pk %}" class="text-blue-600 hover:underline">
+                                    {{ action.number }}
+                                </a>
+                            </td>
+                            <td class="text-xs font-medium text-slate-800">{{ action.title }}</td>
+                            <td><span class="badge {{ action.action_type_badge }}">{{ action.get_action_type_display }}</span></td>
+                            <td class="text-xs text-slate-600">{{ action.assigned_to.username }}</td>
+                            <td class="text-xs {% if action.is_overdue %}text-red-600 font-bold{% else %}text-slate-600{% endif %}">
+                                {{ action.due_date|date:"Y-m-d" }}
+                            </td>
+                            <td><span class="badge {{ action.status_badge }}">{{ action.get_status_display }}</span></td>
+                            <td class="text-center">
+                                {% if action.is_verified %}
+                                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600 inline"></i>
+                                {% else %}
+                                <span class="text-xs text-slate-400">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="table-actions">
+                                <a href="{% url 'quality:capa_action_detail' action.pk %}" class="btn btn-icon"><i data-lucide="eye"></i></a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-sm text-slate-400">No action plan items defined yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Effectiveness Reviews -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">Effectiveness Verification (21 CFR 820.100)</h2>
+                <a href="{% url 'quality:capa_effectiveness_review_create' %}?capa={{ capa.pk }}" class="btn btn-outline text-xs">
+                    <i data-lucide="plus"></i> Schedule Verification
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Review #</th>
+                            <th>Method</th>
+                            <th>Planned Date</th>
+                            <th>Evaluator</th>
+                            <th>Outcome</th>
+                            <th>Recurrence</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for review in reviews %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'quality:capa_effectiveness_review_detail' review.pk %}" class="text-blue-600 hover:underline">
+                                    {{ review.number }}
+                                </a>
+                            </td>
+                            <td><span class="badge {{ review.method_badge }}">{{ review.get_verification_method_display }}</span></td>
+                            <td class="text-xs text-slate-600">{{ review.planned_review_date|date:"Y-m-d" }}</td>
+                            <td class="text-xs text-slate-600">{{ review.evaluator.username }}</td>
+                            <td><span class="badge {{ review.outcome_badge }}">{{ review.get_outcome_display }}</span></td>
+                            <td class="text-center">
+                                {% if review.recurrence_observed %}
+                                <span class="badge badge-red">Observed</span>
+                                {% else %}
+                                <span class="badge badge-green">None</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge {{ review.status_badge }}">{{ review.get_status_display }}</span></td>
+                            <td class="table-actions">
+                                <a href="{% url 'quality:capa_effectiveness_review_detail' review.pk %}" class="btn btn-icon"><i data-lucide="eye"></i></a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-sm text-slate-400">No effectiveness review scheduled.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metadata & Lifecycle Sidebar -->
+    <div class="space-y-6">
+        <!-- Lifecycle Management Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Lifecycle State Machine</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Current Stage</div>
+                    <div class="text-sm font-bold text-slate-800 mt-0.5"><span class="badge {{ capa.status_badge }}">{{ capa.get_status_display }}</span></div>
+                </div>
+
+                {% if capa.status != "closed" %}
+                <form method="post" action="{% url 'quality:capa_investigation_advance_status' capa.pk %}" class="space-y-2 pt-2 border-t border-slate-200">
+                    {% csrf_token %}
+                    <label class="form-label" for="target_status">Advance to Next Stage</label>
+                    <select name="target_status" id="target_status" class="form-select text-xs">
+                        <option value="under_investigation" {% if capa.status == "draft" %}selected{% endif %}>Under Investigation</option>
+                        <option value="rca_in_progress" {% if capa.status == "under_investigation" %}selected{% endif %}>RCA in Progress</option>
+                        <option value="action_plan_dev" {% if capa.status == "rca_in_progress" %}selected{% endif %}>Action Plan Development</option>
+                        <option value="action_implementation" {% if capa.status == "action_plan_dev" %}selected{% endif %}>Action Implementation</option>
+                        <option value="effectiveness_review" {% if capa.status == "action_implementation" %}selected{% endif %}>Effectiveness Review</option>
+                        <option value="voided">Voided / Cancelled</option>
+                    </select>
+                    <button type="submit" class="btn btn-primary w-full text-xs mt-2">
+                        <i data-lucide="chevrons-right"></i> Advance Stage
+                    </button>
+                </form>
+
+                <!-- Formal Closure Form -->
+                <form method="post" action="{% url 'quality:capa_investigation_close' capa.pk %}" class="pt-2 border-t border-slate-200 space-y-2" onsubmit="return confirm('Confirm formal CAPA closure? Ensure all action items are implemented and verified.');">
+                    {% csrf_token %}
+                    <label class="form-label" for="closure_summary">Formal Closure Summary</label>
+                    <textarea name="closure_summary" id="closure_summary" class="form-textarea text-xs" rows="2" placeholder="Document closure rationale and verification proof..."></textarea>
+                    <button type="submit" class="btn btn-outline w-full text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50">
+                        <i data-lucide="check-check"></i> Formally Close CAPA
+                    </button>
+                </form>
+                {% else %}
+                <div class="bg-emerald-50 p-3 rounded border border-emerald-200 text-xs text-emerald-800 space-y-1">
+                    <div class="font-semibold flex items-center gap-1"><i data-lucide="check-circle" class="w-4 h-4"></i> CAPA Formally Closed</div>
+                    <div>Closed At: <strong>{{ capa.closed_at|date:"Y-m-d H:i" }}</strong></div>
+                    <div>Approved By: <strong>{{ capa.closure_approved_by.username }}</strong></div>
+                    {% if capa.closure_summary %}
+                    <div class="mt-2 text-slate-700 font-mono bg-white p-2 rounded border border-emerald-200">{{ capa.closure_summary }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Investigation Details -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Investigation Metadata</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Source Type</dt>
+                        <dd><span class="badge {{ capa.source_type_badge }}">{{ capa.get_source_type_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Source Reference</dt>
+                        <dd class="font-mono text-xs">{{ capa.source_reference|default:"None" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Lead Investigator</dt>
+                        <dd>{{ capa.lead_investigator.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Quality Owner</dt>
+                        <dd>{{ capa.quality_owner.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Department</dt>
+                        <dd>{{ capa.department.name|default:"Not specified" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Affected Item</dt>
+                        <dd class="font-mono text-xs">{{ capa.affected_item_code|default:"N/A" }}{% if capa.affected_item_name %} ({{ capa.affected_item_name }}){% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Affected Lots</dt>
+                        <dd class="font-mono text-xs">{{ capa.affected_lot_numbers|default:"N/A" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Design Project</dt>
+                        <dd>
+                            {% if capa.design_project %}
+                            <a href="{% url 'quality:design_project_detail' capa.design_project.pk %}" class="text-blue-600 hover:underline">
+                                {{ capa.design_project.number }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">None</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Linked Risk</dt>
+                        <dd>
+                            {% if capa.risk_assessment %}
+                            <a href="{% url 'quality:risk_assessment_detail' capa.risk_assessment.pk %}" class="text-blue-600 hover:underline">
+                                {{ capa.risk_assessment.number }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">None</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Investigation</dt>
+                        <dd>{{ capa.target_investigation_date|date:"Y-m-d"|default:"Not set" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Closure</dt>
+                        <dd class="{% if capa.is_overdue %}text-red-600 font-bold{% endif %}">{{ capa.target_closure_date|date:"Y-m-d"|default:"Not set" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Cycle Time</dt>
+                        <dd>{{ capa.days_open }} days open</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
