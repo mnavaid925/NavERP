@@ -45,3 +45,22 @@
 - [ ] `EX-M3`: `apps/quality/admin.py:199, 217, 235` — add `plan__title` to `RiskAssessmentAdmin` & `RiskReviewRecordAdmin` search fields, and `risk_assessment__hazard_description` to `RiskControlMeasureAdmin` search fields.
 - [ ] `EX-M4`: `apps/quality/views/RiskManagement/FmeaMatrix.py:62, 65, 68` — view generates raw inline CSS class strings in Python dict. Replace with semantic zone classes or template mapping.
 
+---
+
+## Pass 3: Frontend / UI / UX / Template Reviewer (`frontend-reviewer`)
+
+### Critical
+- [ ] `FR-C1`: `templates/quality/riskmanagement/risk_management_plan/detail.html:163` — `plan.approved_signature.signer_printed_name` attribute mismatch (actual field is `signer_name`). Update to `plan.approved_signature.signer_name`.
+
+### Important
+- [ ] `FR-I1`: `apps/quality/models/RiskManagement/RiskAssessments.py:77, 83`, `RiskReviewRecords.py:30` and templates specify non-existent `badge-purple`. Replace with `badge-info` or `badge-slate`.
+- [ ] `FR-I2`: `templates/quality/riskmanagement/risk_assessment/list.html:78-129, 244, 254` — missing `hazard_category` filter `<select>` UI, missing from Clear Filters check, and missing from pagination links.
+- [ ] `FR-I3`: `templates/quality/riskmanagement/fmea_matrix.html:248`, `risk_traceability_matrix.html:219` — non-existent `btn-xs` class used in table actions. Replace with `btn-sm`.
+- [ ] `FR-I4`: Multiple list & detail templates have icon-only buttons missing `aria-label` for screen reader accessibility (WCAG 2.1 AA 4.1.2). Add matching `aria-label` attributes.
+
+### Minor
+- [ ] `FR-M1`: `templates/quality/riskmanagement/fmea_matrix.html:40`, `risk_traceability_matrix.html:40` — plan `<select onchange="this.form.submit()">` needs `<button type="submit" class="sr-only">Submit</button>` for keyboard accessibility.
+- [ ] `FR-M2`: Multiple detail templates use unqualified `col-span-2` in detail grids. Change to `sm:col-span-2` for responsive mobile layout.
+- [ ] `FR-M3`: Inconsistent arbitrary opacity utilities (`bg-white/70`, `bg-slate-50/50`, `bg-red-50/30`) in matrix templates. Replace with standard classes.
+
+
