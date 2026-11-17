@@ -36,6 +36,12 @@
         <a href="{% url 'quality:design_review_edit' review.pk %}" class="btn btn-primary">
             <i data-lucide="pencil"></i> Edit Review
         </a>
+        <form method="post" action="{% url 'quality:design_review_delete' review.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete design review {{ review.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 hover:border-red-200" title="Delete Review">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
         {% endif %}
     </div>
 </div>
