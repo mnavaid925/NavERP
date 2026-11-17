@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Review {{ review.number }}{% else %}Schedule Effectiveness Review{% endif %} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:capa_effectiveness_review_list' %}">Effectiveness Reviews</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ review.number }}{% else %}Schedule Review{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Effectiveness Review {{ review.number }}{% else %}Schedule CAPA Effectiveness Review (21 CFR 820.100){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Verification Protocol & Evaluation Criteria</h2>
+        <p class="text-xs text-slate-500">Establish quantitative acceptance criteria, statistical sampling methods, evaluation dates, and recurrence monitoring.</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Parent CAPA & Method -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.capa.id_for_label }}">Associated CAPA Investigation *</label>
+                    {{ form.capa }}
+                    {% if form.capa.errors %}<div class="form-error">{{ form.capa.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.verification_method.id_for_label }}">Verification Methodology *</label>
+                    {{ form.verification_method }}
+                    {% if form.verification_method.errors %}<div class="form-error">{{ form.verification_method.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Review Criteria -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.review_criteria.id_for_label }}">Pre-established Acceptance Criteria *</label>
+                    {{ form.review_criteria }}
+                    {% if form.review_criteria.errors %}<div class="form-error">{{ form.review_criteria.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Evaluator & Planned Date -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.evaluator.id_for_label }}">Assigned Evaluator *</label>
+                    {{ form.evaluator }}
+                    {% if form.evaluator.errors %}<div class="form-error">{{ form.evaluator.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.planned_review_date.id_for_label }}">Planned Review Due Date *</label>
+                    {{ form.planned_review_date }}
+                    {% if form.planned_review_date.errors %}<div class="form-error">{{ form.planned_review_date.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Status & Outcome -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Review Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.outcome.id_for_label }}">Determination Outcome *</label>
+                    {{ form.outcome }}
+                    {% if form.outcome.errors %}<div class="form-error">{{ form.outcome.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Metrics Evaluated -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.metrics_evaluated.id_for_label }}">Metrics Evaluated (Statistical / Test Results)</label>
+                    {{ form.metrics_evaluated }}
+                    {% if form.metrics_evaluated.errors %}<div class="form-error">{{ form.metrics_evaluated.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Recurrence -->
+                <div class="form-group md:col-span-2">
+                    <div class="flex items-center gap-2">
+                        {{ form.recurrence_observed }}
+                        <label class="form-label mb-0" for="{{ form.recurrence_observed.id_for_label }}">Defect Recurrence Observed During Evaluation</label>
+                    </div>
+                    {% if form.recurrence_observed.errors %}<div class="form-error">{{ form.recurrence_observed.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.recurrence_details.id_for_label }}">Recurrence Circumstances & Incidents (If applicable)</label>
+                    {{ form.recurrence_details }}
+                    {% if form.recurrence_details.errors %}<div class="form-error">{{ form.recurrence_details.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Review Notes -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.review_notes.id_for_label }}">Review Notes & Summary</label>
+                    {{ form.review_notes }}
+                    {% if form.review_notes.errors %}<div class="form-error">{{ form.review_notes.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:capa_effectiveness_review_detail' review.pk %}{% else %}{% url 'quality:capa_effectiveness_review_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Update Review{% else %}Save Review Protocol{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
