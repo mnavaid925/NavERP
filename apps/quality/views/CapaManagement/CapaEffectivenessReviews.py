@@ -141,6 +141,12 @@ def capa_effectiveness_review_edit(request, pk):
 @tenant_admin_required
 def capa_effectiveness_review_delete(request, pk):
     review = quality_object(request, CapaEffectivenessReview, pk)
+    if review.status == "completed":
+        messages.error(request, "Cannot delete a completed Effectiveness Review record.")
+        return redirect("quality:capa_effectiveness_review_detail", pk=review.pk)
+    if review.capa.status == "closed":
+        messages.error(request, "Cannot delete reviews belonging to a closed CAPA.")
+        return redirect("quality:capa_effectiveness_review_detail", pk=review.pk)
     num = review.number
     capa_pk = review.capa_id
     write_audit_log(request.user, review, "delete", tenant=request.tenant)
