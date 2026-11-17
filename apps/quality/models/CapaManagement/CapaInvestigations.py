@@ -44,7 +44,7 @@ class CapaInvestigation(TenantNumbered):
 
     ACTION_TYPE_CSS = {
         "corrective": "badge-info",
-        "preventive": "badge-purple",
+        "preventive": "badge-slate",
     }
 
     SOURCE_TYPE_CSS = {
@@ -71,7 +71,7 @@ class CapaInvestigation(TenantNumbered):
         "rca_in_progress": "badge-amber",
         "action_plan_dev": "badge-amber",
         "action_implementation": "badge-info",
-        "effectiveness_review": "badge-purple",
+        "effectiveness_review": "badge-info",
         "closed": "badge-green",
         "voided": "badge-muted",
     }
