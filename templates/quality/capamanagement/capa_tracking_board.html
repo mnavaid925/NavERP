@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}CAPA Tracking & Escalation Board | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <span>Tracking Board</span>
+        </div>
+        <h1 class="page-title">CAPA Tracking & Aging Escalation Board</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_investigation_list' %}" class="btn btn-outline">
+            <i data-lucide="clipboard-list"></i> CAPA List
+        </a>
+        <a href="{% url 'quality:capa_tracking_board_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export Aging CSV
+        </a>
+        <a href="{% url 'quality:capa_investigation_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New CAPA
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Header -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Active CAPAs</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.total_active }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Avg Cycle Age</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.avg_cycle_days }} <span class="text-xs font-normal text-slate-500">days</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Overdue Targets</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.overdue_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Escalated to Exec Review</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.escalated_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Escalated / Overdue Urgent Attention Alert -->
+{% if escalated_capas or overdue_capas %}
+<div class="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+    {% if escalated_capas %}
+    <div class="card border-l-4 border-l-red-500 bg-red-50/30">
+        <div class="card-header pb-2">
+            <h2 class="text-sm font-bold text-red-800 flex items-center gap-1.5">
+                <i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i> Escalated to Management Review ({{ escalated_capas|length }})
+            </h2>
+        </div>
+        <div class="card-body pt-0 space-y-2">
+            {% for c in escalated_capas %}
+            <div class="flex items-center justify-between p-2 rounded bg-white border border-red-200">
+                <div>
+                    <a href="{% url 'quality:capa_investigation_detail' c.pk %}" class="font-mono text-xs font-bold text-blue-600 hover:underline">{{ c.number }}</a>
+                    <span class="text-xs text-slate-700 ml-2 font-medium">{{ c.title }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="badge {{ c.risk_priority_badge }}">{{ c.get_risk_priority_display }}</span>
+                    <span class="text-xs text-slate-500 font-mono">{{ c.days_open }}d</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if overdue_capas %}
+    <div class="card border-l-4 border-l-amber-500 bg-amber-50/30">
+        <div class="card-header pb-2">
+            <h2 class="text-sm font-bold text-amber-800 flex items-center gap-1.5">
+                <i data-lucide="clock" class="w-4 h-4 text-amber-600"></i> Overdue Target Closure Date ({{ overdue_capas|length }})
+            </h2>
+        </div>
+        <div class="card-body pt-0 space-y-2">
+            {% for c in overdue_capas %}
+            <div class="flex items-center justify-between p-2 rounded bg-white border border-amber-200">
+                <div>
+                    <a href="{% url 'quality:capa_investigation_detail' c.pk %}" class="font-mono text-xs font-bold text-blue-600 hover:underline">{{ c.number }}</a>
+                    <span class="text-xs text-slate-700 ml-2 font-medium">{{ c.title }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-red-600 font-bold">Due {{ c.target_closure_date|date:"Y-m-d" }}</span>
+                    <span class="badge {{ c.status_badge }}">{{ c.get_status_display }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Aging Kanban Columns -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- Tier 0-30 Days -->
+    <div class="card">
+        <div class="card-header bg-emerald-50/50 border-b border-emerald-100 flex justify-between items-center py-2.5">
+            <div class="text-xs font-bold uppercase text-emerald-800">0 – 30 Days (On Target)</div>
+            <span class="badge badge-green">{{ tier_0_30|length }}</span>
+        </div>
+        <div class="p-3 space-y-3 min-h-[300px]">
+            {% for c in tier_0_30 %}
+            <div class="p-3 bg-white rounded border border-slate-200 shadow-sm hover:border-blue-400 transition">
+                <div class="flex justify-between items-start mb-1">
+                    <a href="{% url 'quality:capa_investigation_detail' c.pk %}" class="font-mono text-xs font-bold text-blue-600 hover:underline">{{ c.number }}</a>
+                    <span class="badge {{ c.risk_priority_badge }} text-[10px]">{{ c.get_risk_priority_display }}</span>
+                </div>
+                <div class="text-xs font-medium text-slate-800 mb-2 line-clamp-2">{{ c.title }}</div>
+                <div class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                    <span class="badge {{ c.status_badge }} text-[10px]">{{ c.get_status_display }}</span>
+                    <span class="font-mono">{{ c.days_open }}d open</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-center py-8 text-xs text-slate-400 italic">No CAPAs in this tier</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Tier 31-60 Days -->
+    <div class="card">
+        <div class="card-header bg-blue-50/50 border-b border-blue-100 flex justify-between items-center py-2.5">
+            <div class="text-xs font-bold uppercase text-blue-800">31 – 60 Days (Active)</div>
+            <span class="badge badge-info">{{ tier_31_60|length }}</span>
+        </div>
+        <div class="p-3 space-y-3 min-h-[300px]">
+            {% for c in tier_31_60 %}
+            <div class="p-3 bg-white rounded border border-slate-200 shadow-sm hover:border-blue-400 transition">
+                <div class="flex justify-between items-start mb-1">
+                    <a href="{% url 'quality:capa_investigation_detail' c.pk %}" class="font-mono text-xs font-bold text-blue-600 hover:underline">{{ c.number }}</a>
+                    <span class="badge {{ c.risk_priority_badge }} text-[10px]">{{ c.get_risk_priority_display }}</span>
+                </div>
+                <div class="text-xs font-medium text-slate-800 mb-2 line-clamp-2">{{ c.title }}</div>
+                <div class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                    <span class="badge {{ c.status_badge }} text-[10px]">{{ c.get_status_display }}</span>
+                    <span class="font-mono">{{ c.days_open }}d open</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-center py-8 text-xs text-slate-400 italic">No CAPAs in this tier</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Tier 61-90 Days -->
+    <div class="card">
+        <div class="card-header bg-amber-50/50 border-b border-amber-100 flex justify-between items-center py-2.5">
+            <div class="text-xs font-bold uppercase text-amber-800">61 – 90 Days (Aging Warning)</div>
+            <span class="badge badge-amber">{{ tier_61_90|length }}</span>
+        </div>
+        <div class="p-3 space-y-3 min-h-[300px]">
+            {% for c in tier_61_90 %}
+            <div class="p-3 bg-white rounded border border-slate-200 shadow-sm hover:border-blue-400 transition">
+                <div class="flex justify-between items-start mb-1">
+                    <a href="{% url 'quality:capa_investigation_detail' c.pk %}" class="font-mono text-xs font-bold text-blue-600 hover:underline">{{ c.number }}</a>
+                    <span class="badge {{ c.risk_priority_badge }} text-[10px]">{{ c.get_risk_priority_display }}</span>
+                </div>
+                <div class="text-xs font-medium text-slate-800 mb-2 line-clamp-2">{{ c.title }}</div>
+                <div class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                    <span class="badge {{ c.status_badge }} text-[10px]">{{ c.get_status_display }}</span>
+                    <span class="font-mono text-amber-700 font-bold">{{ c.days_open }}d open</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-center py-8 text-xs text-slate-400 italic">No CAPAs in this tier</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Tier >90 Days -->
+    <div class="card">
+        <div class="card-header bg-red-50/50 border-b border-red-100 flex justify-between items-center py-2.5">
+            <div class="text-xs font-bold uppercase text-red-800">&gt; 90 Days (Critical Aging)</div>
+            <span class="badge badge-red">{{ tier_90_plus|length }}</span>
+        </div>
+        <div class="p-3 space-y-3 min-h-[300px]">
+            {% for c in tier_90_plus %}
+            <div class="p-3 bg-white rounded border border-red-200 shadow-sm hover:border-red-400 transition">
+                <div class="flex justify-between items-start mb-1">
+                    <a href="{% url 'quality:capa_investigation_detail' c.pk %}" class="font-mono text-xs font-bold text-blue-600 hover:underline">{{ c.number }}</a>
+                    <span class="badge {{ c.risk_priority_badge }} text-[10px]">{{ c.get_risk_priority_display }}</span>
+                </div>
+                <div class="text-xs font-medium text-slate-800 mb-2 line-clamp-2">{{ c.title }}</div>
+                <div class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                    <span class="badge {{ c.status_badge }} text-[10px]">{{ c.get_status_display }}</span>
+                    <span class="font-mono text-red-700 font-bold">{{ c.days_open }}d open</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-center py-8 text-xs text-slate-400 italic">No CAPAs in this tier</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
