@@ -143,3 +143,11 @@ class RiskManagementPlan(TenantNumbered):
         if not self.next_review_due_date or self.status not in ("active", "periodic_review"):
             return False
         return self.next_review_due_date < timezone.now().date()
+
+    @property
+    def assessments_count(self):
+        return self.assessments.count()
+
+    @property
+    def unmitigated_risks_count(self):
+        return self.assessments.filter(residual_risk_acceptable=False).count()
