@@ -75,7 +75,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4">
             <div>
                 <label class="form-label" for="search-input">Search</label>
                 <input type="text" id="search-input" name="q" value="{{ q }}" placeholder="Number, hazard, mode, harm..." class="form-input">
@@ -95,6 +95,15 @@
                     <option value="">All Types</option>
                     {% for code, label in analysis_type_choices %}
                     <option value="{{ code }}" {% if selected_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="category-filter">Hazard Category</label>
+                <select id="category-filter" name="hazard_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for code, label in hazard_category_choices %}
+                    <option value="{{ code }}" {% if selected_cat == code %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -120,8 +129,8 @@
                 <button type="submit" class="btn btn-primary w-full">
                     <i data-lucide="filter"></i> Filter
                 </button>
-                {% if q or selected_type or selected_level or selected_status or selected_plan %}
-                <a href="{% url 'quality:risk_assessment_list' %}" class="btn btn-outline" title="Clear Filters">
+                {% if q or selected_type or selected_cat or selected_level or selected_status or selected_plan %}
+                <a href="{% url 'quality:risk_assessment_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -201,15 +210,15 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions justify-end">
-                            <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'quality:risk_assessment_edit' item.pk %}" class="btn btn-icon" title="Edit Item">
+                            <a href="{% url 'quality:risk_assessment_edit' item.pk %}" class="btn btn-icon" title="Edit Item" aria-label="Edit Item">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'quality:risk_assessment_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Risk Item {{ item.number|escapejs }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red" title="Delete Item">
+                                <button type="submit" class="btn btn-icon text-red" title="Delete Item" aria-label="Delete Item">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
@@ -241,7 +250,7 @@
         </div>
         <div class="pagination">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&analysis_type={{ selected_type }}{% endif %}{% if selected_level %}&risk_level={{ selected_level }}{% endif %}{% if selected_status %}&lifecycle_status={{ selected_status }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&analysis_type={{ selected_type }}{% endif %}{% if selected_cat %}&hazard_category={{ selected_cat }}{% endif %}{% if selected_level %}&risk_level={{ selected_level }}{% endif %}{% if selected_status %}&lifecycle_status={{ selected_status }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% else %}
@@ -251,7 +260,7 @@
             <span class="px-3 py-1 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&analysis_type={{ selected_type }}{% endif %}{% if selected_level %}&risk_level={{ selected_level }}{% endif %}{% if selected_status %}&lifecycle_status={{ selected_status }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&analysis_type={{ selected_type }}{% endif %}{% if selected_cat %}&hazard_category={{ selected_cat }}{% endif %}{% if selected_level %}&risk_level={{ selected_level }}{% endif %}{% if selected_status %}&lifecycle_status={{ selected_status }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
