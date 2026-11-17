@@ -1,98 +1,215 @@
 # Review Findings — Sub-module 12.3: Risk Management (ISO 14971 / FMEA) (Module 12 — Quality Management System, `quality`)
 
 **Changeset reviewed**: `d0799fa5444471edddf0c0535571f03ef4e1373f...HEAD`
-**Target App**: `apps/quality/` (Sub-module 12.3: `RiskManagement/`)
+**Target App**: `apps/quality/` (Sub-module 12.3: `RiskManagement/`) and `templates/quality/riskmanagement/`
 **Date**: 2026-11-17
 
----
-
-## Pass 1: Code Reviewer (`code-reviewer`)
-
-### Critical
-- [ ] `CR-C1`: In `apps/quality/views/RiskManagement/FmeaMatrix.py` (lines 144-147, 259-267), in `fmea_matrix_export` and `risk_traceability_matrix_export`, omitting `plan` dumps all tenant assessments across all plans instead of matching HTML view's default selected plan. Also validate `plan_id` belongs to `request.tenant`.
-- [ ] `CR-C2`: In `apps/quality/views/RiskManagement/RiskManagementPlans.py` (lines 177-186, 188-197) and `RiskReviewRecords.py` (lines 171-179), state-mutating and destructive actions (`plan_delete`, `plan_activate`, `review_approve`) should be gated with `@tenant_admin_required`.
-
-### Important
-- [ ] `CR-I1`: In `apps/core/navigation.py` (lines 3401-3407), `LIVE_LINKS["12.3"]` maps both "Hazard Identification & Analysis" and "Residual Risk Assessment" to `quality:risk_assessment_list`. Map "Residual Risk Assessment" to `quality:risk_traceability_matrix` to provide distinct live destinations for all feature bullets.
-- [ ] `CR-I2`: In all four delete views (`RiskManagementPlans.py:182`, `RiskAssessments.py:182`, `RiskControlMeasures.py:171`, `RiskReviewRecords.py:164`), `obj.delete()` precedes `write_audit_log`, losing `obj.pk` (`object_id=None`). Must log audit record BEFORE calling `.delete()`.
-- [ ] `CR-I3`: In `apps/quality/models/RiskManagement/RiskAssessments.py:280-291`, `save()` only computes residual scores if both severity and probability are set; if residual scores are cleared on update, stale residual RPN/level values persist. Add `else` branch to clear residual fields.
-- [ ] `CR-I4`: In `apps/quality/views/RiskManagement/FmeaMatrix.py:62-68`, hardcoded raw CSS color strings in matrix cells.
-
-### Minor
-- [ ] `CR-M1`: In `apps/quality/admin.py`, search fields can be expanded: `RiskAssessmentAdmin.search_fields` add `plan__title`; `RiskControlMeasureAdmin.search_fields` add `risk_assessment__hazard_description`.
-- [ ] `CR-M2`: In `apps/quality/models/RiskManagement/RiskManagementPlans.py`, add `assessments_count` and `unmitigated_risks_count` properties to model.
-- [ ] `CR-M3`: In `apps/quality/views/RiskManagement/FmeaMatrix.py`, wrap all output fields in CSV exports with `csv_safe()`.
+All six review passes (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) have concluded strictly serially. Below is the deduplicated, consolidated, and prioritized action register for Phase 5 (`code-fixer`).
 
 ---
 
-## Pass 2: Architecture Explorer (`explorer`)
+## Consolidated Action Register
 
-### Critical
-- [ ] `EX-C1`: `templates/quality/riskmanagement/risk_management_plan/detail.html:163` — template attempts to render `{{ plan.approved_signature.signer_printed_name }}`. However, `ElectronicSignatureRecord` defines this field as `signer_name`. Update to `plan.approved_signature.signer_name`.
-- [ ] `EX-C2`: `templates/quality/riskmanagement/risk_assessment/list.html:78-129, 244, 254` — Contract Section 4.4 explicitly pins `hazard_category_choices` and `selected_cat` in view context, and view implements `hazard_category` filtering. However, the `hazard_category` filter dropdown was omitted from the filter form in `risk_assessment/list.html`, and omitted from pagination links. Add the `hazard_category` `<select>` filter dropdown and preserve `&hazard_category={{ selected_cat }}` in pagination links.
+### Critical Findings
 
-### Important
-- [ ] `EX-I1`: `apps/quality/{models,forms,views,urls}/RiskManagement/` directories lack `__init__.py` files. Create `__init__.py` in each subpackage directory with appropriate entity re-exports.
-- [ ] `EX-I2`: `apps/quality/models/RiskManagement/RiskAssessments.py:77, 83`, `RiskReviewRecords.py:30` specify badge class `"badge-purple"`. `static/css/theme.css` does not define `.badge-purple`. Replace with allowed theme class (`badge-info` or `badge-slate`).
-- [ ] `EX-I3`: `apps/core/navigation.py:3401-3407` — in `LIVE_LINKS["12.3"]`, both "Hazard Identification & Analysis" and "Residual Risk Assessment" point to `quality:risk_assessment_list`. Update "Residual Risk Assessment" to point to `quality:risk_traceability_matrix`.
-- [ ] `EX-I4`: `apps/quality/views/RiskManagement/FmeaMatrix.py:143-154, 258-271` — in `fmea_matrix_export` and `risk_traceability_matrix_export`, when `plan` param is omitted, views export all assessments across all plans instead of defaulting to `plans.first()`. Align export default with HTML view.
-- [ ] `EX-I5`: `apps/quality/models/RiskManagement/RiskAssessments.py:280-291` — `save()` calculates residual RPN/level only when residual severity & probability are present; if cleared, stale calculations persist. Add `else` branch in `save()` to reset residual metrics.
-- [ ] `EX-I6`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:182`, `RiskAssessments.py:182`, `RiskControlMeasures.py:171`, `RiskReviewRecords.py:164` — `obj.delete()` called before `write_audit_log`, losing `obj.pk`. Call `write_audit_log` before `obj.delete()`.
+- [ ] **C1**: `templates/quality/riskmanagement/risk_management_plan/detail.html:163` — Attribute name mismatch on electronic signature (`plan.approved_signature.signer_printed_name` vs `signer_name`). `ElectronicSignatureRecord` defines `signer_name`. Django template silently renders blank string.
+  - *Fix*: Update line 163 to reference `{{ plan.approved_signature.signer_name }}`.
+  - *Status*: [ ] open
 
-### Minor
-- [ ] `EX-M1`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:97` — `RiskControlMeasure` is imported locally inside the view function. Move import to module top-level.
-- [ ] `EX-M2`: `apps/quality/models/RiskManagement/RiskManagementPlans.py:130` — add `@property def assessments_count(self)` and `@property def unmitigated_risks_count(self)` to model.
-- [ ] `EX-M3`: `apps/quality/admin.py:199, 217, 235` — add `plan__title` to `RiskAssessmentAdmin` & `RiskReviewRecordAdmin` search fields, and `risk_assessment__hazard_description` to `RiskControlMeasureAdmin` search fields.
-- [ ] `EX-M4`: `apps/quality/views/RiskManagement/FmeaMatrix.py:62, 65, 68` — view generates raw inline CSS class strings in Python dict. Replace with semantic zone classes or template mapping.
+- [ ] **C2**: `templates/quality/riskmanagement/risk_assessment/list.html:78-129, 244, 254` — Missing `hazard_category` filter `<select>` UI and pagination link dropping filter. Contract Section 4.4 explicitly pins `hazard_category_choices` and `selected_cat`. View implements filtering, but template omits the dropdown, omits `selected_cat` in Clear Filters check, and drops param on pagination.
+  - *Fix*: Add `<select id="category-filter" name="hazard_category" class="form-select">` with options to filter grid, include in Clear Filters check, and append `{% if selected_cat %}&hazard_category={{ selected_cat }}{% endif %}` to previous/next pagination links.
+  - *Status*: [ ] open
 
----
+- [ ] **C3**: `apps/quality/views/RiskManagement/RiskManagementPlans.py:93-114` & `detail.html:219, 314` — Severe query explosion on plan detail page (8 sequential `COUNT(*)` database round-trips: 6 in view, 2 in template via `.count`).
+  - *Fix*: Batch assessment KPI counts into single `.aggregate()`, batch control measure counts into single `.aggregate()`, and replace `{{ assessments.count }}` / `{{ reviews.count }}` in template with `{{ stats.total_assessments }}` / `{{ reviews|length }}`.
+  - *Status*: [ ] open
 
-## Pass 3: Frontend / UI / UX / Template Reviewer (`frontend-reviewer`)
+- [ ] **C4**: `apps/quality/views/RiskManagement/FmeaMatrix.py:144-154, 259-271` — FMEA matrix and Risk Traceability matrix CSV exports dump all tenant records across all plans when `plan` param is omitted, diverging from HTML view which defaults to `plans.first()`. Furthermore, arbitrary `plan` ID inputs are not validated against `request.tenant` via `quality_object`.
+  - *Fix*: Validate `plan` parameter with `quality_object(request, RiskManagementPlan, int(selected_plan_id))` when provided (returning 404 if invalid/cross-tenant). If `plan` is omitted, default `selected_plan` to `plans.first()` matching the HTML view.
+  - *Status*: [ ] open
 
-### Critical
-- [ ] `FR-C1`: `templates/quality/riskmanagement/risk_management_plan/detail.html:163` — `plan.approved_signature.signer_printed_name` attribute mismatch (actual field is `signer_name`). Update to `plan.approved_signature.signer_name`.
-
-### Important
-- [ ] `FR-I1`: `apps/quality/models/RiskManagement/RiskAssessments.py:77, 83`, `RiskReviewRecords.py:30` and templates specify non-existent `badge-purple`. Replace with `badge-info` or `badge-slate`.
-- [ ] `FR-I2`: `templates/quality/riskmanagement/risk_assessment/list.html:78-129, 244, 254` — missing `hazard_category` filter `<select>` UI, missing from Clear Filters check, and missing from pagination links.
-- [ ] `FR-I3`: `templates/quality/riskmanagement/fmea_matrix.html:248`, `risk_traceability_matrix.html:219` — non-existent `btn-xs` class used in table actions. Replace with `btn-sm`.
-- [ ] `FR-I4`: Multiple list & detail templates have icon-only buttons missing `aria-label` for screen reader accessibility (WCAG 2.1 AA 4.1.2). Add matching `aria-label` attributes.
-
-### Minor
-- [ ] `FR-M1`: `templates/quality/riskmanagement/fmea_matrix.html:40`, `risk_traceability_matrix.html:40` — plan `<select onchange="this.form.submit()">` needs `<button type="submit" class="sr-only">Submit</button>` for keyboard accessibility.
-- [ ] `FR-M2`: Multiple detail templates use unqualified `col-span-2` in detail grids. Change to `sm:col-span-2` for responsive mobile layout.
-- [ ] `FR-M3`: Inconsistent arbitrary opacity utilities (`bg-white/70`, `bg-slate-50/50`, `bg-red-50/30`) in matrix templates. Replace with standard classes.
+- [ ] **C5**: `apps/quality/views/RiskManagement/RiskManagementPlans.py:177, 188, 199`, `RiskAssessments.py:176`, `RiskControlMeasures.py:165`, `RiskReviewRecords.py:158, 170` — Destructive and milestone lifecycle actions (`plan_delete`, `plan_activate`, `plan_archive`, `risk_assessment_delete`, `risk_control_measure_delete`, `risk_review_record_delete`, `risk_review_record_approve`) lack `@tenant_admin_required`.
+  - *Fix*: Import and apply `@tenant_admin_required` decorator from `apps.core.decorators` to all 7 destructive and lifecycle action endpoints.
+  - *Status*: [ ] open
 
 ---
 
-## Pass 4: Performance & Database Optimization Reviewer (`performance-reviewer`)
+### Important Findings
 
-### Critical
-- [ ] `PR-C1`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:93-114` & `detail.html:219, 314` — 8 sequential COUNT round-trips on plan detail page (6 in view, 2 in template via `.count`). Batch assessment counts into a single `.aggregate()` call, batch control measure counts into `.aggregate()`, and replace `.count` in template with length or aggregated stats.
+- [ ] **I1**: `apps/core/navigation.py:3401-3407` — In `LIVE_LINKS["12.3"]`, both "Hazard Identification & Analysis" and "Residual Risk Assessment" point to `quality:risk_assessment_list`.
+  - *Fix*: Map "Residual Risk Assessment" to `quality:risk_traceability_matrix` to provide distinct live destinations for all 5 feature bullets.
+  - *Status*: [ ] open
 
-### Important
-- [ ] `PR-I1`: `apps/quality/views/RiskManagement/{RiskManagementPlans,RiskAssessments,RiskControlMeasures,RiskReviewRecords}.py` — sequential unbatched KPI queries across all 4 list views (16 sequential queries). Replace with `.aggregate(Count("id", filter=Q(...)))`.
-- [ ] `PR-I2`: `apps/quality/views/RiskManagement/FmeaMatrix.py:29-33, 117, 203-207, 238` — redundant standalone DB queries on already-evaluated querysets (`assessments.count()`) and duplicate `plans.exists()` followed by `plans.first()`. Use `len(assessments)` and direct `plans.first()`.
-- [ ] `PR-I3`: `templates/quality/riskmanagement/risk_assessment/detail.html:213` — `{{ control_measures.count }}` issues redundant `SELECT COUNT(*)` query right before iteration. Replace with `{{ control_measures|length }}`.
-- [ ] `PR-I4`: `apps/quality/views/RiskManagement/FmeaMatrix.py:290-293` — `controls.exists()` in export loop bypasses prefetch cache. Use `controls = list(a.control_measures.all())` and check `if controls:`.
-- [ ] `PR-I5`: `apps/quality/models/RiskManagement/RiskAssessments.py:234-240` — missing compound index for hazard category filtering. Add `models.Index(fields=["tenant", "hazard_category"], name="idx_qrsk_ten_hazard_cat")` (<= 30 chars).
+- [ ] **I2**: `apps/quality/views/RiskManagement/RiskManagementPlans.py:182`, `RiskAssessments.py:182`, `RiskControlMeasures.py:171`, `RiskReviewRecords.py:164` — All four delete views call `obj.delete()` before `write_audit_log`, resetting `obj.pk = None` and recording `object_id=None` in the audit trail.
+  - *Fix*: Call `write_audit_log(request.user, obj, "delete", tenant=request.tenant)` BEFORE calling `obj.delete()`.
+  - *Status*: [ ] open
 
-### Minor
-- [ ] `PR-M1`: `apps/quality/views/RiskManagement/{RiskAssessments,RiskControlMeasures,RiskReviewRecords,FmeaMatrix}.py` — heavy `TextField` over-fetching in plan dropdown querysets. Add `.only("id", "number", "title", "matrix_dimension")`.
-- [ ] `PR-M2`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:84-91` — optimize `risk_management_plan_detail` prefetching.
+- [ ] **I3**: `apps/quality/models/RiskManagement/RiskAssessments.py:280-291` — `RiskAssessment.save()` only calculates residual metrics when both severity and probability are present. If an existing record has residual metrics cleared on update, stale `residual_rpn` and `residual_risk_level` persist in DB.
+  - *Fix*: Add `else` branch in `save()` when residual severity/probability are absent: set `self.residual_rpn = None`, `self.residual_risk_level = ""`, `self.residual_risk_acceptable = False`.
+  - *Status*: [ ] open
+
+- [ ] **I4**: `apps/quality/models/RiskManagement/`, `apps/quality/forms/RiskManagement/`, `apps/quality/views/RiskManagement/`, `apps/quality/urls/RiskManagement/` — Subpackage directories lack `__init__.py` files.
+  - *Fix*: Create standard `__init__.py` in each directory re-exporting entities according to backend package conventions.
+  - *Status*: [ ] open
+
+- [ ] **I5**: `apps/quality/models/RiskManagement/RiskAssessments.py:77, 83`, `RiskReviewRecords.py:30` — Model choice dictionaries and templates reference non-existent CSS class `"badge-purple"`. `theme.css` only defines `.badge-green`, `.badge-red`, `.badge-amber`, `.badge-info`, `.badge-muted`, `.badge-slate`.
+  - *Fix*: Replace `"badge-purple"` with `"badge-info"` or `"badge-slate"`.
+  - *Status*: [ ] open
+
+- [ ] **I6**: `templates/quality/riskmanagement/fmea_matrix.html:248`, `risk_traceability_matrix.html:219` — Non-existent CSS class `btn-xs` used in action buttons.
+  - *Fix*: Replace `btn-xs` with standard `theme.css` class `btn-sm`.
+  - *Status*: [ ] open
+
+- [ ] **I7**: Icon-only action buttons across list & detail templates lack `aria-label` for screen reader accessibility (WCAG 2.1 AA 4.1.2).
+  - *Fix*: Add matching `aria-label` attributes to all icon-only action links/buttons.
+  - *Status*: [ ] open
+
+- [ ] **I8**: `apps/quality/views/RiskManagement/{RiskManagementPlans,RiskAssessments,RiskControlMeasures,RiskReviewRecords}.py` — Sequential unbatched KPI queries across all 4 list views (16 sequential round-trips).
+  - *Fix*: Replace each list view's 4 sequential `.count()` queries with a single `.aggregate(Count("id", filter=Q(...)))`.
+  - *Status*: [ ] open
+
+- [ ] **I9**: `apps/quality/views/RiskManagement/FmeaMatrix.py:29-33, 117, 203-207, 238` — Standalone DB queries fired on already-evaluated querysets (`assessments.count()`) and redundant `plans.exists()` check right before `plans.first()`.
+  - *Fix*: Use `len(assessments)` / `len(traceability_rows)` and direct `if not selected_plan: selected_plan = plans.first()`.
+  - *Status*: [ ] open
+
+- [ ] **I10**: `templates/quality/riskmanagement/risk_assessment/detail.html:213` — `{{ control_measures.count }}` issues redundant `SELECT COUNT(*)` query right before iteration.
+  - *Fix*: Replace with `{{ control_measures|length }}`.
+  - *Status*: [ ] open
+
+- [ ] **I11**: `apps/quality/views/RiskManagement/FmeaMatrix.py:290-293` — In `risk_traceability_matrix_export`, `controls.exists()` can bypass prefetch cache and trigger N+1 queries.
+  - *Fix*: Use `controls = list(a.control_measures.all())` and check `if controls:`.
+  - *Status*: [ ] open
+
+- [ ] **I12**: `apps/quality/models/RiskManagement/RiskAssessments.py:234-240` — Missing compound index on `(tenant, hazard_category)` for fast category filtering.
+  - *Fix*: Add `models.Index(fields=["tenant", "hazard_category"], name="idx_qrsk_ten_hazard_cat")` to `RiskAssessment.Meta.indexes`.
+  - *Status*: [ ] open
+
+- [ ] **I13**: `apps/quality/forms/RiskManagement/RiskReviewRecords.py:27` — Mass assignment vulnerability on `status`: form includes `"status"`, allowing users to set `status="approved"` directly via form POST and bypass approval workflow.
+  - *Fix*: Restrict `status` choices in `RiskReviewRecordForm.__init__` to `[("draft", "Draft"), ("under_review", "Under Review")]`, or exclude `"status"` from `Meta.fields` (defaulting to `"draft"`).
+  - *Status*: [ ] open
+
+- [ ] **I14**: `apps/quality/forms/RiskManagement/RiskControlMeasures.py:28, 29` — Mass assignment on verification flags: `implementation_verified` and `effectiveness_verified` can be checked without verification evidence notes or test protocol.
+  - *Fix*: In `RiskControlMeasureForm.clean()`, require `verification_notes` or `design_verification` if either verification flag is checked.
+  - *Status*: [ ] open
+
+- [ ] **I15**: `apps/quality/forms/RiskManagement/RiskAssessments.py:30` & `RiskAssessments.py:280-291` — Safety gate bypass: arbitrary acceptance of residual risks in the Unacceptable zone (Red, $S \times P \ge 15$), and lack of Clinical Benefit-Risk justification requirement for ALARP zone.
+  - *Fix*: In `RiskAssessmentForm.clean()`, reject `residual_risk_acceptable=True` if calculated residual level is `"unacceptable"`, and require `benefit_risk_justification` if in ALARP zone. In `RiskAssessment.save()`, enforce `self.residual_risk_acceptable = False` if `self.residual_risk_level == "unacceptable"`.
+  - *Status*: [ ] open
+
+- [ ] **I16**: `apps/quality/views/RiskManagement/RiskManagementPlans.py:154-164`, `RiskReviewRecords.py:135-145` — Modification of electronically signed or active plans and approved review records without revoking signature or creating new revision breaks 21 CFR Part 11 integrity.
+  - *Fix*: In `risk_management_plan_edit` and `risk_review_record_edit`, guard against editing active/signed plans or approved review records, redirecting with a user error message.
+  - *Status*: [ ] open
 
 ---
 
-## Pass 5: QA Smoke Tester — Report-Only Mode (`qa-smoke-tester`)
+### Minor Findings
 
-### Important
-- [ ] `QA-I1`: `templates/quality/riskmanagement/risk_management_plan/detail.html:163` — Silent blank rendering of e-signature signer name (`signer_printed_name` vs `signer_name`). Update to `plan.approved_signature.signer_name`.
-- [ ] `QA-I2`: `templates/quality/riskmanagement/risk_assessment/list.html:78-129, 244, 254` — Missing `hazard_category` filter `<select>` UI and pagination link dropping filter. Add `<select name="hazard_category">` and append query param to pagination links.
-- [ ] `QA-I3`: `apps/quality/models/RiskManagement/RiskAssessments.py:77, 83` & `RiskReviewRecords.py:30` — Undefined CSS class `badge-purple` rendered in DOM. Replace with `badge-info` or `badge-slate`.
+- [ ] **M1**: `apps/quality/admin.py:199, 217, 235` — Search fields in `admin.py` can be expanded for related foreign keys.
+  - *Fix*: Add `plan__title` to `RiskAssessmentAdmin` & `RiskReviewRecordAdmin.search_fields`, and `risk_assessment__hazard_description` to `RiskControlMeasureAdmin.search_fields`.
+  - *Status*: [ ] open
 
-### Minor
-- [ ] `QA-M1`: `apps/quality/views/RiskManagement/FmeaMatrix.py:143-154, 258-271` — Default plan filtering discrepancy between HTML view (first plan) and CSV exports (all plans). Harmonize export default when `?plan=` is omitted.
+- [ ] **M2**: `apps/quality/models/RiskManagement/RiskManagementPlans.py:130` — Model lacks helper properties `assessments_count` and `unmitigated_risks_count`.
+  - *Fix*: Add `@property def assessments_count(self)` and `@property def unmitigated_risks_count(self)` to `RiskManagementPlan`.
+  - *Status*: [ ] open
 
+- [ ] **M3**: `apps/quality/views/RiskManagement/RiskManagementPlans.py:97` — `RiskControlMeasure` is imported locally inside the view function.
+  - *Fix*: Move import to module top-level.
+  - *Status*: [ ] open
 
+- [ ] **M4**: `apps/quality/views/RiskManagement/FmeaMatrix.py:62-68` — View generates raw inline CSS class strings in cell dict.
+  - *Fix*: Map cell colors via clean CSS classes or semantic zone mapping.
+  - *Status*: [ ] open
 
+- [ ] **M5**: `templates/quality/riskmanagement/fmea_matrix.html:40`, `risk_traceability_matrix.html:40` — Plan `<select onchange="this.form.submit()">` needs a visually hidden submit button for keyboard accessibility.
+  - *Fix*: Add `<button type="submit" class="sr-only">Submit</button>`.
+  - *Status*: [ ] open
 
+- [ ] **M6**: Detail templates use unqualified `col-span-2` in detail grids.
+  - *Fix*: Change `col-span-2` to `sm:col-span-2` for responsive mobile layout.
+  - *Status*: [ ] open
+
+- [ ] **M7**: Matrix templates use arbitrary opacity modifiers (`bg-white/70`, `bg-slate-50/50`, `bg-red-50/30`).
+  - *Fix*: Replace with standard solid background classes (`bg-white`, `bg-slate-50`, `bg-red-50`).
+  - *Status*: [ ] open
+
+- [ ] **M8**: Heavy `TextField` over-fetching in plan dropdown querysets across list and matrix views.
+  - *Fix*: Add `.only("id", "number", "title", "matrix_dimension")` to plan querysets.
+  - *Status*: [ ] open
+
+- [ ] **M9**: In all 5 view modules, `csv_safe(value)` checks `text.startswith(...)` without stripping leading whitespace, allowing formula bypass (e.g. ` =1+1`).
+  - *Fix*: Update `csv_safe` to check `text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "%"))` and wrap all export values with `csv_safe`.
+  - *Status*: [ ] open
+
+- [ ] **M10**: `apps/quality/forms/RiskManagement/RiskControlMeasures.py:67-74` — Missing cross-project consistency validation between `risk_assessment.plan.design_project` and `design_input.project`.
+  - *Fix*: In `RiskControlMeasureForm.clean()`, check if `risk_assessment.plan.design_project_id` matches `design_input.project_id` when both are set.
+  - *Status*: [ ] open
+
+- [ ] **M11**: `apps/quality/views/RiskManagement/RiskManagementPlans.py:84-91` — Detail view prefetching optimization.
+  - *Fix*: Use `prefetch_related` on plan assessments and reviews.
+  - *Status*: [ ] open
+
+---
+
+## Raw Review Passes Record
+
+### Pass 1: Code Reviewer (`code-reviewer`)
+- `CR-C1`: In `FmeaMatrix.py` exports, handle omitted `plan` and validate `plan_id`.
+- `CR-C2`: Gate state-mutating actions with `@tenant_admin_required`.
+- `CR-I1`: Map "Residual Risk Assessment" in `navigation.py` to `risk_traceability_matrix`.
+- `CR-I2`: Call `write_audit_log` before `.delete()`.
+- `CR-I3`: Clear residual fields in `RiskAssessment.save()` when residual inputs are unset.
+- `CR-I4`: Replace raw CSS colors in matrix cells.
+- `CR-M1`: Expand admin search fields.
+- `CR-M2`: Add helper properties to `RiskManagementPlan`.
+- `CR-M3`: Wrap export values in `csv_safe`.
+
+### Pass 2: Architecture Explorer (`explorer`)
+- `EX-C1`: Plan detail e-signature attribute mismatch (`signer_printed_name` vs `signer_name`).
+- `EX-C2`: Missing `hazard_category` filter in assessment list.
+- `EX-I1`: Missing `__init__.py` files in `RiskManagement/` subpackage folders.
+- `EX-I2`: Undefined `badge-purple` in model CSS maps.
+- `EX-I3`: Duplicate `navigation.py` link for Residual Risk Assessment.
+- `EX-I4`: Export default plan alignment with HTML view.
+- `EX-I5`: Clear residual risk fields on update.
+- `EX-I6`: Audit log `object_id=None` on delete.
+- `EX-M1`: Local import in `RiskManagementPlans.py`.
+- `EX-M2`: Add model count helper properties.
+- `EX-M3`: Admin search field coverage.
+- `EX-M4`: Presentation classes in view.
+
+### Pass 3: Frontend / UI / UX / Template Reviewer (`frontend-reviewer`)
+- `FR-C1`: `signer_printed_name` vs `signer_name` mismatch.
+- `FR-I1`: Invalid badge `badge-purple`.
+- `FR-I2`: Missing `hazard_category` filter dropdown and pagination param loss.
+- `FR-I3`: Undefined `btn-xs` button class.
+- `FR-I4`: Icon-only buttons missing `aria-label`.
+- `FR-M1`: Plan select keyboard accessibility.
+- `FR-M2`: Unqualified `col-span-2` on mobile.
+- `FR-M3`: Arbitrary opacity utilities in matrices.
+
+### Pass 4: Performance & Database Optimization Reviewer (`performance-reviewer`)
+- `PR-C1`: Severe query explosion on plan detail (8 sequential counts).
+- `PR-I1`: 16 unbatched sequential KPI counts across list views.
+- `PR-I2`: Redundant DB queries on evaluated querysets.
+- `PR-I3`: Redundant `.count()` in assessment detail template.
+- `PR-I4`: Potential prefetch bypass via `.exists()` in export loop.
+- `PR-I5`: Missing compound index for hazard category.
+- `PR-M1`: TextField over-fetching in dropdown querysets.
+- `PR-M2`: Detail view prefetch optimization.
+
+### Pass 5: QA Smoke Tester — Report-Only Mode (`qa-smoke-tester`)
+- `QA-I1`: Silent blank rendering of e-signature signer name.
+- `QA-I2`: Missing `hazard_category` filter UI & pagination parameter drop.
+- `QA-I3`: Undefined CSS class `badge-purple` rendered in DOM.
+- `QA-M1`: Default plan filtering discrepancy between HTML and CSV export.
+
+### Pass 6: Security Reviewer (`security-reviewer`)
+- `SR-I1`: Missing `@tenant_admin_required` on destructive and lifecycle actions.
+- `SR-I2`: Lost audit log `object_id` on deletion.
+- `SR-I3`: Mass assignment bypass of review approval in `RiskReviewRecordForm`.
+- `SR-I4`: Mass assignment bypass of risk control verification in `RiskControlMeasureForm`.
+- `SR-I5`: Safety gate bypass: arbitrary acceptance of unacceptable residual risks.
+- `SR-I6`: Electronic signature / post-approval tampering guard on active/signed plans and approved reviews.
+- `SR-M1`: CSV formula injection bypass via leading whitespace.
+- `SR-M2`: Missing cross-project consistency validation in `RiskControlMeasureForm`.
+- `SR-M3`: Silent invalid plan ID handling in FMEA exports.
