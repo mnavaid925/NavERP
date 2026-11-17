@@ -3405,6 +3405,13 @@ LIVE_LINKS = {
         "Residual Risk Assessment": "quality:risk_traceability_matrix",
         "Risk Management File & Reporting": "quality:risk_management_plan_list",
     },
+    "12.4": {
+        "Issue Detection & Logging": "quality:capa_investigation_list",
+        "Root Cause Analysis (RCA)": "quality:root_cause_analysis_list",
+        "Action Plan Development": "quality:capa_action_list",
+        "CAPA Tracking & Escalation": "quality:capa_tracking_board",
+        "Effectiveness Verification & Closure": "quality:capa_effectiveness_review_list",
+    },
 
 
 
