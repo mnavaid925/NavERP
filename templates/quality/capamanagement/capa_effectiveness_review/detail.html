@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}{{ review.number }} | Effectiveness Review | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_detail' review.capa.pk %}">{{ review.capa.number }}</a>
+            <span>/</span>
+            <span>{{ review.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ review.number }}: {{ review.get_verification_method_display }}</h1>
+            <span class="badge {{ review.status_badge }}">{{ review.get_status_display }}</span>
+            <span class="badge {{ review.outcome_badge }}">{{ review.get_outcome_display }}</span>
+            <span class="badge {{ review.method_badge }}">{{ review.get_verification_method_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_investigation_detail' review.capa.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to CAPA
+        </a>
+        {% if review.status != "completed" %}
+        <a href="{% url 'quality:capa_effectiveness_review_edit' review.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Review
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Acceptance Criteria -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Pre-established Acceptance Criteria</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">{{ review.review_criteria }}</p>
+            </div>
+        </div>
+
+        <!-- Evaluation Results & Statistical Findings -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Metrics Evaluated & Statistical Findings</h2>
+            </div>
+            <div class="card-body space-y-4">
+                {% if review.metrics_evaluated %}
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Observed Data & Capability Proof</h3>
+                    <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">{{ review.metrics_evaluated }}</p>
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-400 italic">No statistical data or evaluation metrics logged yet.</p>
+                {% endif %}
+
+                <!-- Recurrence -->
+                <div class="p-3 rounded {% if review.recurrence_observed %}bg-red-50 border border-red-200 text-red-900{% else %}bg-emerald-50 border border-emerald-200 text-emerald-900{% endif %}">
+                    <div class="text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                        {% if review.recurrence_observed %}
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i> Recurrence Observed During Evaluation
+                        {% else %}
+                        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i> Zero Recurrence Confirmed in Evaluation Window
+                        {% endif %}
+                    </div>
+                    {% if review.recurrence_details %}
+                    <p class="text-xs mt-1 whitespace-pre-wrap">{{ review.recurrence_details }}</p>
+                    {% endif %}
+                </div>
+
+                {% if review.review_notes %}
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Review Conclusions & Recommendations</h3>
+                    <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">{{ review.review_notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sign-off & Metadata Sidebar -->
+    <div class="space-y-6">
+        <!-- Sign-off Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Effectiveness Determination</h2>
+            </div>
+            <div class="card-body space-y-4">
+                {% if review.status == "completed" %}
+                <div class="p-3 rounded bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 space-y-1">
+                    <div class="font-semibold flex items-center gap-1.5"><i data-lucide="check-circle" class="w-4 h-4"></i> Evaluation Completed</div>
+                    <div>Evaluator: <strong>{{ review.evaluator.username }}</strong></div>
+                    <div>Actual Date: <strong>{{ review.actual_review_date|date:"Y-m-d" }}</strong></div>
+                    <div>Determination: <strong><span class="badge {{ review.outcome_badge }}">{{ review.get_outcome_display }}</span></strong></div>
+                </div>
+                {% else %}
+                <form method="post" action="{% url 'quality:capa_effectiveness_review_sign_off' review.pk %}" class="space-y-3" onsubmit="return confirm('Formally complete this effectiveness evaluation?');">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label text-xs" for="outcome">Evaluation Outcome *</label>
+                        <select name="outcome" id="outcome" class="form-select text-xs">
+                            <option value="effective">Effective — Actions Successful</option>
+                            <option value="ineffective">Ineffective — Recurrence / Defect Persists</option>
+                            <option value="inconclusive">Inconclusive — Extended Window Required</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label text-xs" for="review_notes">Determination Summary & Justification</label>
+                        <textarea name="review_notes" id="review_notes" class="form-textarea text-xs" rows="3" placeholder="Document statistical analysis, customer feedback check, and rationale..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full text-xs">
+                        <i data-lucide="check-check"></i> Sign-off Effectiveness
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Metadata Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Review Protocol Metadata</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Parent CAPA</dt>
+                        <dd>
+                            <a href="{% url 'quality:capa_investigation_detail' review.capa.pk %}" class="font-mono text-xs text-blue-600 hover:underline">
+                                {{ review.capa.number }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Verification Method</dt>
+                        <dd><span class="badge {{ review.method_badge }}">{{ review.get_verification_method_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Assigned Evaluator</dt>
+                        <dd>{{ review.evaluator.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Planned Review Date</dt>
+                        <dd class="{% if review.is_review_overdue %}text-red-600 font-bold{% endif %}">
+                            {{ review.planned_review_date|date:"Y-m-d" }}
+                            {% if review.is_review_overdue %}<span class="badge badge-red ml-1">Overdue</span>{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created At</dt>
+                        <dd>{{ review.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
