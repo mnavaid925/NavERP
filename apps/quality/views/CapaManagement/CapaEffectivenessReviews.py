@@ -153,12 +153,26 @@ def capa_effectiveness_review_delete(request, pk):
 @login_required
 def capa_effectiveness_review_sign_off(request, pk):
     review = quality_object(request, CapaEffectivenessReview, pk)
+
+    if review.status == "completed":
+        messages.error(request, "This review has already been signed off and completed.")
+        return redirect("quality:capa_effectiveness_review_detail", pk=review.pk)
+
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    if request.user != review.evaluator and not is_admin:
+        messages.error(request, "Only the assigned evaluator or a tenant administrator can sign off this review.")
+        return redirect("quality:capa_effectiveness_review_detail", pk=review.pk)
+
     outcome = request.POST.get("outcome", "").strip()
     notes = request.POST.get("review_notes", "").strip()
 
     valid_outcomes = [choice[0] for choice in CapaEffectivenessReview.OUTCOME_CHOICES if choice[0] != "pending"]
     if outcome not in valid_outcomes:
         messages.error(request, "Please choose a definitive outcome (Effective, Ineffective, or Inconclusive).")
+        return redirect("quality:capa_effectiveness_review_detail", pk=review.pk)
+
+    if review.recurrence_observed and outcome == "effective":
+        messages.error(request, "Cannot mark review as 'Effective' when recurrence has been observed.")
         return redirect("quality:capa_effectiveness_review_detail", pk=review.pk)
 
     review.outcome = outcome
