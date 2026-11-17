@@ -46,6 +46,11 @@ class RiskReviewRecordForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "status" in self.fields:
+            self.fields["status"].choices = [
+                ("draft", "Draft"),
+                ("under_review", "Under Review"),
+            ]
         if hasattr(self, "tenant") and self.tenant is not None:
             self.fields["plan"].queryset = RiskManagementPlan.objects.filter(tenant=self.tenant)
             self.fields["lead_reviewer"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
@@ -56,4 +61,7 @@ class RiskReviewRecordForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["plan", "lead_reviewer"])
+        status = cleaned.get("status")
+        if status and status not in ("draft", "under_review"):
+            self.add_error("status", "Review status can only be Draft or Under Review. Formal approval requires the Approve action.")
         return cleaned
