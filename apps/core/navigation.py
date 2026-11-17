@@ -3402,7 +3402,7 @@ LIVE_LINKS = {
         "Hazard Identification & Analysis": "quality:risk_assessment_list",
         "Risk Evaluation & Scoring": "quality:fmea_matrix",
         "Risk Control & Mitigation": "quality:risk_control_measure_list",
-        "Residual Risk Assessment": "quality:risk_assessment_list",
+        "Residual Risk Assessment": "quality:risk_traceability_matrix",
         "Risk Management File & Reporting": "quality:risk_management_plan_list",
     },
 
