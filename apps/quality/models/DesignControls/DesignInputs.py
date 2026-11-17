@@ -50,13 +50,13 @@ class DesignInput(TenantNumbered):
     }
 
     INPUT_TYPE_CSS = {
-        "user_need": "badge-purple",
+        "user_need": "badge-slate",
         "functional": "badge-info",
         "performance": "badge-green",
         "safety": "badge-red",
         "regulatory": "badge-amber",
         "human_factors": "badge-info",
-        "software": "badge-blue",
+        "software": "badge-info",
         "interface": "badge-slate",
         "packaging": "badge-slate",
     }
