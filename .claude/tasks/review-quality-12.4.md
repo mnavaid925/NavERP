@@ -57,3 +57,24 @@ All six review passes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perfor
 - **EX-M2**: `templates/quality/capamanagement/capa_action/detail.html:56` — Substring status comparison `in 'implemented verified'`.
   - *Fix*: Replace with `{% if action.status == 'implemented' or action.status == 'verified' %}`.
 
+---
+
+## Pass 3: Frontend Review (`frontend-reviewer`)
+
+### Critical
+- **FE-C1**: `apps/quality/models/CapaManagement/` (`CapaInvestigations.py:47,74`, `CapaActions.py:28`, `CapaEffectivenessReviews.py:35`, `RootCauseAnalyses.py:42,50,58`) — Non-existent theme badge class `"badge-purple"` (Lesson L33 / theme.css design system guard). `theme.css` defines only `.badge-green`, `.badge-red`, `.badge-amber`, `.badge-info`, `.badge-muted`, `.badge-slate`. When any of these choices are rendered in list/detail/board templates, badges render unstyled.
+  - *Fix*: Update model dictionary mappings to use valid theme palette classes (e.g., `"badge-info"` or `"badge-slate"`).
+
+### Important
+- **FE-I1**: `templates/quality/capamanagement/capa_investigation/detail.html:24-43`, `root_cause_analysis/detail.html:26-39`, `capa_action/detail.html:25-35`, `capa_effectiveness_review/detail.html:26-36` — All 4 detail templates lack the status-conditional POST Delete form in the `.page-actions` header, violating the CLAUDE.md CRUD navigation contract (`Edit / POST-Delete / Back-to-List`).
+  - *Fix*: Add POST-delete forms with `{% csrf_token %}`, confirm prompt, and `btn btn-danger` or `btn-outline text-red-600` to all 4 detail template headers.
+- **FE-I2**: `templates/quality/capamanagement/capa_investigation/detail.html:293` — Unprotected nullable FK attribute access on `capa.closure_approved_by.username` (Lesson L10).
+  - *Fix*: Use `{{ capa.closure_approved_by.username|default:"System / Unassigned" }}` or wrap in `{% if capa.closure_approved_by %}`.
+
+### Minor
+- **FE-M1**: `templates/quality/capamanagement/capa_investigation/detail.html:180, 236` — Icon-only action links missing `title` attribute for tooltips and accessibility.
+  - *Fix*: Add `title="View Action"` and `title="View Review"`.
+- **FE-M2**: `templates/quality/capamanagement/root_cause_analysis/detail.html:68, 74, 80, 86` & `capa_tracking_board.html:76, 100` — Physical margins `ml-*` and `border-l-*` instead of logical `ms-*` and `border-s-*` for RTL adaptability.
+  - *Fix*: Replace with `ms-3`, `ms-6`, etc. and `border-s-4`.
+
+
