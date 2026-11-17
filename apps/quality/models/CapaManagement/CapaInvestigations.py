@@ -215,5 +215,7 @@ class CapaInvestigation(TenantNumbered):
 
     @property
     def days_open(self):
+        if not self.created_at:
+            return 0
         end = self.closed_at.date() if self.closed_at else timezone.now().date()
         return (end - self.created_at.date()).days
