@@ -162,6 +162,8 @@ class CapaInvestigation(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_qcap_ten_status"),
+            models.Index(fields=["tenant", "action_type"], name="idx_qcap_ten_act_type"),
+            models.Index(fields=["tenant", "department"], name="idx_qcap_ten_dept"),
             models.Index(fields=["tenant", "source_type"], name="idx_qcap_ten_src_type"),
             models.Index(fields=["tenant", "risk_priority"], name="idx_qcap_ten_risk_pri"),
             models.Index(fields=["tenant", "target_closure_date"], name="idx_qcap_ten_tgt_date"),
