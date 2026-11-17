@@ -36,7 +36,7 @@
             <div class="w-full sm:w-auto">
                 <label class="form-label mb-0" for="plan-select">Select Risk Management Plan:</label>
             </div>
-            <div class="w-full sm:w-80">
+            <div class="w-full sm:w-80 flex items-center gap-2">
                 <select id="plan-select" name="plan" class="form-select" onchange="this.form.submit()">
                     {% for p in plans %}
                     <option value="{{ p.pk }}" {% if selected_plan and selected_plan.pk == p.pk %}selected{% endif %}>
@@ -44,6 +44,7 @@
                     </option>
                     {% endfor %}
                 </select>
+                <button type="submit" class="sr-only">Submit</button>
             </div>
             {% if selected_plan %}
             <div class="text-xs text-slate-500">
@@ -133,7 +134,7 @@
                             <div class="font-bold text-lg leading-tight">{{ cell.score }}</div>
                             <div class="text-xs mt-1 font-medium">
                                 {% if cell.initial_count > 0 %}
-                                <span class="inline-block px-2 py-0.5 rounded bg-white/70 shadow-sm" title="{{ cell.initial_count }} initial hazard items">
+                                <span class="inline-block px-2 py-0.5 rounded bg-white shadow-sm" title="{{ cell.initial_count }} initial hazard items">
                                     {{ cell.initial_count }} Pre
                                 </span>
                                 {% endif %}
@@ -245,7 +246,7 @@
                             </span>
                         </td>
                         <td class="text-right">
-                            <a href="{% url 'quality:risk_control_measure_create' %}?assessment={{ item.pk }}" class="btn btn-xs btn-outline">
+                            <a href="{% url 'quality:risk_control_measure_create' %}?assessment={{ item.pk }}" class="btn btn-sm btn-outline">
                                 <i data-lucide="shield-plus"></i> Add Control
                             </a>
                         </td>
