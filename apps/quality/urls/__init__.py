@@ -1,3 +1,18 @@
+from apps.quality.urls.CapaManagement.CapaActions import (
+    urlpatterns as capa_actions_urls,
+)
+from apps.quality.urls.CapaManagement.CapaEffectivenessReviews import (
+    urlpatterns as capa_effectiveness_reviews_urls,
+)
+from apps.quality.urls.CapaManagement.CapaInvestigations import (
+    urlpatterns as capa_investigations_urls,
+)
+from apps.quality.urls.CapaManagement.CapaTrackingBoard import (
+    urlpatterns as capa_tracking_board_urls,
+)
+from apps.quality.urls.CapaManagement.RootCauseAnalyses import (
+    urlpatterns as root_cause_analyses_urls,
+)
 from apps.quality.urls.DesignControls.DesignInputs import (
     urlpatterns as design_inputs_urls,
 )
@@ -58,5 +73,10 @@ urlpatterns = (
     + risk_control_measures_urls
     + risk_review_records_urls
     + fmea_matrix_urls
+    + capa_investigations_urls
+    + root_cause_analyses_urls
+    + capa_actions_urls
+    + capa_effectiveness_reviews_urls
+    + capa_tracking_board_urls
 )
 
