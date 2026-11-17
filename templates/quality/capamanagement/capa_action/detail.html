@@ -31,6 +31,14 @@
             <i data-lucide="pencil"></i> Edit Action
         </a>
         {% endif %}
+        {% if request.user.is_tenant_admin and action.status != "verified" and action.capa.status != "closed" %}
+        <form method="post" action="{% url 'quality:capa_action_delete' action.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Action {{ action.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
