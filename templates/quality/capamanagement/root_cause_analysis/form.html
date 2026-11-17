@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit RCA {{ rca.number }}{% else %}New Root Cause Analysis{% endif %} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:root_cause_analysis_list' %}">Root Cause Analyses</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ rca.number }}{% else %}New RCA{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Root Cause Analysis {{ rca.number }}{% else %}Conduct Root Cause Analysis (RCA / 5 Whys / Ishikawa){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Root Cause Problem Solving Worksheet</h2>
+        <p class="text-xs text-slate-500">Perform systematic cause-and-effect investigation using 5 Whys, Ishikawa 6M fishbone analysis, or barrier failure modeling.</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Parent CAPA & Method -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.capa.id_for_label }}">Associated CAPA Investigation *</label>
+                    {{ form.capa }}
+                    {% if form.capa.errors %}<div class="form-error">{{ form.capa.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.rca_method.id_for_label }}">Investigation Methodology *</label>
+                    {{ form.rca_method }}
+                    {% if form.rca_method.errors %}<div class="form-error">{{ form.rca_method.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Problem Statement -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.problem_statement.id_for_label }}">Problem Statement (Specific Symptom / Failure Mode) *</label>
+                    {{ form.problem_statement }}
+                    {% if form.problem_statement.errors %}<div class="form-error">{{ form.problem_statement.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Section: 5 Whys -->
+                <div class="md:col-span-2 border-t border-slate-200 pt-4">
+                    <h3 class="text-sm font-semibold text-slate-800 mb-2">5 Whys Root Cause Ladder (Fill applicable levels)</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.why_1.id_for_label }}">Why 1 (Direct causal factor)</label>
+                            {{ form.why_1 }}
+                            {% if form.why_1.errors %}<div class="form-error">{{ form.why_1.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.why_2.id_for_label }}">Why 2 (Condition leading to Why 1)</label>
+                            {{ form.why_2 }}
+                            {% if form.why_2.errors %}<div class="form-error">{{ form.why_2.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.why_3.id_for_label }}">Why 3 (Process / systemic cause)</label>
+                            {{ form.why_3 }}
+                            {% if form.why_3.errors %}<div class="form-error">{{ form.why_3.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.why_4.id_for_label }}">Why 4 (Policy / management control cause)</label>
+                            {{ form.why_4 }}
+                            {% if form.why_4.errors %}<div class="form-error">{{ form.why_4.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs text-indigo-700 font-bold" for="{{ form.why_5.id_for_label }}">Why 5 (Fundamental Root Cause)</label>
+                            {{ form.why_5 }}
+                            {% if form.why_5.errors %}<div class="form-error">{{ form.why_5.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: Ishikawa 6M -->
+                <div class="md:col-span-2 border-t border-slate-200 pt-4">
+                    <h3 class="text-sm font-semibold text-slate-800 mb-2">Ishikawa 6M Cause-and-Effect Factors (Optional / Multi-factor Analysis)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.fishbone_manpower.id_for_label }}">Manpower (People / Training / Ergonomics)</label>
+                            {{ form.fishbone_manpower }}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.fishbone_machine.id_for_label }}">Machine (Equipment / Tooling / Software)</label>
+                            {{ form.fishbone_machine }}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.fishbone_material.id_for_label }}">Material (Supplier / Raw Material / Parts)</label>
+                            {{ form.fishbone_material }}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.fishbone_method.id_for_label }}">Method (Procedures / Parameters / Instructions)</label>
+                            {{ form.fishbone_method }}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.fishbone_measurement.id_for_label }}">Measurement (Gage / Inspection / Accuracy)</label>
+                            {{ form.fishbone_measurement }}
+                        </div>
+                        <div>
+                            <label class="form-label text-xs" for="{{ form.fishbone_environment.id_for_label }}">Environment (Cleanroom / Temp / ESD)</label>
+                            {{ form.fishbone_environment }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Synthesis & Classification -->
+                <div class="md:col-span-2 border-t border-slate-200 pt-4">
+                    <h3 class="text-sm font-semibold text-slate-800 mb-2">Root Cause Synthesis & Escape Point</h3>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.root_cause_category.id_for_label }}">Root Cause Category *</label>
+                    {{ form.root_cause_category }}
+                    {% if form.root_cause_category.errors %}<div class="form-error">{{ form.root_cause_category.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Investigation Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.root_cause_summary.id_for_label }}">Synthesized Primary Root Cause (Evidence-backed conclusion) *</label>
+                    {{ form.root_cause_summary }}
+                    {% if form.root_cause_summary.errors %}<div class="form-error">{{ form.root_cause_summary.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.escape_point_gap.id_for_label }}">Escape Point Gap Analysis (Why did detection barriers fail?)</label>
+                    {{ form.escape_point_gap }}
+                    {% if form.escape_point_gap.errors %}<div class="form-error">{{ form.escape_point_gap.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.lead_investigator.id_for_label }}">Lead RCA Investigator *</label>
+                    {{ form.lead_investigator }}
+                    {% if form.lead_investigator.errors %}<div class="form-error">{{ form.lead_investigator.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:root_cause_analysis_detail' rca.pk %}{% else %}{% url 'quality:root_cause_analysis_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Update RCA{% else %}Save Root Cause Analysis{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
