@@ -147,6 +147,12 @@ def root_cause_analysis_edit(request, pk):
 @tenant_admin_required
 def root_cause_analysis_delete(request, pk):
     rca = quality_object(request, RootCauseAnalysis, pk)
+    if rca.status == "verified":
+        messages.error(request, "Cannot delete a verified Root Cause Analysis record.")
+        return redirect("quality:root_cause_analysis_detail", pk=rca.pk)
+    if rca.capa.status == "closed":
+        messages.error(request, "Cannot delete records belonging to a closed CAPA.")
+        return redirect("quality:root_cause_analysis_detail", pk=rca.pk)
     num = rca.number
     capa_pk = rca.capa_id
     write_audit_log(request.user, rca, "delete", tenant=request.tenant)
