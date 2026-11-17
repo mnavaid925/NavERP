@@ -185,6 +185,18 @@ def capa_investigation_advance_status(request, pk):
         messages.error(request, "Invalid lifecycle transition requested.")
         return redirect("quality:capa_investigation_detail", pk=capa.pk)
 
+    if capa.status == "closed":
+        messages.error(request, "Cannot advance or modify a closed CAPA.")
+        return redirect("quality:capa_investigation_detail", pk=capa.pk)
+
+    if target_status == "closed":
+        messages.error(request, "Formal closure must be performed via the closure workflow.")
+        return redirect("quality:capa_investigation_detail", pk=capa.pk)
+
+    if target_status == "voided" and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)):
+        messages.error(request, "Only tenant administrators can void a CAPA investigation.")
+        return redirect("quality:capa_investigation_detail", pk=capa.pk)
+
     old_status = capa.status
     capa.status = target_status
     capa.save()
