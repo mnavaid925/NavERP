@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit CAPA {{ capa.number }}{% else %}New CAPA Investigation{% endif %} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Investigations</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ capa.number }}{% else %}New CAPA{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit CAPA Investigation {{ capa.number }}{% else %}Initiate CAPA Investigation (ISO 13485 / 21 CFR 820.100){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Corrective & Preventive Action Intake</h2>
+        <p class="text-xs text-slate-500">Capture failure observations, initial containment, risk priority, and investigation ownership per ISO 13485:2016 §8.5.2 and 21 CFR 820.100.</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Title -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">CAPA Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Issue Summary -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.issue_summary.id_for_label }}">Problem Description / Defect Observations *</label>
+                    {{ form.issue_summary }}
+                    {% if form.issue_summary.errors %}<div class="form-error">{{ form.issue_summary.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Action Type & Risk Priority -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.action_type.id_for_label }}">Action Type *</label>
+                    {{ form.action_type }}
+                    {% if form.action_type.errors %}<div class="form-error">{{ form.action_type.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.risk_priority.id_for_label }}">Risk Priority *</label>
+                    {{ form.risk_priority }}
+                    {% if form.risk_priority.errors %}<div class="form-error">{{ form.risk_priority.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Source Type & Source Reference -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.source_type.id_for_label }}">Originating Source Type *</label>
+                    {{ form.source_type }}
+                    {% if form.source_type.errors %}<div class="form-error">{{ form.source_type.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.source_reference.id_for_label }}">Source Reference ID</label>
+                    {{ form.source_reference }}
+                    {% if form.source_reference.errors %}<div class="form-error">{{ form.source_reference.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Item Code & Name -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.affected_item_code.id_for_label }}">Affected Item Code / SKU</label>
+                    {{ form.affected_item_code }}
+                    {% if form.affected_item_code.errors %}<div class="form-error">{{ form.affected_item_code.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.affected_item_name.id_for_label }}">Affected Item Description</label>
+                    {{ form.affected_item_name }}
+                    {% if form.affected_item_name.errors %}<div class="form-error">{{ form.affected_item_name.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Lot Numbers & Department -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.affected_lot_numbers.id_for_label }}">Affected Lot / Batch Numbers</label>
+                    {{ form.affected_lot_numbers }}
+                    {% if form.affected_lot_numbers.errors %}<div class="form-error">{{ form.affected_lot_numbers.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.department.id_for_label }}">Department / Facility</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="form-error">{{ form.department.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Immediate Containment Actions -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.containment_actions.id_for_label }}">Immediate Containment & Quarantine Actions</label>
+                    {{ form.containment_actions }}
+                    {% if form.containment_actions.errors %}<div class="form-error">{{ form.containment_actions.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Containment Implemented, Date & Verified By -->
+                <div class="form-group">
+                    <div class="flex items-center gap-2 mt-6">
+                        {{ form.containment_implemented }}
+                        <label class="form-label mb-0" for="{{ form.containment_implemented.id_for_label }}">Containment Executed & Confirmed</label>
+                    </div>
+                    {% if form.containment_implemented.errors %}<div class="form-error">{{ form.containment_implemented.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.containment_date.id_for_label }}">Containment Execution Date</label>
+                    {{ form.containment_date }}
+                    {% if form.containment_date.errors %}<div class="form-error">{{ form.containment_date.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.containment_verified_by.id_for_label }}">Containment Verified By</label>
+                    {{ form.containment_verified_by }}
+                    {% if form.containment_verified_by.errors %}<div class="form-error">{{ form.containment_verified_by.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Lead Investigator & Quality Owner -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lead_investigator.id_for_label }}">Lead Investigator *</label>
+                    {{ form.lead_investigator }}
+                    {% if form.lead_investigator.errors %}<div class="form-error">{{ form.lead_investigator.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.quality_owner.id_for_label }}">Quality Owner *</label>
+                    {{ form.quality_owner }}
+                    {% if form.quality_owner.errors %}<div class="form-error">{{ form.quality_owner.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Cross-module links -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.design_project.id_for_label }}">Linked Design Controls Project</label>
+                    {{ form.design_project }}
+                    {% if form.design_project.errors %}<div class="form-error">{{ form.design_project.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.risk_assessment.id_for_label }}">Linked Risk Assessment (ISO 14971)</label>
+                    {{ form.risk_assessment }}
+                    {% if form.risk_assessment.errors %}<div class="form-error">{{ form.risk_assessment.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Status & Due Dates -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Lifecycle Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_investigation_date.id_for_label }}">Target Investigation Due Date</label>
+                    {{ form.target_investigation_date }}
+                    {% if form.target_investigation_date.errors %}<div class="form-error">{{ form.target_investigation_date.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_closure_date.id_for_label }}">Target Closure Due Date</label>
+                    {{ form.target_closure_date }}
+                    {% if form.target_closure_date.errors %}<div class="form-error">{{ form.target_closure_date.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Escalation -->
+                <div class="form-group">
+                    <div class="flex items-center gap-2 mt-6">
+                        {{ form.is_escalated }}
+                        <label class="form-label mb-0" for="{{ form.is_escalated.id_for_label }}">Escalate to Management Review</label>
+                    </div>
+                    {% if form.is_escalated.errors %}<div class="form-error">{{ form.is_escalated.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.escalation_reason.id_for_label }}">Management Escalation Rationale</label>
+                    {{ form.escalation_reason }}
+                    {% if form.escalation_reason.errors %}<div class="form-error">{{ form.escalation_reason.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Closure summary -->
+                {% if is_edit %}
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.closure_summary.id_for_label }}">Remediation & Closure Summary</label>
+                    {{ form.closure_summary }}
+                    {% if form.closure_summary.errors %}<div class="form-error">{{ form.closure_summary.errors.0 }}</div>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:capa_investigation_detail' capa.pk %}{% else %}{% url 'quality:capa_investigation_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Update CAPA{% else %}Save & Initiate CAPA{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
