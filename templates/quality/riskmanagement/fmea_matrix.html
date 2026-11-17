@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}ISO 14971 FMEA Risk Matrix & Heatmap | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Management</a>
+            <span>/</span>
+            <span>FMEA Risk Matrix</span>
+        </div>
+        <h1 class="page-title">FMEA Risk Matrix & Heatmap (ISO 14971)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:risk_traceability_matrix' %}{% if selected_plan %}?plan={{ selected_plan.pk }}{% endif %}" class="btn btn-outline">
+            <i data-lucide="git-merge"></i> Risk Traceability
+        </a>
+        <a href="{% url 'quality:fmea_matrix_export' %}{% if selected_plan %}?plan={{ selected_plan.pk }}{% endif %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:risk_assessment_create' %}{% if selected_plan %}?plan={{ selected_plan.pk }}{% endif %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Add Risk Item
+        </a>
+    </div>
+</div>
+
+<!-- Plan Selector Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="flex flex-col sm:flex-row items-center gap-4">
+            <div class="w-full sm:w-auto">
+                <label class="form-label mb-0" for="plan-select">Select Risk Management Plan:</label>
+            </div>
+            <div class="w-full sm:w-80">
+                <select id="plan-select" name="plan" class="form-select" onchange="this.form.submit()">
+                    {% for p in plans %}
+                    <option value="{{ p.pk }}" {% if selected_plan and selected_plan.pk == p.pk %}selected{% endif %}>
+                        {{ p.number }} — {{ p.title|truncatechars:35 }} ({{ p.matrix_dimension }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if selected_plan %}
+            <div class="text-xs text-slate-500">
+                Classification: <strong>{{ selected_plan.get_device_classification_display }}</strong> | Status: <strong>{{ selected_plan.get_status_display }}</strong>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Heatmap Summary Stats -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="grid"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Assessed Risks</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.total }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Unacceptable (Red)</div>
+            <div class="text-2xl font-bold text-red-600">{{ stats.unacceptable }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">ALARP Zone (Amber)</div>
+            <div class="text-2xl font-bold text-amber-600">{{ stats.alarp }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Acceptable (Green)</div>
+            <div class="text-2xl font-bold text-green-600">{{ stats.broadly_acceptable }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- 5x5 Heatmap Matrix Grid Card -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Risk Evaluation Matrix Heatmap (5 × 5)</h2>
+            <p class="text-xs text-slate-500">Severity (Y-axis, Catastrophic down to Negligible) vs Probability (X-axis, Improbable up to Frequent)</p>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-red-500 inline-block"></span> Unacceptable (&ge;15)</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-400 inline-block"></span> ALARP (6&ndash;14)</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-green-500 inline-block"></span> Broadly Acceptable (&le;5)</span>
+        </div>
+    </div>
+    <div class="card-body overflow-x-auto">
+        <div class="min-w-[700px]">
+            <table class="w-full border-collapse">
+                <thead>
+                    <tr>
+                        <th class="w-40 p-2 text-left text-xs font-semibold uppercase text-slate-500 border-b border-slate-200">
+                            Severity \ Probability
+                        </th>
+                        {% for p_val, p_label in probability_range %}
+                        <th class="p-2 text-center text-xs font-semibold uppercase text-slate-600 border-b border-slate-200">
+                            {{ p_label }}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in grid_rows %}
+                    <tr>
+                        <td class="p-3 font-semibold text-xs text-slate-700 bg-slate-50 border border-slate-200">
+                            {{ row.severity_label }}
+                        </td>
+                        {% for cell in row.cells %}
+                        <td class="p-3 border border-slate-200 text-center transition-colors {{ cell.color_class }}">
+                            <div class="font-bold text-lg leading-tight">{{ cell.score }}</div>
+                            <div class="text-xs mt-1 font-medium">
+                                {% if cell.initial_count > 0 %}
+                                <span class="inline-block px-2 py-0.5 rounded bg-white/70 shadow-sm" title="{{ cell.initial_count }} initial hazard items">
+                                    {{ cell.initial_count }} Pre
+                                </span>
+                                {% endif %}
+                                {% if cell.residual_count > 0 %}
+                                <span class="inline-block px-2 py-0.5 rounded bg-green-600 text-white shadow-sm ml-1" title="{{ cell.residual_count }} post-control residual items">
+                                    {{ cell.residual_count }} Post
+                                </span>
+                                {% endif %}
+                                {% if cell.initial_count == 0 and cell.residual_count == 0 %}
+                                <span class="text-slate-400 text-xs">—</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Pareto Ranking & Top Critical Risks -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Top Initial RPN Pareto -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Top 10 Critical Risks (RPN Pareto)</h2>
+            <p class="text-xs text-slate-500">Highest Risk Priority Number (S × P × D) items requiring attention</p>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Hazard / Failure Mode</th>
+                        <th>Initial RPN</th>
+                        <th>Level</th>
+                        <th>Residual RPN</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in rpn_pareto_items %}
+                    <tr>
+                        <td class="font-mono text-xs font-medium">
+                            <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="text-brand hover:underline">
+                                {{ item.number }}
+                            </a>
+                        </td>
+                        <td class="text-xs text-slate-800 font-medium max-w-xs truncate">
+                            {{ item.hazard_description|default:item.failure_mode }}
+                        </td>
+                        <td class="font-mono text-xs font-bold text-red-600">
+                            {{ item.initial_rpn }}
+                        </td>
+                        <td>
+                            <span class="badge {{ item.initial_risk_level_badge }}">
+                                {{ item.get_initial_risk_level_display }}
+                            </span>
+                        </td>
+                        <td class="font-mono text-xs">
+                            {% if item.residual_rpn %}
+                            <strong class="text-green-700">{{ item.residual_rpn }}</strong>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-slate-400 text-xs">No risk items scored yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Unacceptable Zone Hazards -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Unacceptable Zone Items (Red)</h2>
+            <p class="text-xs text-slate-500">Items requiring mandatory risk mitigation per ISO 14971 Clause 7</p>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Harm / Consequence</th>
+                        <th>Status</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in high_risk_items %}
+                    <tr>
+                        <td class="font-mono text-xs font-medium">
+                            <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="text-brand hover:underline">
+                                {{ item.number }}
+                            </a>
+                        </td>
+                        <td class="text-xs text-slate-700 max-w-xs truncate">
+                            {{ item.potential_harm|default:item.failure_effect }}
+                        </td>
+                        <td>
+                            <span class="badge {{ item.lifecycle_status_badge }}">
+                                {{ item.get_lifecycle_status_display }}
+                            </span>
+                        </td>
+                        <td class="text-right">
+                            <a href="{% url 'quality:risk_control_measure_create' %}?assessment={{ item.pk }}" class="btn btn-xs btn-outline">
+                                <i data-lucide="shield-plus"></i> Add Control
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-green-600 text-xs">
+                            <i data-lucide="check-circle" class="w-4 h-4 inline mr-1"></i> No items currently in the Unacceptable zone!
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
