@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Risk Item {{ assessment.number }}{% else %}Log Hazard / FMEA Item{% endif %} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_assessment_list' %}">Risk Items</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ assessment.number }}{% else %}New Risk Item{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Risk Item {{ assessment.number }}{% else %}Log Hazard Analysis / FMEA Item{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">ISO 14971 Hazard Analysis & FMEA Formulation</h2>
+        <p class="text-xs text-slate-500">Capture the causal sequence from hazard to harm, score initial pre-mitigation risk, and evaluate residual risk post-control.</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Risk Plan & Analysis Type -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plan.id_for_label }}">Associated Risk Management Plan *</label>
+                    {{ form.plan }}
+                    {% if form.plan.errors %}<div class="form-error">{{ form.plan.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.analysis_type.id_for_label }}">Analysis Methodology *</label>
+                    {{ form.analysis_type }}
+                    {% if form.analysis_type.errors %}<div class="form-error">{{ form.analysis_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Hazard Category & Lifecycle Status -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.hazard_category.id_for_label }}">Hazard Category *</label>
+                    {{ form.hazard_category }}
+                    {% if form.hazard_category.errors %}<div class="form-error">{{ form.hazard_category.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lifecycle_status.id_for_label }}">Lifecycle Status *</label>
+                    {{ form.lifecycle_status }}
+                    {% if form.lifecycle_status.errors %}<div class="form-error">{{ form.lifecycle_status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Hazard Description -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.hazard_description.id_for_label }}">Hazard / Potential Source of Harm *</label>
+                    {{ form.hazard_description }}
+                    <span class="text-xs text-slate-400">e.g. Excessive electrical leakage current, fluid ingress, bio-incompatibility, sharp edge, syringe misconnection.</span>
+                    {% if form.hazard_description.errors %}<div class="form-error">{{ form.hazard_description.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Foreseeable Sequence of Events -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.foreseeable_sequence_of_events.id_for_label }}">Foreseeable Sequence of Events</label>
+                    {{ form.foreseeable_sequence_of_events }}
+                    <span class="text-xs text-slate-400">Causal steps leading from the initial fault/hazard to the hazardous situation (e.g. 1. O-ring degrades; 2. Saline leaks into enclosure; 3. Internal battery terminal is bridged).</span>
+                    {% if form.foreseeable_sequence_of_events.errors %}<div class="form-error">{{ form.foreseeable_sequence_of_events.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Hazardous Situation -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.hazardous_situation.id_for_label }}">Hazardous Situation *</label>
+                    {{ form.hazardous_situation }}
+                    <span class="text-xs text-slate-400">Circumstance in which user, patient, or equipment is exposed to the hazard (e.g. Patient touch current exceeds IEC 60601 limits during infusion).</span>
+                    {% if form.hazardous_situation.errors %}<div class="form-error">{{ form.hazardous_situation.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Potential Harm -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.potential_harm.id_for_label }}">Potential Harm (Clinical / Physical Injury) *</label>
+                    {{ form.potential_harm }}
+                    <span class="text-xs text-slate-400">Physical injury, health impairment, or environmental damage (e.g. Cardiac arrhythmia, cutaneous thermal burn, bolus overdose, sepsis).</span>
+                    {% if form.potential_harm.errors %}<div class="form-error">{{ form.potential_harm.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Section: FMEA Specifics -->
+                <div class="md:col-span-2 pt-4 border-t border-slate-100">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">FMEA Decomposition (Design / Process / Software)</h3>
+                    <p class="text-xs text-slate-500 mb-3">Optional fields for DFMEA / PFMEA / Software FMEA work breakdown.</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.item_function.id_for_label }}">Item / Subsystem / Function</label>
+                    {{ form.item_function }}
+                    {% if form.item_function.errors %}<div class="form-error">{{ form.item_function.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.failure_mode.id_for_label }}">Specific Failure Mode</label>
+                    {{ form.failure_mode }}
+                    {% if form.failure_mode.errors %}<div class="form-error">{{ form.failure_mode.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.failure_cause.id_for_label }}">Failure Root Cause</label>
+                    {{ form.failure_cause }}
+                    {% if form.failure_cause.errors %}<div class="form-error">{{ form.failure_cause.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.failure_effect.id_for_label }}">Failure Effect</label>
+                    {{ form.failure_effect }}
+                    {% if form.failure_effect.errors %}<div class="form-error">{{ form.failure_effect.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Section: Pre-Mitigation Estimation -->
+                <div class="md:col-span-2 pt-4 border-t border-slate-100">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Pre-Mitigation Risk Estimation (Initial)</h3>
+                    <p class="text-xs text-slate-500 mb-3">Scores without risk controls. System computes RPN = S × P × D and determines risk level.</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.initial_severity.id_for_label }}">Initial Severity (S) *</label>
+                    {{ form.initial_severity }}
+                    {% if form.initial_severity.errors %}<div class="form-error">{{ form.initial_severity.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.initial_probability.id_for_label }}">Initial Probability (P) *</label>
+                    {{ form.initial_probability }}
+                    {% if form.initial_probability.errors %}<div class="form-error">{{ form.initial_probability.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.initial_detectability.id_for_label }}">Initial Detectability (D - FMEA)</label>
+                    {{ form.initial_detectability }}
+                    {% if form.initial_detectability.errors %}<div class="form-error">{{ form.initial_detectability.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.design_input.id_for_label }}">Design Input Link</label>
+                    {{ form.design_input }}
+                    {% if form.design_input.errors %}<div class="form-error">{{ form.design_input.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Section: Post-Mitigation Residual Evaluation -->
+                <div class="md:col-span-2 pt-4 border-t border-slate-100">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Post-Mitigation Residual Risk Evaluation</h3>
+                    <p class="text-xs text-slate-500 mb-3">Re-evaluate severity, probability, and detectability after implementing risk control measures.</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.residual_severity.id_for_label }}">Residual Severity (S_res)</label>
+                    {{ form.residual_severity }}
+                    {% if form.residual_severity.errors %}<div class="form-error">{{ form.residual_severity.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.residual_probability.id_for_label }}">Residual Probability (P_res)</label>
+                    {{ form.residual_probability }}
+                    {% if form.residual_probability.errors %}<div class="form-error">{{ form.residual_probability.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.residual_detectability.id_for_label }}">Residual Detectability (D_res)</label>
+                    {{ form.residual_detectability }}
+                    {% if form.residual_detectability.errors %}<div class="form-error">{{ form.residual_detectability.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group flex items-center pt-6">
+                    <div class="flex items-center gap-2">
+                        {{ form.residual_risk_acceptable }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.residual_risk_acceptable.id_for_label }}">
+                            Residual Risk Certified Acceptable
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group flex items-center">
+                    <div class="flex items-center gap-2">
+                        {{ form.bra_required }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.bra_required.id_for_label }}">
+                            Benefit-Risk Analysis (BRA) Required
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group flex items-center">
+                    <div class="flex items-center gap-2">
+                        {{ form.disclosed_in_ifu }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.disclosed_in_ifu.id_for_label }}">
+                            Disclosed in Instructions for Use (IFU)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.benefit_risk_justification.id_for_label }}">Clinical Benefit-Risk Justification</label>
+                    {{ form.benefit_risk_justification }}
+                    <span class="text-xs text-slate-400">Document clinical literature and rationale confirming benefits outweigh residual risk.</span>
+                    {% if form.benefit_risk_justification.errors %}<div class="form-error">{{ form.benefit_risk_justification.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'quality:risk_assessment_detail' assessment.pk %}{% else %}{% url 'quality:risk_assessment_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Log Risk Item{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
