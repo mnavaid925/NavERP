@@ -18,6 +18,10 @@ from apps.quality.models import (
     RiskAssessment,
     RiskControlMeasure,
     RiskReviewRecord,
+    CapaInvestigation,
+    RootCauseAnalysis,
+    CapaAction,
+    CapaEffectivenessReview,
 )
 
 
@@ -489,5 +493,144 @@ def risk_review_record_b(db, tenant_b, admin_b, risk_management_plan_b):
         lead_reviewer=admin_b,
         status="draft",
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 12.4: CAPA (Corrective & Preventive Action) Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def capa_investigation_a(db, tenant_a, admin_user, quality_department):
+    return CapaInvestigation.objects.create(
+        tenant=tenant_a,
+        title="Optical Fiber Connector Cracking Under Mechanical Stress",
+        capa_type="corrective",
+        source="customer_complaint",
+        risk_priority="high",
+        status="under_investigation",
+        department=quality_department,
+        lead_investigator=admin_user,
+        quality_owner=admin_user,
+        issue_summary="Connector ferrules fracture when subjected to 15N bending load during clinical use.",
+        containment_actions="Quarantine lot OF-2026-088; notify distribution centers.",
+        target_closure_date=timezone.now().date() + timedelta(days=30),
+    )
+
+
+@pytest.fixture
+def capa_investigation_b(db, tenant_b, admin_b, quality_department_b):
+    return CapaInvestigation.objects.create(
+        tenant=tenant_b,
+        title="Globex Power Converter Thermal Excursion",
+        capa_type="corrective",
+        source="internal_audit",
+        risk_priority="critical",
+        status="under_investigation",
+        department=quality_department_b,
+        lead_investigator=admin_b,
+        quality_owner=admin_b,
+        issue_summary="Heatsink paste drying causes overheating in laser power supply unit.",
+        containment_actions="Halt production line 3; verify incoming thermal compound.",
+        target_closure_date=timezone.now().date() + timedelta(days=20),
+    )
+
+
+@pytest.fixture
+def root_cause_analysis_a(db, tenant_a, admin_user, capa_investigation_a):
+    return RootCauseAnalysis.objects.create(
+        tenant=tenant_a,
+        capa=capa_investigation_a,
+        methodology="five_whys",
+        problem_statement="Connector ferrules crack under 15N load instead of rated 30N specification.",
+        why_1="Ferrule molded wall thickness was below 0.8mm nominal.",
+        why_2="Injection molding tooling core pin experienced wear after 50,000 cycles.",
+        why_3="Preventive maintenance schedule did not include core pin dimensional CMM inspection.",
+        why_4="Tool maintenance SOP lacked critical dimension inspection checklist for optical cores.",
+        why_5="No periodic design verification for tooling wear-out limits was established.",
+        root_cause_summary="Lack of tool wear CMM measurement verification in preventive maintenance procedure.",
+        category="machine",
+        lead_investigator=admin_user,
+        status="in_progress",
+    )
+
+
+@pytest.fixture
+def root_cause_analysis_b(db, tenant_b, admin_b, capa_investigation_b):
+    return RootCauseAnalysis.objects.create(
+        tenant=tenant_b,
+        capa=capa_investigation_b,
+        methodology="five_whys",
+        problem_statement="Thermal paste dries out under operating temperature.",
+        why_1="Thermal resistance increased above 0.5 C/W.",
+        why_2="Paste viscosity decreased due to solvent evaporation.",
+        why_3="Supplier changed formulation without notification.",
+        why_4="Incoming inspection did not test volatile organic content.",
+        why_5="Supplier quality agreement did not list thermal compound as critical material.",
+        root_cause_summary="Supplier material formulation change without prior supplier quality agreement gate.",
+        category="material",
+        lead_investigator=admin_b,
+        status="in_progress",
+    )
+
+
+@pytest.fixture
+def capa_action_a(db, tenant_a, admin_user, quality_department, capa_investigation_a, root_cause_analysis_a):
+    return CapaAction.objects.create(
+        tenant=tenant_a,
+        capa=capa_investigation_a,
+        root_cause=root_cause_analysis_a,
+        action_type="corrective",
+        title="Update Tooling PM SOP to require CMM Core Pin Metrology",
+        description="Revise SOP-MNT-042 to mandate CMM measurement of core pins every 10,000 cycles.",
+        assigned_to=admin_user,
+        department=quality_department,
+        due_date=timezone.now().date() + timedelta(days=14),
+        status="pending",
+    )
+
+
+@pytest.fixture
+def capa_action_b(db, tenant_b, admin_b, quality_department_b, capa_investigation_b, root_cause_analysis_b):
+    return CapaAction.objects.create(
+        tenant=tenant_b,
+        capa=capa_investigation_b,
+        root_cause=root_cause_analysis_b,
+        action_type="corrective",
+        title="Institute Incoming VOC Testing for Thermal Paste",
+        description="Establish gas chromatography inspection for incoming compound barrels.",
+        assigned_to=admin_b,
+        department=quality_department_b,
+        due_date=timezone.now().date() + timedelta(days=10),
+        status="pending",
+    )
+
+
+@pytest.fixture
+def capa_effectiveness_review_a(db, tenant_a, admin_user, capa_investigation_a):
+    return CapaEffectivenessReview.objects.create(
+        tenant=tenant_a,
+        capa=capa_investigation_a,
+        review_title="30-Day Post-PM CMM Metrology Effectiveness Evaluation",
+        evaluation_method="statistical_sample",
+        success_criteria="Zero ferrule cracking across 5 consecutive lots (Cpk >= 1.33).",
+        evaluator=admin_user,
+        scheduled_date=timezone.now().date() + timedelta(days=30),
+        status="scheduled",
+    )
+
+
+@pytest.fixture
+def capa_effectiveness_review_b(db, tenant_b, admin_b, capa_investigation_b):
+    return CapaEffectivenessReview.objects.create(
+        tenant=tenant_b,
+        capa=capa_investigation_b,
+        review_title="Globex 60-Day Thermal Stability Review",
+        evaluation_method="trend_analysis",
+        success_criteria="Thermal resistance remains below 0.3 C/W over 1,000 burn-in hours.",
+        evaluator=admin_b,
+        scheduled_date=timezone.now().date() + timedelta(days=60),
+        status="scheduled",
+    )
+
 
 
