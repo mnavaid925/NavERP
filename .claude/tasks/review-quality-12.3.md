@@ -81,5 +81,18 @@
 - [ ] `PR-M1`: `apps/quality/views/RiskManagement/{RiskAssessments,RiskControlMeasures,RiskReviewRecords,FmeaMatrix}.py` — heavy `TextField` over-fetching in plan dropdown querysets. Add `.only("id", "number", "title", "matrix_dimension")`.
 - [ ] `PR-M2`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:84-91` — optimize `risk_management_plan_detail` prefetching.
 
+---
+
+## Pass 5: QA Smoke Tester — Report-Only Mode (`qa-smoke-tester`)
+
+### Important
+- [ ] `QA-I1`: `templates/quality/riskmanagement/risk_management_plan/detail.html:163` — Silent blank rendering of e-signature signer name (`signer_printed_name` vs `signer_name`). Update to `plan.approved_signature.signer_name`.
+- [ ] `QA-I2`: `templates/quality/riskmanagement/risk_assessment/list.html:78-129, 244, 254` — Missing `hazard_category` filter `<select>` UI and pagination link dropping filter. Add `<select name="hazard_category">` and append query param to pagination links.
+- [ ] `QA-I3`: `apps/quality/models/RiskManagement/RiskAssessments.py:77, 83` & `RiskReviewRecords.py:30` — Undefined CSS class `badge-purple` rendered in DOM. Replace with `badge-info` or `badge-slate`.
+
+### Minor
+- [ ] `QA-M1`: `apps/quality/views/RiskManagement/FmeaMatrix.py:143-154, 258-271` — Default plan filtering discrepancy between HTML view (first plan) and CSV exports (all plans). Harmonize export default when `?plan=` is omitted.
+
+
 
 
