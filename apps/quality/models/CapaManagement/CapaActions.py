@@ -116,7 +116,8 @@ class CapaAction(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number}: {self.title} ({self.capa.number})"
+        capa_num = self.capa.number if self.capa_id else "Unassigned"
+        return f"{self.number or 'New'}: {self.title} ({capa_num})"
 
     @property
     def action_type_badge(self):
