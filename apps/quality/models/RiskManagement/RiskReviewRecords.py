@@ -27,7 +27,7 @@ class RiskReviewRecord(TenantNumbered):
         "initial_rmr": "badge-info",
         "periodic_review": "badge-slate",
         "design_change_review": "badge-amber",
-        "post_market_surveillance": "badge-purple",
+        "post_market_surveillance": "badge-info",
         "complaint_trend_trigger": "badge-red",
         "ncr_capa_trigger": "badge-amber",
     }
