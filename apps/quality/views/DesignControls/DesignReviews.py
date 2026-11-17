@@ -196,6 +196,16 @@ def design_review_approve_gate(request, pk):
         messages.error(request, "Cannot approve gate review for a project with a locked Design History File (DHF).")
         return redirect("quality:design_review_detail", pk=review.pk)
 
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)
+    is_authorized = (
+        request.user.pk == review.lead_reviewer_id
+        or (review.project.quality_lead_id and request.user.pk == review.project.quality_lead_id)
+        or is_admin
+    )
+    if not is_authorized:
+        messages.error(request, "Permission denied. Only the lead reviewer, quality lead, or tenant administrator can approve this stage-gate review.")
+        return redirect("quality:design_review_detail", pk=review.pk)
+
     review.status = "approved"
     review.action_items_resolved = True
     review.save(update_fields=["status", "action_items_resolved", "updated_at"])
