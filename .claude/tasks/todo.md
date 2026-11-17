@@ -7,6 +7,330 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 12.4: Corrective & Preventive Action (CAPA) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.4.md` (2026-11-17)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control & Management), 12.2 (Design Controls & Development), and 12.3 (Risk Management / ISO 14971).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0006_riskassessment_idx_qrsk_ten_hazard_cat.py`, so **12.4 claims `0007_...`** (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QCAP`** (`CapaInvestigation`), **`QRCA`** (`RootCauseAnalysis`), **`QACT`** (`CapaAction`), **`QEFF`** (`CapaEffectivenessReview`).
+> Plan written from `.claude/tasks/research-quality-12.4.md` (Phase 1) and `NavERP.md` (`### 12.4 Corrective & Preventive Action (CAPA)`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/CapaManagement/<Entity>.py` (`CapaInvestigations.py`, `RootCauseAnalyses.py`, `CapaActions.py`, `CapaEffectivenessReviews.py`, plus dedicated workbench module `CapaTrackingBoard.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/capamanagement/{capa_investigation,root_cause_analysis,capa_action,capa_effectiveness_review}/{list,detail,form}.html` + `templates/quality/capamanagement/capa_tracking_board.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QCAP`** (`CapaInvestigation`), **`QRCA`** (`RootCauseAnalysis`), **`QACT`** (`CapaAction`), **`QEFF`** (`CapaEffectivenessReview`), all 4 model classes, and all URL stems (`capa_investigation_*`, `root_cause_analysis_*`, `capa_action_*`, `capa_effectiveness_review_*`, `capa_tracking_board*`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - Module 12 siblings (12.1, 12.2, 12.3): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.DocumentChangeOrder` (`apps/quality/models/DocumentControl/DocumentChangeOrders.py`), `quality.ElectronicSignatureRecord` (`apps/quality/models/DocumentControl/ElectronicSignatures.py`), `quality.DesignProject` (`apps/quality/models/DesignControls/DesignProjects.py`), `quality.RiskAssessment` (`apps/quality/models/RiskManagement/RiskAssessments.py`).
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`core.OrgUnit`, `accounts.User`, `ControlledDocument`, `DocumentChangeOrder`, `ElectronicSignatureRecord`, `DesignProject`, `RiskAssessment`, `CapaInvestigation`, `RootCauseAnalysis`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **ISO 13485:2016 (§8.5.2/§8.5.3) & 21 CFR 820.100 (QMSR) Regulatory Alignment**:
+  - Closed-Loop CAPA Lifecycle: Multi-source intake → Immediate Containment → Root Cause Analysis (5 Whys / Ishikawa 6M) → Action Plan Development & Implementation → Independent Effectiveness Review → Formal Closure Sign-off.
+  - Clear segregation of Corrective Actions (eliminate root cause of detected nonconformity to prevent recurrence) vs. Preventive Actions (eliminate causes of potential nonconformity to prevent occurrence).
+  - Containment isolation: immediate stops/quarantines captured and verified before lengthy RCA proceeds.
+  - Escape Point Analysis: mandates investigating not just why the defect occurred, but why quality detection barriers failed to catch it before release.
+  - Independent Effectiveness Verification: time-delayed re-evaluation (30/60/90 days) requiring objective data proof; if recurrence occurs, the CAPA cannot close and automatically triggers re-investigation.
+  - Cross-module change triggers: action items link directly to SOP revisions (`ControlledDocument`), engineering changes (`DocumentChangeOrder`), and DHF remediations (`DesignProject`).
+  - Management Review Escalation: automated overdue/aging detection and escalation flags feed high-risk and delayed CAPAs directly to executive quality reviews.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `closed_at`, `verified_on`, `actual_review_date`), auto-numbers (`number`), and signature links (`formal_closure_signature`, `formal_signature`) MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_overdue`, `days_open`, `actions_count`, `pending_actions_count`, `why_chain`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view (`create`, `edit`, `delete`, and every custom POST workflow action) calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Stat icon colors ONLY from `.stat-icon.{blue,green,orange,purple,slate,red}`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; privileged actions use `@tenant_admin_required`; `confirm(...)` uses system `number` with `\'` escaped apostrophes (L42); paginators guard `has_previous` / `has_next` (L9); CSV exports use `csv_safe(...)` formula neutralization.
+
+---
+
+## Models (from research — 4)
+
+### 1. `CapaInvestigation` (`QCAP-`)
+- [ ] **File**: `apps/quality/models/CapaManagement/CapaInvestigations.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCAP"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `issue_summary`: `TextField(help_text="Detailed problem description, defect observations, and initial conditions")`
+  - `action_type`: `CharField(max_length=20, choices=ACTION_TYPE_CHOICES, default="corrective", db_index=True)` — `"corrective"` (10), `"preventive"` (10) (longest: 10 <= 20)
+  - `source_type`: `CharField(max_length=32, choices=SOURCE_TYPE_CHOICES, default="ncr", db_index=True)` — `"ncr"` (3), `"complaint"` (9), `"internal_audit"` (14), `"external_audit"` (14), `"deviation"` (9), `"risk_assessment"` (15), `"management_review"` (17), `"other"` (5) (longest: 17 <= 32)
+  - `source_reference`: `CharField(max_length=100, blank=True, help_text="Originating defect/document reference ID (e.g. NCR-2026-0042, CMP-0108, AUD-2026-Q1)")`
+  - `risk_priority`: `CharField(max_length=16, choices=RISK_PRIORITY_CHOICES, default="medium", db_index=True)` — `"low"` (3), `"medium"` (6), `"high"` (4), `"critical"` (8) (longest: 8 <= 16)
+  - `containment_actions`: `TextField(blank=True, help_text="Immediate stop-gap containment or quarantine measures (e.g., lot hold, line stoppage)")`
+  - `containment_implemented`: `BooleanField(default=False, help_text="Whether immediate containment/quarantine actions have been executed")`
+  - `containment_verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_containment_capas")`
+  - `containment_date`: `DateField(null=True, blank=True)`
+  - `affected_item_code`: `CharField(max_length=100, blank=True, help_text="Part number or SKU affected (pre-Module 5 text field)")`
+  - `affected_item_name`: `CharField(max_length=255, blank=True, help_text="Item name or product description")`
+  - `affected_lot_numbers`: `CharField(max_length=255, blank=True, help_text="Impacted lot, batch, or serial numbers")`
+  - `lead_investigator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="investigated_capas")`
+  - `quality_owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_capas")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="capa_investigations")`
+  - `design_project`: `ForeignKey("quality.DesignProject", on_delete=models.SET_NULL, null=True, blank=True, related_name="capa_investigations", help_text="Associated product development plan in Design Controls")`
+  - `risk_assessment`: `ForeignKey("quality.RiskAssessment", on_delete=models.SET_NULL, null=True, blank=True, related_name="capa_investigations", help_text="Linked ISO 14971 risk/FMEA assessment")`
+  - `status`: `CharField(max_length=32, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"under_investigation"` (19), `"rca_in_progress"` (15), `"action_plan_dev"` (15), `"action_implementation"` (21), `"effectiveness_review"` (20), `"closed"` (6), `"voided"` (6) (longest: 21 <= 32)
+  - `target_investigation_date`: `DateField(null=True, blank=True)`
+  - `target_closure_date`: `DateField(null=True, blank=True)`
+  - `is_escalated`: `BooleanField(default=False, help_text="Escalated to Executive Quality Management Review")`
+  - `escalation_reason`: `TextField(blank=True, help_text="Regulatory aging justification or critical patient risk trigger")`
+  - `escalated_at`: `DateTimeField(null=True, blank=True)`
+  - `closure_summary`: `TextField(blank=True, help_text="Formal justification and summary of completed remediation")`
+  - `closed_at`: `DateTimeField(null=True, blank=True)`
+  - `closure_approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_closure_capas")`
+  - `formal_closure_signature`: `ForeignKey("quality.ElectronicSignatureRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="closed_capa_signatures", editable=False, help_text="21 CFR Part 11 e-signature manifest")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcap_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qcap_ten_status")` (19)
+  - `Index(fields=["tenant", "source_type"], name="idx_qcap_ten_src_type")` (21)
+  - `Index(fields=["tenant", "risk_priority"], name="idx_qcap_ten_risk_pri")` (21)
+  - `Index(fields=["tenant", "target_closure_date"], name="idx_qcap_ten_tgt_date")` (21)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcap_ten_created")` (20)
+- [ ] **Properties & Methods**:
+  - `actions_count`: total actions linked to this CAPA
+  - `pending_actions_count`: actions not implemented/verified
+  - `is_overdue`: `target_closure_date and target_closure_date < timezone.now().date() and status not in ("closed", "voided")`
+  - `days_open`: days elapsed since creation (or duration until closed)
+  - `rca_count`: count of root cause analyses
+- [ ] **Form (`CapaInvestigationForm`)**:
+  - `Meta.fields`: `title`, `issue_summary`, `action_type`, `source_type`, `source_reference`, `risk_priority`, `containment_actions`, `containment_implemented`, `containment_verified_by`, `containment_date`, `affected_item_code`, `affected_item_name`, `affected_lot_numbers`, `lead_investigator`, `quality_owner`, `department`, `design_project`, `risk_assessment`, `status`, `target_investigation_date`, `target_closure_date`, `is_escalated`, `escalation_reason`, `closure_summary`
+  - Excluded: `tenant`, `number`, `closed_at`, `closure_approved_by`, `formal_closure_signature`, `created_at`, `updated_at`
+  - `clean()`: validate `lead_investigator`, `quality_owner`, `department`, `design_project`, `risk_assessment` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `advance_status`, `escalate_capa`, `close_capa` (`@require_POST`, `@tenant_admin_required`).
+
+### 2. `RootCauseAnalysis` (`QRCA-`)
+- [ ] **File**: `apps/quality/models/CapaManagement/RootCauseAnalyses.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRCA"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.CASCADE, related_name="root_cause_analyses")`
+  - `rca_method`: `CharField(max_length=32, choices=RCA_METHOD_CHOICES, default="5_whys", db_index=True)` — `"5_whys"` (6), `"fishbone_ishikawa"` (17), `"8d"` (2), `"fault_tree"` (10), `"barrier_analysis"` (16), `"other"` (5) (longest: 17 <= 32)
+  - `problem_statement`: `TextField(help_text="Concise description of the specific failure mode or defect to investigate")`
+  - *5 Whys Sequential Chain*:
+    - `why_1`: `CharField(max_length=500, blank=True)`
+    - `why_2`: `CharField(max_length=500, blank=True)`
+    - `why_3`: `CharField(max_length=500, blank=True)`
+    - `why_4`: `CharField(max_length=500, blank=True)`
+    - `why_5`: `CharField(max_length=500, blank=True)`
+  - *Ishikawa 6M Structure*:
+    - `fishbone_manpower`: `TextField(blank=True, help_text="Personnel, training, operator ergonomics, human factor contributors")`
+    - `fishbone_machine`: `TextField(blank=True, help_text="Equipment, tooling, calibration, maintenance, hardware factors")`
+    - `fishbone_material`: `TextField(blank=True, help_text="Raw material, component defect, supplier variation")`
+    - `fishbone_method`: `TextField(blank=True, help_text="Procedures, work instructions, process parameters, test methods")`
+    - `fishbone_measurement`: `TextField(blank=True, help_text="Gauge error, inspection accuracy, measurement resolution")`
+    - `fishbone_environment`: `TextField(blank=True, help_text="Cleanroom conditions, temperature, humidity, ESD, contamination")`
+  - *Taxonomy & Conclusion*:
+    - `root_cause_category`: `CharField(max_length=32, choices=ROOT_CAUSE_CATEGORY_CHOICES, default="process", db_index=True)` — `"design"` (6), `"process"` (7), `"supplier"` (8), `"equipment"` (9), `"human_error"` (11), `"documentation"` (13), `"training"` (8), `"environmental"` (13), `"software"` (8), `"other"` (5) (longest: 13 <= 32)
+    - `root_cause_summary`: `TextField(help_text="Defensible synthesis of the primary root cause supported by physical/data evidence")`
+    - `escape_point_gap`: `TextField(blank=True, help_text="Analysis of why existing inspection/containment barriers failed to detect the defect")`
+    - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"in_progress"` (11), `"completed"` (9), `"verified"` (8), `"rejected"` (8) (longest: 11 <= 24)
+    - `lead_investigator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="conducted_rcas")`
+    - `verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_rcas")`
+    - `verified_date`: `DateField(null=True, blank=True)`
+    - `verification_notes`: `TextField(blank=True, help_text="Quality engineering verification of investigation adequacy")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrca_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "capa"], name="idx_qrca_ten_capa")` (17)
+  - `Index(fields=["tenant", "rca_method"], name="idx_qrca_ten_method")` (19)
+  - `Index(fields=["tenant", "root_cause_category"], name="idx_qrca_ten_rc_cat")` (19)
+  - `Index(fields=["tenant", "status"], name="idx_qrca_ten_status")` (19)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qrca_ten_created")` (20)
+- [ ] **Properties & Methods**:
+  - `why_levels_count`: count of populated why fields
+  - `is_verified`: `status == "verified" and verified_by is not None`
+- [ ] **Form (`RootCauseAnalysisForm`)**:
+  - `Meta.fields`: `capa`, `rca_method`, `problem_statement`, `why_1`, `why_2`, `why_3`, `why_4`, `why_5`, `fishbone_manpower`, `fishbone_machine`, `fishbone_material`, `fishbone_method`, `fishbone_measurement`, `fishbone_environment`, `root_cause_category`, `root_cause_summary`, `escape_point_gap`, `status`, `lead_investigator`
+  - Excluded: `tenant`, `number`, `verified_by`, `verified_date`, `verification_notes`, `created_at`, `updated_at`
+  - `clean()`: validate `capa`, `lead_investigator` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `verify_rca` (`@require_POST`).
+
+### 3. `CapaAction` (`QACT-`)
+- [ ] **File**: `apps/quality/models/CapaManagement/CapaActions.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QACT"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.CASCADE, related_name="actions")`
+  - `root_cause`: `ForeignKey("quality.RootCauseAnalysis", on_delete=models.SET_NULL, null=True, blank=True, related_name="actions", help_text="Associated root cause addressed by this action")`
+  - `action_type`: `CharField(max_length=24, choices=ACTION_TYPE_CHOICES, default="corrective", db_index=True)` — `"containment"` (11), `"corrective"` (10), `"preventive"` (10) (longest: 11 <= 24)
+  - `title`: `CharField(max_length=255)`
+  - `description`: `TextField(help_text="Detailed action instructions, scope, and expected outcome")`
+  - `assigned_to`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="assigned_capa_actions")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="capa_actions")`
+  - `due_date`: `DateField(db_index=True)`
+  - `completion_date`: `DateField(null=True, blank=True)`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"in_progress"` (11), `"implemented"` (11), `"verified"` (8), `"cancelled"` (9) (longest: 11 <= 24)
+  - `implementation_notes`: `TextField(blank=True, help_text="Summary of actions taken and physical evidence of completion")`
+  - *Quality Subsystem Traceability Links*:
+    - `controlled_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="capa_actions", help_text="SOP or work instruction revised as part of action")`
+    - `change_order`: `ForeignKey("quality.DocumentChangeOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="capa_actions", help_text="Formal engineering/document change order initiated")`
+    - `design_project`: `ForeignKey("quality.DesignProject", on_delete=models.SET_NULL, null=True, blank=True, related_name="capa_actions", help_text="Design controls project modified for design remediation")`
+  - *Independent Verification*:
+    - `verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_capa_actions")`
+    - `verified_on`: `DateField(null=True, blank=True)`
+    - `verification_evidence`: `TextField(blank=True, help_text="Independent quality verification notes confirming physical execution")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qact_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "capa"], name="idx_qact_ten_capa")` (17)
+  - `Index(fields=["tenant", "action_type"], name="idx_qact_ten_act_type")` (21)
+  - `Index(fields=["tenant", "status"], name="idx_qact_ten_status")` (19)
+  - `Index(fields=["tenant", "due_date"], name="idx_qact_ten_due_date")` (21)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qact_ten_created")` (20)
+- [ ] **Properties & Methods**:
+  - `is_overdue`: `due_date and due_date < timezone.now().date() and status not in ("implemented", "verified", "cancelled")`
+  - `is_verified`: `status == "verified" and verified_by is not None`
+- [ ] **Form (`CapaActionForm`)**:
+  - `Meta.fields`: `capa`, `root_cause`, `action_type`, `title`, `description`, `assigned_to`, `department`, `due_date`, `status`, `implementation_notes`, `controlled_document`, `change_order`, `design_project`
+  - Excluded: `tenant`, `number`, `completion_date`, `verified_by`, `verified_on`, `verification_evidence`, `created_at`, `updated_at`
+  - `clean()`: validate `capa`, `root_cause`, `assigned_to`, `department`, `controlled_document`, `change_order`, `design_project` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `mark_completed`, `verify_action` (`@require_POST`).
+
+### 4. `CapaEffectivenessReview` (`QEFF-`)
+- [ ] **File**: `apps/quality/models/CapaManagement/CapaEffectivenessReviews.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QEFF"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.CASCADE, related_name="effectiveness_reviews")`
+  - `review_criteria`: `TextField(help_text="Pre-established acceptance criteria (e.g., zero defect recurrence in 90 days, Cpk >= 1.33)")`
+  - `verification_method`: `CharField(max_length=32, choices=METHOD_CHOICES, default="zero_recurrence_window")` — `"statistical_sample"` (18), `"trend_analysis"` (14), `"audit_recheck"` (13), `"process_capability"` (18), `"zero_recurrence_window"` (22) (longest: 22 <= 32)
+  - `planned_review_date`: `DateField(help_text="Scheduled post-implementation review date (30/60/90/180 days)")`
+  - `actual_review_date`: `DateField(null=True, blank=True)`
+  - `evaluator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="evaluated_capa_reviews")`
+  - `metrics_evaluated`: `TextField(blank=True, help_text="Observed defect counts, statistical sample results, or process capability figures")`
+  - `recurrence_observed`: `BooleanField(default=False, help_text="Whether the failure mode or root cause recurred during evaluation window")`
+  - `recurrence_details`: `TextField(blank=True, help_text="Details of any recurrences observed, including event numbers and root causes")`
+  - `outcome`: `CharField(max_length=24, choices=OUTCOME_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"effective"` (9), `"ineffective"` (11), `"inconclusive"` (12) (longest: 12 <= 24)
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="scheduled", db_index=True)` — `"scheduled"` (9), `"in_progress"` (11), `"completed"` (9), `"cancelled"` (9) (longest: 11 <= 24)
+  - `review_notes`: `TextField(blank=True, help_text="Executive summary of effectiveness review finding and recommendations")`
+  - `formal_signature`: `ForeignKey("quality.ElectronicSignatureRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="effective_review_signatures", editable=False, help_text="21 CFR Part 11 e-signature manifest")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qeff_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "capa"], name="idx_qeff_ten_capa")` (17)
+  - `Index(fields=["tenant", "outcome"], name="idx_qeff_ten_outcome")` (20)
+  - `Index(fields=["tenant", "planned_review_date"], name="idx_qeff_ten_plan_dt")` (20)
+  - `Index(fields=["tenant", "status"], name="idx_qeff_ten_status")` (19)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qeff_ten_created")` (20)
+- [ ] **Properties & Methods**:
+  - `is_review_overdue`: `planned_review_date and planned_review_date < timezone.now().date() and status == "scheduled"`
+  - `is_effective`: `outcome == "effective"`
+- [ ] **Form (`CapaEffectivenessReviewForm`)**:
+  - `Meta.fields`: `capa`, `review_criteria`, `verification_method`, `planned_review_date`, `evaluator`, `metrics_evaluated`, `recurrence_observed`, `recurrence_details`, `outcome`, `status`, `review_notes`
+  - Excluded: `tenant`, `number`, `actual_review_date`, `formal_signature`, `created_at`, `updated_at`
+  - `clean()`: validate `capa`, `evaluator` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `complete_review`, `reopen_capa` (`@require_POST`).
+
+---
+
+## Backend Packages (`apps/quality/{models,forms,views,urls}/CapaManagement/`)
+
+- [ ] **Models**:
+  - `apps/quality/models/CapaManagement/CapaInvestigations.py`
+  - `apps/quality/models/CapaManagement/RootCauseAnalyses.py`
+  - `apps/quality/models/CapaManagement/CapaActions.py`
+  - `apps/quality/models/CapaManagement/CapaEffectivenessReviews.py`
+  - Re-export `CapaInvestigation`, `RootCauseAnalysis`, `CapaAction`, `CapaEffectivenessReview` in `apps/quality/models/__init__.py`
+- [ ] **Forms**:
+  - `apps/quality/forms/CapaManagement/CapaInvestigations.py` (`CapaInvestigationForm`)
+  - `apps/quality/forms/CapaManagement/RootCauseAnalyses.py` (`RootCauseAnalysisForm`)
+  - `apps/quality/forms/CapaManagement/CapaActions.py` (`CapaActionForm`)
+  - `apps/quality/forms/CapaManagement/CapaEffectivenessReviews.py` (`CapaEffectivenessReviewForm`)
+  - Re-export forms in `apps/quality/forms/__init__.py`
+- [ ] **Views**:
+  - `apps/quality/views/CapaManagement/CapaInvestigations.py` (`capa_investigation_list`, `capa_investigation_create`, `capa_investigation_detail`, `capa_investigation_edit`, `capa_investigation_delete`, `capa_investigation_advance_status`, `capa_investigation_close`, `capa_investigation_export`)
+  - `apps/quality/views/CapaManagement/RootCauseAnalyses.py` (`root_cause_analysis_list`, `root_cause_analysis_create`, `root_cause_analysis_detail`, `root_cause_analysis_edit`, `root_cause_analysis_delete`, `root_cause_analysis_verify`, `root_cause_analysis_export`)
+  - `apps/quality/views/CapaManagement/CapaActions.py` (`capa_action_list`, `capa_action_create`, `capa_action_detail`, `capa_action_edit`, `capa_action_delete`, `capa_action_mark_completed`, `capa_action_verify`, `capa_action_export`)
+  - `apps/quality/views/CapaManagement/CapaEffectivenessReviews.py` (`capa_effectiveness_review_list`, `capa_effectiveness_review_create`, `capa_effectiveness_review_detail`, `capa_effectiveness_review_edit`, `capa_effectiveness_review_delete`, `capa_effectiveness_review_sign_off`, `capa_effectiveness_review_export`)
+  - `apps/quality/views/CapaManagement/CapaTrackingBoard.py` (`capa_tracking_board`, `capa_tracking_board_export`)
+  - Re-export views in `apps/quality/views/__init__.py`
+- [ ] **URLs**:
+  - `apps/quality/urls/CapaManagement/CapaInvestigations.py`
+  - `apps/quality/urls/CapaManagement/RootCauseAnalyses.py`
+  - `apps/quality/urls/CapaManagement/CapaActions.py`
+  - `apps/quality/urls/CapaManagement/CapaEffectivenessReviews.py`
+  - `apps/quality/urls/CapaManagement/CapaTrackingBoard.py`
+  - Wire all 5 URL modules into `apps/quality/urls/__init__.py`
+- [ ] **Admin**: Register `CapaInvestigation`, `RootCauseAnalysis`, `CapaAction`, `CapaEffectivenessReview` in `apps/quality/admin.py`
+- [ ] **Migration**: Run `makemigrations quality` generating `0007_...`
+- [ ] **Seeder**: Extend `apps/quality/management/commands/seed_quality.py` with idempotent CAPA records (multi-source intake across NCR/Complaint/Audit, 5-Whys and Fishbone 6M RCAs, Corrective/Preventive/Containment actions linked to SOP revisions and change orders, and delayed effectiveness checks with zero-recurrence validation)
+
+---
+
+## Wire-up
+
+- [ ] **Navigation (`apps/core/navigation.py`)**: Add `LIVE_LINKS["12.4"]` mapping exact `NavERP.md` 12.4 bullets:
+  ```python
+  "12.4": {
+      "Issue Detection & Logging": "quality:capa_investigation_list",
+      "Root Cause Analysis (RCA)": "quality:root_cause_analysis_list",
+      "Action Plan Development": "quality:capa_action_list",
+      "CAPA Tracking & Escalation": "quality:capa_tracking_board",
+      "Effectiveness Verification & Closure": "quality:capa_effectiveness_review_list",
+  },
+  ```
+
+---
+
+## Templates (`templates/quality/capamanagement/`)
+
+- [ ] **CAPA Investigations**:
+  - `templates/quality/capamanagement/capa_investigation/list.html`
+  - `templates/quality/capamanagement/capa_investigation/detail.html`
+  - `templates/quality/capamanagement/capa_investigation/form.html`
+- [ ] **Root Cause Analyses (RCA)**:
+  - `templates/quality/capamanagement/root_cause_analysis/list.html`
+  - `templates/quality/capamanagement/root_cause_analysis/detail.html`
+  - `templates/quality/capamanagement/root_cause_analysis/form.html`
+- [ ] **CAPA Actions**:
+  - `templates/quality/capamanagement/capa_action/list.html`
+  - `templates/quality/capamanagement/capa_action/detail.html`
+  - `templates/quality/capamanagement/capa_action/form.html`
+- [ ] **Effectiveness Reviews**:
+  - `templates/quality/capamanagement/capa_effectiveness_review/list.html`
+  - `templates/quality/capamanagement/capa_effectiveness_review/detail.html`
+  - `templates/quality/capamanagement/capa_effectiveness_review/form.html`
+- [ ] **Tracking & Escalation Workbench**:
+  - `templates/quality/capamanagement/capa_tracking_board.html` (Lifecycle Kanban funnel, aging distribution tiers 0-30/31-60/61-90/>90 days, overdue alert matrix, executive management review escalation log)
+
+---
+
+## Verify
+
+- [ ] Run `python manage.py makemigrations quality`
+- [ ] Run `python manage.py migrate`
+- [ ] Run `python manage.py seed_quality` twice (idempotence verification, zero duplicate errors)
+- [ ] Run `python manage.py check` (clean exit 0)
+- [ ] Smoke tests via test client (`temp/` script): HTTP 200/302 for all 12.4 routes, content assertions (titles, numbers, badges), zero `{#` / `{% comment` leaks, IDOR 404 cross-tenant isolation
+- [ ] Sidebar verification: `12.4` Live links functional
+
+---
+
+## Close-out
+
+- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-quality-12.4.md`
+- [ ] Phase 5: `code-fixer` agent burns down all findings in ID order (one commit per file)
+- [ ] Phase 6: Tests (`test_capamanagement_models.py`, `test_capamanagement_forms.py`, `test_capamanagement_views.py`, `test_capamanagement_security.py`) and unfiltered `apps/quality/tests/` green pass
+- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` and `README.md`, declare gaps in `.agents/tasks/gaps-quality-12.4.md` (or declare None), and populate `## Review notes`
+
+---
+
+## Later passes / deferred
+
+- **Parked sibling sub-modules (12.5–12.19)**:
+  - Non-Conformance Reporting (NCR), Lot Quarantine & MRB Dispositions → Sub-module 12.5 (Non-Conformance & Deviation Management).
+  - Supplier Corrective Action Requests (SCAR) → Sub-module 12.6 (Supplier Quality Management).
+  - Calibration Out-of-Tolerance Work Orders → Sub-module 12.7 (Calibration & Maintenance Management).
+  - Formal Audit Programs & Audit Findings → Sub-module 12.11 (Quality Audits & Assessments).
+  - Customer Complaints, Vigilance & Medical Device Reporting (MDR) → Sub-module 12.13 (Customer Complaints & Feedback Management).
+- **Advanced deferred features from research**:
+  - 21 CFR Part 11 Electronic Signature Ceremony Integration (modal cryptographic signing for CAPA closure).
+  - Automated Celery/cron email/push escalation alert dispatch for overdue CAPA phases.
+  - Interactive SVG / HTML5 Canvas Fishbone Diagram Builder with drag-and-drop factor branching.
+  - Natural Language / AI Root Cause Clustering across historical CAPAs.
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
 # Sub-module 12.3: Risk Management (ISO 14971 / FMEA) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.3.md` (2026-11-17)
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control & Management) and 12.2 (Design Controls & Development).
