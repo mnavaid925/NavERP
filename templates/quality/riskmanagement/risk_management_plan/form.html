@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Risk Plan {{ plan.number }}{% else %}New Risk Management Plan{% endif %} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Plans</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ plan.number }}{% else %}New Risk Plan{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Risk Management Plan {{ plan.number }}{% else %}New Risk Management Plan (ISO 14971){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">ISO 14971 Risk Management Plan Specifications</h2>
+        <p class="text-xs text-slate-500">Establish device risk scope, acceptability thresholds, matrix dimensions, and periodic review triggers per ISO 14971 Clause 4.</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Title -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Plan Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Version & Status -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plan_version.id_for_label }}">Plan Version *</label>
+                    {{ form.plan_version }}
+                    {% if form.plan_version.errors %}<div class="form-error">{{ form.plan_version.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Design Project & Department -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.design_project.id_for_label }}">Associated Design Project (DDP)</label>
+                    {{ form.design_project }}
+                    {% if form.design_project.errors %}<div class="form-error">{{ form.design_project.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.department.id_for_label }}">Department / R&D Unit</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="form-error">{{ form.department.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Lead Risk Manager -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lead_risk_manager.id_for_label }}">Lead Risk Manager *</label>
+                    {{ form.lead_risk_manager }}
+                    {% if form.lead_risk_manager.errors %}<div class="form-error">{{ form.lead_risk_manager.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Device Classification -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.device_classification.id_for_label }}">Device Classification *</label>
+                    {{ form.device_classification }}
+                    {% if form.device_classification.errors %}<div class="form-error">{{ form.device_classification.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Matrix Dimension -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.matrix_dimension.id_for_label }}">Risk Matrix Framework *</label>
+                    {{ form.matrix_dimension }}
+                    {% if form.matrix_dimension.errors %}<div class="form-error">{{ form.matrix_dimension.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Review Frequency & Due Date -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.periodic_review_frequency_months.id_for_label }}">Periodic Review Cadence (Months) *</label>
+                    {{ form.periodic_review_frequency_months }}
+                    {% if form.periodic_review_frequency_months.errors %}<div class="form-error">{{ form.periodic_review_frequency_months.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.next_review_due_date.id_for_label }}">Next Review Due Date</label>
+                    {{ form.next_review_due_date }}
+                    {% if form.next_review_due_date.errors %}<div class="form-error">{{ form.next_review_due_date.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Scope Description -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.scope_description.id_for_label }}">Scope, Intended Use & Boundaries *</label>
+                    {{ form.scope_description }}
+                    <span class="text-xs text-slate-400">Specify medical device description, indications for use, user profiles, and lifecycle boundaries covered.</span>
+                    {% if form.scope_description.errors %}<div class="form-error">{{ form.scope_description.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Acceptability Policy -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.risk_acceptability_policy.id_for_label }}">Risk Acceptability Criteria & Policy *</label>
+                    {{ form.risk_acceptability_policy }}
+                    <span class="text-xs text-slate-400">Documented matrix thresholds: Broadly Acceptable (Green), ALARP (Amber - requires BRA), and Unacceptable (Red).</span>
+                    {% if form.risk_acceptability_policy.errors %}<div class="form-error">{{ form.risk_acceptability_policy.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Overall Residual Risk Acceptable -->
+                <div class="form-group md:col-span-2 flex items-start gap-3 p-4 bg-slate-50 rounded border border-slate-200">
+                    <div class="pt-0.5">
+                        {{ form.overall_residual_risk_acceptable }}
+                    </div>
+                    <div>
+                        <label class="form-label font-semibold cursor-pointer" for="{{ form.overall_residual_risk_acceptable.id_for_label }}">
+                            Overall Residual Risk Certified Acceptable (ISO 14971 Clause 8)
+                        </label>
+                        <p class="text-xs text-slate-500">Check to certify that the overall residual risk posed by the medical device is acceptable and clinical benefits outweigh all combined risks.</p>
+                        {% if form.overall_residual_risk_acceptable.errors %}<div class="form-error">{{ form.overall_residual_risk_acceptable.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Benefit-Risk Summary -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.overall_benefit_risk_summary.id_for_label }}">Overall Clinical Benefit-Risk Justification</label>
+                    {{ form.overall_benefit_risk_summary }}
+                    <span class="text-xs text-slate-400">Executive clinical justification synthesizing that device medical benefits outweigh all residual risks.</span>
+                    {% if form.overall_benefit_risk_summary.errors %}<div class="form-error">{{ form.overall_benefit_risk_summary.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'quality:risk_management_plan_detail' plan.pk %}{% else %}{% url 'quality:risk_management_plan_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Risk Plan{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
