@@ -1,4 +1,8 @@
 from apps.quality.models._base import TenantNumbered, TenantOwned
+from apps.quality.models.CapaManagement.CapaActions import CapaAction
+from apps.quality.models.CapaManagement.CapaEffectivenessReviews import CapaEffectivenessReview
+from apps.quality.models.CapaManagement.CapaInvestigations import CapaInvestigation
+from apps.quality.models.CapaManagement.RootCauseAnalyses import RootCauseAnalysis
 from apps.quality.models.DesignControls.DesignInputs import DesignInput
 from apps.quality.models.DesignControls.DesignProjects import DesignProject
 from apps.quality.models.DesignControls.DesignReviews import DesignReview
@@ -27,5 +31,9 @@ __all__ = [
     "RiskAssessment",
     "RiskControlMeasure",
     "RiskReviewRecord",
+    "CapaInvestigation",
+    "RootCauseAnalysis",
+    "CapaAction",
+    "CapaEffectivenessReview",
 ]
 
