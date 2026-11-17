@@ -9,6 +9,10 @@ from apps.quality.forms.DocumentControl.ControlledDocuments import (
 from apps.quality.forms.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgmentForm
 from apps.quality.forms.DocumentControl.DocumentChangeOrders import DocumentChangeOrderForm
 from apps.quality.forms.DocumentControl.ElectronicSignatures import ElectronicSignatureForm
+from apps.quality.forms.RiskManagement.RiskAssessments import RiskAssessmentForm
+from apps.quality.forms.RiskManagement.RiskControlMeasures import RiskControlMeasureForm
+from apps.quality.forms.RiskManagement.RiskManagementPlans import RiskManagementPlanForm
+from apps.quality.forms.RiskManagement.RiskReviewRecords import RiskReviewRecordForm
 
 __all__ = [
     "ControlledDocumentForm",
@@ -20,4 +24,9 @@ __all__ = [
     "DesignInputForm",
     "DesignReviewForm",
     "DesignVerificationForm",
+    "RiskManagementPlanForm",
+    "RiskAssessmentForm",
+    "RiskControlMeasureForm",
+    "RiskReviewRecordForm",
 ]
+
