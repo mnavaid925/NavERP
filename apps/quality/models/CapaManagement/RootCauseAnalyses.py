@@ -39,7 +39,7 @@ class RootCauseAnalysis(TenantNumbered):
 
     RCA_METHOD_CSS = {
         "5_whys": "badge-info",
-        "fishbone_ishikawa": "badge-purple",
+        "fishbone_ishikawa": "badge-info",
         "8d": "badge-amber",
         "fault_tree": "badge-slate",
         "barrier_analysis": "badge-info",
@@ -47,7 +47,7 @@ class RootCauseAnalysis(TenantNumbered):
     }
 
     ROOT_CAUSE_CATEGORY_CSS = {
-        "design": "badge-purple",
+        "design": "badge-info",
         "process": "badge-info",
         "supplier": "badge-amber",
         "equipment": "badge-slate",
@@ -55,7 +55,7 @@ class RootCauseAnalysis(TenantNumbered):
         "documentation": "badge-slate",
         "training": "badge-info",
         "environmental": "badge-slate",
-        "software": "badge-purple",
+        "software": "badge-slate",
         "other": "badge-slate",
     }
 
