@@ -62,6 +62,13 @@ class DesignReviewForm(TenantUniqueMixin, TenantModelForm):
         elif self.instance.pk and self.instance.project and self.instance.project.dhf_locked:
             self.add_error("project", "Cannot modify records belonging to a project with a locked Design History File (DHF).")
 
+        status = cleaned.get("status")
+        if status == "approved" and (not self.instance.pk or self.instance.status != "approved"):
+            self.add_error(
+                "status",
+                "Stage-gate review approval requires formal gate clearance via the Clear & Approve Gate action."
+            )
+
         lead = cleaned.get("lead_reviewer")
         indep = cleaned.get("independent_reviewer")
         if lead and indep and lead.pk == indep.pk:
