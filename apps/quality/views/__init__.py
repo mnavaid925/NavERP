@@ -79,6 +79,50 @@ from apps.quality.views.DocumentControl.ElectronicSignatures import (
     electronic_signature_list,
     electronic_signature_verify,
 )
+from apps.quality.views.RiskManagement.FmeaMatrix import (
+    fmea_matrix,
+    fmea_matrix_export,
+    risk_traceability_matrix,
+    risk_traceability_matrix_export,
+)
+from apps.quality.views.RiskManagement.RiskAssessments import (
+    risk_assessment_create,
+    risk_assessment_delete,
+    risk_assessment_detail,
+    risk_assessment_edit,
+    risk_assessment_export,
+    risk_assessment_list,
+)
+from apps.quality.views.RiskManagement.RiskControlMeasures import (
+    risk_control_measure_create,
+    risk_control_measure_delete,
+    risk_control_measure_detail,
+    risk_control_measure_edit,
+    risk_control_measure_export,
+    risk_control_measure_list,
+    risk_control_measure_verify_eff,
+    risk_control_measure_verify_impl,
+)
+from apps.quality.views.RiskManagement.RiskManagementPlans import (
+    risk_management_plan_activate,
+    risk_management_plan_archive,
+    risk_management_plan_create,
+    risk_management_plan_delete,
+    risk_management_plan_detail,
+    risk_management_plan_edit,
+    risk_management_plan_export,
+    risk_management_plan_list,
+)
+from apps.quality.views.RiskManagement.RiskReviewRecords import (
+    risk_review_record_approve,
+    risk_review_record_create,
+    risk_review_record_delete,
+    risk_review_record_detail,
+    risk_review_record_edit,
+    risk_review_record_export,
+    risk_review_record_list,
+)
+
 
 __all__ = [
     "controlled_document_list",
@@ -144,4 +188,38 @@ __all__ = [
     "traceability_matrix_export",
     "design_project_dhf",
     "design_project_dhf_export",
+    "risk_management_plan_list",
+    "risk_management_plan_create",
+    "risk_management_plan_detail",
+    "risk_management_plan_edit",
+    "risk_management_plan_delete",
+    "risk_management_plan_activate",
+    "risk_management_plan_archive",
+    "risk_management_plan_export",
+    "risk_assessment_list",
+    "risk_assessment_create",
+    "risk_assessment_detail",
+    "risk_assessment_edit",
+    "risk_assessment_delete",
+    "risk_assessment_export",
+    "risk_control_measure_list",
+    "risk_control_measure_create",
+    "risk_control_measure_detail",
+    "risk_control_measure_edit",
+    "risk_control_measure_delete",
+    "risk_control_measure_verify_impl",
+    "risk_control_measure_verify_eff",
+    "risk_control_measure_export",
+    "risk_review_record_list",
+    "risk_review_record_create",
+    "risk_review_record_detail",
+    "risk_review_record_edit",
+    "risk_review_record_delete",
+    "risk_review_record_approve",
+    "risk_review_record_export",
+    "fmea_matrix",
+    "fmea_matrix_export",
+    "risk_traceability_matrix",
+    "risk_traceability_matrix_export",
 ]
+
