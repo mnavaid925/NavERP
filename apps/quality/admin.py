@@ -196,7 +196,7 @@ class RiskAssessmentAdmin(admin.ModelAdmin):
         "tenant",
     )
     list_filter = ("analysis_type", "hazard_category", "initial_risk_level", "residual_risk_level", "lifecycle_status", "tenant")
-    search_fields = ("number", "hazard_description", "failure_mode", "potential_harm", "plan__number")
+    search_fields = ("number", "hazard_description", "failure_mode", "potential_harm", "plan__number", "plan__title")
     list_select_related = ("tenant", "plan", "design_input")
 
 
@@ -214,7 +214,7 @@ class RiskControlMeasureAdmin(admin.ModelAdmin):
         "tenant",
     )
     list_filter = ("control_hierarchy", "status", "implementation_verified", "effectiveness_verified", "tenant")
-    search_fields = ("number", "title", "risk_assessment__number", "assigned_to__username")
+    search_fields = ("number", "title", "risk_assessment__number", "risk_assessment__hazard_description", "assigned_to__username")
     list_select_related = ("tenant", "risk_assessment", "assigned_to", "design_input", "controlled_document", "design_verification")
 
 
@@ -232,6 +232,6 @@ class RiskReviewRecordAdmin(admin.ModelAdmin):
         "tenant",
     )
     list_filter = ("review_type", "status", "overall_residual_risk_reconfirmed", "tenant")
-    search_fields = ("number", "review_title", "findings_summary", "lead_reviewer__username", "plan__number")
+    search_fields = ("number", "review_title", "findings_summary", "lead_reviewer__username", "plan__number", "plan__title")
     list_select_related = ("tenant", "plan", "lead_reviewer", "approved_signature")
 
