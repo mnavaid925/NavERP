@@ -22,8 +22,17 @@ def csv_safe(value):
 
 @login_required
 def capa_tracking_board(request):
-    base_qs = quality_scope(CapaInvestigation.objects.all(), request).select_related(
-        "lead_investigator", "quality_owner", "department"
+    base_qs = quality_scope(CapaInvestigation.objects.all(), request).only(
+        "id",
+        "tenant_id",
+        "number",
+        "title",
+        "risk_priority",
+        "status",
+        "target_closure_date",
+        "is_escalated",
+        "closed_at",
+        "created_at",
     )
 
     active_capas = list(
