@@ -77,4 +77,25 @@ All six review passes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perfor
 - **FE-M2**: `templates/quality/capamanagement/root_cause_analysis/detail.html:68, 74, 80, 86` & `capa_tracking_board.html:76, 100` — Physical margins `ml-*` and `border-l-*` instead of logical `ms-*` and `border-s-*` for RTL adaptability.
   - *Fix*: Replace with `ms-3`, `ms-6`, etc. and `border-s-4`.
 
+---
+
+## Pass 4: Performance Review (`performance-reviewer`)
+
+### Critical
+- **PRF-C1**: `apps/quality/models/CapaManagement/CapaInvestigations.py:191-197`, `apps/quality/views/CapaManagement/CapaInvestigations.py:30-33`, and `templates/quality/capamanagement/capa_investigation/list.html:171-175` — N+1 Queries in `capa_investigation_list` via unannotated model property evaluations (`capa.actions_count` and `capa.pending_actions_count`), causing up to 45 extra queries per 15-row page. Because `@property` is a class data descriptor, annotating the queryset alone will not override the property unless the property explicitly checks `if 'actions_count' in self.__dict__`.
+  - *Fix*: Update properties in `CapaInvestigations.py` to check `self.__dict__` first, annotate `actions_count` and `pending_actions_count` on `qs` in `capa_investigation_list`, and assert max queries in tests.
+
+### Important
+- **PRF-I1**: `apps/quality/forms/CapaManagement/CapaActions.py:54`, `apps/quality/models/CapaManagement/RootCauseAnalyses.py:126-128` — Chained N+1 Foreign Key query burst in `CapaActionForm` choice rendering through `RootCauseAnalysis.__str__` (Lesson L18). In `CapaActionForm`, `self.fields["root_cause"].queryset` lacks `.select_related("capa")`, triggering a query per RCA in the tenant on form load.
+  - *Fix*: Add `.select_related("capa")` to `self.fields["root_cause"].queryset`.
+- **PRF-I2**: `apps/quality/views/CapaManagement/CapaTrackingBoard.py:25-31` — Unused table joins and unconstrained heavy TextField loading in `capa_tracking_board`. Joined tables `lead_investigator`, `quality_owner`, `department` are never accessed, while large text fields are pulled across the wire without `.only(...)`.
+  - *Fix*: Remove unused `select_related` and add `.only(...)` with only required header/metric fields.
+- **PRF-I3**: `apps/quality/models/CapaManagement/CapaInvestigations.py:163-169`, `apps/quality/models/CapaManagement/CapaActions.py:110-116` — Missing compound tenant composite indexes for hot filter dimensions: `(tenant, action_type)` and `(tenant, department)`.
+  - *Fix*: Add `models.Index(fields=["tenant", "action_type"], name="idx_qcap_ten_act_type")`, `models.Index(fields=["tenant", "department"], name="idx_qcap_ten_dept")` on `CapaInvestigation`, and `models.Index(fields=["tenant", "department"], name="idx_qact_ten_dept")` on `CapaAction`. Generate migration.
+
+### Minor
+- **PRF-M1**: `apps/quality/views/CapaManagement/CapaInvestigations.py:30-32` — Unused `select_related` joins (`lead_investigator`, `quality_owner`, `department`) in `capa_investigation_list`.
+  - *Fix*: Clean up unused joins in `capa_investigation_list`.
+
+
 
