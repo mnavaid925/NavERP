@@ -73,7 +73,7 @@
 {% if escalated_capas or overdue_capas %}
 <div class="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
     {% if escalated_capas %}
-    <div class="card border-l-4 border-l-red-500 bg-red-50/30">
+    <div class="card border-s-4 border-s-red-500 bg-red-50/30">
         <div class="card-header pb-2">
             <h2 class="text-sm font-bold text-red-800 flex items-center gap-1.5">
                 <i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i> Escalated to Management Review ({{ escalated_capas|length }})
@@ -84,7 +84,7 @@
             <div class="flex items-center justify-between p-2 rounded bg-white border border-red-200">
                 <div>
                     <a href="{% url 'quality:capa_investigation_detail' c.pk %}" class="font-mono text-xs font-bold text-blue-600 hover:underline">{{ c.number }}</a>
-                    <span class="text-xs text-slate-700 ml-2 font-medium">{{ c.title }}</span>
+                    <span class="text-xs text-slate-700 ms-2 font-medium">{{ c.title }}</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="badge {{ c.risk_priority_badge }}">{{ c.get_risk_priority_display }}</span>
@@ -97,7 +97,7 @@
     {% endif %}
 
     {% if overdue_capas %}
-    <div class="card border-l-4 border-l-amber-500 bg-amber-50/30">
+    <div class="card border-s-4 border-s-amber-500 bg-amber-50/30">
         <div class="card-header pb-2">
             <h2 class="text-sm font-bold text-amber-800 flex items-center gap-1.5">
                 <i data-lucide="clock" class="w-4 h-4 text-amber-600"></i> Overdue Target Closure Date ({{ overdue_capas|length }})
@@ -108,7 +108,7 @@
             <div class="flex items-center justify-between p-2 rounded bg-white border border-amber-200">
                 <div>
                     <a href="{% url 'quality:capa_investigation_detail' c.pk %}" class="font-mono text-xs font-bold text-blue-600 hover:underline">{{ c.number }}</a>
-                    <span class="text-xs text-slate-700 ml-2 font-medium">{{ c.title }}</span>
+                    <span class="text-xs text-slate-700 ms-2 font-medium">{{ c.title }}</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="text-xs text-red-600 font-bold">Due {{ c.target_closure_date|date:"Y-m-d" }}</span>
