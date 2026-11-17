@@ -29,8 +29,13 @@ def traceability_matrix(request):
     selected_project_id = request.GET.get("project", "").strip()
     selected_project = None
 
-    if selected_project_id and selected_project_id.isdigit():
-        selected_project = quality_scope(DesignProject.objects.filter(pk=int(selected_project_id)), request).first()
+    if selected_project_id:
+        if selected_project_id.isdigit():
+            selected_project = quality_scope(DesignProject.objects.filter(pk=int(selected_project_id)), request).first()
+        if not selected_project:
+            messages.warning(request, "Selected design project was not found or is inaccessible.")
+            if projects.exists():
+                selected_project = projects.first()
     elif projects.exists():
         selected_project = projects.first()
 
