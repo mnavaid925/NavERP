@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Root Cause Analyses (RCA) | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <span>Root Cause Analyses</span>
+        </div>
+        <h1 class="page-title">Root Cause Analyses (RCA / 5 Whys / Ishikawa)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_investigation_list' %}" class="btn btn-outline">
+            <i data-lucide="clipboard-list"></i> CAPA List
+        </a>
+        <a href="{% url 'quality:root_cause_analysis_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:root_cause_analysis_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New RCA
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="git-pull-request"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Investigations</div>
+            <div class="text-2xl font-bold text-slate-800">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Verified by Quality</div>
+            <div class="text-2xl font-bold text-slate-800">{{ verified_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Search RCA number, problem, summary...">
+            </div>
+            <div>
+                <label class="form-label" for="method-filter">Methodology</label>
+                <select id="method-filter" name="method" class="form-select">
+                    <option value="">All Methods</option>
+                    {% for val, label in rca_method_choices %}
+                    <option value="{{ val }}" {% if method_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="category-filter">Root Cause Category</label>
+                <select id="category-filter" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in root_cause_category_choices %}
+                    <option value="{{ val }}" {% if category_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-3 flex justify-end gap-2">
+                <a href="{% url 'quality:root_cause_analysis_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>RCA Number</th>
+                    <th>CAPA</th>
+                    <th>Method</th>
+                    <th>Category</th>
+                    <th>Problem Statement</th>
+                    <th>Status</th>
+                    <th>Verified</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rca in rcas %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold text-slate-900">
+                        <a href="{% url 'quality:root_cause_analysis_detail' rca.pk %}" class="text-blue-600 hover:underline">
+                            {{ rca.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:capa_investigation_detail' rca.capa.pk %}" class="font-mono text-xs text-blue-600 hover:underline">
+                            {{ rca.capa.number }}
+                        </a>
+                        <div class="text-xs text-slate-500 truncate max-w-xs">{{ rca.capa.title }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ rca.method_badge }}">{{ rca.get_rca_method_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ rca.category_badge }}">{{ rca.get_root_cause_category_display }}</span>
+                    </td>
+                    <td class="text-xs text-slate-700 max-w-xs truncate">
+                        {{ rca.problem_statement|truncatechars:70 }}
+                    </td>
+                    <td>
+                        <span class="badge {{ rca.status_badge }}">{{ rca.get_status_display }}</span>
+                    </td>
+                    <td class="text-center">
+                        {% if rca.is_verified %}
+                        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600 inline"></i>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:root_cause_analysis_detail' rca.pk %}" title="View Details" class="btn btn-icon">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if rca.status != "verified" %}
+                        <a href="{% url 'quality:root_cause_analysis_edit' rca.pk %}" title="Edit RCA" class="btn btn-icon">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        <form method="post" action="{% url 'quality:root_cause_analysis_delete' rca.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete RCA {{ rca.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="git-pull-request" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold text-slate-700">No Root Cause Analyses Found</h3>
+                            <p class="text-sm text-slate-500">There are no root cause investigations matching your query.</p>
+                            <a href="{% url 'quality:root_cause_analysis_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> New Root Cause Analysis
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if rcas.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Page {{ rcas.number }} of {{ rcas.paginator.num_pages }} ({{ total_count }} total records)
+        </div>
+        <div class="flex gap-2">
+            {% if rcas.has_previous %}
+            <a href="?page={{ rcas.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if method_filter %}&method={{ method_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="btn btn-outline text-sm">Previous</a>
+            {% endif %}
+            {% if rcas.has_next %}
+            <a href="?page={{ rcas.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if method_filter %}&method={{ method_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="btn btn-outline text-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
