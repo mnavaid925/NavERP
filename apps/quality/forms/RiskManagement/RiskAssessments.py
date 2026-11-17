@@ -72,4 +72,27 @@ class RiskAssessmentForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["plan", "design_input"])
+
+        res_s = cleaned.get("residual_severity")
+        res_p = cleaned.get("residual_probability")
+        acceptable = cleaned.get("residual_risk_acceptable")
+        justification = (cleaned.get("benefit_risk_justification") or "").strip()
+
+        if res_s and res_p:
+            try:
+                level = RiskAssessment.calculate_level(int(res_s), int(res_p))
+            except (ValueError, TypeError):
+                level = ""
+
+            if level == "unacceptable" and acceptable:
+                self.add_error(
+                    "residual_risk_acceptable",
+                    "Residual risk is in the Unacceptable zone (Severity x Probability >= 15). It cannot be marked acceptable under ISO 14971 without further risk reduction.",
+                )
+            elif level == "alarp" and acceptable and not justification:
+                self.add_error(
+                    "benefit_risk_justification",
+                    "A Clinical Benefit-Risk Analysis (BRA) justification is mandatory when accepting a residual risk in the ALARP zone.",
+                )
+
         return cleaned
