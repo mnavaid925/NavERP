@@ -61,8 +61,8 @@
         <div class="card">
             <div class="card-header flex justify-between items-center">
                 <h2 class="text-base font-semibold text-slate-800">Implementation Execution Evidence</h2>
-                <span class="badge {% if action.status in 'implemented verified' %}badge-green{% else %}badge-amber{% endif %}">
-                    {% if action.status in "implemented verified" %}Implemented{% else %}Pending Execution{% endif %}
+                <span class="badge {% if action.status == 'implemented' or action.status == 'verified' %}badge-green{% else %}badge-amber{% endif %}">
+                    {% if action.status == 'implemented' or action.status == 'verified' %}Implemented{% else %}Pending Execution{% endif %}
                 </span>
             </div>
             <div class="card-body space-y-4">
