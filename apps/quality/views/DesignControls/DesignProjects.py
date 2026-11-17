@@ -46,9 +46,14 @@ def design_project_list(request):
     if selected_status:
         qs = qs.filter(status=selected_status)
 
-    total_count = quality_scope(DesignProject.objects.all(), request).count()
-    active_count = quality_scope(DesignProject.objects.filter(status__in=["active", "gate_review"]), request).count()
-    locked_count = quality_scope(DesignProject.objects.filter(dhf_locked=True), request).count()
+    stats = quality_scope(DesignProject.objects.all(), request).aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(status__in=["active", "gate_review"])),
+        locked_count=Count("id", filter=Q(dhf_locked=True)),
+    )
+    total_count = stats["total_count"]
+    active_count = stats["active_count"]
+    locked_count = stats["locked_count"]
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
@@ -137,20 +142,20 @@ def design_project_detail(request, pk):
     reviews = project.reviews.all().select_related("lead_reviewer", "independent_reviewer", "electronic_signature")[:10]
     verifications = project.verifications.all().select_related("primary_input", "executed_by", "protocol_document", "report_document")[:20]
 
-    input_stats = {
-        "total": project.inputs.count(),
-        "verified": project.inputs.filter(status="verified").count(),
-        "approved": project.inputs.filter(status="approved").count(),
-    }
-    review_stats = {
-        "total": project.reviews.count(),
-        "approved": project.reviews.filter(status="approved").count(),
-    }
-    verification_stats = {
-        "total": project.verifications.count(),
-        "passed": project.verifications.filter(pass_fail_result="pass").count(),
-        "failed": project.verifications.filter(pass_fail_result="fail").count(),
-    }
+    input_stats = project.inputs.aggregate(
+        total=Count("id"),
+        verified=Count("id", filter=Q(status="verified")),
+        approved=Count("id", filter=Q(status="approved")),
+    )
+    review_stats = project.reviews.aggregate(
+        total=Count("id"),
+        approved=Count("id", filter=Q(status="approved")),
+    )
+    verification_stats = project.verifications.aggregate(
+        total=Count("id"),
+        passed=Count("id", filter=Q(pass_fail_result="pass")),
+        failed=Count("id", filter=Q(pass_fail_result="fail")),
+    )
 
     return render(
         request,
