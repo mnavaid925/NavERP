@@ -6,6 +6,10 @@ from django.utils import timezone
 
 from apps.core.models import OrgUnit, Tenant
 from apps.hrm.models.EmployeeManagement.EmployeeProfiles import EmployeeProfile
+from apps.quality.models.CapaManagement.CapaActions import CapaAction
+from apps.quality.models.CapaManagement.CapaEffectivenessReviews import CapaEffectivenessReview
+from apps.quality.models.CapaManagement.CapaInvestigations import CapaInvestigation
+from apps.quality.models.CapaManagement.RootCauseAnalyses import RootCauseAnalysis
 from apps.quality.models.DesignControls.DesignInputs import DesignInput
 from apps.quality.models.DesignControls.DesignProjects import DesignProject
 from apps.quality.models.DesignControls.DesignReviews import DesignReview
@@ -36,6 +40,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            CapaEffectivenessReview.objects.all().delete()
+            CapaAction.objects.all().delete()
+            RootCauseAnalysis.objects.all().delete()
+            CapaInvestigation.objects.all().delete()
             RiskReviewRecord.objects.all().delete()
             RiskControlMeasure.objects.all().delete()
             RiskAssessment.objects.all().delete()
@@ -60,6 +68,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_1(tenant)
             self._seed_submodule_12_2(tenant)
             self._seed_submodule_12_3(tenant)
+            self._seed_submodule_12_4(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -894,4 +903,270 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.3 Risk Management (ISO 14971 / FMEA) seeded successfully."))
+
+    def _seed_submodule_12_4(self, tenant):
+        if CapaInvestigation.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.4 CAPA data already seeded, skipping.")
+            return
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_staff=True).first()
+            or User.objects.filter(tenant=tenant).first()
+        )
+        if not admin_user:
+            self.stdout.write(self.style.WARNING(f"[{tenant.name}] No user found to assign CAPAs, skipping."))
+            return
+
+        today = timezone.now().date()
+        dept = OrgUnit.objects.filter(tenant=tenant).first()
+        design_prj = DesignProject.objects.filter(tenant=tenant).first()
+        risk_asmt = RiskAssessment.objects.filter(tenant=tenant).first()
+        controlled_doc = ControlledDocument.objects.filter(tenant=tenant).first()
+        change_ord = DocumentChangeOrder.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
+            # 1. Critical CAPA: Infusion Pump Occlusion Pressure Sensor Calibration Drift
+            capa_01 = CapaInvestigation.objects.create(
+                tenant=tenant,
+                title="Infusion Pump Occlusion Pressure Sensor Calibration Drift",
+                issue_summary=(
+                    "In-line functional pressure testing observed a 15% positive calibration drift across multiple "
+                    "InfuseFlow Pro 3000 units, resulting in delayed downstream occlusion alarm triggers under simulated patient backpressure."
+                ),
+                action_type="corrective",
+                source_type="ncr",
+                source_reference="NCR-2026-0042",
+                risk_priority="critical",
+                containment_actions="Immediate quarantine hold on assembly Lot LOT-2026-A1; stopped line 2 calibration cell.",
+                containment_implemented=True,
+                containment_verified_by=admin_user,
+                containment_date=today - datetime.timedelta(days=45),
+                affected_item_code="PRD-MED-3000",
+                affected_item_name="InfuseFlow Pro 3000 Smart Infusion Pump",
+                affected_lot_numbers="LOT-2026-A1",
+                lead_investigator=admin_user,
+                quality_owner=admin_user,
+                department=dept,
+                design_project=design_prj,
+                risk_assessment=risk_asmt,
+                status="effectiveness_review",
+                target_investigation_date=today - datetime.timedelta(days=30),
+                target_closure_date=today + datetime.timedelta(days=15),
+                is_escalated=True,
+                escalation_reason="Critical patient safety threshold: delayed occlusion detection could induce venous bolus.",
+                escalated_at=timezone.now() - datetime.timedelta(days=40),
+            )
+
+            # RCA for CAPA 1: 5 Whys
+            rca_01 = RootCauseAnalysis.objects.create(
+                tenant=tenant,
+                capa=capa_01,
+                rca_method="5_whys",
+                problem_statement="Sensor output voltage drifted above upper acceptance tolerance by +0.18V after curing cycle.",
+                why_1="Pressure transducer diaphragm adhesive curing temperature fluctuated by +/- 8°C.",
+                why_2="Infrared oven thermal controller thermocouple had uncalibrated thermal offset.",
+                why_3="Preventative maintenance calibration cycle was missed due to ambiguous maintenance schedule.",
+                why_4="Calibration tracking relied on decentralized physical logbook rather than automated CMMS.",
+                why_5="Root cause: Inadequate tooling calibration management and missing thermal interlock on cure oven.",
+                root_cause_category="equipment",
+                root_cause_summary=(
+                    "Physical verification proved uncalibrated thermal sensor allowed cure temperature to exceed 65°C, "
+                    "causing polymeric pre-stress on piezo-resistive diaphragm silicon element."
+                ),
+                escape_point_gap="Pre-assembly incoming batch electrical test checked resistance at ambient 20°C but not post-cure thermal delta.",
+                status="verified",
+                lead_investigator=admin_user,
+                verified_by=admin_user,
+                verified_date=today - datetime.timedelta(days=25),
+                verification_notes="Thermal gradient study confirmed repeatability of +0.18V drift at >65°C oven temperature.",
+            )
+
+            # Actions for CAPA 1
+            act_01_containment = CapaAction.objects.create(
+                tenant=tenant,
+                capa=capa_01,
+                root_cause=rca_01,
+                action_type="containment",
+                title="Quarantine and segregate assembly Lot LOT-2026-A1",
+                description="Physically tag and move all 140 assembled pump subassemblies to Quality Quarantine Cage B.",
+                assigned_to=admin_user,
+                department=dept,
+                due_date=today - datetime.timedelta(days=44),
+                completion_date=today - datetime.timedelta(days=44),
+                status="verified",
+                implementation_notes="All 140 units locked in Cage B with yellow NCR quarantine tags.",
+                verified_by=admin_user,
+                verified_on=today - datetime.timedelta(days=43),
+                verification_evidence="Physical count verified 140/140 serialized units accounted for.",
+            )
+
+            act_01_corrective_1 = CapaAction.objects.create(
+                tenant=tenant,
+                capa=capa_01,
+                root_cause=rca_01,
+                action_type="corrective",
+                title="Install automated digital thermal interlock and replace thermocouple",
+                description="Fit dual-redundant Class A RTD temperature sensors with automatic oven power cutoff if temperature exceeds 62°C.",
+                assigned_to=admin_user,
+                department=dept,
+                due_date=today - datetime.timedelta(days=20),
+                completion_date=today - datetime.timedelta(days=20),
+                status="verified",
+                change_order=change_ord,
+                design_project=design_prj,
+                implementation_notes="New Eurotherm 3216 controller installed with NIST-traceable thermocouple.",
+                verified_by=admin_user,
+                verified_on=today - datetime.timedelta(days=18),
+                verification_evidence="Calibration certificate #CAL-2026-0889 attached and verified.",
+            )
+
+            act_01_corrective_2 = CapaAction.objects.create(
+                tenant=tenant,
+                capa=capa_01,
+                root_cause=rca_01,
+                action_type="corrective",
+                title="Revise Curing & Sensor Calibration Procedure SOP",
+                description="Update SOP-MFG-004 to mandate temperature profile logging and 100% post-cure pressure offset verification.",
+                assigned_to=admin_user,
+                department=dept,
+                due_date=today - datetime.timedelta(days=15),
+                completion_date=today - datetime.timedelta(days=14),
+                status="verified",
+                controlled_document=controlled_doc,
+                implementation_notes="SOP-MFG-004 Rev 3.0 approved and effective.",
+                verified_by=admin_user,
+                verified_on=today - datetime.timedelta(days=12),
+                verification_evidence="Training records confirmed 8/8 assembly operators completed revised SOP training.",
+            )
+
+            # Effectiveness Review for CAPA 1
+            eff_01 = CapaEffectivenessReview.objects.create(
+                tenant=tenant,
+                capa=capa_01,
+                review_criteria="Zero pressure sensor calibration drift across 5 consecutive production batches (sample N=150, Cpk >= 1.33).",
+                verification_method="process_capability",
+                planned_review_date=today - datetime.timedelta(days=5),
+                actual_review_date=today - datetime.timedelta(days=2),
+                evaluator=admin_user,
+                metrics_evaluated="Evaluated 180 units across Lots A2, A3, and A4. Mean offset: +0.01V, StdDev: 0.021V, Cpk = 1.62.",
+                recurrence_observed=False,
+                outcome="effective",
+                status="completed",
+                review_notes="Capability analysis proves curing process is fully robust with zero recurrence in production.",
+            )
+
+            # 2. Medium Priority CAPA: Cleanroom Particulate Count Excursion in Packaging Cell B
+            capa_02 = CapaInvestigation.objects.create(
+                tenant=tenant,
+                title="Cleanroom Particulate Count Excursion in Packaging Cell B",
+                issue_summary=(
+                    "Routine environmental monitoring detected ISO Class 7 particulate count excursion (0.5µm particles > 352,000/m³) "
+                    "near sterile packaging sealing station #2."
+                ),
+                action_type="corrective",
+                source_type="internal_audit",
+                source_reference="AUD-2026-Q1",
+                risk_priority="medium",
+                containment_actions="Halted packaging line B; switched primary sterile packaging to line A.",
+                containment_implemented=True,
+                containment_verified_by=admin_user,
+                containment_date=today - datetime.timedelta(days=20),
+                affected_item_code="PRD-SYR-005",
+                affected_item_name="AccuInject 5mL Safety Syringe",
+                affected_lot_numbers="LOT-2026-SYR-11",
+                lead_investigator=admin_user,
+                quality_owner=admin_user,
+                department=dept,
+                status="action_implementation",
+                target_investigation_date=today - datetime.timedelta(days=10),
+                target_closure_date=today + datetime.timedelta(days=30),
+                is_escalated=False,
+            )
+
+            # RCA for CAPA 2: Ishikawa 6M
+            rca_02 = RootCauseAnalysis.objects.create(
+                tenant=tenant,
+                capa=capa_02,
+                rca_method="fishbone_ishikawa",
+                problem_statement="ISO Class 7 particle count elevated during secondary shift packaging operation.",
+                fishbone_manpower="Personnel movement rate exceeded SOP limits during shift handover.",
+                fishbone_machine="HEPA filter fan unit #4 terminal seal degradation.",
+                fishbone_material="Cardboard carton storage within 3 meters of packaging barrier.",
+                fishbone_method="Missing wipe-down protocol for supply cart entry.",
+                fishbone_measurement="Particle counter optical sensor calibrated and verified accurate.",
+                fishbone_environment="Differential pressure dropped from 15 Pa to 8 Pa during main exhaust damper transition.",
+                root_cause_category="environmental",
+                root_cause_summary="Damper seal degradation on exhaust line caused intermittent low-pressure vacuum backdraft through pass-through door.",
+                escape_point_gap="Continuous facility monitoring alarm threshold was set to 15-minute averaging rather than instantaneous excursion trigger.",
+                status="completed",
+                lead_investigator=admin_user,
+            )
+
+            act_02_1 = CapaAction.objects.create(
+                tenant=tenant,
+                capa=capa_02,
+                root_cause=rca_02,
+                action_type="corrective",
+                title="Replace HEPA terminal seal and overhaul exhaust damper gasket",
+                description="Install silicone gasket and re-balance HVAC differential pressure to maintain >=15 Pa at all times.",
+                assigned_to=admin_user,
+                department=dept,
+                due_date=today + datetime.timedelta(days=5),
+                status="in_progress",
+                implementation_notes="Damper gasket received from supplier; HVAC maintenance scheduled for weekend maintenance shutdown.",
+            )
+
+            act_02_2 = CapaAction.objects.create(
+                tenant=tenant,
+                capa=capa_02,
+                root_cause=rca_02,
+                action_type="preventive",
+                title="Implement instantaneous particle counter alarm interlock",
+                description="Reconfigure SCADA environmental monitoring to alert instantly upon any 60-second particle count surge.",
+                assigned_to=admin_user,
+                department=dept,
+                due_date=today + datetime.timedelta(days=15),
+                status="pending",
+            )
+
+            eff_02 = CapaEffectivenessReview.objects.create(
+                tenant=tenant,
+                capa=capa_02,
+                review_criteria="30 consecutive days of continuous environmental monitoring confirming particle counts <= 100,000/m³ in ISO Class 7 zone.",
+                verification_method="trend_analysis",
+                planned_review_date=today + datetime.timedelta(days=45),
+                evaluator=admin_user,
+                outcome="pending",
+                status="scheduled",
+            )
+
+            # 3. Preventive Action: Proactive Upstream Supplier Resin Moisture Tolerance Tightening
+            capa_03 = CapaInvestigation.objects.create(
+                tenant=tenant,
+                title="Proactive Upstream Supplier Resin Moisture Tolerance Tightening",
+                issue_summary=(
+                    "Statistical analysis of raw polycarbonate polymer incoming moisture logs identified a seasonal upward trend "
+                    "approaching the upper specification limit during high-humidity summer months."
+                ),
+                action_type="preventive",
+                source_type="risk_assessment",
+                source_reference="QRMP-00001",
+                risk_priority="low",
+                containment_actions="Desiccant dryer dwell time temporarily increased from 4 to 6 hours.",
+                containment_implemented=True,
+                containment_verified_by=admin_user,
+                containment_date=today - datetime.timedelta(days=10),
+                affected_item_code="RESIN-PC-01",
+                affected_item_name="Medical Grade Polycarbonate Resin",
+                lead_investigator=admin_user,
+                quality_owner=admin_user,
+                department=dept,
+                status="under_investigation",
+                target_investigation_date=today + datetime.timedelta(days=20),
+                target_closure_date=today + datetime.timedelta(days=60),
+                is_escalated=False,
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.4 Corrective & Preventive Action (CAPA) seeded successfully."))
+
 
