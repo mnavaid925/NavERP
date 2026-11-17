@@ -141,6 +141,7 @@ def design_verification_create(request):
                 if ver.pass_fail_result == "pass" and ver.status == "passed":
                     ver.primary_input.status = "verified"
                     ver.primary_input.save(update_fields=["status", "updated_at"])
+                    write_audit_log(request.user, ver.primary_input, "verify", tenant=request.tenant)
                 write_audit_log(request.user, ver, "create", tenant=request.tenant)
             messages.success(request, f"Verification protocol {ver.number} created successfully.")
             return redirect("quality:design_verification_detail", pk=ver.pk)
@@ -185,6 +186,7 @@ def design_verification_edit(request, pk):
                 if verification.pass_fail_result == "pass" and verification.status == "passed":
                     verification.primary_input.status = "verified"
                     verification.primary_input.save(update_fields=["status", "updated_at"])
+                    write_audit_log(request.user, verification.primary_input, "verify", tenant=request.tenant)
                 write_audit_log(request.user, verification, "update", tenant=request.tenant)
             messages.success(request, f"Verification protocol {verification.number} updated successfully.")
             return redirect("quality:design_verification_detail", pk=verification.pk)
