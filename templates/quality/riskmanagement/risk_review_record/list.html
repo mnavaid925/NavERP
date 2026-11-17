@@ -112,7 +112,7 @@
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if q or selected_type or selected_status or selected_plan %}
-                <a href="{% url 'quality:risk_review_record_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'quality:risk_review_record_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -176,15 +176,15 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions justify-end">
-                            <a href="{% url 'quality:risk_review_record_detail' r.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'quality:risk_review_record_detail' r.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'quality:risk_review_record_edit' r.pk %}" class="btn btn-icon" title="Edit Review">
+                            <a href="{% url 'quality:risk_review_record_edit' r.pk %}" class="btn btn-icon" title="Edit Review" aria-label="Edit Review">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'quality:risk_review_record_delete' r.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Risk Review Record {{ r.number|escapejs }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red" title="Delete Review">
+                                <button type="submit" class="btn btn-icon text-red" title="Delete Review" aria-label="Delete Review">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
