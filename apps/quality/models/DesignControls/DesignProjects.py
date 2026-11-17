@@ -101,6 +101,7 @@ class DesignProject(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="quality_qdpl_ten_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_qdpl_ten_created"),
             models.Index(fields=["tenant", "status"], name="idx_qdpl_ten_status"),
             models.Index(fields=["tenant", "current_phase"], name="idx_qdpl_ten_phase"),
             models.Index(fields=["tenant", "device_class"], name="idx_qdpl_ten_dclass"),
