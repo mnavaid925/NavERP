@@ -70,6 +70,7 @@ def capa_effectiveness_review_list(request):
         "q": q,
         "outcome_filter": outcome_filter,
         "status_filter": status_filter,
+        "capa_filter": capa_filter,
         "outcome_choices": CapaEffectivenessReview.OUTCOME_CHOICES,
         "status_choices": CapaEffectivenessReview.STATUS_CHOICES,
     }
