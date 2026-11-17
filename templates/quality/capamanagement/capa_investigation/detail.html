@@ -286,6 +286,7 @@
                 </form>
 
                 <!-- Formal Closure Form -->
+                {% if request.user.is_tenant_admin %}
                 <form method="post" action="{% url 'quality:capa_investigation_close' capa.pk %}" class="pt-2 border-t border-slate-200 space-y-2" onsubmit="return confirm('Confirm formal CAPA closure? Ensure all action items are implemented and verified.');">
                     {% csrf_token %}
                     <label class="form-label" for="closure_summary">Formal Closure Summary</label>
@@ -294,6 +295,7 @@
                         <i data-lucide="check-check"></i> Formally Close CAPA
                     </button>
                 </form>
+                {% endif %}
                 {% else %}
                 <div class="bg-emerald-50 p-3 rounded border border-emerald-200 text-xs text-emerald-800 space-y-1">
                     <div class="font-semibold flex items-center gap-1"><i data-lucide="check-circle" class="w-4 h-4"></i> CAPA Formally Closed</div>
