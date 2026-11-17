@@ -26,8 +26,7 @@ def quality_department(db, tenant_a):
     return OrgUnit.objects.create(
         tenant=tenant_a,
         name="Quality Assurance",
-        code="QA-ACME",
-        unit_type="department",
+        kind="department",
     )
 
 
@@ -36,8 +35,7 @@ def quality_department_b(db, tenant_b):
     return OrgUnit.objects.create(
         tenant=tenant_b,
         name="Quality Assurance Globex",
-        code="QA-GLOBEX",
-        unit_type="department",
+        kind="department",
     )
 
 
