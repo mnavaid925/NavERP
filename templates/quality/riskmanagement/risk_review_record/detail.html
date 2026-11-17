@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}{{ review_record.number }} — Risk Review Record | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_review_record_list' %}">Review Records</a>
+            <span>/</span>
+            <span>{{ review_record.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ review_record.number }} — {{ review_record.review_title }}</h1>
+            <span class="badge {{ review_record.review_type_badge }}">{{ review_record.get_review_type_display }}</span>
+            <span class="badge {{ review_record.status_badge }}">{{ review_record.get_status_display }}</span>
+            {% if review_record.overall_residual_risk_reconfirmed %}
+            <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Residual Risk Reconfirmed Acceptable</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if review_record.status != "approved" %}
+        <form method="post" action="{% url 'quality:risk_review_record_approve' review_record.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700 hover:bg-green-50" title="Approve Review Record">
+                <i data-lucide="check-circle"></i> Approve Review
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'quality:risk_review_record_edit' review_record.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Review
+        </a>
+        <form method="post" action="{% url 'quality:risk_review_record_delete' review_record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Risk Review Record {{ review_record.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 hover:border-red-200" title="Delete Review">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">ISO 14971 Clause 9 Review Evaluation</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Associated Risk Management Plan</dt>
+                    <dd>
+                        <a href="{% url 'quality:risk_management_plan_detail' review_record.plan.pk %}" class="text-brand hover:underline font-mono">
+                            {{ review_record.plan.number }} — {{ review_record.plan.title }}
+                        </a>
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Review Type</dt>
+                    <dd>{{ review_record.get_review_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Review Execution Date</dt>
+                    <dd>{{ review_record.review_date }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Lead Reviewer / Risk Officer</dt>
+                    <dd>{{ review_record.lead_reviewer.get_full_name|default:review_record.lead_reviewer.username }}</dd>
+                </div>
+                <div class="detail-item col-span-2">
+                    <dt>Review Period Coverage</dt>
+                    <dd>
+                        {% if review_record.review_period_start and review_record.review_period_end %}
+                        {{ review_record.review_period_start }} to {{ review_record.review_period_end }}
+                        {% else %}
+                        <span class="text-slate-400">Point-in-time review</span>
+                        {% endif %}
+                    </dd>
+                </div>
+
+                <!-- PMS Sources -->
+                <div class="detail-item col-span-2">
+                    <dt>Post-Market Surveillance & Feedback Sources Reviewed</dt>
+                    <dd class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded">
+                        {{ review_record.pms_sources_reviewed|default:"No external sources documented." }}
+                    </dd>
+                </div>
+
+                <!-- Findings Summary -->
+                <div class="detail-item col-span-2">
+                    <dt>Review Findings & Conclusions (Clause 9 Evaluation)</dt>
+                    <dd class="text-sm text-slate-800 whitespace-pre-line font-medium bg-slate-50 p-3 rounded">
+                        {{ review_record.findings_summary }}
+                    </dd>
+                </div>
+
+                <!-- Follow-up Actions -->
+                {% if review_record.action_items_required %}
+                <div class="detail-item col-span-2">
+                    <dt>Required Follow-up Actions (CAPAs / ECOs / Labeling Updates)</dt>
+                    <dd class="text-sm text-slate-700 whitespace-pre-line bg-amber-50 p-3 rounded border border-amber-200">
+                        {{ review_record.action_items_required }}
+                    </dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+    </div>
+
+    <!-- Review Reconfirmation Checklist Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">ISO 14971 Safety Reconfirmation</h2>
+        </div>
+        <div class="card-body flex flex-col gap-4">
+            <div class="p-3 rounded border {% if review_record.overall_residual_risk_reconfirmed %}bg-green-50 border-green-200{% else %}bg-red-50 border-red-200{% endif %}">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold {% if review_record.overall_residual_risk_reconfirmed %}text-green-800{% else %}text-red-800{% endif %}">
+                        Residual Risk Acceptable
+                    </span>
+                    {% if review_record.overall_residual_risk_reconfirmed %}
+                    <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Reconfirmed</span>
+                    {% else %}
+                    <span class="badge badge-red">Unacceptable</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Reconfirmation that overall residual risk remains acceptable per established criteria.</p>
+            </div>
+
+            <div class="p-3 rounded border {% if review_record.new_hazards_identified %}bg-amber-50 border-amber-200{% else %}bg-green-50 border-green-200{% endif %}">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold {% if review_record.new_hazards_identified %}text-amber-800{% else %}text-green-800{% endif %}">
+                        New Hazards Detected
+                    </span>
+                    {% if review_record.new_hazards_identified %}
+                    <span class="badge badge-amber">New Hazards Found</span>
+                    {% else %}
+                    <span class="badge badge-green">None Discovered</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Post-market feedback or device usage revealed previously unrecognized hazards.</p>
+            </div>
+
+            <div class="p-3 rounded border {% if review_record.risk_profile_changed %}bg-amber-50 border-amber-200{% else %}bg-green-50 border-green-200{% endif %}">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold {% if review_record.risk_profile_changed %}text-amber-800{% else %}text-green-800{% endif %}">
+                        Risk Profile Changed
+                    </span>
+                    {% if review_record.risk_profile_changed %}
+                    <span class="badge badge-amber">Profile Shifted</span>
+                    {% else %}
+                    <span class="badge badge-green">Profile Stable</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Increased occurrence frequency or severity observed in commercial distribution.</p>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-400 mb-2">Metadata</div>
+                <div class="text-xs text-slate-500 mb-1">Created: {{ review_record.created_at|date:"Y-m-d H:i" }}</div>
+                <div class="text-xs text-slate-500">Updated: {{ review_record.updated_at|date:"Y-m-d H:i" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
