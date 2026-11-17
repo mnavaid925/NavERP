@@ -190,7 +190,7 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:design_input_detail' inp.pk %}" class="btn btn-icon">
+                        <a href="{% url 'quality:design_input_detail' inp.pk %}" class="btn btn-icon" title="View Design Input">
                             <i data-lucide="eye"></i>
                         </a>
                     </td>
@@ -257,7 +257,7 @@
                         <span class="badge {{ rev.status_css }}">{{ rev.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:design_review_detail' rev.pk %}" class="btn btn-icon">
+                        <a href="{% url 'quality:design_review_detail' rev.pk %}" class="btn btn-icon" title="View Design Review">
                             <i data-lucide="eye"></i>
                         </a>
                     </td>
@@ -323,7 +323,7 @@
                         <span class="badge {{ ver.result_css }}">{{ ver.get_pass_fail_result_display }}</span>
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:design_verification_detail' ver.pk %}" class="btn btn-icon">
+                        <a href="{% url 'quality:design_verification_detail' ver.pk %}" class="btn btn-icon" title="View Protocol">
                             <i data-lucide="eye"></i>
                         </a>
                     </td>
