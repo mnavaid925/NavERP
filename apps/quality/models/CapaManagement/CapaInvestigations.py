@@ -189,10 +189,14 @@ class CapaInvestigation(TenantNumbered):
 
     @property
     def actions_count(self):
+        if "actions_count" in self.__dict__:
+            return self.__dict__["actions_count"]
         return self.actions.count()
 
     @property
     def pending_actions_count(self):
+        if "pending_actions_count" in self.__dict__:
+            return self.__dict__["pending_actions_count"]
         return self.actions.exclude(status__in=["implemented", "verified", "cancelled"]).count()
 
     @property
