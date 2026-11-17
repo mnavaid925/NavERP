@@ -60,7 +60,7 @@
             </div>
             <div class="detail-item">
                 <dt>Test Operator / Executed By</dt>
-                <dd>{{ verification.executed_by.get_full_name|default:verification.executed_by.username|default:"Pending Execution" }}</dd>
+                <dd>{% if verification.executed_by %}{{ verification.executed_by.get_full_name|default:verification.executed_by.username }}{% else %}Pending Execution{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>Execution Date</dt>
