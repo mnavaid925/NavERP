@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Risk Review {{ review_record.number }}{% else %}Log Risk Review Record{% endif %} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_review_record_list' %}">Review Records</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ review_record.number }}{% else %}New Risk Review{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Risk Review Record {{ review_record.number }}{% else %}Log Risk Management Review / Report (Clause 9){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">ISO 14971 Risk Management File Review Details</h2>
+        <p class="text-xs text-slate-500">Document periodic review conclusions, post-market surveillance (PMS) findings, and reconfirmation of overall residual risk acceptability.</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Risk Plan & Review Title -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plan.id_for_label }}">Associated Risk Management Plan *</label>
+                    {{ form.plan }}
+                    {% if form.plan.errors %}<div class="form-error">{{ form.plan.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.review_type.id_for_label }}">Review Type / Trigger *</label>
+                    {{ form.review_type }}
+                    {% if form.review_type.errors %}<div class="form-error">{{ form.review_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.review_title.id_for_label }}">Review Report Title *</label>
+                    {{ form.review_title }}
+                    {% if form.review_title.errors %}<div class="form-error">{{ form.review_title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Date & Periods -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.review_date.id_for_label }}">Review Execution Date *</label>
+                    {{ form.review_date }}
+                    {% if form.review_date.errors %}<div class="form-error">{{ form.review_date.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lead_reviewer.id_for_label }}">Lead Reviewer / Risk Officer *</label>
+                    {{ form.lead_reviewer }}
+                    {% if form.lead_reviewer.errors %}<div class="form-error">{{ form.lead_reviewer.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.review_period_start.id_for_label }}">Review Period Start Date</label>
+                    {{ form.review_period_start }}
+                    {% if form.review_period_start.errors %}<div class="form-error">{{ form.review_period_start.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.review_period_end.id_for_label }}">Review Period End Date</label>
+                    {{ form.review_period_end }}
+                    {% if form.review_period_end.errors %}<div class="form-error">{{ form.review_period_end.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Status -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Post-Market Information & Feedback Sources -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.pms_sources_reviewed.id_for_label }}">Post-Market Surveillance (PMS) Sources Examined</label>
+                    {{ form.pms_sources_reviewed }}
+                    <span class="text-xs text-slate-400">List customer complaints, service logs, non-conformances, CAPAs, adverse incident feeds, scientific literature, and competitor recall notices reviewed.</span>
+                    {% if form.pms_sources_reviewed.errors %}<div class="form-error">{{ form.pms_sources_reviewed.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Findings Summary -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.findings_summary.id_for_label }}">Review Findings & Conclusions *</label>
+                    {{ form.findings_summary }}
+                    <span class="text-xs text-slate-400">Detailed qualitative synthesis evaluating device safety in the field and state of the art comparison.</span>
+                    {% if form.findings_summary.errors %}<div class="form-error">{{ form.findings_summary.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Reconfirmation Gates -->
+                <div class="md:col-span-2 pt-4 border-t border-slate-100">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Clause 9 / Clause 10 Safety Gates</h3>
+                </div>
+
+                <div class="form-group flex items-center">
+                    <div class="flex items-center gap-2">
+                        {{ form.new_hazards_identified }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.new_hazards_identified.id_for_label }}">
+                            New or Unrecognized Hazards Identified
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group flex items-center">
+                    <div class="flex items-center gap-2">
+                        {{ form.risk_profile_changed }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.risk_profile_changed.id_for_label }}">
+                            Overall Risk Profile Has Shifted / Increased
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center p-3 bg-green-50 rounded border border-green-200">
+                    <div class="flex items-center gap-2">
+                        {{ form.overall_residual_risk_reconfirmed }}
+                        <label class="form-label mb-0 cursor-pointer font-semibold text-green-900" for="{{ form.overall_residual_risk_reconfirmed.id_for_label }}">
+                            Reconfirm that Overall Residual Risk Remains Acceptable
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Action Items -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.action_items_required.id_for_label }}">Action Items Required</label>
+                    {{ form.action_items_required }}
+                    <span class="text-xs text-slate-400">Initiate follow-up design change orders (DCOs), CAPAs, or labeling updates.</span>
+                    {% if form.action_items_required.errors %}<div class="form-error">{{ form.action_items_required.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'quality:risk_review_record_detail' review_record.pk %}{% else %}{% url 'quality:risk_review_record_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Log Review Record{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
