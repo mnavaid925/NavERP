@@ -18,7 +18,7 @@
             <span class="badge {{ project.phase_css }}">{{ project.get_current_phase_display }}</span>
             <span class="badge {{ project.device_class_css }}">{{ project.get_device_class_display }}</span>
             {% if project.dhf_locked %}
-            <span class="badge badge-purple"><i data-lucide="lock" class="w-3 h-3 inline"></i> DHF Locked</span>
+            <span class="badge badge-info"><i data-lucide="lock" class="w-3 h-3 inline"></i> DHF Locked</span>
             {% endif %}
         </div>
     </div>
