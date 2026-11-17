@@ -63,4 +63,23 @@
 - [ ] `FR-M2`: Multiple detail templates use unqualified `col-span-2` in detail grids. Change to `sm:col-span-2` for responsive mobile layout.
 - [ ] `FR-M3`: Inconsistent arbitrary opacity utilities (`bg-white/70`, `bg-slate-50/50`, `bg-red-50/30`) in matrix templates. Replace with standard classes.
 
+---
+
+## Pass 4: Performance & Database Optimization Reviewer (`performance-reviewer`)
+
+### Critical
+- [ ] `PR-C1`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:93-114` & `detail.html:219, 314` — 8 sequential COUNT round-trips on plan detail page (6 in view, 2 in template via `.count`). Batch assessment counts into a single `.aggregate()` call, batch control measure counts into `.aggregate()`, and replace `.count` in template with length or aggregated stats.
+
+### Important
+- [ ] `PR-I1`: `apps/quality/views/RiskManagement/{RiskManagementPlans,RiskAssessments,RiskControlMeasures,RiskReviewRecords}.py` — sequential unbatched KPI queries across all 4 list views (16 sequential queries). Replace with `.aggregate(Count("id", filter=Q(...)))`.
+- [ ] `PR-I2`: `apps/quality/views/RiskManagement/FmeaMatrix.py:29-33, 117, 203-207, 238` — redundant standalone DB queries on already-evaluated querysets (`assessments.count()`) and duplicate `plans.exists()` followed by `plans.first()`. Use `len(assessments)` and direct `plans.first()`.
+- [ ] `PR-I3`: `templates/quality/riskmanagement/risk_assessment/detail.html:213` — `{{ control_measures.count }}` issues redundant `SELECT COUNT(*)` query right before iteration. Replace with `{{ control_measures|length }}`.
+- [ ] `PR-I4`: `apps/quality/views/RiskManagement/FmeaMatrix.py:290-293` — `controls.exists()` in export loop bypasses prefetch cache. Use `controls = list(a.control_measures.all())` and check `if controls:`.
+- [ ] `PR-I5`: `apps/quality/models/RiskManagement/RiskAssessments.py:234-240` — missing compound index for hazard category filtering. Add `models.Index(fields=["tenant", "hazard_category"], name="idx_qrsk_ten_hazard_cat")` (<= 30 chars).
+
+### Minor
+- [ ] `PR-M1`: `apps/quality/views/RiskManagement/{RiskAssessments,RiskControlMeasures,RiskReviewRecords,FmeaMatrix}.py` — heavy `TextField` over-fetching in plan dropdown querysets. Add `.only("id", "number", "title", "matrix_dimension")`.
+- [ ] `PR-M2`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:84-91` — optimize `risk_management_plan_detail` prefetching.
+
+
 
