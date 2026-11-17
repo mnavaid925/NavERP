@@ -160,7 +160,7 @@
                     <dd>
                         {% if plan.approved_signature %}
                         <span class="text-xs font-mono text-green-700 bg-green-50 px-2 py-1 rounded">
-                            Signed by {{ plan.approved_signature.signer_printed_name }} on {{ plan.approved_signature.signature_timestamp|date:"Y-m-d H:i" }}
+                            Signed by {{ plan.approved_signature.signer_name }} on {{ plan.approved_signature.signature_timestamp|date:"Y-m-d H:i" }}
                         </span>
                         {% else %}
                         <span class="text-slate-400">Pending formal e-signature</span>
