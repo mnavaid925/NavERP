@@ -3398,6 +3398,14 @@ LIVE_LINKS = {
         "Design History File (DHF)": "quality:traceability_matrix",
         "Design Changes & Configuration Management": "quality:design_input_list",
     },
+    "12.3": {
+        "Hazard Identification & Analysis": "quality:risk_assessment_list",
+        "Risk Evaluation & Scoring": "quality:fmea_matrix",
+        "Risk Control & Mitigation": "quality:risk_control_measure_list",
+        "Residual Risk Assessment": "quality:risk_assessment_list",
+        "Risk Management File & Reporting": "quality:risk_management_plan_list",
+    },
+
 
 
 
