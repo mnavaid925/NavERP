@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}CAPA Effectiveness Reviews | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <span>Effectiveness Reviews</span>
+        </div>
+        <h1 class="page-title">CAPA Effectiveness Reviews (21 CFR 820.100)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_investigation_list' %}" class="btn btn-outline">
+            <i data-lucide="clipboard-list"></i> CAPA List
+        </a>
+        <a href="{% url 'quality:capa_effectiveness_review_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:capa_effectiveness_review_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Schedule Review
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Reviews</div>
+            <div class="text-2xl font-bold text-slate-800">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Proven Effective</div>
+            <div class="text-2xl font-bold text-slate-800">{{ effective_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="x-circle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Ineffective / Recurred</div>
+            <div class="text-2xl font-bold text-slate-800">{{ ineffective_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Search number, criteria, notes, CAPA...">
+            </div>
+            <div>
+                <label class="form-label" for="outcome-filter">Evaluation Outcome</label>
+                <select id="outcome-filter" name="outcome" class="form-select">
+                    <option value="">All Outcomes</option>
+                    {% for val, label in outcome_choices %}
+                    <option value="{{ val }}" {% if outcome_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Review Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-3 flex justify-end gap-2">
+                <a href="{% url 'quality:capa_effectiveness_review_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Review #</th>
+                    <th>CAPA</th>
+                    <th>Method</th>
+                    <th>Planned Date</th>
+                    <th>Evaluator</th>
+                    <th>Recurrence</th>
+                    <th>Outcome</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for review in reviews %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold text-slate-900">
+                        <a href="{% url 'quality:capa_effectiveness_review_detail' review.pk %}" class="text-blue-600 hover:underline">
+                            {{ review.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:capa_investigation_detail' review.capa.pk %}" class="font-mono text-xs text-blue-600 hover:underline">
+                            {{ review.capa.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge {{ review.method_badge }}">{{ review.get_verification_method_display }}</span>
+                    </td>
+                    <td class="text-xs {% if review.is_review_overdue %}text-red-600 font-bold{% else %}text-slate-600{% endif %}">
+                        {{ review.planned_review_date|date:"Y-m-d" }}
+                        {% if review.is_review_overdue %}<span class="badge badge-red ml-1">Overdue</span>{% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">{{ review.evaluator.username }}</td>
+                    <td class="text-center">
+                        {% if review.recurrence_observed %}
+                        <span class="badge badge-red">Recurred</span>
+                        {% else %}
+                        <span class="badge badge-green">None</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ review.outcome_badge }}">{{ review.get_outcome_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ review.status_badge }}">{{ review.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:capa_effectiveness_review_detail' review.pk %}" title="View Details" class="btn btn-icon">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if review.status != "completed" %}
+                        <a href="{% url 'quality:capa_effectiveness_review_edit' review.pk %}" title="Edit Review" class="btn btn-icon">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        <form method="post" action="{% url 'quality:capa_effectiveness_review_delete' review.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete review {{ review.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="award" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold text-slate-700">No Effectiveness Reviews Found</h3>
+                            <p class="text-sm text-slate-500">There are no verification reviews matching your query.</p>
+                            <a href="{% url 'quality:capa_effectiveness_review_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> Schedule Effectiveness Review
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if reviews.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Page {{ reviews.number }} of {{ reviews.paginator.num_pages }} ({{ total_count }} total records)
+        </div>
+        <div class="flex gap-2">
+            {% if reviews.has_previous %}
+            <a href="?page={{ reviews.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if outcome_filter %}&outcome={{ outcome_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline text-sm">Previous</a>
+            {% endif %}
+            {% if reviews.has_next %}
+            <a href="?page={{ reviews.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if outcome_filter %}&outcome={{ outcome_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline text-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
