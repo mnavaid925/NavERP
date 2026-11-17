@@ -69,6 +69,11 @@ class DesignVerificationForm(TenantUniqueMixin, TenantModelForm):
         reject_foreign(self, cleaned, ["project", "primary_input", "executed_by", "protocol_document", "report_document"])
 
         project = cleaned.get("project")
+        if project and project.dhf_locked:
+            self.add_error("project", "Cannot create or modify verification protocols for a project with a locked Design History File (DHF).")
+        elif self.instance.pk and self.instance.project and self.instance.project.dhf_locked:
+            self.add_error("project", "Cannot modify records belonging to a project with a locked Design History File (DHF).")
+
         primary_input = cleaned.get("primary_input")
         if project and primary_input and primary_input.project_id != project.pk:
             self.add_error("primary_input", "Primary design input must belong to the selected design project.")
