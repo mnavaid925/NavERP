@@ -55,7 +55,7 @@ class DesignVerification(TenantNumbered):
     ACTIVITY_TYPE_CSS = {
         "verification": "badge-info",
         "validation": "badge-green",
-        "usability": "badge-purple",
+        "usability": "badge-info",
         "process_validation": "badge-amber",
     }
 
