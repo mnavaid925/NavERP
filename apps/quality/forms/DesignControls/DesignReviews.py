@@ -76,5 +76,10 @@ class DesignReviewForm(TenantUniqueMixin, TenantModelForm):
                 "independent_reviewer",
                 "21 CFR § 820.30(e) requires an independent reviewer who does not have direct responsibility for the design stage being reviewed."
             )
+        if project and indep and project.project_lead_id == indep.pk:
+            self.add_error(
+                "independent_reviewer",
+                "The project lead cannot serve as the independent reviewer (21 CFR § 820.30(e))."
+            )
 
         return cleaned
