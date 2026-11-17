@@ -108,6 +108,14 @@
                     <div>Evaluator: <strong>{{ review.evaluator.username }}</strong></div>
                     <div>Actual Date: <strong>{{ review.actual_review_date|date:"Y-m-d" }}</strong></div>
                     <div>Determination: <strong><span class="badge {{ review.outcome_badge }}">{{ review.get_outcome_display }}</span></strong></div>
+                    {% if review.formal_signature %}
+                    <div class="pt-2 border-t border-emerald-200 mt-2">
+                        <div class="font-medium text-emerald-900">21 CFR Part 11 Electronic Signature:</div>
+                        <div>Signer: <strong>{{ review.formal_signature.signer_name }}</strong> {% if review.formal_signature.signer_title %}({{ review.formal_signature.signer_title }}){% endif %}</div>
+                        <div>Signed At: <strong>{{ review.formal_signature.signature_timestamp|date:"Y-m-d H:i:s" }}</strong></div>
+                        <div class="text-[10px] text-emerald-600 font-mono truncate" title="{{ review.formal_signature.signature_hash }}">Manifest: {{ review.formal_signature.number }}</div>
+                    </div>
+                    {% endif %}
                 </div>
                 {% else %}
                 <form method="post" action="{% url 'quality:capa_effectiveness_review_sign_off' review.pk %}" class="space-y-3" onsubmit="return confirm('Formally complete this effectiveness evaluation?');">
