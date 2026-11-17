@@ -1,5 +1,9 @@
 from django.contrib import admin
 
+from apps.quality.models.CapaManagement.CapaActions import CapaAction
+from apps.quality.models.CapaManagement.CapaEffectivenessReviews import CapaEffectivenessReview
+from apps.quality.models.CapaManagement.CapaInvestigations import CapaInvestigation
+from apps.quality.models.CapaManagement.RootCauseAnalyses import RootCauseAnalysis
 from apps.quality.models.DesignControls.DesignInputs import DesignInput
 from apps.quality.models.DesignControls.DesignProjects import DesignProject
 from apps.quality.models.DesignControls.DesignReviews import DesignReview
@@ -234,4 +238,77 @@ class RiskReviewRecordAdmin(admin.ModelAdmin):
     list_filter = ("review_type", "status", "overall_residual_risk_reconfirmed", "tenant")
     search_fields = ("number", "review_title", "findings_summary", "lead_reviewer__username", "plan__number", "plan__title")
     list_select_related = ("tenant", "plan", "lead_reviewer", "approved_signature")
+
+
+@admin.register(CapaInvestigation)
+class CapaInvestigationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "action_type",
+        "source_type",
+        "risk_priority",
+        "status",
+        "lead_investigator",
+        "quality_owner",
+        "target_closure_date",
+        "is_escalated",
+        "tenant",
+    )
+    list_filter = ("action_type", "source_type", "risk_priority", "status", "is_escalated", "containment_implemented", "tenant")
+    search_fields = ("number", "title", "source_reference", "affected_item_code", "lead_investigator__username")
+    list_select_related = ("tenant", "lead_investigator", "quality_owner", "department", "design_project", "risk_assessment")
+
+
+@admin.register(RootCauseAnalysis)
+class RootCauseAnalysisAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "capa",
+        "rca_method",
+        "root_cause_category",
+        "status",
+        "lead_investigator",
+        "verified_by",
+        "tenant",
+    )
+    list_filter = ("rca_method", "root_cause_category", "status", "tenant")
+    search_fields = ("number", "problem_statement", "root_cause_summary", "capa__number", "lead_investigator__username")
+    list_select_related = ("tenant", "capa", "lead_investigator", "verified_by")
+
+
+@admin.register(CapaAction)
+class CapaActionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "capa",
+        "action_type",
+        "title",
+        "assigned_to",
+        "due_date",
+        "status",
+        "tenant",
+    )
+    list_filter = ("action_type", "status", "tenant")
+    search_fields = ("number", "title", "description", "capa__number", "assigned_to__username")
+    list_select_related = ("tenant", "capa", "root_cause", "assigned_to", "department", "verified_by")
+
+
+@admin.register(CapaEffectivenessReview)
+class CapaEffectivenessReviewAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "capa",
+        "verification_method",
+        "planned_review_date",
+        "evaluator",
+        "recurrence_observed",
+        "outcome",
+        "status",
+        "tenant",
+    )
+    list_filter = ("verification_method", "recurrence_observed", "outcome", "status", "tenant")
+    search_fields = ("number", "review_criteria", "review_notes", "capa__number", "evaluator__username")
+    list_select_related = ("tenant", "capa", "evaluator", "formal_signature")
+
 
