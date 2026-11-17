@@ -97,5 +97,28 @@ All six review passes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perfor
 - **PRF-M1**: `apps/quality/views/CapaManagement/CapaInvestigations.py:30-32` — Unused `select_related` joins (`lead_investigator`, `quality_owner`, `department`) in `capa_investigation_list`.
   - *Fix*: Clean up unused joins in `capa_investigation_list`.
 
+---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+- **QA-C1**: `apps/quality/views/CapaManagement/CapaInvestigations.py:183-194` (`capa_investigation_advance_status`) — Non-admin tenant user bypasses tenant admin closure restriction (Runtime confirmation of CR-C1). Standard employee user can POST to `capa_investigation_advance_status` with `target_status="closed"`, bypassing closure checks and timestamps.
+  - *Fix*: Disallow `target_status="closed"` in `capa_investigation_advance_status` and require tenant admin for voiding.
+- **QA-C2**: `apps/quality/views/CapaManagement/CapaEffectivenessReviews.py:160-174` (`capa_effectiveness_review_sign_off`) — Sign-off allows `"effective"` outcome when recurrence observed (Runtime confirmation of CR-C2).
+  - *Fix*: Add guard in `capa_effectiveness_review_sign_off` checking `if review.recurrence_observed and outcome == "effective"`.
+- **QA-C3**: `apps/quality/models/CapaManagement/*.py` — Undefined theme class `"badge-purple"` rendered in live HTML (Runtime confirmation of FE-C1 / CR-I5).
+  - *Fix*: Replace `"badge-purple"` with `"badge-info"`, `"badge-slate"`, or `"badge-amber"`.
+
+### Important
+- **QA-I1**: Detail views omit POST Delete forms in page header actions (`detail.html` of CAPA, RCA, Action, Review) — Runtime confirmation of CR-I3 / FE-I1.
+  - *Fix*: Add status-conditional POST delete button with CSRF and confirm prompt in all 4 detail templates.
+- **QA-I2**: `apps/quality/views/CapaManagement/CapaTrackingBoard.py:128` — Unsaved model instance `CapaInvestigation()` passed to `write_audit_log` on tracking board export.
+  - *Fix*: Log export against `request.tenant` or valid persisted target.
+
+### Minor
+- **QA-M1**: Parent `capa` filter dropped during pagination in child lists (`root_cause_analysis_list`, `capa_action_list`, `capa_effectiveness_review_list`) — Runtime confirmation of CR-I4.
+  - *Fix*: Pass `capa_filter` in context and preserve in pagination links.
+
+
 
 
