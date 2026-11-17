@@ -194,6 +194,20 @@ def capa_action_mark_completed(request, pk):
 @login_required
 def capa_action_verify(request, pk):
     action = quality_object(request, CapaAction, pk)
+
+    if action.status == "verified":
+        messages.warning(request, "Action item is already verified.")
+        return redirect("quality:capa_action_detail", pk=action.pk)
+
+    if action.status != "implemented":
+        messages.error(request, "Only implemented actions can be verified.")
+        return redirect("quality:capa_action_detail", pk=action.pk)
+
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    if action.assigned_to and request.user == action.assigned_to and not is_admin:
+        messages.error(request, "Separation of duties required: the assignee cannot verify their own action item.")
+        return redirect("quality:capa_action_detail", pk=action.pk)
+
     evidence = request.POST.get("verification_evidence", "").strip()
 
     action.status = "verified"
