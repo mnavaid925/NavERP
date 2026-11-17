@@ -38,3 +38,22 @@ All six review passes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perfor
   - *Fix*: In `capa_action_mark_completed`, add `if action.status in ["verified", "cancelled"]: messages.warning(...); return redirect(...)`; in `capa_action_verify`, check `if action.status != "implemented": messages.warning(request, "Only implemented actions can be verified."); return redirect(...)`.
 - **CR-M2**: `apps/quality/models/CapaManagement/CapaInvestigations.py:211-213` — `days_open` property assumes `self.created_at` is always populated; accessing it on an unsaved model instance will raise `AttributeError`.
   - *Fix*: Add an initial guard `if not self.created_at: return 0`.
+
+---
+
+## Pass 2: Explorer Review (`explorer`)
+
+### Important
+- **EX-I1**: `apps/quality/{models,forms,views,urls}/CapaManagement/` — Missing `__init__.py` in all 4 `CapaManagement` subpackages. While Python 3.3+ supports implicit namespaces, this violates CLAUDE.md backend package conventions ("Backend layers are PACKAGES, one folder per sub-module, one file per entity... Empty `__init__.py` files still get their own commit"), breaks uniformity with sibling sub-modules, and can cause issues with static analyzers and packaging.
+  - *Fix*: Create and commit empty `__init__.py` files in `apps/quality/models/CapaManagement/`, `forms/CapaManagement/`, `views/CapaManagement/`, and `urls/CapaManagement/`.
+- **EX-I2**: `apps/quality/views/CapaManagement/CapaInvestigations.py:29-33` & `templates/quality/capamanagement/capa_investigation/list.html:171-175` — N+1 queries in `capa_investigation_list` for action counts (`capa.pending_actions_count` and `capa.actions_count` evaluated per row in template).
+  - *Fix*: In `capa_investigation_list`, annotate `actions_count=Count('actions')` and `pending_actions_count=Count('actions', filter=~Q(actions__status__in=['implemented', 'verified', 'cancelled']))` on `qs`.
+- **EX-I3**: `templates/quality/capamanagement/capa_investigation/detail.html:290-298` & `templates/quality/capamanagement/capa_effectiveness_review/detail.html:97-104` — Missing Electronic Signature display in detail templates. Both models have FKs to `quality.ElectronicSignatureRecord` for 21 CFR Part 11 regulatory compliance, but neither detail template renders the attached e-signature manifest.
+  - *Fix*: Add conditional display blocks in both detail templates rendering signer name and signed timestamp.
+
+### Minor
+- **EX-M1**: `templates/quality/capamanagement/capa_investigation/form.html:8-16`, `root_cause_analysis/form.html:8-18`, `capa_action/form.html:8-18`, `capa_effectiveness_review/form.html:8-18` — Breadcrumb hierarchy omission: all 4 form templates omit the `<span>Quality Management</span> <span>/</span>` breadcrumb segment.
+  - *Fix*: Standardize breadcrumbs across all 4 form templates to include `<span>Quality Management</span> <span>/</span>`.
+- **EX-M2**: `templates/quality/capamanagement/capa_action/detail.html:56` — Substring status comparison `in 'implemented verified'`.
+  - *Fix*: Replace with `{% if action.status == 'implemented' or action.status == 'verified' %}`.
+
