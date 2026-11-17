@@ -300,7 +300,7 @@
                 <div class="bg-emerald-50 p-3 rounded border border-emerald-200 text-xs text-emerald-800 space-y-1">
                     <div class="font-semibold flex items-center gap-1"><i data-lucide="check-circle" class="w-4 h-4"></i> CAPA Formally Closed</div>
                     <div>Closed At: <strong>{{ capa.closed_at|date:"Y-m-d H:i" }}</strong></div>
-                    <div>Approved By: <strong>{{ capa.closure_approved_by.username }}</strong></div>
+                    <div>Approved By: <strong>{% if capa.closure_approved_by %}{{ capa.closure_approved_by.username }}{% else %}System / Unassigned{% endif %}</strong></div>
                     {% if capa.formal_closure_signature %}
                     <div class="pt-2 border-t border-emerald-200 mt-2">
                         <div class="font-medium text-emerald-900">21 CFR Part 11 Electronic Signature:</div>
