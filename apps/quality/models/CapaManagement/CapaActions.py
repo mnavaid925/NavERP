@@ -110,6 +110,7 @@ class CapaAction(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "capa"], name="idx_qact_ten_capa"),
             models.Index(fields=["tenant", "action_type"], name="idx_qact_ten_act_type"),
+            models.Index(fields=["tenant", "department"], name="idx_qact_ten_dept"),
             models.Index(fields=["tenant", "status"], name="idx_qact_ten_status"),
             models.Index(fields=["tenant", "due_date"], name="idx_qact_ten_due_date"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qact_ten_created"),
