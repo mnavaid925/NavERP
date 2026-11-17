@@ -177,6 +177,11 @@ def capa_action_delete(request, pk):
 @login_required
 def capa_action_mark_completed(request, pk):
     action = quality_object(request, CapaAction, pk)
+
+    if action.status in ["verified", "cancelled"]:
+        messages.warning(request, f"Action item is already {action.get_status_display()} and cannot be marked implemented.")
+        return redirect("quality:capa_action_detail", pk=action.pk)
+
     notes = request.POST.get("implementation_notes", "").strip()
 
     action.status = "implemented"
