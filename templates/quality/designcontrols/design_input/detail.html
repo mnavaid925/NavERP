@@ -194,7 +194,7 @@
                     <td><span class="badge {{ ver.result_css }}">{{ ver.get_pass_fail_result_display }}</span></td>
                     <td class="text-sm text-slate-600">{% if ver.executed_by %}{{ ver.executed_by.get_full_name|default:ver.executed_by.username }}{% else %}—{% endif %}</td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:design_verification_detail' ver.pk %}" class="btn btn-icon">
+                        <a href="{% url 'quality:design_verification_detail' ver.pk %}" class="btn btn-icon" title="View Protocol">
                             <i data-lucide="eye"></i>
                         </a>
                     </td>
