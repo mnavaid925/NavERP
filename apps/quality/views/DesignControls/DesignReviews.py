@@ -192,6 +192,10 @@ def design_review_delete(request, pk):
 @require_POST
 def design_review_approve_gate(request, pk):
     review = quality_object(request, DesignReview, pk)
+    if review.project.dhf_locked:
+        messages.error(request, "Cannot approve gate review for a project with a locked Design History File (DHF).")
+        return redirect("quality:design_review_detail", pk=review.pk)
+
     review.status = "approved"
     review.action_items_resolved = True
     review.save(update_fields=["status", "action_items_resolved", "updated_at"])
