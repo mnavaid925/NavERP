@@ -158,6 +158,12 @@ def capa_action_edit(request, pk):
 @tenant_admin_required
 def capa_action_delete(request, pk):
     action = quality_object(request, CapaAction, pk)
+    if action.status == "verified":
+        messages.error(request, "Cannot delete a verified CAPA action item.")
+        return redirect("quality:capa_action_detail", pk=action.pk)
+    if action.capa.status == "closed":
+        messages.error(request, "Cannot delete actions belonging to a closed CAPA.")
+        return redirect("quality:capa_action_detail", pk=action.pk)
     num = action.number
     capa_pk = action.capa_id
     write_audit_log(request.user, action, "delete", tenant=request.tenant)
