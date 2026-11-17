@@ -22,3 +22,26 @@
 - [ ] `CR-M1`: In `apps/quality/admin.py`, search fields can be expanded: `RiskAssessmentAdmin.search_fields` add `plan__title`; `RiskControlMeasureAdmin.search_fields` add `risk_assessment__hazard_description`.
 - [ ] `CR-M2`: In `apps/quality/models/RiskManagement/RiskManagementPlans.py`, add `assessments_count` and `unmitigated_risks_count` properties to model.
 - [ ] `CR-M3`: In `apps/quality/views/RiskManagement/FmeaMatrix.py`, wrap all output fields in CSV exports with `csv_safe()`.
+
+---
+
+## Pass 2: Architecture Explorer (`explorer`)
+
+### Critical
+- [ ] `EX-C1`: `templates/quality/riskmanagement/risk_management_plan/detail.html:163` — template attempts to render `{{ plan.approved_signature.signer_printed_name }}`. However, `ElectronicSignatureRecord` defines this field as `signer_name`. Update to `plan.approved_signature.signer_name`.
+- [ ] `EX-C2`: `templates/quality/riskmanagement/risk_assessment/list.html:78-129, 244, 254` — Contract Section 4.4 explicitly pins `hazard_category_choices` and `selected_cat` in view context, and view implements `hazard_category` filtering. However, the `hazard_category` filter dropdown was omitted from the filter form in `risk_assessment/list.html`, and omitted from pagination links. Add the `hazard_category` `<select>` filter dropdown and preserve `&hazard_category={{ selected_cat }}` in pagination links.
+
+### Important
+- [ ] `EX-I1`: `apps/quality/{models,forms,views,urls}/RiskManagement/` directories lack `__init__.py` files. Create `__init__.py` in each subpackage directory with appropriate entity re-exports.
+- [ ] `EX-I2`: `apps/quality/models/RiskManagement/RiskAssessments.py:77, 83`, `RiskReviewRecords.py:30` specify badge class `"badge-purple"`. `static/css/theme.css` does not define `.badge-purple`. Replace with allowed theme class (`badge-info` or `badge-slate`).
+- [ ] `EX-I3`: `apps/core/navigation.py:3401-3407` — in `LIVE_LINKS["12.3"]`, both "Hazard Identification & Analysis" and "Residual Risk Assessment" point to `quality:risk_assessment_list`. Update "Residual Risk Assessment" to point to `quality:risk_traceability_matrix`.
+- [ ] `EX-I4`: `apps/quality/views/RiskManagement/FmeaMatrix.py:143-154, 258-271` — in `fmea_matrix_export` and `risk_traceability_matrix_export`, when `plan` param is omitted, views export all assessments across all plans instead of defaulting to `plans.first()`. Align export default with HTML view.
+- [ ] `EX-I5`: `apps/quality/models/RiskManagement/RiskAssessments.py:280-291` — `save()` calculates residual RPN/level only when residual severity & probability are present; if cleared, stale calculations persist. Add `else` branch in `save()` to reset residual metrics.
+- [ ] `EX-I6`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:182`, `RiskAssessments.py:182`, `RiskControlMeasures.py:171`, `RiskReviewRecords.py:164` — `obj.delete()` called before `write_audit_log`, losing `obj.pk`. Call `write_audit_log` before `obj.delete()`.
+
+### Minor
+- [ ] `EX-M1`: `apps/quality/views/RiskManagement/RiskManagementPlans.py:97` — `RiskControlMeasure` is imported locally inside the view function. Move import to module top-level.
+- [ ] `EX-M2`: `apps/quality/models/RiskManagement/RiskManagementPlans.py:130` — add `@property def assessments_count(self)` and `@property def unmitigated_risks_count(self)` to model.
+- [ ] `EX-M3`: `apps/quality/admin.py:199, 217, 235` — add `plan__title` to `RiskAssessmentAdmin` & `RiskReviewRecordAdmin` search fields, and `risk_assessment__hazard_description` to `RiskControlMeasureAdmin` search fields.
+- [ ] `EX-M4`: `apps/quality/views/RiskManagement/FmeaMatrix.py:62, 65, 68` — view generates raw inline CSS class strings in Python dict. Replace with semantic zone classes or template mapping.
+
