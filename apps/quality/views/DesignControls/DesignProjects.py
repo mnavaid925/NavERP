@@ -248,6 +248,10 @@ def design_project_lock_dhf(request, pk):
         messages.error(request, "Permission denied. Only the project lead, quality lead, or tenant administrator can freeze the DHF.")
         return redirect("quality:design_project_detail", pk=project.pk)
 
+    if project.dhf_locked:
+        messages.info(request, f"Design History File for {project.number} is already locked.")
+        return redirect("quality:design_project_detail", pk=project.pk)
+
     project.dhf_locked = True
     project.status = "completed"
     if not project.actual_completion_date:
