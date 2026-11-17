@@ -105,4 +105,8 @@ class DesignInput(TenantNumbered):
 
     @property
     def is_verified(self):
-        return self.status == "verified" or self.verifications.filter(pass_fail_result="pass").exists()
+        if self.status == "verified":
+            return True
+        if hasattr(self, "_prefetched_objects_cache") and "verifications" in self._prefetched_objects_cache:
+            return any(v.pass_fail_result == "pass" for v in self.verifications.all())
+        return self.verifications.filter(pass_fail_result="pass").exists()
