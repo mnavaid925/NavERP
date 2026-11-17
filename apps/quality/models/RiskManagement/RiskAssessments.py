@@ -74,13 +74,13 @@ class RiskAssessment(TenantNumbered):
         "open": "badge-red",
         "mitigation_in_progress": "badge-amber",
         "mitigated": "badge-info",
-        "accepted": "badge-purple",
+        "accepted": "badge-info",
         "closed": "badge-green",
     }
 
     ANALYSIS_TYPE_CSS = {
         "hazard_analysis": "badge-info",
-        "dfmea": "badge-purple",
+        "dfmea": "badge-slate",
         "pfmea": "badge-slate",
         "software_fmea": "badge-amber",
         "use_error_urra": "badge-info",
@@ -233,6 +233,7 @@ class RiskAssessment(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "plan", "analysis_type"], name="idx_qrsk_ten_pln_type"),
+            models.Index(fields=["tenant", "hazard_category"], name="idx_qrsk_ten_hazard_cat"),
             models.Index(fields=["tenant", "initial_risk_level"], name="idx_qrsk_ten_init_lvl"),
             models.Index(fields=["tenant", "residual_risk_level"], name="idx_qrsk_ten_res_lvl"),
             models.Index(fields=["tenant", "lifecycle_status"], name="idx_qrsk_ten_status"),
@@ -284,9 +285,15 @@ class RiskAssessment(TenantNumbered):
             self.residual_rpn = res_s * res_p * res_d
             self.residual_risk_level = self.calculate_level(res_s, res_p)
 
-            if self.residual_risk_level == "alarp":
+            if self.residual_risk_level == "unacceptable":
+                self.residual_risk_acceptable = False
+            elif self.residual_risk_level == "alarp":
                 self.bra_required = True
             elif self.residual_risk_level == "broadly_acceptable":
                 self.residual_risk_acceptable = True
+        else:
+            self.residual_rpn = None
+            self.residual_risk_level = ""
+            self.residual_risk_acceptable = False
 
         super().save(*args, **kwargs)
