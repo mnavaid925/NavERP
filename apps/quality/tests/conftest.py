@@ -14,6 +14,10 @@ from apps.quality.models import (
     DesignInput,
     DesignReview,
     DesignVerification,
+    RiskManagementPlan,
+    RiskAssessment,
+    RiskControlMeasure,
+    RiskReviewRecord,
 )
 
 
@@ -361,4 +365,133 @@ def design_verification_b(db, tenant_b, admin_b, design_project_b, design_input_
         acceptance_criteria="Optical sensor detects spot alignment within tolerance.",
         results_summary="Globex protocol initialized.",
     )
+
+
+@pytest.fixture
+def risk_management_plan_a(db, tenant_a, admin_user, design_project_a):
+    return RiskManagementPlan.objects.create(
+        tenant=tenant_a,
+        title="InfuseFlow Pro 3000 Risk Management Plan",
+        device_name="InfuseFlow Pro 3000 Syringe Infusion Pump",
+        device_class="class_ii",
+        design_project=design_project_a,
+        author=admin_user,
+        status="active",
+        matrix_dimension=5,
+        scope_description="ISO 14971 compliance plan across design, verification, and commercial release.",
+        risk_acceptability_policy="Broadly acceptable when RPN < 4; ALARP when 4 <= RPN < 15 with clinical benefit justification.",
+    )
+
+
+@pytest.fixture
+def risk_management_plan_b(db, tenant_b, admin_b, design_project_b):
+    return RiskManagementPlan.objects.create(
+        tenant=tenant_b,
+        title="Globex Laser Scalpel Risk Management Plan",
+        device_name="Globex Laser Scalpel XLS-10",
+        device_class="class_iii",
+        design_project=design_project_b,
+        author=admin_b,
+        status="active",
+        matrix_dimension=5,
+        scope_description="Globex laser device risk management lifecycle.",
+        risk_acceptability_policy="Globex acceptable risk criteria per ISO 14971.",
+    )
+
+
+@pytest.fixture
+def risk_assessment_a(db, tenant_a, admin_user, risk_management_plan_a):
+    return RiskAssessment.objects.create(
+        tenant=tenant_a,
+        plan=risk_management_plan_a,
+        hazard_category="electrical",
+        hazard_description="Chassis isolation breakdown during power surge",
+        sequence_of_events="Line voltage spike causes capacitor breakdown bridging current to metal chassis.",
+        hazardous_situation="Operator or patient touches energized enclosure.",
+        harm_description="Ventricular fibrillation or thermal shock injury.",
+        analysis_type="dfmea",
+        initial_severity=4,
+        initial_probability=3,
+        created_by=admin_user,
+        lifecycle_status="analyzed",
+    )
+
+
+@pytest.fixture
+def risk_assessment_b(db, tenant_b, admin_b, risk_management_plan_b):
+    return RiskAssessment.objects.create(
+        tenant=tenant_b,
+        plan=risk_management_plan_b,
+        hazard_category="thermal",
+        hazard_description="Optical waveguide overheating during extended laser emission",
+        sequence_of_events="Cooling circuit blockage causes optic assembly thermal accumulation.",
+        hazardous_situation="Excess heat transmitted to surgeon handle.",
+        harm_description="Second-degree burn on operator hand.",
+        analysis_type="dfmea",
+        initial_severity=3,
+        initial_probability=3,
+        created_by=admin_b,
+        lifecycle_status="analyzed",
+    )
+
+
+@pytest.fixture
+def risk_control_measure_a(db, tenant_a, admin_user, risk_assessment_a, design_input_spec, design_verification_a):
+    return RiskControlMeasure.objects.create(
+        tenant=tenant_a,
+        risk_assessment=risk_assessment_a,
+        control_hierarchy="inherent_safety",
+        title="Galvanic 4kV Dielectric Isolation Transformer",
+        description="Integrate double-reinforced galvanic barrier meeting IEC 60601-1 3rd edition.",
+        design_input=design_input_spec,
+        design_verification=design_verification_a,
+        implementation_verified=False,
+        effectiveness_verified=False,
+        status="proposed",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def risk_control_measure_b(db, tenant_b, admin_b, risk_assessment_b, design_input_b, design_verification_b):
+    return RiskControlMeasure.objects.create(
+        tenant=tenant_b,
+        risk_assessment=risk_assessment_b,
+        control_hierarchy="inherent_safety",
+        title="Thermal Cutoff Sensor on Laser Diode Housing",
+        description="Hardware bimetallic thermostat cuts laser power if waveguide exceeds 55C.",
+        design_input=design_input_b,
+        design_verification=design_verification_b,
+        implementation_verified=False,
+        effectiveness_verified=False,
+        status="proposed",
+        created_by=admin_b,
+    )
+
+
+@pytest.fixture
+def risk_review_record_a(db, tenant_a, admin_user, risk_management_plan_a):
+    return RiskReviewRecord.objects.create(
+        tenant=tenant_a,
+        plan=risk_management_plan_a,
+        review_type="interim",
+        review_title="Interim Design Verification Risk Review",
+        executive_summary="Review of active risks, verification protocol outcomes, and residual risk acceptance.",
+        lead_author=admin_user,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def risk_review_record_b(db, tenant_b, admin_b, risk_management_plan_b):
+    return RiskReviewRecord.objects.create(
+        tenant=tenant_b,
+        plan=risk_management_plan_b,
+        review_type="interim",
+        review_title="Globex Waveguide Safety Review",
+        executive_summary="Evaluation of laser thermal containment mitigations.",
+        lead_author=admin_b,
+        status="draft",
+    )
+
 
