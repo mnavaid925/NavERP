@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}CAPA Actions | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <span>Action Plan</span>
+        </div>
+        <h1 class="page-title">CAPA Action Items (Containment, Corrective, Preventive)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_investigation_list' %}" class="btn btn-outline">
+            <i data-lucide="clipboard-list"></i> CAPA List
+        </a>
+        <a href="{% url 'quality:capa_action_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:capa_action_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Action Item
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="check-square"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Action Items</div>
+            <div class="text-2xl font-bold text-slate-800">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Pending Execution</div>
+            <div class="text-2xl font-bold text-slate-800">{{ pending_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Overdue Actions</div>
+            <div class="text-2xl font-bold text-slate-800">{{ overdue_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Search number, title, description, CAPA...">
+            </div>
+            <div>
+                <label class="form-label" for="type-filter">Action Type</label>
+                <select id="type-filter" name="type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in action_type_choices %}
+                    <option value="{{ val }}" {% if action_type_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Action Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-3 flex justify-end gap-2">
+                <a href="{% url 'quality:capa_action_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Action #</th>
+                    <th>CAPA</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Assigned To</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th>Verified</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for action in actions %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold text-slate-900">
+                        <a href="{% url 'quality:capa_action_detail' action.pk %}" class="text-blue-600 hover:underline">
+                            {{ action.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:capa_investigation_detail' action.capa.pk %}" class="font-mono text-xs text-blue-600 hover:underline">
+                            {{ action.capa.number }}
+                        </a>
+                    </td>
+                    <td class="text-xs font-medium text-slate-800">{{ action.title }}</td>
+                    <td>
+                        <span class="badge {{ action.action_type_badge }}">{{ action.get_action_type_display }}</span>
+                    </td>
+                    <td class="text-xs text-slate-600">{{ action.assigned_to.username }}</td>
+                    <td class="text-xs {% if action.is_overdue %}text-red-600 font-bold{% else %}text-slate-600{% endif %}">
+                        {{ action.due_date|date:"Y-m-d" }}
+                        {% if action.is_overdue %}<span class="badge badge-red ml-1">Overdue</span>{% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ action.status_badge }}">{{ action.get_status_display }}</span>
+                    </td>
+                    <td class="text-center">
+                        {% if action.is_verified %}
+                        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600 inline"></i>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:capa_action_detail' action.pk %}" title="View Details" class="btn btn-icon">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if action.status != "verified" %}
+                        <a href="{% url 'quality:capa_action_edit' action.pk %}" title="Edit Action" class="btn btn-icon">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        <form method="post" action="{% url 'quality:capa_action_delete' action.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete action {{ action.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="check-square" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold text-slate-700">No Action Items Found</h3>
+                            <p class="text-sm text-slate-500">There are no CAPA action plan items matching your query.</p>
+                            <a href="{% url 'quality:capa_action_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> New Action Item
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if actions.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Page {{ actions.number }} of {{ actions.paginator.num_pages }} ({{ total_count }} total records)
+        </div>
+        <div class="flex gap-2">
+            {% if actions.has_previous %}
+            <a href="?page={{ actions.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if action_type_filter %}&type={{ action_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline text-sm">Previous</a>
+            {% endif %}
+            {% if actions.has_next %}
+            <a href="?page={{ actions.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if action_type_filter %}&type={{ action_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline text-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
