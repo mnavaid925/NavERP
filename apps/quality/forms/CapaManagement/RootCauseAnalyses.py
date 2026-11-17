@@ -75,4 +75,6 @@ class RootCauseAnalysisForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["capa", "lead_investigator"])
+        if self.instance.pk and cleaned.get("capa") and cleaned["capa"] != self.instance.capa:
+            self.add_error("capa", "The parent CAPA investigation cannot be changed once established.")
         return cleaned
