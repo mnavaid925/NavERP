@@ -1,3 +1,7 @@
+from apps.quality.forms.CapaManagement.CapaActions import CapaActionForm
+from apps.quality.forms.CapaManagement.CapaEffectivenessReviews import CapaEffectivenessReviewForm
+from apps.quality.forms.CapaManagement.CapaInvestigations import CapaInvestigationForm
+from apps.quality.forms.CapaManagement.RootCauseAnalyses import RootCauseAnalysisForm
 from apps.quality.forms.DesignControls.DesignInputs import DesignInputForm
 from apps.quality.forms.DesignControls.DesignProjects import DesignProjectForm
 from apps.quality.forms.DesignControls.DesignReviews import DesignReviewForm
@@ -28,5 +32,9 @@ __all__ = [
     "RiskAssessmentForm",
     "RiskControlMeasureForm",
     "RiskReviewRecordForm",
+    "CapaInvestigationForm",
+    "RootCauseAnalysisForm",
+    "CapaActionForm",
+    "CapaEffectivenessReviewForm",
 ]
 
