@@ -9,8 +9,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.quality.forms.RiskManagement.RiskManagementPlans import RiskManagementPlanForm
+from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
 from apps.quality.views._common import quality_object, quality_scope
 
@@ -19,7 +21,7 @@ def csv_safe(value):
     if value is None:
         return ""
     text = str(value)
-    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+    if text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "%")):
         return f"'{text}"
     return text
 
@@ -47,14 +49,20 @@ def risk_management_plan_list(request):
         qs = qs.filter(device_classification=selected_class)
 
     base_qs = quality_scope(RiskManagementPlan.objects.all(), request)
-    total_count = base_qs.count()
-    active_count = base_qs.filter(status="active").count()
     today = timezone.now().date()
-    overdue_count = base_qs.filter(
-        status__in=["active", "periodic_review"],
-        next_review_due_date__lt=today,
-    ).count()
-    archived_count = base_qs.filter(status="archived").count()
+    counts = base_qs.aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(status="active")),
+        overdue_count=Count("id", filter=Q(
+            status__in=["active", "periodic_review"],
+            next_review_due_date__lt=today,
+        )),
+        archived_count=Count("id", filter=Q(status="archived")),
+    )
+    total_count = counts["total_count"] or 0
+    active_count = counts["active_count"] or 0
+    overdue_count = counts["overdue_count"] or 0
+    archived_count = counts["archived_count"] or 0
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
@@ -90,27 +98,27 @@ def risk_management_plan_detail(request, pk):
     assessments = plan.assessments.select_related("design_input").order_by("-initial_rpn")
     reviews = plan.reviews.select_related("lead_reviewer", "approved_signature").order_by("-review_date")
 
-    unacceptable_count = assessments.filter(initial_risk_level="unacceptable").count()
-    alarp_count = assessments.filter(initial_risk_level="alarp").count()
-    acceptable_count = assessments.filter(initial_risk_level="broadly_acceptable").count()
-
-    from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
-
-    controls = RiskControlMeasure.objects.filter(
-        tenant=request.tenant, risk_assessment__plan=plan
+    assessment_stats = assessments.aggregate(
+        total=Count("id"),
+        unacceptable=Count("id", filter=Q(initial_risk_level="unacceptable")),
+        alarp=Count("id", filter=Q(initial_risk_level="alarp")),
+        acceptable=Count("id", filter=Q(initial_risk_level="broadly_acceptable")),
     )
-    controls_count = controls.count()
-    verified_controls_count = controls.filter(
-        implementation_verified=True, effectiveness_verified=True
-    ).count()
+
+    control_stats = RiskControlMeasure.objects.filter(
+        tenant=request.tenant, risk_assessment__plan=plan
+    ).aggregate(
+        total=Count("id"),
+        verified=Count("id", filter=Q(implementation_verified=True, effectiveness_verified=True)),
+    )
 
     stats = {
-        "total_assessments": assessments.count(),
-        "unacceptable_count": unacceptable_count,
-        "alarp_count": alarp_count,
-        "acceptable_count": acceptable_count,
-        "controls_count": controls_count,
-        "verified_controls_count": verified_controls_count,
+        "total_assessments": assessment_stats["total"] or 0,
+        "unacceptable_count": assessment_stats["unacceptable"] or 0,
+        "alarp_count": assessment_stats["alarp"] or 0,
+        "acceptable_count": assessment_stats["acceptable"] or 0,
+        "controls_count": control_stats["total"] or 0,
+        "verified_controls_count": control_stats["verified"] or 0,
     }
 
     return render(
@@ -153,6 +161,13 @@ def risk_management_plan_create(request):
 @login_required
 def risk_management_plan_edit(request, pk):
     plan = quality_object(request, RiskManagementPlan, pk)
+    if plan.approved_signature_id or plan.status in ("active", "archived"):
+        messages.error(
+            request,
+            f"Risk Management Plan {plan.number} cannot be modified while {plan.get_status_display().lower()} or electronically signed. Create a new revision.",
+        )
+        return redirect("quality:risk_management_plan_detail", pk=plan.pk)
+
     if request.method == "POST":
         form = RiskManagementPlanForm(request.POST, instance=plan, tenant=request.tenant)
         if form.is_valid():
@@ -176,17 +191,19 @@ def risk_management_plan_edit(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def risk_management_plan_delete(request, pk):
     plan = quality_object(request, RiskManagementPlan, pk)
     number = plan.number
-    plan.delete()
     write_audit_log(request.user, plan, "delete", tenant=request.tenant)
+    plan.delete()
     messages.success(request, f"Risk Management Plan {number} deleted successfully.")
     return redirect("quality:risk_management_plan_list")
 
 
 @require_POST
 @login_required
+@tenant_admin_required
 def risk_management_plan_activate(request, pk):
     plan = quality_object(request, RiskManagementPlan, pk)
     plan.status = "active"
@@ -198,6 +215,7 @@ def risk_management_plan_activate(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def risk_management_plan_archive(request, pk):
     plan = quality_object(request, RiskManagementPlan, pk)
     plan.status = "archived"
