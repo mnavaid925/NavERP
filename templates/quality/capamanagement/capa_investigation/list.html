@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}CAPA Investigations | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <span>CAPA Management</span>
+            <span>/</span>
+            <span>Investigations</span>
+        </div>
+        <h1 class="page-title">Corrective & Preventive Actions (CAPA)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_tracking_board' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i> Tracking Board
+        </a>
+        <a href="{% url 'quality:capa_investigation_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:capa_investigation_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New CAPA
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-list"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total CAPAs</div>
+            <div class="text-2xl font-bold text-slate-800">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Active In Progress</div>
+            <div class="text-2xl font-bold text-slate-800">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Overdue CAPAs</div>
+            <div class="text-2xl font-bold text-slate-800">{{ overdue_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Critical Priority</div>
+            <div class="text-2xl font-bold text-slate-800">{{ critical_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Search number, title, item, ref...">
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Lifecycle Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="source-filter">Issue Source</label>
+                <select id="source-filter" name="source" class="form-select">
+                    <option value="">All Sources</option>
+                    {% for val, label in source_type_choices %}
+                    <option value="{{ val }}" {% if source_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="priority-filter">Risk Priority</label>
+                <select id="priority-filter" name="priority" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for val, label in risk_priority_choices %}
+                    <option value="{{ val }}" {% if priority_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'quality:capa_investigation_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- CAPA List Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>CAPA Number</th>
+                    <th>Title & Item</th>
+                    <th>Type</th>
+                    <th>Source</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Target Closure</th>
+                    <th>Actions (Open)</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for capa in capas %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold text-slate-900">
+                        <a href="{% url 'quality:capa_investigation_detail' capa.pk %}" class="text-blue-600 hover:underline">
+                            {{ capa.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ capa.title }}</div>
+                        {% if capa.affected_item_code %}
+                        <div class="text-xs text-slate-500 font-mono">{{ capa.affected_item_code }}{% if capa.affected_item_name %} — {{ capa.affected_item_name }}{% endif %}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ capa.action_type_badge }}">{{ capa.get_action_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ capa.source_type_badge }}">{{ capa.get_source_type_display }}</span>
+                        {% if capa.source_reference %}
+                        <div class="text-xs text-slate-500 font-mono mt-0.5">{{ capa.source_reference }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ capa.risk_priority_badge }}">{{ capa.get_risk_priority_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ capa.status_badge }}">{{ capa.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {% if capa.target_closure_date %}
+                        <span class="text-xs {% if capa.is_overdue %}text-red-600 font-bold{% else %}text-slate-600{% endif %}">
+                            {{ capa.target_closure_date|date:"Y-m-d" }}
+                            {% if capa.is_overdue %}<span class="badge badge-red ml-1">Overdue</span>{% endif %}
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center font-medium">
+                        <span class="badge {% if capa.pending_actions_count > 0 %}badge-amber{% else %}badge-green{% endif %}">
+                            {{ capa.pending_actions_count }} / {{ capa.actions_count }}
+                        </span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:capa_investigation_detail' capa.pk %}" title="View Details" class="btn btn-icon">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if capa.status != "closed" %}
+                        <a href="{% url 'quality:capa_investigation_edit' capa.pk %}" title="Edit CAPA" class="btn btn-icon">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        <form method="post" action="{% url 'quality:capa_investigation_delete' capa.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete CAPA {{ capa.number|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="shield-alert" class="w-12 h-12 text-slate-400 mb-2"></i>
+                            <h3 class="text-base font-semibold text-slate-700">No CAPA Investigations Found</h3>
+                            <p class="text-sm text-slate-500">There are no corrective or preventive action investigations matching your filter criteria.</p>
+                            <a href="{% url 'quality:capa_investigation_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> New CAPA Investigation
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if capas.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-slate-500">
+            Page {{ capas.number }} of {{ capas.paginator.num_pages }} ({{ total_count }} total records)
+        </div>
+        <div class="flex gap-2">
+            {% if capas.has_previous %}
+            <a href="?page={{ capas.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}" class="btn btn-outline text-sm">Previous</a>
+            {% endif %}
+            {% if capas.has_next %}
+            <a href="?page={{ capas.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}" class="btn btn-outline text-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
