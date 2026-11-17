@@ -61,7 +61,7 @@ class DesignProject(TenantNumbered):
         "planning": "badge-slate",
         "input": "badge-info",
         "output_verification": "badge-amber",
-        "validation": "badge-purple",
+        "validation": "badge-info",
         "commercial_closure": "badge-green",
         "closed": "badge-muted",
     }
