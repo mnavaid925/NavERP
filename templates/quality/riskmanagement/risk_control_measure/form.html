@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Risk Control {{ control_measure.number }}{% else %}New Risk Control Measure{% endif %} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_control_measure_list' %}">Control Measures</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ control_measure.number }}{% else %}New Risk Control{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Risk Control Measure {{ control_measure.number }}{% else %}New Risk Control Measure (Clause 7.1){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">ISO 14971 Risk Control Measure Definition</h2>
+        <p class="text-xs text-slate-500">Apply the mandatory 3-tier hierarchy: (1) Inherent safety by design > (2) Protective measures > (3) Information for safety.</p>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                {% for err in form.non_field_errors %}
+                <p class="text-sm text-red-700 font-medium">{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Risk Item & Control Hierarchy -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.risk_assessment.id_for_label }}">Associated Risk Assessment Item *</label>
+                    {{ form.risk_assessment }}
+                    {% if form.risk_assessment.errors %}<div class="form-error">{{ form.risk_assessment.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.control_hierarchy.id_for_label }}">ISO 14971 Hierarchy Option *</label>
+                    {{ form.control_hierarchy }}
+                    <span class="text-xs text-slate-400">1: Inherent safety (preferred), 2: Protective measures, 3: Warning / labeling / training.</span>
+                    {% if form.control_hierarchy.errors %}<div class="form-error">{{ form.control_hierarchy.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Title -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Control Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Description -->
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Control Measure Description *</label>
+                    {{ form.description }}
+                    <span class="text-xs text-slate-400">Engineering specifications, firmware interlocks, hardware barriers, or procedural instructions.</span>
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Assigned To, Due Date, Status -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.assigned_to.id_for_label }}">Assigned Engineer</label>
+                    {{ form.assigned_to }}
+                    {% if form.assigned_to.errors %}<div class="form-error">{{ form.assigned_to.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.due_date.id_for_label }}">Target Implementation Date</label>
+                    {{ form.due_date }}
+                    {% if form.due_date.errors %}<div class="form-error">{{ form.due_date.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Traceability Links -->
+                <div class="md:col-span-2 pt-4 border-t border-slate-100">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Cross-Functional Spine Traceability</h3>
+                    <p class="text-xs text-slate-500 mb-3">Link this mitigation directly to Design Controls requirements, procedures, or verification tests.</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.design_input.id_for_label }}">Design Requirement (Design Input)</label>
+                    {{ form.design_input }}
+                    {% if form.design_input.errors %}<div class="form-error">{{ form.design_input.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.controlled_document.id_for_label }}">SOP / Work Instruction / IFU</label>
+                    {{ form.controlled_document }}
+                    {% if form.controlled_document.errors %}<div class="form-error">{{ form.controlled_document.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.design_verification.id_for_label }}">Design Verification Protocol (V&V Test)</label>
+                    {{ form.design_verification }}
+                    {% if form.design_verification.errors %}<div class="form-error">{{ form.design_verification.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Verification Gate (Clause 7.2) -->
+                <div class="md:col-span-2 pt-4 border-t border-slate-100">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Clause 7.2 Verification of Controls</h3>
+                </div>
+
+                <div class="form-group flex items-center">
+                    <div class="flex items-center gap-2">
+                        {{ form.implementation_verified }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.implementation_verified.id_for_label }}">
+                            Implementation Verified
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group flex items-center">
+                    <div class="flex items-center gap-2">
+                        {{ form.effectiveness_verified }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.effectiveness_verified.id_for_label }}">
+                            Effectiveness Verified
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.verification_notes.id_for_label }}">Verification Evidence Summary</label>
+                    {{ form.verification_notes }}
+                    <span class="text-xs text-slate-400">Summarize test results, protocol report numbers, and objective proof of risk reduction.</span>
+                    {% if form.verification_notes.errors %}<div class="form-error">{{ form.verification_notes.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Secondary Hazards Gate (Clause 7.3) -->
+                <div class="md:col-span-2 pt-4 border-t border-slate-100">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Clause 7.3 Introduces New Hazards</h3>
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center">
+                    <div class="flex items-center gap-2">
+                        {{ form.introduces_new_hazard }}
+                        <label class="form-label mb-0 cursor-pointer text-amber-800 font-semibold" for="{{ form.introduces_new_hazard.id_for_label }}">
+                            Warning: This control measure introduces a new or secondary hazard
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.new_hazard_details.id_for_label }}">New Hazard Description & Mitigation Plan</label>
+                    {{ form.new_hazard_details }}
+                    {% if form.new_hazard_details.errors %}<div class="form-error">{{ form.new_hazard_details.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'quality:risk_control_measure_detail' control_measure.pk %}{% else %}{% url 'quality:risk_control_measure_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Control Measure{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
