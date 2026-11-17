@@ -186,7 +186,7 @@
                     <td class="text-sm text-slate-600">{{ ver.get_test_method_display }}</td>
                     <td><span class="badge {{ ver.status_css }}">{{ ver.get_status_display }}</span></td>
                     <td><span class="badge {{ ver.result_css }}">{{ ver.get_pass_fail_result_display }}</span></td>
-                    <td class="text-sm text-slate-600">{{ ver.executed_by.get_full_name|default:ver.executed_by.username|default:"—" }}</td>
+                    <td class="text-sm text-slate-600">{% if ver.executed_by %}{{ ver.executed_by.get_full_name|default:ver.executed_by.username }}{% else %}—{% endif %}</td>
                     <td class="table-actions text-right">
                         <a href="{% url 'quality:design_verification_detail' ver.pk %}" class="btn btn-icon">
                             <i data-lucide="eye"></i>
