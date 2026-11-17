@@ -36,7 +36,7 @@ def capa_investigation_list(request):
             filter=Q(actions__status__in=["pending", "in_progress"]),
             distinct=True,
         ),
-    )
+    ).order_by("-created_at")
 
     q = request.GET.get("q", "").strip()
     if q:
