@@ -47,6 +47,15 @@ class CapaEffectivenessReviewForm(TenantUniqueMixin, TenantModelForm):
             self.fields["capa"].queryset = CapaInvestigation.objects.none()
             self.fields["evaluator"].queryset = User.objects.none()
 
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status in ["completed"]:
+            if not self.instance.pk or self.instance.status != status:
+                raise forms.ValidationError(
+                    f"Status '{status}' cannot be set directly. Use the sign-off action."
+                )
+        return status
+
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["capa", "evaluator"])
