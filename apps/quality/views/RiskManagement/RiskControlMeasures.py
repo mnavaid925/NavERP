@@ -3,11 +3,12 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.quality.forms.RiskManagement.RiskControlMeasures import RiskControlMeasureForm
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
@@ -19,7 +20,7 @@ def csv_safe(value):
     if value is None:
         return ""
     text = str(value)
-    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+    if text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "%")):
         return f"'{text}"
     return text
 
@@ -51,12 +52,18 @@ def risk_control_measure_list(request):
         qs = qs.filter(risk_assessment__plan_id=int(selected_plan))
 
     base_qs = quality_scope(RiskControlMeasure.objects.all(), request)
-    total_count = base_qs.count()
-    verified_count = base_qs.filter(implementation_verified=True, effectiveness_verified=True).count()
-    inherent_safety_count = base_qs.filter(control_hierarchy="inherent_safety").count()
-    in_progress_count = base_qs.filter(status="in_progress").count()
+    counts = base_qs.aggregate(
+        total_count=Count("id"),
+        verified_count=Count("id", filter=Q(implementation_verified=True, effectiveness_verified=True)),
+        inherent_safety_count=Count("id", filter=Q(control_hierarchy="inherent_safety")),
+        in_progress_count=Count("id", filter=Q(status="in_progress")),
+    )
+    total_count = counts["total_count"] or 0
+    verified_count = counts["verified_count"] or 0
+    inherent_safety_count = counts["inherent_safety_count"] or 0
+    in_progress_count = counts["in_progress_count"] or 0
 
-    plans = quality_scope(RiskManagementPlan.objects.all(), request).order_by("number")
+    plans = quality_scope(RiskManagementPlan.objects.all(), request).only("id", "number", "title").order_by("number")
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
@@ -164,12 +171,13 @@ def risk_control_measure_edit(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def risk_control_measure_delete(request, pk):
     control_measure = quality_object(request, RiskControlMeasure, pk)
     number = control_measure.number
     assessment_id = control_measure.risk_assessment_id
-    control_measure.delete()
     write_audit_log(request.user, control_measure, "delete", tenant=request.tenant)
+    control_measure.delete()
     messages.success(request, f"Risk Control Measure {number} deleted successfully.")
     return redirect("quality:risk_assessment_detail", pk=assessment_id)
 
