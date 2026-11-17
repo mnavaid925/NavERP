@@ -32,7 +32,7 @@ class CapaEffectivenessReview(TenantNumbered):
 
     METHOD_CSS = {
         "statistical_sample": "badge-info",
-        "trend_analysis": "badge-purple",
+        "trend_analysis": "badge-info",
         "audit_recheck": "badge-amber",
         "process_capability": "badge-info",
         "zero_recurrence_window": "badge-slate",
