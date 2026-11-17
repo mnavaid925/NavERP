@@ -301,6 +301,14 @@
                     <div class="font-semibold flex items-center gap-1"><i data-lucide="check-circle" class="w-4 h-4"></i> CAPA Formally Closed</div>
                     <div>Closed At: <strong>{{ capa.closed_at|date:"Y-m-d H:i" }}</strong></div>
                     <div>Approved By: <strong>{{ capa.closure_approved_by.username }}</strong></div>
+                    {% if capa.formal_closure_signature %}
+                    <div class="pt-2 border-t border-emerald-200 mt-2">
+                        <div class="font-medium text-emerald-900">21 CFR Part 11 Electronic Signature:</div>
+                        <div>Signer: <strong>{{ capa.formal_closure_signature.signer_name }}</strong> {% if capa.formal_closure_signature.signer_title %}({{ capa.formal_closure_signature.signer_title }}){% endif %}</div>
+                        <div>Signed At: <strong>{{ capa.formal_closure_signature.signature_timestamp|date:"Y-m-d H:i:s" }}</strong></div>
+                        <div class="text-[10px] text-emerald-600 font-mono truncate" title="{{ capa.formal_closure_signature.signature_hash }}">Manifest: {{ capa.formal_closure_signature.number }}</div>
+                    </div>
+                    {% endif %}
                     {% if capa.closure_summary %}
                     <div class="mt-2 text-slate-700 font-mono bg-white p-2 rounded border border-emerald-200">{{ capa.closure_summary }}</div>
                     {% endif %}
