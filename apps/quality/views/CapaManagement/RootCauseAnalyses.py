@@ -166,6 +166,12 @@ def root_cause_analysis_delete(request, pk):
 @login_required
 def root_cause_analysis_verify(request, pk):
     rca = quality_object(request, RootCauseAnalysis, pk)
+    if rca.status == "verified":
+        messages.warning(request, "This Root Cause Analysis has already been verified.")
+        return redirect("quality:root_cause_analysis_detail", pk=rca.pk)
+    if rca.capa.status == "closed":
+        messages.error(request, "Cannot verify records belonging to a closed CAPA.")
+        return redirect("quality:root_cause_analysis_detail", pk=rca.pk)
     verification_notes = request.POST.get("verification_notes", "").strip()
 
     rca.status = "verified"
