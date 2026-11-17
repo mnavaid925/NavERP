@@ -1,41 +1,50 @@
 import csv
 
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import render
 
 from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
-from apps.quality.views._common import quality_scope
+from apps.quality.views._common import quality_object, quality_scope
+
+ZONE_CLASSES = {
+    "unacceptable": "bg-red-100 border-red-300 text-red-800",
+    "alarp": "bg-amber-100 border-amber-300 text-amber-800",
+    "broadly_acceptable": "bg-green-100 border-green-300 text-green-800",
+}
 
 
 def csv_safe(value):
     if value is None:
         return ""
     text = str(value)
-    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+    if text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "%")):
         return f"'{text}"
     return text
 
 
 @login_required
 def fmea_matrix(request):
-    plans = quality_scope(RiskManagementPlan.objects.all(), request).order_by("number")
+    plans = quality_scope(RiskManagementPlan.objects.all(), request).only(
+        "id", "number", "title", "matrix_dimension"
+    ).order_by("number")
 
     selected_plan_id = request.GET.get("plan", "").strip()
     selected_plan = None
-    if selected_plan_id and selected_plan_id.isdigit():
-        selected_plan = quality_scope(RiskManagementPlan.objects.all(), request).filter(pk=int(selected_plan_id)).first()
-
-    if not selected_plan and plans.exists():
+    if selected_plan_id:
+        if not selected_plan_id.isdigit():
+            raise Http404("Invalid plan ID")
+        selected_plan = quality_object(request, RiskManagementPlan, int(selected_plan_id))
+    else:
         selected_plan = plans.first()
 
-    assessments = quality_scope(RiskAssessment.objects.all(), request)
+    assessments_qs = quality_scope(RiskAssessment.objects.all(), request)
     if selected_plan:
-        assessments = assessments.filter(plan=selected_plan)
+        assessments_qs = assessments_qs.filter(plan=selected_plan)
 
-    assessments = assessments.select_related("plan")
+    assessments = list(assessments_qs.select_related("plan"))
 
     # 5x5 Matrix cells mapping (Severity: 5 down to 1, Probability: 1 up to 5)
     severity_range = [
@@ -59,18 +68,15 @@ def fmea_matrix(request):
             score = s_val * p_val
             if score >= 15:
                 zone = "unacceptable"
-                color_class = "bg-red-100 border-red-300 text-red-800"
             elif score >= 6:
                 zone = "alarp"
-                color_class = "bg-amber-100 border-amber-300 text-amber-800"
             else:
                 zone = "broadly_acceptable"
-                color_class = "bg-green-100 border-green-300 text-green-800"
 
             matrix_cells[(s_val, p_val)] = {
                 "score": score,
                 "zone": zone,
-                "color_class": color_class,
+                "color_class": ZONE_CLASSES[zone],
                 "initial_items": [],
                 "residual_items": [],
             }
@@ -114,7 +120,7 @@ def fmea_matrix(request):
     rpn_pareto_items = sorted(assessments, key=lambda x: x.initial_rpn, reverse=True)[:10]
 
     stats = {
-        "total": assessments.count(),
+        "total": len(assessments),
         "unacceptable": len([a for a in assessments if a.initial_risk_level == "unacceptable"]),
         "alarp": len([a for a in assessments if a.initial_risk_level == "alarp"]),
         "broadly_acceptable": len([a for a in assessments if a.initial_risk_level == "broadly_acceptable"]),
@@ -141,10 +147,22 @@ def fmea_matrix(request):
 
 @login_required
 def fmea_matrix_export(request):
+    plans = quality_scope(RiskManagementPlan.objects.all(), request).only(
+        "id", "number", "title"
+    ).order_by("number")
+
     selected_plan_id = request.GET.get("plan", "").strip()
+    selected_plan = None
+    if selected_plan_id:
+        if not selected_plan_id.isdigit():
+            raise Http404("Invalid plan ID")
+        selected_plan = quality_object(request, RiskManagementPlan, int(selected_plan_id))
+    else:
+        selected_plan = plans.first()
+
     assessments = quality_scope(RiskAssessment.objects.all(), request).select_related("plan")
-    if selected_plan_id and selected_plan_id.isdigit():
-        assessments = assessments.filter(plan_id=int(selected_plan_id))
+    if selected_plan:
+        assessments = assessments.filter(plan=selected_plan)
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="fmea_risk_matrix.csv"'
@@ -176,15 +194,15 @@ def fmea_matrix_export(request):
             csv_safe(a.number),
             csv_safe(a.get_analysis_type_display()),
             csv_safe(a.hazard_description or a.failure_mode),
-            a.initial_severity,
-            a.initial_probability,
-            a.initial_detectability,
-            a.initial_rpn,
+            csv_safe(a.initial_severity),
+            csv_safe(a.initial_probability),
+            csv_safe(a.initial_detectability),
+            csv_safe(a.initial_rpn),
             csv_safe(a.get_initial_risk_level_display()),
-            a.residual_severity or "",
-            a.residual_probability or "",
-            a.residual_detectability or "",
-            a.residual_rpn or "",
+            csv_safe(a.residual_severity or ""),
+            csv_safe(a.residual_probability or ""),
+            csv_safe(a.residual_detectability or ""),
+            csv_safe(a.residual_rpn or ""),
             csv_safe(a.get_residual_risk_level_display() if a.residual_risk_level else ""),
             "Yes" if a.residual_risk_acceptable else "No",
             csv_safe(a.get_lifecycle_status_display()),
@@ -195,14 +213,17 @@ def fmea_matrix_export(request):
 
 @login_required
 def risk_traceability_matrix(request):
-    plans = quality_scope(RiskManagementPlan.objects.all(), request).order_by("number")
+    plans = quality_scope(RiskManagementPlan.objects.all(), request).only(
+        "id", "number", "title"
+    ).order_by("number")
 
     selected_plan_id = request.GET.get("plan", "").strip()
     selected_plan = None
-    if selected_plan_id and selected_plan_id.isdigit():
-        selected_plan = quality_scope(RiskManagementPlan.objects.all(), request).filter(pk=int(selected_plan_id)).first()
-
-    if not selected_plan and plans.exists():
+    if selected_plan_id:
+        if not selected_plan_id.isdigit():
+            raise Http404("Invalid plan ID")
+        selected_plan = quality_object(request, RiskManagementPlan, int(selected_plan_id))
+    else:
         selected_plan = plans.first()
 
     assessments = quality_scope(RiskAssessment.objects.all(), request)
@@ -235,7 +256,7 @@ def risk_traceability_matrix(request):
         })
 
     stats = {
-        "total_hazards": assessments.count(),
+        "total_hazards": len(traceability_rows),
         "total_mitigations": total_mitigations,
         "covered_hazards": len([r for r in traceability_rows if r["is_covered"]]),
         "uncovered_hazards": len([r for r in traceability_rows if not r["is_covered"]]),
@@ -256,15 +277,27 @@ def risk_traceability_matrix(request):
 
 @login_required
 def risk_traceability_matrix_export(request):
+    plans = quality_scope(RiskManagementPlan.objects.all(), request).only(
+        "id", "number", "title"
+    ).order_by("number")
+
     selected_plan_id = request.GET.get("plan", "").strip()
+    selected_plan = None
+    if selected_plan_id:
+        if not selected_plan_id.isdigit():
+            raise Http404("Invalid plan ID")
+        selected_plan = quality_object(request, RiskManagementPlan, int(selected_plan_id))
+    else:
+        selected_plan = plans.first()
+
     assessments = quality_scope(RiskAssessment.objects.all(), request).select_related("plan", "design_input").prefetch_related(
         "control_measures",
         "control_measures__design_input",
         "control_measures__controlled_document",
         "control_measures__design_verification",
     )
-    if selected_plan_id and selected_plan_id.isdigit():
-        assessments = assessments.filter(plan_id=int(selected_plan_id))
+    if selected_plan:
+        assessments = assessments.filter(plan=selected_plan)
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="risk_traceability_matrix.csv"'
@@ -288,8 +321,8 @@ def risk_traceability_matrix_export(request):
     ])
 
     for a in assessments:
-        controls = a.control_measures.all()
-        if controls.exists():
+        controls = list(a.control_measures.all())
+        if controls:
             for c in controls:
                 writer.writerow([
                     csv_safe(a.plan.number if a.plan else ""),
