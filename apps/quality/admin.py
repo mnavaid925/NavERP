@@ -8,6 +8,11 @@ from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDo
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
+from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
+from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
+from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
+from apps.quality.models.RiskManagement.RiskReviewRecords import RiskReviewRecord
+
 
 
 @admin.register(DesignProject)
@@ -154,3 +159,79 @@ class DocumentAcknowledgmentAdmin(admin.ModelAdmin):
     list_filter = ("status", "tenant")
     search_fields = ("number", "user__username", "document__number", "document__title")
     list_select_related = ("tenant", "document", "user", "employee", "signature_record")
+
+
+@admin.register(RiskManagementPlan)
+class RiskManagementPlanAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "plan_version",
+        "device_classification",
+        "status",
+        "design_project",
+        "lead_risk_manager",
+        "overall_residual_risk_acceptable",
+        "next_review_due_date",
+        "tenant",
+    )
+    list_filter = ("device_classification", "status", "overall_residual_risk_acceptable", "tenant")
+    search_fields = ("number", "title", "design_project__number", "lead_risk_manager__username")
+    list_select_related = ("tenant", "design_project", "lead_risk_manager", "department", "approved_signature")
+
+
+@admin.register(RiskAssessment)
+class RiskAssessmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "plan",
+        "analysis_type",
+        "hazard_category",
+        "initial_rpn",
+        "initial_risk_level",
+        "residual_rpn",
+        "residual_risk_level",
+        "residual_risk_acceptable",
+        "lifecycle_status",
+        "tenant",
+    )
+    list_filter = ("analysis_type", "hazard_category", "initial_risk_level", "residual_risk_level", "lifecycle_status", "tenant")
+    search_fields = ("number", "hazard_description", "failure_mode", "potential_harm", "plan__number")
+    list_select_related = ("tenant", "plan", "design_input")
+
+
+@admin.register(RiskControlMeasure)
+class RiskControlMeasureAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "risk_assessment",
+        "control_hierarchy",
+        "title",
+        "assigned_to",
+        "implementation_verified",
+        "effectiveness_verified",
+        "status",
+        "tenant",
+    )
+    list_filter = ("control_hierarchy", "status", "implementation_verified", "effectiveness_verified", "tenant")
+    search_fields = ("number", "title", "risk_assessment__number", "assigned_to__username")
+    list_select_related = ("tenant", "risk_assessment", "assigned_to", "design_input", "controlled_document", "design_verification")
+
+
+@admin.register(RiskReviewRecord)
+class RiskReviewRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "plan",
+        "review_title",
+        "review_type",
+        "review_date",
+        "lead_reviewer",
+        "overall_residual_risk_reconfirmed",
+        "status",
+        "tenant",
+    )
+    list_filter = ("review_type", "status", "overall_residual_risk_reconfirmed", "tenant")
+    search_fields = ("number", "review_title", "findings_summary", "lead_reviewer__username", "plan__number")
+    list_select_related = ("tenant", "plan", "lead_reviewer", "approved_signature")
+
