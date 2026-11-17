@@ -41,7 +41,7 @@ class DesignReview(TenantNumbered):
         "concept": "badge-slate",
         "input_freeze": "badge-info",
         "detailed_design": "badge-amber",
-        "verification_gate": "badge-purple",
+        "verification_gate": "badge-info",
         "validation_gate": "badge-green",
         "transfer_gate": "badge-green",
         "post_launch": "badge-muted",
