@@ -75,6 +75,7 @@ def capa_action_list(request):
         "q": q,
         "action_type_filter": action_type_filter,
         "status_filter": status_filter,
+        "capa_filter": capa_filter,
         "action_type_choices": CapaAction.ACTION_TYPE_CHOICES,
         "status_choices": CapaAction.STATUS_CHOICES,
     }
