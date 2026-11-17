@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}{{ assessment.number }} — Risk Assessment | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_assessment_list' %}">Risk Items</a>
+            <span>/</span>
+            <span>{{ assessment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ assessment.number }} — {{ assessment.hazard_description|default:assessment.failure_mode }}</h1>
+            <span class="badge {{ assessment.analysis_type_badge }}">{{ assessment.get_analysis_type_display }}</span>
+            <span class="badge {{ assessment.initial_risk_level_badge }}">Initial: {{ assessment.get_initial_risk_level_display }}</span>
+            {% if assessment.residual_risk_level %}
+            <span class="badge {{ assessment.residual_risk_level_badge }}">Residual: {{ assessment.get_residual_risk_level_display }}</span>
+            {% endif %}
+            <span class="badge {{ assessment.lifecycle_status_badge }}">{{ assessment.get_lifecycle_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:risk_control_measure_create' %}?assessment={{ assessment.pk }}" class="btn btn-primary">
+            <i data-lucide="shield-plus"></i> Add Risk Control
+        </a>
+        <a href="{% url 'quality:risk_assessment_edit' assessment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Item
+        </a>
+        <form method="post" action="{% url 'quality:risk_assessment_delete' assessment.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Risk Item {{ assessment.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 hover:border-red-200" title="Delete Item">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Risk Score Cards Comparison -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <!-- Pre-Mitigation Score Card -->
+    <div class="card border-l-4 border-l-red-500">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">Pre-Mitigation Risk Estimation</h2>
+            <span class="badge {{ assessment.initial_risk_level_badge }}">{{ assessment.get_initial_risk_level_display }}</span>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-4 gap-4 text-center">
+                <div class="p-3 bg-slate-50 rounded">
+                    <div class="text-xs text-slate-500 uppercase font-semibold">Severity (S)</div>
+                    <div class="text-2xl font-bold text-slate-800">{{ assessment.initial_severity }}</div>
+                    <div class="text-xs text-slate-500">{{ assessment.get_initial_severity_display }}</div>
+                </div>
+                <div class="p-3 bg-slate-50 rounded">
+                    <div class="text-xs text-slate-500 uppercase font-semibold">Probability (P)</div>
+                    <div class="text-2xl font-bold text-slate-800">{{ assessment.initial_probability }}</div>
+                    <div class="text-xs text-slate-500">{{ assessment.get_initial_probability_display }}</div>
+                </div>
+                <div class="p-3 bg-slate-50 rounded">
+                    <div class="text-xs text-slate-500 uppercase font-semibold">Detectability (D)</div>
+                    <div class="text-2xl font-bold text-slate-800">{{ assessment.initial_detectability }}</div>
+                    <div class="text-xs text-slate-500">{{ assessment.get_initial_detectability_display }}</div>
+                </div>
+                <div class="p-3 bg-red-50 border border-red-100 rounded">
+                    <div class="text-xs text-red-600 uppercase font-semibold">Initial RPN</div>
+                    <div class="text-2xl font-bold text-red-700">{{ assessment.initial_rpn }}</div>
+                    <div class="text-xs text-red-600">S × P × D</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Post-Mitigation Residual Score Card -->
+    <div class="card border-l-4 {% if assessment.residual_risk_level == 'broadly_acceptable' %}border-l-green-500{% elif assessment.residual_risk_level == 'alarp' %}border-l-amber-500{% else %}border-l-slate-300{% endif %}">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">Residual Risk Evaluation (Post-Control)</h2>
+            {% if assessment.residual_risk_level %}
+            <span class="badge {{ assessment.residual_risk_level_badge }}">{{ assessment.get_residual_risk_level_display }}</span>
+            {% else %}
+            <span class="badge badge-slate">Pending Residual Scoring</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            {% if assessment.residual_severity and assessment.residual_probability %}
+            <div class="grid grid-cols-4 gap-4 text-center">
+                <div class="p-3 bg-slate-50 rounded">
+                    <div class="text-xs text-slate-500 uppercase font-semibold">Residual S</div>
+                    <div class="text-2xl font-bold text-slate-800">{{ assessment.residual_severity }}</div>
+                    <div class="text-xs text-slate-500">{{ assessment.get_residual_severity_display }}</div>
+                </div>
+                <div class="p-3 bg-slate-50 rounded">
+                    <div class="text-xs text-slate-500 uppercase font-semibold">Residual P</div>
+                    <div class="text-2xl font-bold text-slate-800">{{ assessment.residual_probability }}</div>
+                    <div class="text-xs text-slate-500">{{ assessment.get_residual_probability_display }}</div>
+                </div>
+                <div class="p-3 bg-slate-50 rounded">
+                    <div class="text-xs text-slate-500 uppercase font-semibold">Residual D</div>
+                    <div class="text-2xl font-bold text-slate-800">{{ assessment.residual_detectability|default:"1" }}</div>
+                    <div class="text-xs text-slate-500">{{ assessment.get_residual_detectability_display|default:"Almost Certain" }}</div>
+                </div>
+                <div class="p-3 bg-green-50 border border-green-100 rounded">
+                    <div class="text-xs text-green-600 uppercase font-semibold">Residual RPN</div>
+                    <div class="text-2xl font-bold text-green-700">{{ assessment.residual_rpn }}</div>
+                    <div class="text-xs text-green-600">
+                        {% if assessment.residual_risk_acceptable %}Acceptable{% else %}Review Required{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-6 text-slate-400 text-sm">
+                Residual risk scores not calculated yet. Edit this item to enter post-mitigation S, P, D scores.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ISO 14971 Causal Chain & FMEA Breakdown -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">ISO 14971 Causal Event Chain & Analysis Details</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Risk Management Plan</dt>
+                <dd>
+                    <a href="{% url 'quality:risk_management_plan_detail' assessment.plan.pk %}" class="text-brand hover:underline font-mono">
+                        {{ assessment.plan.number }} — {{ assessment.plan.title }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Hazard Category</dt>
+                <dd>{{ assessment.get_hazard_category_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Originating / Mitigating Design Input</dt>
+                <dd>
+                    {% if assessment.design_input %}
+                    <a href="{% url 'quality:design_input_detail' assessment.design_input.pk %}" class="text-brand hover:underline font-mono">
+                        {{ assessment.design_input.identifier }} ({{ assessment.design_input.number }})
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">None linked</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Disclosed in IFU / Labeling</dt>
+                <dd>
+                    {% if assessment.disclosed_in_ifu %}
+                    <span class="badge badge-info">Yes — In User Manual / IFU</span>
+                    {% else %}
+                    <span class="text-slate-400">No</span>
+                    {% endif %}
+                </dd>
+            </div>
+
+            <!-- Causal Event Chain -->
+            <div class="detail-item col-span-2">
+                <dt>Hazard (Potential Source of Harm)</dt>
+                <dd class="text-sm font-medium text-slate-800">{{ assessment.hazard_description|default:assessment.failure_mode }}</dd>
+            </div>
+            <div class="detail-item col-span-2">
+                <dt>Foreseeable Sequence of Events</dt>
+                <dd class="text-sm text-slate-700 whitespace-pre-line">{{ assessment.foreseeable_sequence_of_events|default:"—" }}</dd>
+            </div>
+            <div class="detail-item col-span-2">
+                <dt>Hazardous Situation</dt>
+                <dd class="text-sm text-slate-700 whitespace-pre-line">{{ assessment.hazardous_situation }}</dd>
+            </div>
+            <div class="detail-item col-span-2">
+                <dt>Potential Harm (Severity Outcome)</dt>
+                <dd class="text-sm text-slate-700 whitespace-pre-line font-medium text-red-700">{{ assessment.potential_harm|default:assessment.failure_effect }}</dd>
+            </div>
+
+            <!-- FMEA Fields (if present) -->
+            {% if assessment.item_function or assessment.failure_mode %}
+            <div class="detail-item">
+                <dt>FMEA Item / Function</dt>
+                <dd>{{ assessment.item_function|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Specific Failure Mode</dt>
+                <dd>{{ assessment.failure_mode|default:"—" }}</dd>
+            </div>
+            <div class="detail-item col-span-2">
+                <dt>Failure Root Cause</dt>
+                <dd class="text-sm text-slate-700 whitespace-pre-line">{{ assessment.failure_cause|default:"—" }}</dd>
+            </div>
+            {% endif %}
+
+            <!-- BRA Section -->
+            {% if assessment.benefit_risk_justification or assessment.bra_required %}
+            <div class="detail-item col-span-2 bg-amber-50 p-4 rounded border border-amber-200">
+                <dt class="text-amber-800 font-semibold mb-1">Clinical Benefit-Risk Analysis (BRA) Justification</dt>
+                <dd class="text-sm text-slate-800 whitespace-pre-line">{{ assessment.benefit_risk_justification|default:"Clinical BRA justification pending documentation." }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+<!-- Risk Control Measures (Mitigations) -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Risk Control Measures ({{ control_measures.count }})</h2>
+            <p class="text-xs text-slate-500">ISO 14971 Clause 7.1 hierarchy & verification evidence</p>
+        </div>
+        <a href="{% url 'quality:risk_control_measure_create' %}?assessment={{ assessment.pk }}" class="btn btn-sm btn-primary">
+            <i data-lucide="shield-plus"></i> Add Risk Control
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Hierarchy Tier</th>
+                    <th>Control Title</th>
+                    <th>Assigned To</th>
+                    <th>Design Link / Doc</th>
+                    <th>Impl Verified</th>
+                    <th>Eff Verified</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in control_measures %}
+                <tr>
+                    <td class="font-mono text-xs font-medium">
+                        <a href="{% url 'quality:risk_control_measure_detail' c.pk %}" class="text-brand hover:underline">
+                            {{ c.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge {{ c.control_hierarchy_badge }}">{{ c.get_control_hierarchy_display }}</span>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800 text-sm">{{ c.title }}</div>
+                        {% if c.introduces_new_hazard %}
+                        <span class="badge badge-amber text-xs"><i data-lucide="alert-triangle" class="w-3 h-3 inline"></i> New Hazard Flag</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ c.assigned_to.get_full_name|default:c.assigned_to.username|default:"—" }}
+                    </td>
+                    <td class="text-xs font-mono">
+                        {% if c.design_input %}
+                        <a href="{% url 'quality:design_input_detail' c.design_input.pk %}" class="text-slate-600 hover:underline">
+                            {{ c.design_input.identifier }}
+                        </a>
+                        {% elif c.controlled_document %}
+                        <a href="{% url 'quality:controlled_document_detail' c.controlled_document.pk %}" class="text-slate-600 hover:underline">
+                            {{ c.controlled_document.number }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.implementation_verified %}
+                        <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Verified</span>
+                        {% else %}
+                        <span class="badge badge-slate">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.effectiveness_verified %}
+                        <span class="badge badge-green"><i data-lucide="check" class="w-3 h-3 inline"></i> Effective</span>
+                        {% else %}
+                        <span class="badge badge-slate">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ c.status_badge }}">{{ c.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'quality:risk_control_measure_detail' c.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:risk_control_measure_edit' c.pk %}" class="btn btn-icon" title="Edit Control">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-6 text-slate-400 text-sm">
+                        No risk control measures added yet. Add mitigations adhering to the ISO 14971 3-tier hierarchy.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
