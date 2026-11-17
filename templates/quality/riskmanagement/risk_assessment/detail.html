@@ -162,19 +162,19 @@
             </div>
 
             <!-- Causal Event Chain -->
-            <div class="detail-item col-span-2">
+            <div class="detail-item sm:col-span-2">
                 <dt>Hazard (Potential Source of Harm)</dt>
                 <dd class="text-sm font-medium text-slate-800">{{ assessment.hazard_description|default:assessment.failure_mode }}</dd>
             </div>
-            <div class="detail-item col-span-2">
+            <div class="detail-item sm:col-span-2">
                 <dt>Foreseeable Sequence of Events</dt>
                 <dd class="text-sm text-slate-700 whitespace-pre-line">{{ assessment.foreseeable_sequence_of_events|default:"—" }}</dd>
             </div>
-            <div class="detail-item col-span-2">
+            <div class="detail-item sm:col-span-2">
                 <dt>Hazardous Situation</dt>
                 <dd class="text-sm text-slate-700 whitespace-pre-line">{{ assessment.hazardous_situation }}</dd>
             </div>
-            <div class="detail-item col-span-2">
+            <div class="detail-item sm:col-span-2">
                 <dt>Potential Harm (Severity Outcome)</dt>
                 <dd class="text-sm text-slate-700 whitespace-pre-line font-medium text-red-700">{{ assessment.potential_harm|default:assessment.failure_effect }}</dd>
             </div>
@@ -189,7 +189,7 @@
                 <dt>Specific Failure Mode</dt>
                 <dd>{{ assessment.failure_mode|default:"—" }}</dd>
             </div>
-            <div class="detail-item col-span-2">
+            <div class="detail-item sm:col-span-2">
                 <dt>Failure Root Cause</dt>
                 <dd class="text-sm text-slate-700 whitespace-pre-line">{{ assessment.failure_cause|default:"—" }}</dd>
             </div>
@@ -197,7 +197,7 @@
 
             <!-- BRA Section -->
             {% if assessment.benefit_risk_justification or assessment.bra_required %}
-            <div class="detail-item col-span-2 bg-amber-50 p-4 rounded border border-amber-200">
+            <div class="detail-item sm:col-span-2 bg-amber-50 p-4 rounded border border-amber-200">
                 <dt class="text-amber-800 font-semibold mb-1">Clinical Benefit-Risk Analysis (BRA) Justification</dt>
                 <dd class="text-sm text-slate-800 whitespace-pre-line">{{ assessment.benefit_risk_justification|default:"Clinical BRA justification pending documentation." }}</dd>
             </div>
@@ -210,7 +210,7 @@
 <div class="card">
     <div class="card-header flex items-center justify-between">
         <div>
-            <h2 class="text-base font-semibold text-slate-800">Risk Control Measures ({{ control_measures.count }})</h2>
+            <h2 class="text-base font-semibold text-slate-800">Risk Control Measures ({{ control_measures|length }})</h2>
             <p class="text-xs text-slate-500">ISO 14971 Clause 7.1 hierarchy & verification evidence</p>
         </div>
         <a href="{% url 'quality:risk_control_measure_create' %}?assessment={{ assessment.pk }}" class="btn btn-sm btn-primary">
@@ -284,10 +284,10 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions justify-end">
-                            <a href="{% url 'quality:risk_control_measure_detail' c.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'quality:risk_control_measure_detail' c.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'quality:risk_control_measure_edit' c.pk %}" class="btn btn-icon" title="Edit Control">
+                            <a href="{% url 'quality:risk_control_measure_edit' c.pk %}" class="btn btn-icon" title="Edit Control" aria-label="Edit Control">
                                 <i data-lucide="pencil"></i>
                             </a>
                         </div>
