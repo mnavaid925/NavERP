@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rca.number }} | Root Cause Analysis | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_detail' rca.capa.pk %}">{{ rca.capa.number }}</a>
+            <span>/</span>
+            <span>{{ rca.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ rca.number }}: {{ rca.get_rca_method_display }}</h1>
+            <span class="badge {{ rca.status_badge }}">{{ rca.get_status_display }}</span>
+            <span class="badge {{ rca.method_badge }}">{{ rca.get_rca_method_display }}</span>
+            <span class="badge {{ rca.category_badge }}">{{ rca.get_root_cause_category_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_investigation_detail' rca.capa.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to CAPA
+        </a>
+        {% if rca.status != "verified" %}
+        <a href="{% url 'quality:root_cause_analysis_edit' rca.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit RCA
+        </a>
+        {% endif %}
+        <a href="{% url 'quality:capa_action_create' %}?capa={{ rca.capa.pk }}&rca={{ rca.pk }}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Create Action from RCA
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Problem Statement -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Problem Statement</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">{{ rca.problem_statement }}</p>
+            </div>
+        </div>
+
+        <!-- 5 Whys Ladder -->
+        {% if rca.why_1 or rca.rca_method == "5_whys" %}
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">5 Whys Root Cause Ladder</h2>
+                <span class="text-xs text-slate-500 font-mono">{{ rca.why_levels_count }} / 5 Levels Populated</span>
+            </div>
+            <div class="card-body space-y-3">
+                {% if rca.why_1 %}
+                <div class="flex items-start gap-3 p-2.5 rounded bg-blue-50/50 border border-blue-100">
+                    <span class="font-bold text-blue-600 text-xs w-16 uppercase">Why 1:</span>
+                    <span class="text-sm text-slate-800 flex-1">{{ rca.why_1 }}</span>
+                </div>
+                {% endif %}
+                {% if rca.why_2 %}
+                <div class="flex items-start gap-3 p-2.5 rounded bg-blue-50/50 border border-blue-100 ml-3">
+                    <span class="font-bold text-blue-600 text-xs w-16 uppercase">Why 2:</span>
+                    <span class="text-sm text-slate-800 flex-1">{{ rca.why_2 }}</span>
+                </div>
+                {% endif %}
+                {% if rca.why_3 %}
+                <div class="flex items-start gap-3 p-2.5 rounded bg-blue-50/50 border border-blue-100 ml-6">
+                    <span class="font-bold text-blue-600 text-xs w-16 uppercase">Why 3:</span>
+                    <span class="text-sm text-slate-800 flex-1">{{ rca.why_3 }}</span>
+                </div>
+                {% endif %}
+                {% if rca.why_4 %}
+                <div class="flex items-start gap-3 p-2.5 rounded bg-blue-50/50 border border-blue-100 ml-9">
+                    <span class="font-bold text-blue-600 text-xs w-16 uppercase">Why 4:</span>
+                    <span class="text-sm text-slate-800 flex-1">{{ rca.why_4 }}</span>
+                </div>
+                {% endif %}
+                {% if rca.why_5 %}
+                <div class="flex items-start gap-3 p-2.5 rounded bg-indigo-50 border border-indigo-200 ml-12">
+                    <span class="font-bold text-indigo-700 text-xs w-16 uppercase">Root (5):</span>
+                    <span class="text-sm text-indigo-950 font-medium flex-1">{{ rca.why_5 }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Ishikawa 6M Factors -->
+        {% if rca.fishbone_manpower or rca.fishbone_machine or rca.fishbone_material or rca.fishbone_method or rca.fishbone_measurement or rca.fishbone_environment or rca.rca_method == "fishbone_ishikawa" %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Ishikawa 6M Cause & Effect Factors</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-bold uppercase text-slate-600 mb-1 flex items-center gap-1.5"><i data-lucide="users" class="w-3.5 h-3.5"></i> Manpower / Personnel</div>
+                        <p class="text-xs text-slate-700 whitespace-pre-wrap">{{ rca.fishbone_manpower|default:"No factor identified." }}</p>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-bold uppercase text-slate-600 mb-1 flex items-center gap-1.5"><i data-lucide="cpu" class="w-3.5 h-3.5"></i> Machine / Equipment</div>
+                        <p class="text-xs text-slate-700 whitespace-pre-wrap">{{ rca.fishbone_machine|default:"No factor identified." }}</p>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-bold uppercase text-slate-600 mb-1 flex items-center gap-1.5"><i data-lucide="box" class="w-3.5 h-3.5"></i> Material / Components</div>
+                        <p class="text-xs text-slate-700 whitespace-pre-wrap">{{ rca.fishbone_material|default:"No factor identified." }}</p>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-bold uppercase text-slate-600 mb-1 flex items-center gap-1.5"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Method / Process</div>
+                        <p class="text-xs text-slate-700 whitespace-pre-wrap">{{ rca.fishbone_method|default:"No factor identified." }}</p>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-bold uppercase text-slate-600 mb-1 flex items-center gap-1.5"><i data-lucide="gauge" class="w-3.5 h-3.5"></i> Measurement / Gage</div>
+                        <p class="text-xs text-slate-700 whitespace-pre-wrap">{{ rca.fishbone_measurement|default:"No factor identified." }}</p>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs font-bold uppercase text-slate-600 mb-1 flex items-center gap-1.5"><i data-lucide="thermometer" class="w-3.5 h-3.5"></i> Environment / Cleanroom</div>
+                        <p class="text-xs text-slate-700 whitespace-pre-wrap">{{ rca.fishbone_environment|default:"No factor identified." }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Root Cause Conclusion & Escape Point -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Root Cause Conclusion & Escape Point Analysis</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Synthesized Root Cause</h3>
+                    <p class="text-sm text-slate-800 bg-emerald-50 p-3 rounded border border-emerald-200 whitespace-pre-wrap">{{ rca.root_cause_summary }}</p>
+                </div>
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Escape Point Gap Analysis (Detection Failure)</h3>
+                    {% if rca.escape_point_gap %}
+                    <p class="text-sm text-slate-700 bg-amber-50 p-3 rounded border border-amber-200 whitespace-pre-wrap">{{ rca.escape_point_gap }}</p>
+                    {% else %}
+                    <p class="text-xs text-slate-400 italic">No escape point gap documented.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Linked Action Items -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">Action Items Addressing this Root Cause</h2>
+                <a href="{% url 'quality:capa_action_create' %}?capa={{ rca.capa.pk }}&rca={{ rca.pk }}" class="btn btn-outline text-xs">
+                    <i data-lucide="plus"></i> Add Action
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Action #</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Assigned To</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for action in linked_actions %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'quality:capa_action_detail' action.pk %}" class="text-blue-600 hover:underline">
+                                    {{ action.number }}
+                                </a>
+                            </td>
+                            <td class="text-xs font-medium text-slate-800">{{ action.title }}</td>
+                            <td><span class="badge {{ action.action_type_badge }}">{{ action.get_action_type_display }}</span></td>
+                            <td class="text-xs text-slate-600">{{ action.assigned_to.username }}</td>
+                            <td><span class="badge {{ action.status_badge }}">{{ action.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-sm text-slate-400">No action items linked to this RCA yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Verification & Metadata -->
+    <div class="space-y-6">
+        <!-- Quality Verification Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Quality Engineering Sign-off</h2>
+            </div>
+            <div class="card-body space-y-4">
+                {% if rca.status == "verified" %}
+                <div class="p-3 rounded bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 space-y-1">
+                    <div class="font-semibold flex items-center gap-1.5"><i data-lucide="check-circle" class="w-4 h-4"></i> Investigation Verified</div>
+                    <div>Verified By: <strong>{{ rca.verified_by.username }}</strong></div>
+                    <div>Verified On: <strong>{{ rca.verified_date|date:"Y-m-d" }}</strong></div>
+                    {% if rca.verification_notes %}
+                    <div class="mt-2 text-slate-700 bg-white p-2 rounded border border-emerald-200 font-mono">{{ rca.verification_notes }}</div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <form method="post" action="{% url 'quality:root_cause_analysis_verify' rca.pk %}" class="space-y-3" onsubmit="return confirm('Verify this root cause investigation as scientifically sound and complete?');">
+                    {% csrf_token %}
+                    <label class="form-label" for="verification_notes">Verification Notes</label>
+                    <textarea name="verification_notes" id="verification_notes" class="form-textarea text-xs" rows="3" placeholder="Document review notes confirming investigation validity and data evidence..."></textarea>
+                    <button type="submit" class="btn btn-primary w-full text-xs">
+                        <i data-lucide="check-circle"></i> Verify Investigation
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Metadata Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Investigation Details</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Parent CAPA</dt>
+                        <dd>
+                            <a href="{% url 'quality:capa_investigation_detail' rca.capa.pk %}" class="font-mono text-xs text-blue-600 hover:underline">
+                                {{ rca.capa.number }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Methodology</dt>
+                        <dd><span class="badge {{ rca.method_badge }}">{{ rca.get_rca_method_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Root Cause Category</dt>
+                        <dd><span class="badge {{ rca.category_badge }}">{{ rca.get_root_cause_category_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Lead Investigator</dt>
+                        <dd>{{ rca.lead_investigator.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Status</dt>
+                        <dd><span class="badge {{ rca.status_badge }}">{{ rca.get_status_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created At</dt>
+                        <dd>{{ rca.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
