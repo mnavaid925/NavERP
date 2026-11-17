@@ -188,10 +188,10 @@
         </div>
         <div class="flex gap-2">
             {% if actions.has_previous %}
-            <a href="?page={{ actions.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if action_type_filter %}&type={{ action_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline text-sm">Previous</a>
+            <a href="?page={{ actions.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if action_type_filter %}&type={{ action_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if capa_filter %}&capa={{ capa_filter }}{% endif %}" class="btn btn-outline text-sm">Previous</a>
             {% endif %}
             {% if actions.has_next %}
-            <a href="?page={{ actions.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if action_type_filter %}&type={{ action_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline text-sm">Next</a>
+            <a href="?page={{ actions.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if action_type_filter %}&type={{ action_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if capa_filter %}&capa={{ capa_filter }}{% endif %}" class="btn btn-outline text-sm">Next</a>
             {% endif %}
         </div>
     </div>
