@@ -179,10 +179,10 @@
         </div>
         <div class="flex gap-2">
             {% if rcas.has_previous %}
-            <a href="?page={{ rcas.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if method_filter %}&method={{ method_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="btn btn-outline text-sm">Previous</a>
+            <a href="?page={{ rcas.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if method_filter %}&method={{ method_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if capa_filter %}&capa={{ capa_filter }}{% endif %}" class="btn btn-outline text-sm">Previous</a>
             {% endif %}
             {% if rcas.has_next %}
-            <a href="?page={{ rcas.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if method_filter %}&method={{ method_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="btn btn-outline text-sm">Next</a>
+            <a href="?page={{ rcas.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if method_filter %}&method={{ method_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if capa_filter %}&capa={{ capa_filter }}{% endif %}" class="btn btn-outline text-sm">Next</a>
             {% endif %}
         </div>
     </div>
