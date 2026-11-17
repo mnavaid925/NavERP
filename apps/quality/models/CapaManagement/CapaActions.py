@@ -25,7 +25,7 @@ class CapaAction(TenantNumbered):
     ACTION_TYPE_CSS = {
         "containment": "badge-amber",
         "corrective": "badge-info",
-        "preventive": "badge-purple",
+        "preventive": "badge-slate",
     }
 
     STATUS_CSS = {
