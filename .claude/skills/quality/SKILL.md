@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development including FDA 21 CFR § 820.30 / ISO 13485:2016 design projects, user needs, engineering specs, stage-gate design reviews with independent review sign-off, verification & validation protocols, Requirements Traceability Matrix (RTM), and audit-ready Design History File (DHF) dossiers; and 12.3 Risk Management (ISO 14971 / FMEA) including risk management plans, hazard identification & FMEA risk assessments, risk control measures & mitigations, interactive FMEA risk matrix heatmaps, risk traceability matrices, and risk management reviews/reports). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1, 12.2, or 12.3), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development including FDA 21 CFR § 820.30 / ISO 13485:2016 design projects, user needs, engineering specs, stage-gate design reviews with independent review sign-off, verification & validation protocols, Requirements Traceability Matrix (RTM), and audit-ready Design History File (DHF) dossiers; 12.3 Risk Management (ISO 14971 / FMEA) including risk management plans, hazard identification & FMEA risk assessments, risk control measures & mitigations, interactive FMEA risk matrix heatmaps, risk traceability matrices, and risk management reviews/reports; and 12.4 Corrective & Preventive Action (CAPA) compliant with ISO 13485:2016 §8.5.2/§8.5.3 and 21 CFR § 820.100 including issue detection & logging, 5 Whys & Ishikawa 6M root cause analysis, action plan development & verification, 4-tier aging Kanban tracking board, and delayed effectiveness reviews with defect recurrence guards). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1, 12.2, 12.3, or 12.4), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -39,6 +39,13 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **FMEA Risk Matrix Heatmap Workbench**: Interactive visual matrix mapping Severity vs. Probability distributions for pre-mitigation and residual risks, highlighting risk zone transitions, Pareto RPN distributions, and filtered plan-specific CSV export.
   - **Risk Traceability Matrix (Hazard -> Control -> Verification)**: Comprehensive traceability workbench linking every identified hazard to its control measure, verification protocol, test result, and residual risk acceptance evaluation with coverage metrics and CSV export.
 
+- **12.4 Corrective & Preventive Action (CAPA)**:
+  - **CAPA Investigations** [`QCAP-`]: Regulatory problem-solving workflows conforming to ISO 13485:2016 §8.5.2/§8.5.3 and 21 CFR § 820.100. Captures multi-source issue intake (`customer_complaint`, `internal_audit`, `ncr`, `management_review`, `supplier_issue`, `trend_analysis`, `regulatory_finding`), risk priority triage (`low`, `medium`, `high`, `critical`), immediate containment measures, 7-stage lifecycle state machine (`draft` -> `under_investigation` -> `rca_in_progress` -> `action_pending` -> `effectiveness_review` -> `closed` / `voided`), escalation protocols, and Part 11 electronic signature closure sign-offs.
+  - **Root Cause Analysis (RCA)** [`QRCA-`]: Systematic root cause analysis combining the 5 Whys iterative causal ladder and the Ishikawa 6M fishbone analysis framework (`manpower`, `machine`, `material`, `method`, `measurement`, `environment`). Features escape point detection failure analysis, independent quality engineering verification, and prevention of premature closure.
+  - **CAPA Action Plans** [`QACT-`]: Targeted action items categorized across containment, corrective, and preventive action types. Enforces strict parent CAPA integrity, links directly to QMS engineering assets (`ControlledDocument`, `DocumentChangeOrder`, `DesignProject`), tracks completion dates and implementation evidence, and mandates independent verification by a qualified user other than the assignee.
+  - **Effectiveness Reviews & Verification** [`QEFF-`]: Delayed statistical evaluation window (30/60/90 days post-implementation) verifying that underlying causes were permanently eliminated without introducing unintended consequences. Features evaluation methods (`statistical_sampling`, `trend_analysis`, `process_audit`, `customer_feedback`, `repeat_incident_check`), defect recurrence tracking, and a hard safety invariant preventing an "Effective" determination if defect recurrence is documented.
+  - **CAPA Tracking & Escalation Board**: High-level visual Kanban workbench tracking open investigations across 5 operational workflow lanes (`Draft`, `Under Investigation`, `RCA in Progress`, `Action Implementation`, `Effectiveness Review`) and 4 aging tiers (`0-30`, `31-60`, `61-90`, `>90 days`), surfacing overdue alerts, escalation badges, and filtered CSV exports.
+
 ---
 
 ## App Layout & Architecture
@@ -64,6 +71,11 @@ apps/quality/
       RiskAssessments.py                      <- RiskAssessment [QRSK-]
       RiskControlMeasures.py                  <- RiskControlMeasure [QRCM-]
       RiskReviewRecords.py                    <- RiskReviewRecord [QRMR-]
+    CapaManagement/                           <- Sub-module 12.4 models
+      CapaInvestigations.py                   <- CapaInvestigation [QCAP-]
+      RootCauseAnalyses.py                    <- RootCauseAnalysis [QRCA-]
+      CapaActions.py                          <- CapaAction [QACT-]
+      CapaEffectivenessReviews.py             <- CapaEffectivenessReview [QEFF-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -82,6 +94,11 @@ apps/quality/
       RiskAssessments.py                      <- RiskAssessmentForm (with ISO 14971 safety gate & ALARP checks)
       RiskControlMeasures.py                  <- RiskControlMeasureForm (with objective verification evidence guards)
       RiskReviewRecords.py                    <- RiskReviewRecordForm (with restricted draft/under_review choices)
+    CapaManagement/                           <- Sub-module 12.4 forms
+      CapaInvestigations.py                   <- CapaInvestigationForm (with target date and status guards)
+      RootCauseAnalyses.py                    <- RootCauseAnalysisForm (with parent CAPA immutability check)
+      CapaActions.py                          <- CapaActionForm (with cross-CAPA root cause verification)
+      CapaEffectivenessReviews.py             <- CapaEffectivenessReviewForm (with recurrence safety invariant)
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -102,6 +119,12 @@ apps/quality/
       RiskControlMeasures.py                  <- List, Detail, Create, Edit, Delete, Verify Impl, Verify Eff, Export
       RiskReviewRecords.py                    <- List, Detail, Create, Edit, Delete, Approve, Export
       FmeaMatrix.py                           <- FMEA Matrix, Matrix Export, Risk Traceability Matrix, Traceability Export
+    CapaManagement/                           <- Sub-module 12.4 views
+      CapaInvestigations.py                   <- List, Detail, Create, Edit, Delete, Advance Status, Close, Export
+      RootCauseAnalyses.py                    <- List, Detail, Create, Edit, Delete, Verify, Export
+      CapaActions.py                          <- List, Detail, Create, Edit, Delete, Mark Completed, Verify, Export
+      CapaEffectivenessReviews.py             <- List, Detail, Create, Edit, Delete, Sign Off, Export
+      CapaTrackingBoard.py                    <- Kanban Tracking Board, Tracking Board Export
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -121,12 +144,18 @@ apps/quality/
       RiskControlMeasures.py
       RiskReviewRecords.py
       FmeaMatrix.py
+    CapaManagement/                           <- Sub-module 12.4 URLs
+      CapaInvestigations.py
+      RootCauseAnalyses.py
+      CapaActions.py
+      CapaEffectivenessReviews.py
+      CapaTrackingBoard.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1, 12.2, 12.3)
-  tests/                                      <- Pytest test suite (100% green, 604 passing tests)
-    conftest.py                               <- Shared 12.1, 12.2, and 12.3 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1, 12.2, 12.3, 12.4)
+  tests/                                      <- Pytest test suite (100% green, 946 passing tests)
+    conftest.py                               <- Shared 12.1, 12.2, 12.3, and 12.4 fixtures
     test_documentcontrol_models.py
     test_documentcontrol_forms.py
     test_documentcontrol_views.py
@@ -139,6 +168,10 @@ apps/quality/
     test_riskmanagement_forms.py
     test_riskmanagement_views.py
     test_riskmanagement_security.py
+    test_capamanagement_models.py
+    test_capamanagement_forms.py
+    test_capamanagement_views.py
+    test_capamanagement_security.py
 ```
 
 ---
@@ -215,6 +248,34 @@ apps/quality/
 - **Key Fields:** `number`, `plan` (`RiskManagementPlan`), `review_title`, `review_type` (`initial_rmr`, `periodic_review`, `design_change_review`, `post_market_surveillance`, `complaint_trend_trigger`, `ncr_capa_trigger`), `review_date`, `period_start_date`, `period_end_date`, `lead_reviewer` (`accounts.User`), `status` (`draft`, `under_review`, `approved`, `rejected`), `findings_summary`, `post_market_data_reviewed`, `risk_benefit_conclusion`, `overall_residual_risk_acceptable`, `approved_signature` (`ElectronicSignatureRecord`), `approval_date`.
 - **Properties & Methods:** `status_badge`, `review_type_badge`.
 - **Indexes:** `idx_qrmr_ten_plan_type`, `idx_qrmr_ten_status`, `idx_qrmr_ten_created`.
+
+---
+
+### Sub-module 12.4 Entities
+
+#### 13. `CapaInvestigation` (Prefix: `QCAP-`)
+- **Table:** `quality_capa_investigation`
+- **Key Fields:** `number`, `title`, `action_type` (`corrective`, `preventive`), `source_type` (`customer_complaint`, `internal_audit`, `ncr`, `management_review`, `supplier_issue`, `trend_analysis`, `regulatory_finding`), `risk_priority` (`low`, `medium`, `high`, `critical`), `status` (`draft`, `under_investigation`, `rca_in_progress`, `action_pending`, `effectiveness_review`, `closed`, `voided`), `department` (`core.OrgUnit`), `lead_investigator` (`accounts.User`), `quality_owner` (`accounts.User`), `issue_summary`, `containment_actions`, `containment_verified`, `containment_verified_by` (`accounts.User`), `containment_verified_at`, `target_closure_date`, `closed_at`, `closure_approved_by` (`accounts.User`), `closure_summary`, `formal_closure_signature` (`ElectronicSignatureRecord`), `design_project` (`DesignProject`), `risk_assessment` (`RiskAssessment`), `is_escalated`, `escalation_reason`.
+- **Properties & Methods:** `action_type_badge`, `source_type_badge`, `risk_priority_badge`, `status_badge`, `days_open`, `is_overdue`, `actions_count` (with `__dict__` cache check), `pending_actions_count` (with `__dict__` cache check), `rca_count`.
+- **Indexes:** `idx_qcap_ten_status`, `idx_qcap_ten_act_type`, `idx_qcap_ten_dept`, `idx_qcap_ten_src_type`, `idx_qcap_ten_risk_pri`, `idx_qcap_ten_tgt_date`, `idx_qcap_ten_created`.
+
+#### 14. `RootCauseAnalysis` (Prefix: `QRCA-`)
+- **Table:** `quality_root_cause_analysis`
+- **Key Fields:** `number`, `capa` (`CapaInvestigation`), `rca_method` (`five_whys`, `fishbone_ishikawa`, `fault_tree`, `fmea_deduction`, `is_is_not`, `barrier_analysis`), `problem_statement`, `why_1`, `why_2`, `why_3`, `why_4`, `why_5`, `root_cause_summary`, `root_cause_category` (`manpower`, `machine`, `material`, `method`, `measurement`, `environment`), `escape_point`, `lead_investigator` (`accounts.User`), `status` (`in_progress`, `verified`, `rejected`), `verified_by` (`accounts.User`), `verified_date`, `verification_notes`.
+- **Properties & Methods:** `rca_method_badge`, `root_cause_category_badge`, `status_badge`, `why_levels_count`, `is_verified`.
+- **Indexes:** `idx_qrca_ten_capa_stat`, `idx_qrca_ten_method`, `idx_qrca_ten_cat`, `idx_qrca_ten_created`.
+
+#### 15. `CapaAction` (Prefix: `QACT-`)
+- **Table:** `quality_capa_action`
+- **Key Fields:** `number`, `capa` (`CapaInvestigation`), `root_cause` (`RootCauseAnalysis`), `action_type` (`immediate_containment`, `corrective`, `preventive`), `title`, `description`, `assigned_to` (`accounts.User`), `department` (`core.OrgUnit`), `due_date`, `completion_date`, `status` (`pending`, `in_progress`, `implemented`, `verified`, `cancelled`), `implementation_notes`, `verified_by` (`accounts.User`), `verified_on`, `verification_evidence`, `controlled_document` (`ControlledDocument`), `change_order` (`DocumentChangeOrder`), `design_project` (`DesignProject`).
+- **Properties & Methods:** `action_type_badge`, `status_badge`, `is_overdue`, `is_verified`.
+- **Indexes:** `idx_qact_ten_capa_stat`, `idx_qact_ten_type`, `idx_qact_ten_dept`, `idx_qact_ten_due`, `idx_qact_ten_created`.
+
+#### 16. `CapaEffectivenessReview` (Prefix: `QEFF-`)
+- **Table:** `quality_capa_effectiveness_review`
+- **Key Fields:** `number`, `capa` (`CapaInvestigation`), `review_criteria`, `verification_method` (`statistical_sampling`, `trend_analysis`, `process_audit`, `customer_feedback`, `repeat_incident_check`), `planned_review_date`, `actual_review_date`, `evaluator` (`accounts.User`), `status` (`scheduled`, `in_progress`, `completed`, `cancelled`), `outcome` (`pending`, `effective`, `partially_effective`, `ineffective`), `results_summary`, `recurrence_observed`, `recurrence_details`, `follow_up_capa_required`, `formal_signature` (`ElectronicSignatureRecord`).
+- **Properties & Methods:** `verification_method_badge`, `status_badge`, `outcome_badge`, `is_effective`, `is_review_overdue`.
+- **Indexes:** `idx_qeff_ten_capa_stat`, `idx_qeff_ten_method`, `idx_qeff_ten_outcome`, `idx_qeff_ten_planned`, `idx_qeff_ten_created`.
 
 
 ---
@@ -330,6 +391,42 @@ All routes use the `quality:` namespace:
 | `/quality/risk-management/traceability-matrix/` | `risk_traceability_matrix` | Comprehensive Hazard -> Control -> Verification Traceability Matrix |
 | `/quality/risk-management/traceability-matrix/export/` | `risk_traceability_matrix_export` | CSV export of Risk Traceability Matrix |
 
+### Sub-module 12.4 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/capa/investigations/` | `capa_investigation_list` | CAPA investigations list with filters, KPI counters, and search |
+| `/quality/capa/investigations/create/` | `capa_investigation_create` | Log new CAPA investigation with initial containment |
+| `/quality/capa/investigations/<pk>/` | `capa_investigation_detail` | Detailed CAPA dossier with linked RCAs, actions, reviews, and audit trail |
+| `/quality/capa/investigations/<pk>/edit/` | `capa_investigation_edit` | Edit investigation metadata (guarded against closed/voided CAPAs) |
+| `/quality/capa/investigations/<pk>/delete/` | `capa_investigation_delete` | POST-only delete (requires tenant admin, blocks closed CAPAs) |
+| `/quality/capa/investigations/<pk>/advance-status/` | `capa_investigation_advance_status` | POST-only lifecycle phase progression (blocks direct closure, gates voiding to admin) |
+| `/quality/capa/investigations/<pk>/close/` | `capa_investigation_close` | POST-only formal closure (requires tenant admin, checks pending actions, records signature) |
+| `/quality/capa/investigations/export/` | `capa_investigation_export` | CSV export with formula injection defense |
+| `/quality/capa/root-causes/` | `root_cause_analysis_list` | RCA records list with method and category filters |
+| `/quality/capa/root-causes/create/` | `root_cause_analysis_create` | Add 5 Whys or Ishikawa fishbone analysis to CAPA |
+| `/quality/capa/root-causes/<pk>/` | `root_cause_analysis_detail` | RCA visual ladder, fishbone diagram, and verification status |
+| `/quality/capa/root-causes/<pk>/edit/` | `root_cause_analysis_edit` | Edit RCA (guarded against verified records) |
+| `/quality/capa/root-causes/<pk>/delete/` | `root_cause_analysis_delete` | POST-only delete (requires tenant admin, blocks verified RCAs) |
+| `/quality/capa/root-causes/<pk>/verify/` | `root_cause_analysis_verify` | POST-only quality engineering verification |
+| `/quality/capa/root-causes/export/` | `root_cause_analysis_export` | CSV export of root cause analyses |
+| `/quality/capa/actions/` | `capa_action_list` | Action items list with action type and overdue status |
+| `/quality/capa/actions/create/` | `capa_action_create` | Add action item linked to root cause and QMS engineering spine |
+| `/quality/capa/actions/<pk>/` | `capa_action_detail` | Action detail with verification evidence and linked assets |
+| `/quality/capa/actions/<pk>/edit/` | `capa_action_edit` | Edit action plan (guarded against verified actions) |
+| `/quality/capa/actions/<pk>/delete/` | `capa_action_delete` | POST-only delete (requires tenant admin, blocks verified actions) |
+| `/quality/capa/actions/<pk>/mark-completed/` | `capa_action_mark_completed` | POST-only implementation sign-off with implementation notes |
+| `/quality/capa/actions/<pk>/verify/` | `capa_action_verify` | POST-only independent verification (requires implemented status, enforces separation of duties) |
+| `/quality/capa/actions/export/` | `capa_action_export` | CSV export of CAPA actions |
+| `/quality/capa/effectiveness-reviews/` | `capa_effectiveness_review_list` | Effectiveness reviews list with outcome and overdue filters |
+| `/quality/capa/effectiveness-reviews/create/` | `capa_effectiveness_review_create` | Schedule post-implementation effectiveness evaluation |
+| `/quality/capa/effectiveness-reviews/<pk>/` | `capa_effectiveness_review_detail` | Review detail with recurrence tracking and statistical results |
+| `/quality/capa/effectiveness-reviews/<pk>/edit/` | `capa_effectiveness_review_edit` | Edit review protocol (guarded against completed reviews) |
+| `/quality/capa/effectiveness-reviews/<pk>/delete/` | `capa_effectiveness_review_delete` | POST-only delete (requires tenant admin, blocks completed reviews) |
+| `/quality/capa/effectiveness-reviews/<pk>/sign-off/` | `capa_effectiveness_review_sign_off` | POST-only outcome sign-off (evaluator/admin check, blocks 'effective' if recurrence observed) |
+| `/quality/capa/effectiveness-reviews/export/` | `capa_effectiveness_review_export` | CSV export of effectiveness reviews |
+| `/quality/capa/tracking-board/` | `capa_tracking_board` | Interactive 5-column Kanban board with 4-tier aging matrix |
+| `/quality/capa/tracking-board/export/` | `capa_tracking_board_export` | CSV export of aging workbench data |
+
 ---
 
 ## Seeder (`seed_quality`)
@@ -367,6 +464,16 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
     - Interim Design Risk Assessment Review (Approved with e-signature)
     - Pre-Verification Risk Assessment Review (Under Review)
 
+- **12.4 Data**:
+  - 4 CAPA investigations per tenant:
+    - `Infusion Pump Pressure Sensor Drift`: Customer complaint, Critical priority, under investigation with quarantined lots
+    - `Sterile Barrier Pouch Seal Temperature Excursion`: Internal audit finding, High priority, RCA in progress
+    - `Automated Syringe Assembly Alignment Fault`: NCR root cause, Medium priority, corrective actions pending
+    - `Annual Trend: Luer Lock Thread Stripping`: Historical trend analysis, Medium priority, closed with e-signature sign-off
+  - 4 Root Cause Analyses (5 Whys causal stepping ladders and Ishikawa 6M fishbone models with escape point barrier gaps)
+  - 5 CAPA Actions across immediate containment, corrective, and preventive types linked to DCOs and engineering specs
+  - 3 Effectiveness Reviews with statistical sampling, trend evaluations, and Part 11 e-signature records
+
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
 ---
@@ -400,8 +507,20 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
    - Plan detail view aggregates KPI counts into single `.aggregate(Count("id", filter=Q(...)))` calls.
    - Matrix views avoid standalone COUNT queries on already iterated querysets by using `len(assessments)`.
    - In exports, prefetch caches are preserved using `list(a.control_measures.all())` rather than `.exists()`.
-8. **Theme CSS Badges:**
-   - Strictly use colour-named classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`. Never use semantic names like `badge-success`, `badge-danger`, `badge-purple`, or `badge-blue`.
+8. **CAPA Lifecycle Governance (ISO 13485:2016 §8.5.2 / 21 CFR § 820.100):**
+   - Direct transitions to `closed` are blocked on standard advance status endpoints. Closure must occur via `capa_investigation_close` with `@tenant_admin_required`, verification that `pending_actions_count == 0`, and timestamping `closed_at`.
+   - Closed investigations cannot be modified, reopened, or deleted.
+   - Child records (RCAs, Actions, Reviews) under a closed CAPA cannot be deleted or re-verified.
+   - Parent CAPA immutability: Child forms (`RootCauseAnalysisForm`, `CapaActionForm`, `CapaEffectivenessReviewForm`) disallow reassigning parent `capa` on existing records.
+   - Cross-record integrity: `CapaActionForm` validates that `root_cause.capa_id == capa.id`.
+9. **CAPA Effectiveness Recurrence Safety Gate:**
+   - Under 21 CFR § 820.100(a)(4), an effectiveness review CANNOT be marked `outcome="effective"` if `recurrence_observed=True`. Both `CapaEffectivenessReviewForm.clean()` and `capa_effectiveness_review_sign_off` enforce this rule unconditionally.
+10. **Separation of Duties in Action Verification:**
+    - `capa_action_verify` requires the action to be in `implemented` status and prevents the assignee (`assigned_to`) from self-verifying without tenant-admin privilege.
+11. **Property Annotation Cache Pattern:**
+    - Because `@property` methods override annotations in class descriptors, `CapaInvestigation.actions_count` and `pending_actions_count` inspect `self.__dict__` first. When pre-annotated on the queryset, zero additional queries are generated in list tables.
+12. **Theme CSS Badges:**
+    - Strictly use colour-named classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`. Never use semantic names like `badge-success`, `badge-danger`, `badge-purple`, or `badge-blue`.
 
 ---
 
@@ -432,6 +551,13 @@ LIVE_LINKS = {
         "quality:risk_control_measure_list",
         "quality:fmea_matrix",
         "quality:risk_traceability_matrix",
+    ],
+    "12.4": [
+        "quality:capa_investigation_list",
+        "quality:root_cause_analysis_list",
+        "quality:capa_action_list",
+        "quality:capa_tracking_board",
+        "quality:capa_effectiveness_review_list",
     ],
 }
 ```
