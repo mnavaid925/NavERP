@@ -17,7 +17,7 @@
         <div class="flex items-center gap-3">
             <h1 class="page-title">Design History File (DHF) Dossier</h1>
             {% if project.dhf_locked %}
-            <span class="badge badge-purple"><i data-lucide="lock" class="w-3.5 h-3.5 inline"></i> DHF Frozen & Locked</span>
+            <span class="badge badge-info"><i data-lucide="lock" class="w-3.5 h-3.5 inline"></i> DHF Frozen & Locked</span>
             {% elif is_dhf_complete %}
             <span class="badge badge-green"><i data-lucide="check-circle" class="w-3.5 h-3.5 inline"></i> Ready for Transfer Freeze</span>
             {% else %}
@@ -220,7 +220,7 @@
                     <td><span class="badge {{ rev.status_css }}">{{ rev.get_status_display }}</span></td>
                     <td>
                         {% if rev.electronic_signature %}
-                        <span class="badge badge-purple font-mono text-[10px]"><i data-lucide="award" class="w-3 h-3 inline"></i> {{ rev.electronic_signature.number }}</span>
+                        <span class="badge badge-info font-mono text-[10px]"><i data-lucide="award" class="w-3 h-3 inline"></i> {{ rev.electronic_signature.number }}</span>
                         {% else %}
                         <span class="text-xs text-slate-400">Pending</span>
                         {% endif %}
