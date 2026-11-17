@@ -7,6 +7,319 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 12.3: Risk Management (ISO 14971 / FMEA) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.3.md` (2026-11-17)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control & Management) and 12.2 (Design Controls & Development).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0004_designproject_idx_qdpl_ten_created.py`, so **12.3 claims `0005_...`** (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QRMP`** (`RiskManagementPlan`), **`QRSK`** (`RiskAssessment`), **`QRCM`** (`RiskControlMeasure`), **`QRMR`** (`RiskReviewRecord`).
+> Plan written from `.claude/tasks/research-quality-12.3.md` (Phase 1) and `NavERP.md` (`### 12.3 Risk Management (ISO 14971 / FMEA)`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/RiskManagement/<Entity>.py` (`RiskManagementPlans.py`, `RiskAssessments.py`, `RiskControlMeasures.py`, `RiskReviewRecords.py`, plus dedicated workbench module `FmeaMatrix.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/riskmanagement/{risk_management_plan,risk_assessment,risk_control_measure,risk_review_record}/{list,detail,form}.html` + `templates/quality/riskmanagement/{fmea_matrix.html,risk_traceability_matrix.html}`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QRMP`** (`RiskManagementPlan`), **`QRSK`** (`RiskAssessment`), **`QRCM`** (`RiskControlMeasure`), **`QRMR`** (`RiskReviewRecord`), all 4 model classes, and all URL stems (`risk_management_plan_*`, `risk_assessment_*`, `risk_control_measure_*`, `risk_review_record_*`, `fmea_matrix`, `risk_traceability_matrix`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - Module 12 siblings (12.1 & 12.2): `quality.DesignProject` (`apps/quality/models/DesignControls/DesignProjects.py`), `quality.DesignInput` (`apps/quality/models/DesignControls/DesignInputs.py`), `quality.DesignVerification` (`apps/quality/models/DesignControls/DesignVerifications.py`), `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.ElectronicSignatureRecord` (`apps/quality/models/DocumentControl/ElectronicSignatures.py`).
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`core.OrgUnit`, `accounts.User`, `DesignProject`, `DesignInput`, `DesignVerification`, `ControlledDocument`, `ElectronicSignatureRecord`, `RiskManagementPlan`, `RiskAssessment`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **ISO 14971:2019 & IEC 60812 Regulatory Alignment**:
+  - Clause 4: Risk Management Plan (`RiskManagementPlan`) governs scope, intended use, device classification, risk acceptability criteria, and review cadence.
+  - Clause 5 & 6: Hazard Identification & Analysis (`RiskAssessment`) enforces the ISO 14971 causal event chain (Hazard → Sequence of Events → Hazardous Situation → Harm) and IEC 60812 FMEA structure (Item/Function → Failure Mode → Failure Cause → Failure Effect). Captures pre-mitigation Severity ($S$), Probability ($P$), Detectability ($D$), initial $RPN = S \times P \times D$, and automated traffic-light acceptability levels (`broadly_acceptable`, `alarp`, `unacceptable`).
+  - Clause 7.1: Risk Control Option Hierarchy (`RiskControlMeasure`) strictly enforces the regulatory order of precedence: (1) Inherent safety by design > (2) Protective measures in the medical device or process > (3) Information for safety and training.
+  - Clause 7.2: Dual Verification of Controls (`RiskControlMeasure`) requires separate confirmation of implementation (`implementation_verified`) and effectiveness (`effectiveness_verified`), linking directly to `quality.DesignVerification`.
+  - Clause 7.3: Introduces New Hazards gate (`introduces_new_hazard`, `new_hazard_details`) evaluates any unintended secondary hazards introduced by the mitigation itself.
+  - Clause 7.4 & 8: Residual Risk Assessment & Benefit-Risk Analysis (`RiskAssessment` & `RiskManagementPlan`): residual scoring ($S_{res}, P_{res}, D_{res}$, Residual RPN), clinical Benefit-Risk Analysis (BRA) for ALARP risks, and overall residual risk evaluation certifying that benefits outweigh collective risks.
+  - Clause 9 & 10: Living Risk Management File & Post-Market Surveillance (`RiskReviewRecord`) connects periodic reviews and post-market safety inputs (complaints, non-conformances, CAPAs) to live risk profile reconfirmations.
+  - 21 CFR Part 11: Formal approvals of Risk Management Plans and Risk Management Reports integrate cryptographic electronic signatures (`ElectronicSignatureRecord`).
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`), auto-numbers (`number`), auto-calculated scoring fields (`initial_rpn`, `initial_risk_level`, `residual_rpn`, `residual_risk_level`), and signature references MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_fully_verified`, `is_acceptable`, `assessments_count`, `unmitigated_risks_count`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view (`create`, `edit`, `delete`, and every custom POST workflow action) calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Stat icon colors ONLY from `.stat-icon.{blue,green,orange,purple,slate,red}`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; privileged actions use `@tenant_admin_required`; `confirm(...)` uses system `number` with `\'` escaped apostrophes (L42); paginators guard `has_previous` / `has_next` (L9); CSV exports use `csv_safe(...)` formula neutralization.
+
+---
+
+## Models (from research — 4)
+
+### 1. `RiskManagementPlan` (`QRMP-`)
+- [ ] **File**: `apps/quality/models/RiskManagement/RiskManagementPlans.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRMP"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `plan_version`: `CharField(max_length=16, default="1.0", help_text="Plan revision, e.g. 1.0, 2.0")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"in_review"` (9), `"active"` (6), `"periodic_review"` (15), `"superseded"` (10), `"archived"` (8) (longest: 15 <= 24)
+  - `design_project`: `ForeignKey("quality.DesignProject", on_delete=models.SET_NULL, null=True, blank=True, related_name="risk_plans", help_text="Associated product development plan in Design Controls")`
+  - `lead_risk_manager`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="managed_risk_plans")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="risk_plans")`
+  - `device_classification`: `CharField(max_length=24, choices=DEVICE_CLASSIFICATION_CHOICES, default="class_ii")` — `"class_i"` (7), `"class_ii_a"` (10), `"class_ii_b"` (10), `"class_iii"` (9), `"samd"` (4), `"non_medical"` (11) (longest: 11 <= 24)
+  - `scope_description`: `TextField(help_text="Device description, clinical intended use, and lifecycle boundaries")`
+  - `matrix_dimension`: `CharField(max_length=12, choices=MATRIX_DIMENSION_CHOICES, default="5x5")` — `"3x3"` (3), `"4x4"` (3), `"5x5"` (3) (longest: 3 <= 12)
+  - `risk_acceptability_policy`: `TextField(help_text="Documented criteria for risk acceptability, ALARP thresholds, and evaluation policy")`
+  - `overall_residual_risk_acceptable`: `BooleanField(default=False, help_text="Certification per ISO 14971 Clause 8")`
+  - `overall_benefit_risk_summary`: `TextField(blank=True, help_text="Executive summary justifying that overall clinical benefits outweigh collective residual risks")`
+  - `periodic_review_frequency_months`: `PositiveSmallIntegerField(default=12, help_text="Review frequency in months (e.g. 12)")`
+  - `next_review_due_date`: `DateField(null=True, blank=True)`
+  - `approved_signature`: `ForeignKey("quality.ElectronicSignatureRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_risk_plans", editable=False, help_text="21 CFR Part 11 signature manifest")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrmp_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qrmp_ten_status")` (19)
+  - `Index(fields=["tenant", "device_classification"], name="idx_qrmp_ten_class")` (18)
+  - `Index(fields=["tenant", "design_project"], name="idx_qrmp_ten_prj")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qrmp_ten_created")` (20)
+- [ ] **Properties & Methods**:
+  - `assessments_count`: total associated risk assessment items
+  - `unmitigated_risks_count`: count of assessments with `residual_risk_acceptable=False` or `lifecycle_status != "closed"`
+  - `is_review_overdue`: True if `next_review_due_date and next_review_due_date < timezone.now().date() and status == "active"`
+- [ ] **Form (`RiskManagementPlanForm`)**:
+  - `Meta.fields`: `title`, `plan_version`, `status`, `design_project`, `lead_risk_manager`, `department`, `device_classification`, `scope_description`, `matrix_dimension`, `risk_acceptability_policy`, `overall_residual_risk_acceptable`, `overall_benefit_risk_summary`, `periodic_review_frequency_months`, `next_review_due_date`
+  - Excluded: `tenant`, `number`, `approved_signature`, `created_at`, `updated_at`
+  - `clean()`: validate `design_project`, `lead_risk_manager`, `department` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `activate_plan`, `archive_plan`, `schedule_periodic_review`, `sign_plan` (`@require_POST`).
+
+### 2. `RiskAssessment` (`QRSK-`)
+- [ ] **File**: `apps/quality/models/RiskManagement/RiskAssessments.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRSK"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `plan`: `ForeignKey("quality.RiskManagementPlan", on_delete=models.CASCADE, related_name="assessments")`
+  - `analysis_type`: `CharField(max_length=24, choices=ANALYSIS_TYPE_CHOICES, default="hazard_analysis", db_index=True)` — `"hazard_analysis"` (15), `"dfmea"` (5), `"pfmea"` (5), `"software_fmea"` (13), `"use_error_urra"` (14) (longest: 15 <= 24)
+  - `hazard_category`: `CharField(max_length=32, choices=HAZARD_CATEGORY_CHOICES, default="other")` — `"energy_electrical"` (17), `"energy_thermal"` (14), `"energy_mechanical"` (17), `"radiation"` (9), `"biological_chemical"` (19), `"operational_use_error"` (22), `"software_cybersecurity"` (22), `"environmental"` (13), `"other"` (5) (longest: 22 <= 32)
+  - `hazard_description`: `CharField(max_length=255, help_text="Potential source of harm per ISO 14971")`
+  - `hazardous_situation`: `TextField(help_text="Circumstance in which people, property, or environment are exposed to hazard(s)")`
+  - `foreseeable_sequence_of_events`: `TextField(blank=True, help_text="Causal sequence leading to the hazardous situation")`
+  - `potential_harm`: `TextField(help_text="Physical injury, impairment, damage to health, or environmental harm")`
+  - *FMEA Specifics*:
+    - `item_function`: `CharField(max_length=255, blank=True, help_text="System component, subsystem, or process step analyzed")`
+    - `failure_mode`: `CharField(max_length=255, blank=True, help_text="Specific manner in which the item fails to perform intended function")`
+    - `failure_cause`: `TextField(blank=True, help_text="Root physical or chemical mechanism causing the failure mode")`
+    - `failure_effect`: `TextField(blank=True, help_text="Consequence of the failure on the system or end user")`
+  - *Pre-Mitigation Scoring*:
+    - `initial_severity`: `PositiveSmallIntegerField(default=3, choices=SEVERITY_CHOICES, help_text="1=Negligible, 2=Minor, 3=Serious, 4=Critical, 5=Catastrophic")`
+    - `initial_probability`: `PositiveSmallIntegerField(default=3, choices=PROBABILITY_CHOICES, help_text="1=Improbable, 2=Remote, 3=Occasional, 4=Probable, 5=Frequent")`
+    - `initial_detectability`: `PositiveSmallIntegerField(default=1, choices=DETECTABILITY_CHOICES, help_text="1=Almost Certain, 2=High, 3=Moderate, 4=Low, 5=Undetectable")`
+    - `initial_rpn`: `PositiveIntegerField(default=0, editable=False, help_text="Computed S x P x D")`
+    - `initial_risk_level`: `CharField(max_length=24, choices=RISK_LEVEL_CHOICES, default="unacceptable", editable=False)` — `"broadly_acceptable"` (18), `"alarp"` (5), `"unacceptable"` (12) (longest: 18 <= 24)
+  - *Post-Mitigation Residual Scoring*:
+    - `residual_severity`: `PositiveSmallIntegerField(null=True, blank=True, choices=SEVERITY_CHOICES)`
+    - `residual_probability`: `PositiveSmallIntegerField(null=True, blank=True, choices=PROBABILITY_CHOICES)`
+    - `residual_detectability`: `PositiveSmallIntegerField(null=True, blank=True, choices=DETECTABILITY_CHOICES)`
+    - `residual_rpn`: `PositiveIntegerField(null=True, blank=True, editable=False)`
+    - `residual_risk_level`: `CharField(max_length=24, choices=RISK_LEVEL_CHOICES, blank=True, editable=False)`
+    - `residual_risk_acceptable`: `BooleanField(default=False, help_text="Meets pre-defined risk acceptability threshold")`
+    - `bra_required`: `BooleanField(default=False, help_text="Mandatory Benefit-Risk Analysis if residual risk is in ALARP zone")`
+    - `benefit_risk_justification`: `TextField(blank=True, help_text="Documented clinical evidence justifying that clinical benefit outweighs residual risk")`
+    - `disclosed_in_ifu`: `BooleanField(default=False, help_text="Residual risk disclosed in Instructions for Use / device labeling")`
+  - *Design Link & Status*:
+    - `design_input`: `ForeignKey("quality.DesignInput", on_delete=models.SET_NULL, null=True, blank=True, related_name="risk_assessments", help_text="Originating or mitigating design requirement in Design Controls")`
+    - `lifecycle_status`: `CharField(max_length=28, choices=LIFECYCLE_STATUS_CHOICES, default="open", db_index=True)` — `"open"` (4), `"mitigation_in_progress"` (22), `"mitigated"` (9), `"accepted"` (8), `"closed"` (6) (longest: 22 <= 28)
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrsk_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "plan", "analysis_type"], name="idx_qrsk_ten_pln_type")` (21)
+  - `Index(fields=["tenant", "initial_risk_level"], name="idx_qrsk_ten_init_lvl")` (21)
+  - `Index(fields=["tenant", "residual_risk_level"], name="idx_qrsk_ten_res_lvl")` (20)
+  - `Index(fields=["tenant", "lifecycle_status"], name="idx_qrsk_ten_status")` (19)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qrsk_ten_created")` (20)
+- [ ] **Calculation in `save()`**:
+  - `initial_rpn = initial_severity * initial_probability * (initial_detectability or 1)`
+  - `initial_risk_level`: calculated via matrix threshold (S*P >= 15: `unacceptable`; S*P 6–14: `alarp`; S*P <= 5: `broadly_acceptable`)
+  - If residual scores are set: `residual_rpn = residual_severity * residual_probability * (residual_detectability or 1)` and `residual_risk_level` computed with matching matrix logic
+- [ ] **Form (`RiskAssessmentForm`)**:
+  - `Meta.fields`: `plan`, `analysis_type`, `hazard_category`, `hazard_description`, `hazardous_situation`, `foreseeable_sequence_of_events`, `potential_harm`, `item_function`, `failure_mode`, `failure_cause`, `failure_effect`, `initial_severity`, `initial_probability`, `initial_detectability`, `residual_severity`, `residual_probability`, `residual_detectability`, `residual_risk_acceptable`, `bra_required`, `benefit_risk_justification`, `disclosed_in_ifu`, `design_input`, `lifecycle_status`
+  - Excluded: `tenant`, `number`, `initial_rpn`, `initial_risk_level`, `residual_rpn`, `residual_risk_level`, `created_at`, `updated_at`
+  - `clean()`: validate `plan`, `design_input` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `recalculate_scores`, `close_risk` (`@require_POST`).
+
+### 3. `RiskControlMeasure` (`QRCM-`)
+- [ ] **File**: `apps/quality/models/RiskManagement/RiskControlMeasures.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRCM"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `risk_assessment`: `ForeignKey("quality.RiskAssessment", on_delete=models.CASCADE, related_name="control_measures")`
+  - `control_hierarchy`: `CharField(max_length=28, choices=CONTROL_HIERARCHY_CHOICES, default="inherent_safety", help_text="ISO 14971 Clause 7.1 mandatory priority order")` — `"inherent_safety"` (15), `"protective_measure"` (18), `"information_for_safety"` (22) (longest: 22 <= 28)
+  - `title`: `CharField(max_length=255)`
+  - `description`: `TextField(help_text="Engineering or procedural mitigation details")`
+  - `assigned_to`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_risk_controls")`
+  - `due_date`: `DateField(null=True, blank=True)`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="planned", db_index=True)` — `"planned"` (7), `"in_progress"` (11), `"implemented"` (11), `"verified"` (8), `"ineffective"` (11), `"obsolete"` (8) (longest: 11 <= 24)
+  - *Spine Traceability Links*:
+    - `design_input`: `ForeignKey("quality.DesignInput", on_delete=models.SET_NULL, null=True, blank=True, related_name="risk_controls", help_text="Design requirement specifying this mitigation")`
+    - `controlled_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="risk_controls", help_text="SOP, work instruction, or IFU implementing this mitigation")`
+    - `design_verification`: `ForeignKey("quality.DesignVerification", on_delete=models.SET_NULL, null=True, blank=True, related_name="risk_controls", help_text="Test protocol verifying mitigation implementation and effectiveness")`
+  - *Verification & Safety Gate*:
+    - `implementation_verified`: `BooleanField(default=False, help_text="ISO 14971 Clause 7.2 verification of implementation")`
+    - `effectiveness_verified`: `BooleanField(default=False, help_text="ISO 14971 Clause 7.2 verification of effectiveness")`
+    - `verification_notes`: `TextField(blank=True, help_text="Summary of objective verification evidence")`
+    - `introduces_new_hazard`: `BooleanField(default=False, help_text="ISO 14971 Clause 7.3 check for new hazards introduced by control")`
+    - `new_hazard_details`: `TextField(blank=True, help_text="Description and cross-reference of any new hazard created")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrcm_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "risk_assessment"], name="idx_qrcm_ten_assessment")` (23)
+  - `Index(fields=["tenant", "control_hierarchy"], name="idx_qrcm_ten_hier")` (17)
+  - `Index(fields=["tenant", "status"], name="idx_qrcm_ten_status")` (19)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qrcm_ten_created")` (20)
+- [ ] **Properties & Methods**:
+  - `is_fully_verified`: True if `implementation_verified and effectiveness_verified`
+- [ ] **Form (`RiskControlMeasureForm`)**:
+  - `Meta.fields`: `risk_assessment`, `control_hierarchy`, `title`, `description`, `assigned_to`, `due_date`, `status`, `design_input`, `controlled_document`, `design_verification`, `implementation_verified`, `effectiveness_verified`, `verification_notes`, `introduces_new_hazard`, `new_hazard_details`
+  - Excluded: `tenant`, `number`, `created_at`, `updated_at`
+  - `clean()`: validate `risk_assessment`, `assigned_to`, `design_input`, `controlled_document`, `design_verification` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `verify_implementation`, `verify_effectiveness` (`@require_POST`).
+
+### 4. `RiskReviewRecord` (`QRMR-`)
+- [ ] **File**: `apps/quality/models/RiskManagement/RiskReviewRecords.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRMR"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `plan`: `ForeignKey("quality.RiskManagementPlan", on_delete=models.CASCADE, related_name="reviews")`
+  - `review_title`: `CharField(max_length=255)`
+  - `review_type`: `CharField(max_length=32, choices=REVIEW_TYPE_CHOICES, default="periodic_review", db_index=True)` — `"initial_rmr"` (11), `"periodic_review"` (15), `"design_change_review"` (20), `"post_market_surveillance"` (24), `"complaint_trend_trigger"` (23), `"ncr_capa_trigger"` (16) (longest: 24 <= 32)
+  - `review_date`: `DateField()`
+  - `review_period_start`: `DateField(null=True, blank=True)`
+  - `review_period_end`: `DateField(null=True, blank=True)`
+  - `pms_sources_reviewed`: `TextField(blank=True, help_text="Complaints, NCRs, CAPAs, adverse event feeds, scientific literature examined")`
+  - `new_hazards_identified`: `BooleanField(default=False, help_text="Revealed previously unrecognized hazards or situations")`
+  - `risk_profile_changed`: `BooleanField(default=False, help_text="Increased occurrence frequency or severity observed")`
+  - `overall_residual_risk_reconfirmed`: `BooleanField(default=True, help_text="Reconfirmed overall residual risk remains acceptable")`
+  - `findings_summary`: `TextField(help_text="Detailed review conclusions and regulatory evaluation")`
+  - `action_items_required`: `TextField(blank=True, help_text="Follow-up design changes, DCOs, or CAPAs initiated")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"under_review"` (12), `"approved"` (8), `"rejected"` (8) (longest: 12 <= 24)
+  - `lead_reviewer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="conducted_risk_reviews")`
+  - `approved_signature`: `ForeignKey("quality.ElectronicSignatureRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_risk_reviews", editable=False, help_text="21 CFR Part 11 sign-off")`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrmr_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "plan", "review_type"], name="idx_qrmr_ten_pln_type")` (21)
+  - `Index(fields=["tenant", "status"], name="idx_qrmr_ten_status")` (19)
+  - `Index(fields=["tenant", "review_date"], name="idx_qrmr_ten_date")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qrmr_ten_created")` (20)
+- [ ] **Form (`RiskReviewRecordForm`)**:
+  - `Meta.fields`: `plan`, `review_title`, `review_type`, `review_date`, `review_period_start`, `review_period_end`, `pms_sources_reviewed`, `new_hazards_identified`, `risk_profile_changed`, `overall_residual_risk_reconfirmed`, `findings_summary`, `action_items_required`, `status`, `lead_reviewer`
+  - Excluded: `tenant`, `number`, `approved_signature`, `created_at`, `updated_at`
+  - `clean()`: validate `plan`, `lead_reviewer` via `reject_foreign(...)`
+- [ ] **Workflow actions**: `approve_review`, `sign_review` (`@require_POST`).
+
+---
+
+## Backend Packages (`apps/quality/{models,forms,views,urls}/RiskManagement/`)
+
+- [ ] **Models**:
+  - `apps/quality/models/RiskManagement/RiskManagementPlans.py`
+  - `apps/quality/models/RiskManagement/RiskAssessments.py`
+  - `apps/quality/models/RiskManagement/RiskControlMeasures.py`
+  - `apps/quality/models/RiskManagement/RiskReviewRecords.py`
+  - Re-export `RiskManagementPlan`, `RiskAssessment`, `RiskControlMeasure`, `RiskReviewRecord` in `apps/quality/models/__init__.py`
+- [ ] **Forms**:
+  - `apps/quality/forms/RiskManagement/RiskManagementPlans.py` (`RiskManagementPlanForm`)
+  - `apps/quality/forms/RiskManagement/RiskAssessments.py` (`RiskAssessmentForm`)
+  - `apps/quality/forms/RiskManagement/RiskControlMeasures.py` (`RiskControlMeasureForm`)
+  - `apps/quality/forms/RiskManagement/RiskReviewRecords.py` (`RiskReviewRecordForm`)
+  - Re-export forms in `apps/quality/forms/__init__.py`
+- [ ] **Views**:
+  - `apps/quality/views/RiskManagement/RiskManagementPlans.py` (`risk_management_plan_list`, `risk_management_plan_create`, `risk_management_plan_detail`, `risk_management_plan_edit`, `risk_management_plan_delete`, `risk_management_plan_activate`, `risk_management_plan_archive`, `risk_management_plan_export`)
+  - `apps/quality/views/RiskManagement/RiskAssessments.py` (`risk_assessment_list`, `risk_assessment_create`, `risk_assessment_detail`, `risk_assessment_edit`, `risk_assessment_delete`, `risk_assessment_export`)
+  - `apps/quality/views/RiskManagement/RiskControlMeasures.py` (`risk_control_measure_list`, `risk_control_measure_create`, `risk_control_measure_detail`, `risk_control_measure_edit`, `risk_control_measure_delete`, `risk_control_measure_verify_implementation`, `risk_control_measure_verify_effectiveness`, `risk_control_measure_export`)
+  - `apps/quality/views/RiskManagement/RiskReviewRecords.py` (`risk_review_record_list`, `risk_review_record_create`, `risk_review_record_detail`, `risk_review_record_edit`, `risk_review_record_delete`, `risk_review_record_approve`, `risk_review_record_export`)
+  - `apps/quality/views/RiskManagement/FmeaMatrix.py` (`fmea_matrix`, `fmea_matrix_export`, `risk_traceability_matrix`, `risk_traceability_matrix_export`)
+  - Re-export views in `apps/quality/views/__init__.py`
+- [ ] **URLs**:
+  - `apps/quality/urls/RiskManagement/RiskManagementPlans.py`
+  - `apps/quality/urls/RiskManagement/RiskAssessments.py`
+  - `apps/quality/urls/RiskManagement/RiskControlMeasures.py`
+  - `apps/quality/urls/RiskManagement/RiskReviewRecords.py`
+  - `apps/quality/urls/RiskManagement/FmeaMatrix.py`
+  - Wire all 5 URL modules into `apps/quality/urls/__init__.py`
+- [ ] **Admin**: Register `RiskManagementPlan`, `RiskAssessment`, `RiskControlMeasure`, `RiskReviewRecord` in `apps/quality/admin.py`
+- [ ] **Migration**: Run `makemigrations quality` generating `0005_...`
+- [ ] **Seeder**: Extend `apps/quality/management/commands/seed_quality.py` with idempotent medical device risk management plans, hazard assessments across ISO 14971 categories, FMEA failure modes with S/P/D scores, control measures with inherent safety/protective/IFU classifications and verification links, and periodic/PMS risk review records
+
+---
+
+## Wire-up
+
+- [ ] **Navigation (`apps/core/navigation.py`)**: Add `LIVE_LINKS["12.3"]` mapping exact `NavERP.md` 12.3 bullets:
+  ```python
+  "12.3": {
+      "Hazard Identification & Analysis": "quality:risk_assessment_list",
+      "Risk Evaluation & Scoring": "quality:fmea_matrix",
+      "Risk Control & Mitigation": "quality:risk_control_measure_list",
+      "Residual Risk Assessment": "quality:risk_assessment_list",
+      "Risk Management File & Reporting": "quality:risk_management_plan_list",
+  },
+  ```
+
+---
+
+## Templates (`templates/quality/riskmanagement/`)
+
+- [ ] **Risk Management Plans**:
+  - `templates/quality/riskmanagement/risk_management_plan/list.html`
+  - `templates/quality/riskmanagement/risk_management_plan/detail.html`
+  - `templates/quality/riskmanagement/risk_management_plan/form.html`
+- [ ] **Risk Assessments (Hazard Analysis & FMEA)**:
+  - `templates/quality/riskmanagement/risk_assessment/list.html`
+  - `templates/quality/riskmanagement/risk_assessment/detail.html`
+  - `templates/quality/riskmanagement/risk_assessment/form.html`
+- [ ] **Risk Control Measures**:
+  - `templates/quality/riskmanagement/risk_control_measure/list.html`
+  - `templates/quality/riskmanagement/risk_control_measure/detail.html`
+  - `templates/quality/riskmanagement/risk_control_measure/form.html`
+- [ ] **Risk Review Records**:
+  - `templates/quality/riskmanagement/risk_review_record/list.html`
+  - `templates/quality/riskmanagement/risk_review_record/detail.html`
+  - `templates/quality/riskmanagement/risk_review_record/form.html`
+- [ ] **Workbenches & Matrices**:
+  - `templates/quality/riskmanagement/fmea_matrix.html` (Interactive $5\times5$ risk matrix heatmap, pre/post mitigation score migration, RPN Pareto distribution)
+  - `templates/quality/riskmanagement/risk_traceability_matrix.html` (Bidirectional ISO 14971 traceability: Hazard → Control Measure → Design Verification → Residual Risk)
+
+---
+
+## Verify
+
+- [ ] Run `python manage.py makemigrations quality`
+- [ ] Run `python manage.py migrate`
+- [ ] Run `python manage.py seed_quality` twice (idempotence verification, zero duplicate errors)
+- [ ] Run `python manage.py check` (clean exit 0)
+- [ ] Smoke tests via test client (`temp/` script): HTTP 200/302 for all 12.3 routes, content assertions (titles, numbers, badges), zero `{#` / `{% comment` leaks, IDOR 404 cross-tenant isolation
+- [ ] Sidebar verification: `12.3` Live links functional
+
+---
+
+## Close-out
+
+- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-quality-12.3.md`
+- [ ] Phase 5: `code-fixer` agent burns down all findings in ID order (one commit per file)
+- [ ] Phase 6: Tests (`test_riskmanagement_models.py`, `test_riskmanagement_forms.py`, `test_riskmanagement_views.py`, `test_riskmanagement_security.py`) and unfiltered `apps/quality/tests/` green pass
+- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` and `README.md`, declare gaps in `.agents/tasks/gaps-quality-12.3.md` (or declare None), and populate `## Review notes`
+
+---
+
+## Later passes / deferred
+
+- **Parked sibling sub-modules (12.4–12.19)**:
+  - Root Cause Analysis (RCA) & CAPA Actions (5 Whys, Ishikawa fishbone) → Sub-module 12.4 (CAPA).
+  - Non-Conformance Reporting (NCR), Lot Quarantine & MRB Dispositions → Sub-module 12.5 (Non-Conformance & Deviation Management).
+  - Supplier Quality & Supplier Audits → Sub-module 12.6.
+  - Quality Audits (Internal & External) → Sub-module 12.11 (Audit Management).
+  - Employee Training Matrix & SOP Qualifications → Sub-module 12.12 (Training & Qualification).
+  - Enterprise Change Control Board (CCB) → Sub-module 12.11 / Enterprise Change Control.
+  - Regulatory Submissions & Notified Body Filings (FDA 510(k), PMA, EU MDR Technical Files) → Sub-module 12.17.
+- **Advanced deferred features from research**:
+  - AI-Powered Hazard Suggestion & IMDRF Coding from adverse event databases (FDA MAUDE).
+  - Interactive SVG Fault Tree Analysis (FTA) drag-and-drop editor with boolean logic gates.
+  - Automated IoT / Telemetry Anomaly Feeds streaming device telemetry directly into occurrence probability updates.
+  - Direct Regulatory Portal Dispatch (FDA eSubmitter / EUDAMED) for automated B2B XML risk updates.
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
 # Sub-module 12.2: Design Controls & Development (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.2.md` (2026-11-16)
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-module 12.1 (Document Control & Management).
