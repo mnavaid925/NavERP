@@ -36,7 +36,7 @@
             <div class="w-full sm:w-auto">
                 <label class="form-label mb-0" for="plan-select">Select Risk Management Plan:</label>
             </div>
-            <div class="w-full sm:w-80">
+            <div class="w-full sm:w-80 flex items-center gap-2">
                 <select id="plan-select" name="plan" class="form-select" onchange="this.form.submit()">
                     {% for p in plans %}
                     <option value="{{ p.pk }}" {% if selected_plan and selected_plan.pk == p.pk %}selected{% endif %}>
@@ -44,6 +44,7 @@
                     </option>
                     {% endfor %}
                 </select>
+                <button type="submit" class="sr-only">Submit</button>
             </div>
             {% if selected_plan %}
             <div class="text-xs text-slate-500">
@@ -117,7 +118,7 @@
                     {% for c in row.controls %}
                     <tr class="{% if forloop.first %}border-t-2 border-slate-200{% endif %}">
                         {% if forloop.first %}
-                        <td rowspan="{{ row.controls_count }}" class="align-top bg-slate-50/50">
+                        <td rowspan="{{ row.controls_count }}" class="align-top bg-slate-50">
                             <div class="font-mono text-xs font-semibold">
                                 <a href="{% url 'quality:risk_assessment_detail' row.assessment.pk %}" class="text-brand hover:underline">
                                     {{ row.assessment.number }}
@@ -196,7 +197,7 @@
                     {% endfor %}
                 {% else %}
                 <!-- Unmitigated Hazard Row -->
-                <tr class="bg-red-50/30 border-t-2 border-slate-200">
+                <tr class="bg-red-50 border-t-2 border-slate-200">
                     <td>
                         <div class="font-mono text-xs font-semibold">
                             <a href="{% url 'quality:risk_assessment_detail' row.assessment.pk %}" class="text-brand hover:underline">
@@ -216,7 +217,7 @@
                         <i data-lucide="alert-circle" class="w-4 h-4 inline mr-1 text-red-600"></i> No risk control measures assigned! ISO 14971 compliance gap.
                     </td>
                     <td class="text-right">
-                        <a href="{% url 'quality:risk_control_measure_create' %}?assessment={{ row.assessment.pk }}" class="btn btn-xs btn-primary">
+                        <a href="{% url 'quality:risk_control_measure_create' %}?assessment={{ row.assessment.pk }}" class="btn btn-sm btn-primary">
                             <i data-lucide="shield-plus"></i> Add Control
                         </a>
                     </td>
