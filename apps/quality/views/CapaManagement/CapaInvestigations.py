@@ -174,6 +174,9 @@ def capa_investigation_edit(request, pk):
 @tenant_admin_required
 def capa_investigation_delete(request, pk):
     capa = quality_object(request, CapaInvestigation, pk)
+    if capa.status == "closed":
+        messages.error(request, "Cannot delete a closed CAPA investigation. Closed records are retained for audit compliance.")
+        return redirect("quality:capa_investigation_detail", pk=capa.pk)
     num = capa.number
     write_audit_log(request.user, capa, "delete", tenant=request.tenant)
     capa.delete()
