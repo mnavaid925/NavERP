@@ -3,11 +3,12 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.quality.forms.RiskManagement.RiskReviewRecords import RiskReviewRecordForm
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
@@ -19,7 +20,7 @@ def csv_safe(value):
     if value is None:
         return ""
     text = str(value)
-    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+    if text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "%")):
         return f"'{text}"
     return text
 
@@ -51,12 +52,18 @@ def risk_review_record_list(request):
         qs = qs.filter(plan_id=int(selected_plan))
 
     base_qs = quality_scope(RiskReviewRecord.objects.all(), request)
-    total_count = base_qs.count()
-    approved_count = base_qs.filter(status="approved").count()
-    pms_count = base_qs.filter(review_type="post_market_surveillance").count()
-    draft_count = base_qs.filter(status="draft").count()
+    counts = base_qs.aggregate(
+        total_count=Count("id"),
+        approved_count=Count("id", filter=Q(status="approved")),
+        pms_count=Count("id", filter=Q(review_type="post_market_surveillance")),
+        draft_count=Count("id", filter=Q(status="draft")),
+    )
+    total_count = counts["total_count"] or 0
+    approved_count = counts["approved_count"] or 0
+    pms_count = counts["pms_count"] or 0
+    draft_count = counts["draft_count"] or 0
 
-    plans = quality_scope(RiskManagementPlan.objects.all(), request).order_by("number")
+    plans = quality_scope(RiskManagementPlan.objects.all(), request).only("id", "number", "title").order_by("number")
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
@@ -134,6 +141,13 @@ def risk_review_record_create(request):
 @login_required
 def risk_review_record_edit(request, pk):
     review_record = quality_object(request, RiskReviewRecord, pk)
+    if review_record.status == "approved" or review_record.approved_signature_id:
+        messages.error(
+            request,
+            f"Risk Review Record {review_record.number} cannot be modified because it is already approved or signed.",
+        )
+        return redirect("quality:risk_review_record_detail", pk=review_record.pk)
+
     if request.method == "POST":
         form = RiskReviewRecordForm(request.POST, instance=review_record, tenant=request.tenant)
         if form.is_valid():
@@ -157,18 +171,20 @@ def risk_review_record_edit(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def risk_review_record_delete(request, pk):
     review_record = quality_object(request, RiskReviewRecord, pk)
     number = review_record.number
     plan_id = review_record.plan_id
-    review_record.delete()
     write_audit_log(request.user, review_record, "delete", tenant=request.tenant)
+    review_record.delete()
     messages.success(request, f"Risk Review Record {number} deleted successfully.")
     return redirect("quality:risk_management_plan_detail", pk=plan_id)
 
 
 @require_POST
 @login_required
+@tenant_admin_required
 def risk_review_record_approve(request, pk):
     review_record = quality_object(request, RiskReviewRecord, pk)
     review_record.status = "approved"
