@@ -177,41 +177,41 @@
 
 ## Backend Packages (`apps/quality/{models,forms,views,urls}/DesignControls/`)
 
-- [ ] **Models**:
+- [x] **Models**:
   - `apps/quality/models/DesignControls/DesignProjects.py`
   - `apps/quality/models/DesignControls/DesignInputs.py`
   - `apps/quality/models/DesignControls/DesignReviews.py`
   - `apps/quality/models/DesignControls/DesignVerifications.py`
   - Re-export `DesignProject`, `DesignInput`, `DesignReview`, `DesignVerification` in `apps/quality/models/__init__.py`
-- [ ] **Forms**:
+- [x] **Forms**:
   - `apps/quality/forms/DesignControls/DesignProjects.py` (`DesignProjectForm`)
   - `apps/quality/forms/DesignControls/DesignInputs.py` (`DesignInputForm`)
   - `apps/quality/forms/DesignControls/DesignReviews.py` (`DesignReviewForm`)
   - `apps/quality/forms/DesignControls/DesignVerifications.py` (`DesignVerificationForm`)
   - Re-export forms in `apps/quality/forms/__init__.py`
-- [ ] **Views**:
+- [x] **Views**:
   - `apps/quality/views/DesignControls/DesignProjects.py` (`design_project_list`, `design_project_create`, `design_project_detail`, `design_project_edit`, `design_project_delete`, `design_project_advance_phase`, `design_project_lock_dhf`)
-  - `apps/quality/views/DesignControls/DesignInputs.py` (`design_input_list`, `design_input_create`, `design_input_detail`, `design_input_edit`, `design_input_delete`, `design_input_approve`)
-  - `apps/quality/views/DesignControls/DesignReviews.py` (`design_review_list`, `design_review_create`, `design_review_detail`, `design_review_edit`, `design_review_delete`, `design_review_sign`, `design_review_resolve_actions`)
-  - `apps/quality/views/DesignControls/DesignVerifications.py` (`design_verification_list`, `design_verification_create`, `design_verification_detail`, `design_verification_edit`, `design_verification_delete`, `design_verification_record_results`)
-  - `apps/quality/views/DesignControls/TraceabilityMatrix.py` (`traceability_matrix`, `traceability_matrix_export`, `dhf_dossier`)
+  - `apps/quality/views/DesignControls/DesignInputs.py` (`design_input_list`, `design_input_create`, `design_input_detail`, `design_input_edit`, `design_input_delete`)
+  - `apps/quality/views/DesignControls/DesignReviews.py` (`design_review_list`, `design_review_create`, `design_review_detail`, `design_review_edit`, `design_review_delete`, `design_review_approve_gate`)
+  - `apps/quality/views/DesignControls/DesignVerifications.py` (`design_verification_list`, `design_verification_create`, `design_verification_detail`, `design_verification_edit`, `design_verification_delete`)
+  - `apps/quality/views/DesignControls/TraceabilityMatrix.py` (`traceability_matrix`, `traceability_matrix_export`, `design_project_dhf`, `design_project_dhf_export`)
   - Re-export views in `apps/quality/views/__init__.py`
-- [ ] **URLs**:
+- [x] **URLs**:
   - `apps/quality/urls/DesignControls/DesignProjects.py`
   - `apps/quality/urls/DesignControls/DesignInputs.py`
   - `apps/quality/urls/DesignControls/DesignReviews.py`
   - `apps/quality/urls/DesignControls/DesignVerifications.py`
   - `apps/quality/urls/DesignControls/TraceabilityMatrix.py`
   - Wire all URL modules in `apps/quality/urls/__init__.py`
-- [ ] **Admin**: Register `DesignProject`, `DesignInput`, `DesignReview`, `DesignVerification` in `apps/quality/admin.py`
-- [ ] **Migration**: Run `makemigrations quality` generating `0003_...`
-- [ ] **Seeder**: Extend `apps/quality/management/commands/seed_quality.py` with idempotent medical device design projects, user needs, engineering inputs, gate reviews, and verification tests
+- [x] **Admin**: Register `DesignProject`, `DesignInput`, `DesignReview`, `DesignVerification` in `apps/quality/admin.py`
+- [x] **Migration**: Run `makemigrations quality` generating `0003_...` and `0004_...`
+- [x] **Seeder**: Extend `apps/quality/management/commands/seed_quality.py` with idempotent medical device design projects, user needs, engineering inputs, gate reviews, and verification tests
 
 ---
 
 ## Wire-up
 
-- [ ] **Navigation (`apps/core/navigation.py`)**: Add `LIVE_LINKS["12.2"]` mapping exact `NavERP.md` 12.2 bullets:
+- [x] **Navigation (`apps/core/navigation.py`)**: Add `LIVE_LINKS["12.2"]` mapping exact `NavERP.md` 12.2 bullets:
   - `"Design Planning & Inputs": "quality:design_project_list"`
   - `"Design Reviews & Verification": "quality:design_review_list"`
   - `"Design Validation & Transfer": "quality:design_verification_list"`
@@ -222,23 +222,23 @@
 
 ## Templates (`templates/quality/designcontrols/`)
 
-- [ ] **Design Projects**:
+- [x] **Design Projects**:
   - `templates/quality/designcontrols/design_project/list.html`
   - `templates/quality/designcontrols/design_project/detail.html`
   - `templates/quality/designcontrols/design_project/form.html`
-- [ ] **Design Inputs**:
+- [x] **Design Inputs**:
   - `templates/quality/designcontrols/design_input/list.html`
   - `templates/quality/designcontrols/design_input/detail.html`
   - `templates/quality/designcontrols/design_input/form.html`
-- [ ] **Design Reviews**:
+- [x] **Design Reviews**:
   - `templates/quality/designcontrols/design_review/list.html`
   - `templates/quality/designcontrols/design_review/detail.html`
   - `templates/quality/designcontrols/design_review/form.html`
-- [ ] **Design Verifications**:
+- [x] **Design Verifications**:
   - `templates/quality/designcontrols/design_verification/list.html`
   - `templates/quality/designcontrols/design_verification/detail.html`
   - `templates/quality/designcontrols/design_verification/form.html`
-- [ ] **Workbenches & Dossier**:
+- [x] **Workbenches & Dossier**:
   - `templates/quality/designcontrols/traceability_matrix.html` (Interactive Requirements Traceability Matrix)
   - `templates/quality/designcontrols/dhf_dossier.html` (Design History File Dossier & Audit Index)
 
@@ -246,21 +246,21 @@
 
 ## Verify
 
-- [ ] Run `python manage.py makemigrations quality`
-- [ ] Run `python manage.py migrate`
-- [ ] Run `python manage.py seed_quality` twice (idempotence verification)
-- [ ] Run `python manage.py check`
-- [ ] Smoke tests via test client (`temp/` script): HTTP 200/302 for all 12.2 routes, content assertions, IDOR 404
-- [ ] Sidebar verification: `12.2` Live links functional
+- [x] Run `python manage.py makemigrations quality`
+- [x] Run `python manage.py migrate`
+- [x] Run `python manage.py seed_quality` twice (idempotence verification)
+- [x] Run `python manage.py check`
+- [x] Smoke tests via test client (`temp/` script): HTTP 200/302 for all 12.2 routes, content assertions, IDOR 404
+- [x] Sidebar verification: `12.2` Live links functional
 
 ---
 
 ## Close-out
 
-- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-quality-12.2.md`
-- [ ] Phase 5: `code-fixer` agent burns down all findings
-- [ ] Phase 6: Tests (`test_designcontrols_models.py`, `test_designcontrols_forms.py`, `test_designcontrols_views.py`, `test_designcontrols_security.py`)
-- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` and `README.md`, declare gaps register in `.agents/tasks/gaps-quality-12.2.md`
+- [x] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) -> `.claude/tasks/review-quality-12.2.md`
+- [x] Phase 5: `code-fixer` agent burns down all 23 findings
+- [x] Phase 6: Tests (`test_designcontrols_models.py`, `test_designcontrols_forms.py`, `test_designcontrols_views.py`, `test_designcontrols_security.py`)
+- [x] Phase 7: Update `.claude/skills/quality/SKILL.md` and `README.md`, declare gaps register in `.agents/tasks/gaps-quality-12.2.md`
 
 ---
 
@@ -276,8 +276,26 @@
 
 ---
 
-## Review notes — Sub-module 12.2 Close-out (pending build)
-(To be filled in at completion of Phase 7)
+## Review notes — Sub-module 12.2 Close-out (2026-11-17)
+- **Delivery Unit**: Extension of `apps/quality/` (Module 12: Quality Management System) — Sub-module 12.2: Design Controls & Development.
+- **Models**: 4 tenant-scoped models subclasses of `TenantNumbered`:
+  - `DesignProject` [`QDPL-`]: Medical device development governance, 510(k)/PMA/CE-Mark pathways, Class I/II/III classification, 6-phase lifecycle, intended use, project/quality leads, target completion dates, and post-transfer immutable regulatory freeze (`dhf_locked=True`). Compound index `(tenant, -created_at)` (`idx_qdpl_ten_created`).
+  - `DesignInput` [`QINP-`]: Product specifications and user needs with parent-child hierarchy (`user_need_parent`), acceptance criteria, priority triage, and prefetch-optimized auto-verification status tracking.
+  - `DesignReview` [`QREV-`]: Formal stage-gate milestone reviews complying with FDA 21 CFR § 820.30(e) mandating an independent reviewer with operational independence from the project lead, action item tracking, formal gate approval workflow, and electronic signature linking.
+  - `DesignVerification` [`QVER-`]: V&V test execution protocols, sample sizes, test methods, acceptance criteria, results summaries, pass/fail evaluations, and automated two-way status synchronization with primary design inputs.
+- **Forms**: 4 ModelForms (`DesignProjectForm`, `DesignInputForm`, `DesignReviewForm`, `DesignVerificationForm`) with strict system field exclusion, tenant-scoped FK filtering, cross-tenant foreign key rejection via `reject_foreign`, DHF regulatory lock enforcement, and business rule validations.
+- **Views & Routes**: 16 FBV views across 4 entities + Requirements Traceability Matrix (RTM) workbench (`traceability_matrix`, `traceability_matrix_export`) and audit-ready Design History File (DHF) Dossier index (`design_project_dhf`, `design_project_dhf_export`).
+- **Templates**: 14 responsive Tailwind templates under `templates/quality/designcontrols/` with color-named theme badges and CSRF-protected POST actions.
+- **Review Pass**: 6 sequential specialist reviews (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) yielded 23 findings (5 Critical, 10 Important, 8 Minor) consolidated in `.claude/tasks/review-quality-12.2.md`.
+- **Fix Pass**: `code-fixer` agent resolved all 23 findings in ID order across 38 single-file commits with clean `manage.py check`.
+- **Tests**: 4 test files (`test_designcontrols_models.py` [54 tests], `test_designcontrols_forms.py` [44 tests], `test_designcontrols_views.py` [64 tests], `test_designcontrols_security.py` [69 tests]) totaling **231 dedicated tests**. Full unfiltered app suite `apps/quality/tests/` passes 100% green with **356 passing tests** in ~75 seconds on SQLite.
+- **Gaps Register**: 4 future roadmap & upstream items tracked in `.agents/tasks/gaps-quality-12.2.md`:
+  - `GAP-quality-12.2-01`: Cross-Module CAPA & Non-Conformance Hand-off on Verification Failure (waiting on 12.3 NCR / 12.4 CAPA).
+  - `GAP-quality-12.2-02`: Formal Change Order (DCO) Workflow for Amending Frozen DHFs (bridging to 12.1 DCO).
+  - `GAP-quality-12.2-03`: Automated Asynchronous PDF DHF Dossier Compilation Engine.
+  - `GAP-quality-12.2-04`: CAD / PLM Engineering Bill of Materials (EBOM) Artifact Integration (waiting on Module 15 PLM).
+- **Navigation Wiring**: `LIVE_LINKS["12.2"]` verified functional for all 5 feature bullets in `apps/core/navigation.py`.
+- **Git Commits**: All edits committed individually (one file per commit, PowerShell-safe). Nothing pushed. Untracked file `apps/assets/tests/test_spacefacility_security.py` preserved untouched per L45.
 
 ---
 # Sub-module 12.1: Document Control & Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.1.md` (2026-11-15)
