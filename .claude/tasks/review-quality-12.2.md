@@ -79,3 +79,19 @@ Changeset reviewed: `8ade3ec32bae7a7208579153bcfb73e15a836f6f...HEAD` (Base from
 ### Minor
 - Confirmed I8 / M1: `apps/quality/views/DesignControls/DesignVerifications.py:133-143, 179-186` — Multi-model writes (`DesignVerification` + `DesignInput`) lack `with transaction.atomic():`.
 - M20: `apps/quality/models/DesignControls/DesignProjects.py:103` — Recommend compound index `(tenant, -created_at)` for fast sorting on large project datasets.
+
+---
+
+## 5. QA Smoke Tester Pass (`qa-smoke-tester`)
+
+### Critical
+- None. All 30 endpoints resolved, 0 comment leaks, zero 500 errors on valid and junk parameter sweeps, cross-tenant IDOR returned HTTP 404.
+
+### Important
+- Confirmed C17 / I1: `apps/quality/models/DesignControls/DesignInputs.py:107-108` & `apps/quality/views/DesignControls/TraceabilityMatrix.py:47-49` — `is_verified` property triggers N+1 query in `TraceabilityMatrix.py`. Fix: Evaluate using prefetched list or `status == "verified"`.
+- I21: `apps/quality/views/DesignControls/TraceabilityMatrix.py:32-36` — When `?project=<id>` is invalid or belongs to another tenant, `selected_project` remains `None` without feedback. Fix: Fall back to `projects.first()` with warning message `messages.warning(request, "Selected design project was not found.")`.
+
+### Minor
+- M22: `apps/quality/views/DesignControls/` — Filter context naming variability (`selected_class` vs `selected_project` vs `selected_activity`).
+- M23: `templates/quality/designcontrols/{design_project,design_input,design_review,design_verification}/list.html` — Inline `onsubmit="return confirm(...)"` on deletion forms.
+
