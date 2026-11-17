@@ -98,7 +98,8 @@ class CapaEffectivenessReview(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number}: {self.get_outcome_display()} ({self.capa.number})"
+        capa_num = self.capa.number if self.capa_id else "Unassigned"
+        return f"{self.number or 'New'}: {self.get_outcome_display()} ({capa_num})"
 
     @property
     def method_badge(self):
