@@ -56,6 +56,12 @@ class DesignReviewForm(TenantUniqueMixin, TenantModelForm):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["project", "lead_reviewer", "independent_reviewer"])
 
+        project = cleaned.get("project")
+        if project and project.dhf_locked:
+            self.add_error("project", "Cannot create or modify design reviews for a project with a locked Design History File (DHF).")
+        elif self.instance.pk and self.instance.project and self.instance.project.dhf_locked:
+            self.add_error("project", "Cannot modify records belonging to a project with a locked Design History File (DHF).")
+
         lead = cleaned.get("lead_reviewer")
         indep = cleaned.get("independent_reviewer")
         if lead and indep and lead.pk == indep.pk:
