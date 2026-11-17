@@ -66,6 +66,15 @@ class CapaActionForm(TenantUniqueMixin, TenantModelForm):
             self.fields["change_order"].queryset = DocumentChangeOrder.objects.none()
             self.fields["design_project"].queryset = DesignProject.objects.none()
 
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status in ["verified"]:
+            if not self.instance.pk or self.instance.status != status:
+                raise forms.ValidationError(
+                    f"Status '{status}' cannot be set directly. Use the verification action."
+                )
+        return status
+
     def clean(self):
         cleaned = super().clean()
         reject_foreign(
