@@ -90,4 +90,8 @@ class CapaActionForm(TenantUniqueMixin, TenantModelForm):
                 "design_project",
             ],
         )
+        capa = cleaned.get("capa")
+        root_cause = cleaned.get("root_cause")
+        if root_cause and capa and root_cause.capa_id != capa.id:
+            self.add_error("root_cause", "The selected Root Cause Analysis must belong to the selected CAPA investigation.")
         return cleaned
