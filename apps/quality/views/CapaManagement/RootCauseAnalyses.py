@@ -71,6 +71,7 @@ def root_cause_analysis_list(request):
         "q": q,
         "method_filter": method_filter,
         "category_filter": category_filter,
+        "capa_filter": capa_filter,
         "rca_method_choices": RootCauseAnalysis.RCA_METHOD_CHOICES,
         "root_cause_category_choices": RootCauseAnalysis.ROOT_CAUSE_CATEGORY_CHOICES,
     }
