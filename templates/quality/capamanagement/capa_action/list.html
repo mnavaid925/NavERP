@@ -152,12 +152,14 @@
                             <i data-lucide="pencil"></i>
                         </a>
                         {% endif %}
+                        {% if request.user.is_tenant_admin and action.status != "verified" %}
                         <form method="post" action="{% url 'quality:capa_action_delete' action.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete action {{ action.number|escapejs }}?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
