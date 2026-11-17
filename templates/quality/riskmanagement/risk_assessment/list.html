@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}Hazard Analysis & FMEA Items | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Management</a>
+            <span>/</span>
+            <span>Hazard & Risk Items</span>
+        </div>
+        <h1 class="page-title">Hazard Identification & FMEA Items</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:fmea_matrix' %}" class="btn btn-outline">
+            <i data-lucide="grid"></i> FMEA Risk Matrix
+        </a>
+        <a href="{% url 'quality:risk_traceability_matrix' %}" class="btn btn-outline">
+            <i data-lucide="git-merge"></i> Risk Traceability
+        </a>
+        <a href="{% url 'quality:risk_assessment_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:risk_assessment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Log Risk Item
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Risk Items</div>
+            <div class="text-2xl font-bold text-slate-800">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Unacceptable (Red)</div>
+            <div class="text-2xl font-bold text-red-600">{{ high_risk_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Unmitigated / Residual Open</div>
+            <div class="text-2xl font-bold text-amber-600">{{ unmitigated_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Closed / Verified</div>
+            <div class="text-2xl font-bold text-slate-800">{{ closed_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" placeholder="Number, hazard, mode, harm..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="plan-filter">Risk Plan</label>
+                <select id="plan-filter" name="plan" class="form-select">
+                    <option value="">All Plans</option>
+                    {% for p in plans %}
+                    <option value="{{ p.pk }}" {% if selected_plan == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} - {{ p.title|truncatechars:20 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="type-filter">Analysis Type</label>
+                <select id="type-filter" name="analysis_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for code, label in analysis_type_choices %}
+                    <option value="{{ code }}" {% if selected_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="level-filter">Risk Level</label>
+                <select id="level-filter" name="risk_level" class="form-select">
+                    <option value="">All Levels</option>
+                    {% for code, label in risk_level_choices %}
+                    <option value="{{ code }}" {% if selected_level == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Status</label>
+                <select id="status-filter" name="lifecycle_status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in lifecycle_status_choices %}
+                    <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if q or selected_type or selected_level or selected_status or selected_plan %}
+                <a href="{% url 'quality:risk_assessment_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Plan</th>
+                    <th>Type</th>
+                    <th>Hazard / Failure Mode</th>
+                    <th>Harm / Failure Effect</th>
+                    <th>Pre-Mitigation</th>
+                    <th>Initial Level</th>
+                    <th>Residual Level</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in assessments %}
+                <tr>
+                    <td class="font-mono text-xs font-medium">
+                        <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="text-brand hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td class="text-xs">
+                        <a href="{% url 'quality:risk_management_plan_detail' item.plan.pk %}" class="text-slate-600 hover:underline font-mono">
+                            {{ item.plan.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.analysis_type_badge }}">
+                            {{ item.get_analysis_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800 text-sm">
+                            {{ item.hazard_description|default:item.failure_mode }}
+                        </div>
+                        <div class="text-xs text-slate-400">{{ item.get_hazard_category_display }}</div>
+                    </td>
+                    <td class="text-xs text-slate-600 max-w-xs truncate">
+                        {{ item.potential_harm|default:item.failure_effect }}
+                    </td>
+                    <td class="font-mono text-xs">
+                        S:{{ item.initial_severity }} × P:{{ item.initial_probability }}
+                        {% if item.initial_detectability %}× D:{{ item.initial_detectability }}{% endif %}
+                        = <strong>{{ item.initial_rpn }}</strong>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.initial_risk_level_badge }}">
+                            {{ item.get_initial_risk_level_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if item.residual_risk_level %}
+                        <span class="badge {{ item.residual_risk_level_badge }}">
+                            {{ item.get_residual_risk_level_display }}
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400 text-xs">Unassessed</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.lifecycle_status_badge }}">
+                            {{ item.get_lifecycle_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:risk_assessment_edit' item.pk %}" class="btn btn-icon" title="Edit Item">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'quality:risk_assessment_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Risk Item {{ item.number|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red" title="Delete Item">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i data-lucide="alert-triangle" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-700">No Risk Assessment records found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Log hazards, sequence of events, and FMEA failure modes per ISO 14971.</p>
+                            <a href="{% url 'quality:risk_assessment_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i> Log Risk Item
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-body border-t border-slate-100 flex items-center justify-between text-sm text-slate-600">
+        <div>
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} entries
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&analysis_type={{ selected_type }}{% endif %}{% if selected_level %}&risk_level={{ selected_level }}{% endif %}{% if selected_status %}&lifecycle_status={{ selected_status }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="px-3 py-1 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&analysis_type={{ selected_type }}{% endif %}{% if selected_level %}&risk_level={{ selected_level }}{% endif %}{% if selected_status %}&lifecycle_status={{ selected_status }}{% endif %}{% if selected_plan %}&plan={{ selected_plan }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
