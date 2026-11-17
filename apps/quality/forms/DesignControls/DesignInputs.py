@@ -73,4 +73,14 @@ class DesignInputForm(TenantUniqueMixin, TenantModelForm):
         if project and user_need_parent and user_need_parent.project_id != project.pk:
             self.add_error("user_need_parent", "Parent user need must belong to the same design project.")
 
+        status = cleaned.get("status")
+        if status == "verified":
+            is_already_verified = bool(self.instance.pk and self.instance.status == "verified")
+            has_passing_test = bool(self.instance.pk and self.instance.verifications.filter(pass_fail_result="pass").exists())
+            if not (is_already_verified or has_passing_test):
+                self.add_error(
+                    "status",
+                    "Design input cannot be marked as verified without at least one executed passing verification protocol."
+                )
+
         return cleaned
