@@ -14,6 +14,11 @@ from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDo
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
+from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
+from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
+from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
+from apps.quality.models.RiskManagement.RiskReviewRecords import RiskReviewRecord
+
 
 User = get_user_model()
 
@@ -31,6 +36,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            RiskReviewRecord.objects.all().delete()
+            RiskControlMeasure.objects.all().delete()
+            RiskAssessment.objects.all().delete()
+            RiskManagementPlan.objects.all().delete()
             DesignVerification.objects.all().delete()
             DesignReview.objects.all().delete()
             DesignInput.objects.all().delete()
@@ -50,6 +59,8 @@ class Command(BaseCommand):
         for tenant in tenants:
             self._seed_submodule_12_1(tenant)
             self._seed_submodule_12_2(tenant)
+            self._seed_submodule_12_3(tenant)
+
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
         self.stdout.write(
@@ -547,3 +558,340 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.2 Design Controls & Development seeded successfully."))
+
+    def _seed_submodule_12_3(self, tenant):
+        if RiskManagementPlan.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.3 Risk Management data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.3 Risk Management (ISO 14971 / FMEA)...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not admin_user:
+            self.stdout.write(f"[{tenant.name}] Warning: No user found for tenant.")
+            return
+
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
+        reviewer_user = users[1] if len(users) > 1 else admin_user
+
+        qa_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="quality").order_by("pk").first()
+        if not qa_dept:
+            qa_dept = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
+
+        today = timezone.now().date()
+        project_active = DesignProject.objects.filter(tenant=tenant, status="active").first()
+        di_safe = DesignInput.objects.filter(tenant=tenant, input_type="safety").first()
+        doc_sop = ControlledDocument.objects.filter(tenant=tenant, lifecycle_state="effective").first()
+        ver_01 = DesignVerification.objects.filter(tenant=tenant, status="passed").first()
+
+        with transaction.atomic():
+            # 1. Master Risk Management Plan (Active Infusion System)
+            rmp_active = RiskManagementPlan.objects.create(
+                tenant=tenant,
+                title="InfuseFlow Pro 3000 Device Risk Management Plan",
+                plan_version="2.0",
+                status="active",
+                design_project=project_active,
+                lead_risk_manager=admin_user,
+                department=qa_dept,
+                device_classification="class_ii_b",
+                scope_description=(
+                    "Comprehensive ISO 14971:2019 lifecycle risk management covering InfuseFlow Pro 3000 infusion pump system. "
+                    "Encompasses fluid delivery mechanism, lithium battery sub-assembly, clinical user interface, and bedside IV administration."
+                ),
+                matrix_dimension="5x5",
+                risk_acceptability_policy=(
+                    "Pre-defined ISO 14971 risk acceptance criteria: S*P >= 15 is Unacceptable (mandatory reduction); "
+                    "S*P 6 to 14 is ALARP (Conditionally Acceptable - requires formal clinical Benefit-Risk Analysis); "
+                    "S*P <= 5 is Broadly Acceptable. Single-fault failure modes leading to catastrophic harm are prohibited."
+                ),
+                overall_residual_risk_acceptable=True,
+                overall_benefit_risk_summary=(
+                    "Clinical evaluation confirms that precise life-sustaining continuous drug infusion delivered by InfuseFlow Pro 3000 "
+                    "substantially outweighs all mitigated collective residual risks when used per validated IFU instructions."
+                ),
+                periodic_review_frequency_months=12,
+                next_review_due_date=today + datetime.timedelta(days=180),
+            )
+
+            # 2. Draft Secondary Risk Management Plan (Connected Health Telemetry)
+            rmp_draft = RiskManagementPlan.objects.create(
+                tenant=tenant,
+                title="SmartInfuse Cloud Gateway Software Risk Plan",
+                plan_version="1.0",
+                status="draft",
+                design_project=None,
+                lead_risk_manager=reviewer_user,
+                department=qa_dept,
+                device_classification="samd",
+                scope_description=(
+                    "Software as a Medical Device (SaMD) risk management file addressing cloud gateway telemetry, "
+                    "HL7/FHIR EHR communication, and cybersecurity anomaly detection."
+                ),
+                matrix_dimension="5x5",
+                risk_acceptability_policy="SaMD risk acceptability per IEC 62304 and FDA Cybersecurity Guidance.",
+                overall_residual_risk_acceptable=False,
+                overall_benefit_risk_summary="",
+                periodic_review_frequency_months=6,
+                next_review_due_date=today + datetime.timedelta(days=90),
+            )
+
+            # 3. Risk Assessment 1: Air-in-line ultrasonic detection failure
+            risk_01 = RiskAssessment.objects.create(
+                tenant=tenant,
+                plan=rmp_active,
+                analysis_type="hazard_analysis",
+                hazard_category="energy_mechanical",
+                hazard_description="Air-in-line ultrasonic bubble detection failure",
+                hazardous_situation="Air bubble (> 100 uL) passes undetected through infusion cassette into IV line",
+                foreseeable_sequence_of_events=(
+                    "1. Tubing cassette micro-crack introduces air; "
+                    "2. Transducer acoustic coupling is compromised; "
+                    "3. Sensor fails to trip occlusion alarm; "
+                    "4. Air is pumped directly into patient vasculature."
+                ),
+                potential_harm="Venous/arterial air embolism causing neurological stroke or cardiac arrest",
+                item_function="Bubble Detection Sensor Subsystem",
+                failure_mode="Loss of acoustic echo detection",
+                failure_cause="Piezoelectric ceramic crystal cracking or adhesive delamination",
+                failure_effect="False negative detection of air bolus during rapid delivery",
+                initial_severity=5,
+                initial_probability=3,
+                initial_detectability=2,
+                residual_severity=5,
+                residual_probability=1,
+                residual_detectability=1,
+                residual_risk_acceptable=True,
+                bra_required=True,
+                benefit_risk_justification=(
+                    "Residual probability reduced to < 1 in 100,000 via dual redundant sensors and automatic mechanical line clamp. "
+                    "Critical IV therapy cannot be discontinued; benefit of life-saving infusion outweighs residual risk."
+                ),
+                disclosed_in_ifu=True,
+                design_input=di_safe,
+                lifecycle_status="closed",
+            )
+
+            # 4. Risk Assessment 2: Battery depletion during active medication delivery
+            risk_02 = RiskAssessment.objects.create(
+                tenant=tenant,
+                plan=rmp_active,
+                analysis_type="dfmea",
+                hazard_category="energy_electrical",
+                hazard_description="Sudden battery depletion during active drug infusion",
+                hazardous_situation="Pump shuts down unexpectedly mid-infusion while operating on internal battery during hospital transport",
+                foreseeable_sequence_of_events="1. AC power disconnected for transport; 2. State-of-charge calculation drifts; 3. Low-battery alarm fails to sound before cut-off.",
+                potential_harm="Abrupt hemodynamic decompensation due to cessation of vasoactive inotropic infusion",
+                item_function="Battery Management Unit (BMU)",
+                failure_mode="Premature cell voltage collapse below operating threshold",
+                failure_cause="Electrolyte degradation or high internal cell impedance",
+                failure_effect="Sudden loss of motor torque and immediate delivery shutdown",
+                initial_severity=4,
+                initial_probability=3,
+                initial_detectability=2,
+                residual_severity=4,
+                residual_probability=1,
+                residual_detectability=1,
+                residual_risk_acceptable=True,
+                bra_required=False,
+                benefit_risk_justification="",
+                disclosed_in_ifu=True,
+                design_input=None,
+                lifecycle_status="closed",
+            )
+
+            # 5. Risk Assessment 3: Fluid ingress causing electrical short circuit
+            risk_03 = RiskAssessment.objects.create(
+                tenant=tenant,
+                plan=rmp_active,
+                analysis_type="hazard_analysis",
+                hazard_category="energy_electrical",
+                hazard_description="Saline / cleaning solution fluid ingress into pump enclosure",
+                hazardous_situation="Conductive IV fluid bridges high-voltage power converter trace to exposed patient ground",
+                foreseeable_sequence_of_events="1. Accidental IV bag leak spills 500 mL saline over top housing; 2. Enclosure seam seal leaks; 3. Short circuit occurs.",
+                potential_harm="Electrical shock to clinical operator or patient touch current exceedance",
+                item_function="Chassis Enclosure & Gasket Assembly",
+                failure_mode="Moisture penetration through mating housing seams",
+                failure_cause="Inadequate gasket compression or degradation from harsh hospital disinfectants",
+                failure_effect="Internal corrosion and dielectric insulation breakdown",
+                initial_severity=4,
+                initial_probability=4,
+                initial_detectability=1,
+                residual_severity=4,
+                residual_probability=1,
+                residual_detectability=1,
+                residual_risk_acceptable=True,
+                bra_required=False,
+                benefit_risk_justification="",
+                disclosed_in_ifu=False,
+                design_input=None,
+                lifecycle_status="closed",
+            )
+
+            # 6. Risk Assessment 4: Syringe misloading by nursing staff (Use Error)
+            risk_04 = RiskAssessment.objects.create(
+                tenant=tenant,
+                plan=rmp_active,
+                analysis_type="use_error_urra",
+                hazard_category="operational_use_error",
+                hazard_description="Syringe flange misplacement in drive carriage clamp",
+                hazardous_situation="User clamps syringe plunger without engaging flange sensor, causing uncontrolled siphon flow",
+                foreseeable_sequence_of_events="1. Nurse rushes during emergency room setup; 2. Syringe barrel is placed askew; 3. Siphon flow occurs under gravity.",
+                potential_harm="Rapid unmetered drug bolus administration causing overdose toxicity",
+                item_function="Syringe Drive Mechanism Clamp",
+                failure_mode="Mechanical flange engagement not locked before start",
+                failure_cause="Poor visual feedback and ambiguous mechanical detent feel",
+                failure_effect="Free-flow delivery under atmospheric head pressure",
+                initial_severity=4,
+                initial_probability=3,
+                initial_detectability=3,
+                residual_severity=4,
+                residual_probability=1,
+                residual_detectability=1,
+                residual_risk_acceptable=True,
+                bra_required=True,
+                benefit_risk_justification="Safety interlock switch prevents pump start unless barrel flange is seated.",
+                disclosed_in_ifu=True,
+                design_input=None,
+                lifecycle_status="mitigated",
+            )
+
+            # 7. Risk Control Measures
+            rcm_01 = RiskControlMeasure.objects.create(
+                tenant=tenant,
+                risk_assessment=risk_01,
+                control_hierarchy="inherent_safety",
+                title="Dual-Channel Ultrasonic Bubble Transducers with Solenoid Anti-Free-Flow Clamp",
+                description=(
+                    "Hardware design implements two independent ultrasonic sensors operating at 2.5 MHz with cross-channel voting. "
+                    "An automatic spring-loaded line clamp mechanically pinches the IV line closed within 50 ms if air is detected."
+                ),
+                assigned_to=admin_user,
+                due_date=today - datetime.timedelta(days=20),
+                status="verified",
+                design_input=di_safe,
+                controlled_document=None,
+                design_verification=ver_01,
+                implementation_verified=True,
+                effectiveness_verified=True,
+                verification_notes="Verification test protocol demonstrated 100% occlusion clamp closure on 15 test trials with zero bubble escape.",
+                introduces_new_hazard=False,
+                new_hazard_details="",
+            )
+
+            rcm_02 = RiskControlMeasure.objects.create(
+                tenant=tenant,
+                risk_assessment=risk_02,
+                control_hierarchy="protective_measure",
+                title="Coulomb-Counting Smart Fuel Gauge with Forced Transport Lockout at 20% Reserve",
+                description=(
+                    "Integrated Texas Instruments bq40z50 battery fuel-gauge IC with impedance tracking. "
+                    "Firmware enforces a continuous acoustic warning at 30 minutes runtime remaining and prohibits patient transport if reserve < 20%."
+                ),
+                assigned_to=admin_user,
+                due_date=today - datetime.timedelta(days=15),
+                status="verified",
+                design_input=None,
+                controlled_document=None,
+                design_verification=None,
+                implementation_verified=True,
+                effectiveness_verified=True,
+                verification_notes="Battery discharge run-down test protocol demonstrated reliable 45-minute minimum warning across all 10 test packs.",
+                introduces_new_hazard=False,
+                new_hazard_details="",
+            )
+
+            rcm_03 = RiskControlMeasure.objects.create(
+                tenant=tenant,
+                risk_assessment=risk_03,
+                control_hierarchy="protective_measure",
+                title="IPX4 Liquid Ingress Gasket Seals with Internal Drain Channeling",
+                description=(
+                    "Overmolded silicone perimeter gasket with labyrinth joint seal tested to IEC 60529 IPX4 splash testing. "
+                    "Internal physical bulkhead diverts any incidental fluid away from high-voltage DC/DC power components."
+                ),
+                assigned_to=reviewer_user,
+                due_date=today - datetime.timedelta(days=10),
+                status="verified",
+                design_input=None,
+                controlled_document=None,
+                design_verification=None,
+                implementation_verified=True,
+                effectiveness_verified=True,
+                verification_notes="IPX4 oscillating spray test passed with zero dielectric breakdown under 4,000V dielectric withstand test.",
+                introduces_new_hazard=False,
+                new_hazard_details="",
+            )
+
+            rcm_04 = RiskControlMeasure.objects.create(
+                tenant=tenant,
+                risk_assessment=risk_04,
+                control_hierarchy="information_for_safety",
+                title="Color-Coded Mechanical Detent Clamp & On-Screen Visual Syringe Seating Guide",
+                description=(
+                    "Mechanical syringe clamp features high-contrast green indicator flag visible only when barrel flange is fully seated. "
+                    "LCD prompts step-by-step confirmation wizard and IFU warning label highlights syringe seating check."
+                ),
+                assigned_to=reviewer_user,
+                due_date=today + datetime.timedelta(days=30),
+                status="in_progress",
+                design_input=None,
+                controlled_document=doc_sop,
+                design_verification=None,
+                implementation_verified=True,
+                effectiveness_verified=False,
+                verification_notes="Formative human factors study completed with 12 nurses; summative validation test scheduled.",
+                introduces_new_hazard=False,
+                new_hazard_details="",
+            )
+
+            # 8. Risk Review Records
+            rmr_01 = RiskReviewRecord.objects.create(
+                tenant=tenant,
+                plan=rmp_active,
+                review_title="Initial Risk Management Report (RMR) - Design Freeze & V&V Completion",
+                review_type="initial_rmr",
+                review_date=today - datetime.timedelta(days=30),
+                review_period_start=today - datetime.timedelta(days=365),
+                review_period_end=today - datetime.timedelta(days=30),
+                pms_sources_reviewed="Design verification protocols, safety engineering hazard log, FMEA worksheets, and clinical usability assessments.",
+                new_hazards_identified=False,
+                risk_profile_changed=False,
+                overall_residual_risk_reconfirmed=True,
+                findings_summary=(
+                    "Comprehensive review of all 4 identified hazard categories and associated FMEA lines confirms: "
+                    "100% of risk control measures are implemented; dual redundant bubble detection eliminates catastrophic air embolism; "
+                    "all residual risks are in acceptable or justified ALARP zones per ISO 14971 Clause 8."
+                ),
+                action_items_required="Submit RMR to Regulatory Affairs for 510(k) Premarket Notification dossier compilation.",
+                status="approved",
+                lead_reviewer=admin_user,
+            )
+
+            rmr_02 = RiskReviewRecord.objects.create(
+                tenant=tenant,
+                plan=rmp_active,
+                review_title="Annual Post-Market Surveillance (PMS) Risk Evaluation - Year 1 Commercial",
+                review_type="post_market_surveillance",
+                review_date=today - datetime.timedelta(days=5),
+                review_period_start=today - datetime.timedelta(days=180),
+                review_period_end=today - datetime.timedelta(days=5),
+                pms_sources_reviewed="32 customer complaints, 2 service maintenance records, FDA MAUDE adverse event database, and cleanroom non-conformances.",
+                new_hazards_identified=False,
+                risk_profile_changed=False,
+                overall_residual_risk_reconfirmed=True,
+                findings_summary=(
+                    "Post-market feedback across 2,400 deployed clinical units shows zero air embolism incidents and zero electric shock events. "
+                    "Observed syringe misloading complaints were 0.08 per 1,000 infusions (well below 0.5 per 1,000 threshold). "
+                    "Overall residual risk profile remains completely acceptable."
+                ),
+                action_items_required="Continue standard 12-month post-market vigilance cadence.",
+                status="approved",
+                lead_reviewer=admin_user,
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.3 Risk Management (ISO 14971 / FMEA) seeded successfully."))
+
