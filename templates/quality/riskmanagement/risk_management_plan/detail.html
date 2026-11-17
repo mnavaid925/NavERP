@@ -167,16 +167,16 @@
                         {% endif %}
                     </dd>
                 </div>
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Scope & Intended Use</dt>
                     <dd class="text-sm whitespace-pre-line text-slate-700">{{ plan.scope_description }}</dd>
                 </div>
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Risk Acceptability Policy (Criteria)</dt>
                     <dd class="text-sm whitespace-pre-line text-slate-700">{{ plan.risk_acceptability_policy }}</dd>
                 </div>
                 {% if plan.overall_benefit_risk_summary %}
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Overall Benefit-Risk Analysis (ISO 14971 Clause 8)</dt>
                     <dd class="text-sm whitespace-pre-line text-slate-700 bg-slate-50 p-3 rounded">{{ plan.overall_benefit_risk_summary }}</dd>
                 </div>
@@ -216,7 +216,7 @@
 <div class="card mb-6">
     <div class="card-header flex items-center justify-between">
         <div>
-            <h2 class="text-base font-semibold text-slate-800">Hazard Analyses & FMEAs ({{ assessments.count }})</h2>
+            <h2 class="text-base font-semibold text-slate-800">Hazard Analyses & FMEAs ({{ stats.total_assessments }})</h2>
             <p class="text-xs text-slate-500">ISO 14971 causal event chains and pre/post mitigation scoring</p>
         </div>
         <a href="{% url 'quality:risk_assessment_create' %}?plan={{ plan.pk }}" class="btn btn-sm btn-primary">
@@ -286,10 +286,10 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions justify-end">
-                            <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'quality:risk_assessment_edit' item.pk %}" class="btn btn-icon" title="Edit Item">
+                            <a href="{% url 'quality:risk_assessment_edit' item.pk %}" class="btn btn-icon" title="Edit Item" aria-label="Edit Item">
                                 <i data-lucide="pencil"></i>
                             </a>
                         </div>
@@ -311,7 +311,7 @@
 <div class="card">
     <div class="card-header flex items-center justify-between">
         <div>
-            <h2 class="text-base font-semibold text-slate-800">Risk Management Reviews & Reports ({{ reviews.count }})</h2>
+            <h2 class="text-base font-semibold text-slate-800">Risk Management Reviews & Reports ({{ reviews|length }})</h2>
             <p class="text-xs text-slate-500">Periodic evaluations, PMS triggers, and living file reconfirmations</p>
         </div>
         <a href="{% url 'quality:risk_review_record_create' %}?plan={{ plan.pk }}" class="btn btn-sm btn-primary">
@@ -360,10 +360,10 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions justify-end">
-                            <a href="{% url 'quality:risk_review_record_detail' r.pk %}" class="btn btn-icon" title="View Detail">
+                            <a href="{% url 'quality:risk_review_record_detail' r.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'quality:risk_review_record_edit' r.pk %}" class="btn btn-icon" title="Edit Review">
+                            <a href="{% url 'quality:risk_review_record_edit' r.pk %}" class="btn btn-icon" title="Edit Review" aria-label="Edit Review">
                                 <i data-lucide="pencil"></i>
                             </a>
                         </div>
