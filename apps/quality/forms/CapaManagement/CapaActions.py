@@ -51,7 +51,7 @@ class CapaActionForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if hasattr(self, "tenant") and self.tenant is not None:
             self.fields["capa"].queryset = CapaInvestigation.objects.filter(tenant=self.tenant)
-            self.fields["root_cause"].queryset = RootCauseAnalysis.objects.filter(tenant=self.tenant)
+            self.fields["root_cause"].queryset = RootCauseAnalysis.objects.filter(tenant=self.tenant).select_related("capa")
             self.fields["assigned_to"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
             self.fields["department"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
             self.fields["controlled_document"].queryset = ControlledDocument.objects.filter(tenant=self.tenant)
