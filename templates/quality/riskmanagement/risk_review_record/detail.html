@@ -71,7 +71,7 @@
                     <dt>Lead Reviewer / Risk Officer</dt>
                     <dd>{{ review_record.lead_reviewer.get_full_name|default:review_record.lead_reviewer.username }}</dd>
                 </div>
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Review Period Coverage</dt>
                     <dd>
                         {% if review_record.review_period_start and review_record.review_period_end %}
@@ -83,7 +83,7 @@
                 </div>
 
                 <!-- PMS Sources -->
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Post-Market Surveillance & Feedback Sources Reviewed</dt>
                     <dd class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded">
                         {{ review_record.pms_sources_reviewed|default:"No external sources documented." }}
@@ -91,7 +91,7 @@
                 </div>
 
                 <!-- Findings Summary -->
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Review Findings & Conclusions (Clause 9 Evaluation)</dt>
                     <dd class="text-sm text-slate-800 whitespace-pre-line font-medium bg-slate-50 p-3 rounded">
                         {{ review_record.findings_summary }}
@@ -100,7 +100,7 @@
 
                 <!-- Follow-up Actions -->
                 {% if review_record.action_items_required %}
-                <div class="detail-item col-span-2">
+                <div class="detail-item sm:col-span-2">
                     <dt>Required Follow-up Actions (CAPAs / ECOs / Labeling Updates)</dt>
                     <dd class="text-sm text-slate-700 whitespace-pre-line bg-amber-50 p-3 rounded border border-amber-200">
                         {{ review_record.action_items_required }}
