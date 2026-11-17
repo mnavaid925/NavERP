@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action.number }}: {{ action.title }} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_list' %}">CAPA Management</a>
+            <span>/</span>
+            <a href="{% url 'quality:capa_investigation_detail' action.capa.pk %}">{{ action.capa.number }}</a>
+            <span>/</span>
+            <span>{{ action.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ action.number }}: {{ action.title }}</h1>
+            <span class="badge {{ action.status_badge }}">{{ action.get_status_display }}</span>
+            <span class="badge {{ action.action_type_badge }}">{{ action.get_action_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:capa_investigation_detail' action.capa.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to CAPA
+        </a>
+        {% if action.status != "verified" %}
+        <a href="{% url 'quality:capa_action_edit' action.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Action
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Action Instructions & Scope -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Action Instructions & Deliverables</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Work Description</h3>
+                    <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">{{ action.description }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Implementation Execution Evidence -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">Implementation Execution Evidence</h2>
+                <span class="badge {% if action.status in 'implemented verified' %}badge-green{% else %}badge-amber{% endif %}">
+                    {% if action.status in "implemented verified" %}Implemented{% else %}Pending Execution{% endif %}
+                </span>
+            </div>
+            <div class="card-body space-y-4">
+                {% if action.implementation_notes %}
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Execution Summary</h3>
+                    <p class="text-sm text-slate-700 bg-emerald-50/50 p-3 rounded border border-emerald-100 whitespace-pre-wrap">{{ action.implementation_notes }}</p>
+                    {% if action.completion_date %}
+                    <div class="text-xs text-slate-500 mt-2">Completed on: <strong>{{ action.completion_date|date:"Y-m-d" }}</strong></div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-400 italic">No execution notes submitted yet.</p>
+                {% endif %}
+
+                {% if action.status in "pending in_progress" %}
+                <form method="post" action="{% url 'quality:capa_action_mark_completed' action.pk %}" class="pt-3 border-t border-slate-200 space-y-3" onsubmit="return confirm('Confirm completion of this action item?');">
+                    {% csrf_token %}
+                    <label class="form-label text-xs" for="implementation_notes">Execution Notes & Deliverables Proof</label>
+                    <textarea name="implementation_notes" id="implementation_notes" class="form-textarea text-xs" rows="2" placeholder="Document physical changes, updated records, or work completed..."></textarea>
+                    <button type="submit" class="btn btn-primary text-xs">
+                        <i data-lucide="check"></i> Mark Action as Implemented
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quality Subsystem Links -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Quality Subsystem Traceability</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Controlled Document (SOP / WI)</dt>
+                        <dd>
+                            {% if action.controlled_document %}
+                            <a href="{% url 'quality:controlled_document_detail' action.controlled_document.pk %}" class="text-blue-600 hover:underline">
+                                {{ action.controlled_document.number }}: {{ action.controlled_document.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">None linked</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Document Change Order (DCO)</dt>
+                        <dd>
+                            {% if action.change_order %}
+                            <a href="{% url 'quality:document_change_order_detail' action.change_order.pk %}" class="text-blue-600 hover:underline">
+                                {{ action.change_order.number }}: {{ action.change_order.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">None linked</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Design Controls Project</dt>
+                        <dd>
+                            {% if action.design_project %}
+                            <a href="{% url 'quality:design_project_detail' action.design_project.pk %}" class="text-blue-600 hover:underline">
+                                {{ action.design_project.number }}: {{ action.design_project.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">None linked</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Root Cause Addressed</dt>
+                        <dd>
+                            {% if action.root_cause %}
+                            <a href="{% url 'quality:root_cause_analysis_detail' action.root_cause.pk %}" class="text-blue-600 hover:underline">
+                                {{ action.root_cause.number }} ({{ action.root_cause.get_rca_method_display }})
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">General CAPA remediation</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Verification & Assignment -->
+    <div class="space-y-6">
+        <!-- Quality Verification Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Quality Verification</h2>
+            </div>
+            <div class="card-body space-y-4">
+                {% if action.is_verified %}
+                <div class="p-3 rounded bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 space-y-1">
+                    <div class="font-semibold flex items-center gap-1.5"><i data-lucide="check-circle" class="w-4 h-4"></i> Action Independently Verified</div>
+                    <div>Verified By: <strong>{{ action.verified_by.username }}</strong></div>
+                    <div>Verified On: <strong>{{ action.verified_on|date:"Y-m-d" }}</strong></div>
+                    {% if action.verification_evidence %}
+                    <div class="mt-2 text-slate-700 bg-white p-2 rounded border border-emerald-200 font-mono">{{ action.verification_evidence }}</div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <form method="post" action="{% url 'quality:capa_action_verify' action.pk %}" class="space-y-3" onsubmit="return confirm('Independently verify that this action item has been properly executed?');">
+                    {% csrf_token %}
+                    <label class="form-label text-xs" for="verification_evidence">Verification Evidence Notes</label>
+                    <textarea name="verification_evidence" id="verification_evidence" class="form-textarea text-xs" rows="3" placeholder="Confirm document revisions, physical inspections, training records..."></textarea>
+                    <button type="submit" class="btn btn-primary w-full text-xs">
+                        <i data-lucide="check-circle"></i> Verify Action Execution
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Assignment Details -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Assignment Metadata</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Parent CAPA</dt>
+                        <dd>
+                            <a href="{% url 'quality:capa_investigation_detail' action.capa.pk %}" class="font-mono text-xs text-blue-600 hover:underline">
+                                {{ action.capa.number }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Action Type</dt>
+                        <dd><span class="badge {{ action.action_type_badge }}">{{ action.get_action_type_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Assigned To</dt>
+                        <dd>{{ action.assigned_to.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Department</dt>
+                        <dd>{{ action.department.name|default:"Not specified" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Due Date</dt>
+                        <dd class="{% if action.is_overdue %}text-red-600 font-bold{% endif %}">
+                            {{ action.due_date|date:"Y-m-d" }}
+                            {% if action.is_overdue %}<span class="badge badge-red ml-1">Overdue</span>{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created At</dt>
+                        <dd>{{ action.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
