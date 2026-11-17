@@ -64,6 +64,11 @@ class DesignInputForm(TenantUniqueMixin, TenantModelForm):
         reject_foreign(self, cleaned, ["project", "owner", "user_need_parent", "controlled_document"])
 
         project = cleaned.get("project")
+        if project and project.dhf_locked:
+            self.add_error("project", "Cannot create or modify design inputs for a project with a locked Design History File (DHF).")
+        elif self.instance.pk and self.instance.project and self.instance.project.dhf_locked:
+            self.add_error("project", "Cannot modify records belonging to a project with a locked Design History File (DHF).")
+
         user_need_parent = cleaned.get("user_need_parent")
         if project and user_need_parent and user_need_parent.project_id != project.pk:
             self.add_error("user_need_parent", "Parent user need must belong to the same design project.")
