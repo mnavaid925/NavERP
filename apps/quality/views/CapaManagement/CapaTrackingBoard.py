@@ -134,5 +134,5 @@ def capa_tracking_board_export(request):
             csv_safe("Yes" if c.is_escalated else "No"),
         ])
 
-    write_audit_log(request.user, CapaInvestigation(), "export", tenant=request.tenant)
+    write_audit_log(request.user, request.tenant, "export", tenant=request.tenant)
     return response
