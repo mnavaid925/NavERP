@@ -242,6 +242,12 @@ def design_project_advance_phase(request, pk):
 @require_POST
 def design_project_lock_dhf(request, pk):
     project = quality_object(request, DesignProject, pk)
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)
+    is_lead = (request.user.pk == project.project_lead_id) or (project.quality_lead_id and request.user.pk == project.quality_lead_id)
+    if not (is_admin or is_lead):
+        messages.error(request, "Permission denied. Only the project lead, quality lead, or tenant administrator can freeze the DHF.")
+        return redirect("quality:design_project_detail", pk=project.pk)
+
     project.dhf_locked = True
     project.status = "completed"
     if not project.actual_completion_date:
