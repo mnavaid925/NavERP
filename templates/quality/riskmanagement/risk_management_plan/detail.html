@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plan.number }} — {{ plan.title }} | Risk Management Plan{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'quality:risk_management_plan_list' %}">Risk Plans</a>
+            <span>/</span>
+            <span>{{ plan.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ plan.number }} — {{ plan.title }}</h1>
+            <span class="badge {{ plan.status_badge }}">{{ plan.get_status_display }}</span>
+            <span class="badge {{ plan.device_class_badge }}">{{ plan.get_device_classification_display }}</span>
+            <span class="badge badge-slate">v{{ plan.plan_version }}</span>
+            {% if plan.overall_residual_risk_acceptable %}
+            <span class="badge badge-green"><i data-lucide="shield-check" class="w-3 h-3 inline"></i> Overall Residual Risk Acceptable</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:fmea_matrix' %}?plan={{ plan.pk }}" class="btn btn-outline">
+            <i data-lucide="grid"></i> FMEA Risk Matrix
+        </a>
+        <a href="{% url 'quality:risk_traceability_matrix' %}?plan={{ plan.pk }}" class="btn btn-outline">
+            <i data-lucide="git-merge"></i> Traceability
+        </a>
+        {% if plan.status != "active" %}
+        <form method="post" action="{% url 'quality:risk_management_plan_activate' plan.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700 hover:bg-green-50" title="Activate Plan">
+                <i data-lucide="check-circle"></i> Activate
+            </button>
+        </form>
+        {% endif %}
+        {% if plan.status != "archived" %}
+        <form method="post" action="{% url 'quality:risk_management_plan_archive' plan.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-slate-600 hover:bg-slate-50" title="Archive Plan">
+                <i data-lucide="archive"></i> Archive
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'quality:risk_management_plan_edit' plan.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Plan
+        </a>
+        <form method="post" action="{% url 'quality:risk_management_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Risk Management Plan {{ plan.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 hover:border-red-200" title="Delete Plan">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Risk Metrics Bar -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Total Hazards / Risks</div>
+            <div class="text-2xl font-bold text-slate-800">{{ stats.total_assessments }}</div>
+            <div class="text-xs text-slate-500">{{ stats.controls_count }} mitigations planned</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Unacceptable (Red)</div>
+            <div class="text-2xl font-bold text-red-600">{{ stats.unacceptable_count }}</div>
+            <div class="text-xs text-slate-500">Require immediate reduction</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">ALARP Zone (Amber)</div>
+            <div class="text-2xl font-bold text-amber-600">{{ stats.alarp_count }}</div>
+            <div class="text-xs text-slate-500">Require clinical BRA justification</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-sm text-slate-500 font-medium">Verified Controls</div>
+            <div class="text-2xl font-bold text-green-600">{{ stats.verified_controls_count }} / {{ stats.controls_count }}</div>
+            <div class="text-xs text-slate-500">Implementation & effectiveness verified</div>
+        </div>
+    </div>
+</div>
+
+<!-- Plan Master Details -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">ISO 14971 Plan Specification</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Device Classification</dt>
+                    <dd>{{ plan.get_device_classification_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Risk Matrix Framework</dt>
+                    <dd>{{ plan.get_matrix_dimension_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Associated Design Project</dt>
+                    <dd>
+                        {% if plan.design_project %}
+                        <a href="{% url 'quality:design_project_detail' plan.design_project.pk %}" class="text-brand hover:underline font-mono">
+                            {{ plan.design_project.number }} — {{ plan.design_project.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">None linked</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Lead Risk Manager</dt>
+                    <dd>{{ plan.lead_risk_manager.get_full_name|default:plan.lead_risk_manager.username }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Department / Unit</dt>
+                    <dd>{{ plan.department.name|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Review Frequency</dt>
+                    <dd>Every {{ plan.periodic_review_frequency_months }} Months</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Next Review Due Date</dt>
+                    <dd>
+                        {% if plan.next_review_due_date %}
+                            {% if plan.is_review_overdue %}
+                            <span class="text-red font-semibold">{{ plan.next_review_due_date }} (Overdue)</span>
+                            {% else %}
+                            <span>{{ plan.next_review_due_date }}</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="text-slate-400">Not scheduled</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>21 CFR Part 11 Signature</dt>
+                    <dd>
+                        {% if plan.approved_signature %}
+                        <span class="text-xs font-mono text-green-700 bg-green-50 px-2 py-1 rounded">
+                            Signed by {{ plan.approved_signature.signer_printed_name }} on {{ plan.approved_signature.signature_timestamp|date:"Y-m-d H:i" }}
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400">Pending formal e-signature</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item col-span-2">
+                    <dt>Scope & Intended Use</dt>
+                    <dd class="text-sm whitespace-pre-line text-slate-700">{{ plan.scope_description }}</dd>
+                </div>
+                <div class="detail-item col-span-2">
+                    <dt>Risk Acceptability Policy (Criteria)</dt>
+                    <dd class="text-sm whitespace-pre-line text-slate-700">{{ plan.risk_acceptability_policy }}</dd>
+                </div>
+                {% if plan.overall_benefit_risk_summary %}
+                <div class="detail-item col-span-2">
+                    <dt>Overall Benefit-Risk Analysis (ISO 14971 Clause 8)</dt>
+                    <dd class="text-sm whitespace-pre-line text-slate-700 bg-slate-50 p-3 rounded">{{ plan.overall_benefit_risk_summary }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+    </div>
+
+    <!-- Quick Actions Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Risk Management Actions</h2>
+        </div>
+        <div class="card-body flex flex-col gap-3">
+            <a href="{% url 'quality:risk_assessment_create' %}?plan={{ plan.pk }}" class="btn btn-outline justify-start">
+                <i data-lucide="plus-circle"></i> Log Hazard / Failure Mode
+            </a>
+            <a href="{% url 'quality:risk_review_record_create' %}?plan={{ plan.pk }}" class="btn btn-outline justify-start">
+                <i data-lucide="calendar"></i> Conduct Periodic / PMS Review
+            </a>
+            <a href="{% url 'quality:fmea_matrix' %}?plan={{ plan.pk }}" class="btn btn-outline justify-start">
+                <i data-lucide="layout-grid"></i> Open Interactive Heatmap
+            </a>
+            <a href="{% url 'quality:risk_traceability_matrix' %}?plan={{ plan.pk }}" class="btn btn-outline justify-start">
+                <i data-lucide="table"></i> Traceability Matrix
+            </a>
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase text-slate-400 mb-2">Metadata</div>
+                <div class="text-xs text-slate-500 mb-1">Created: {{ plan.created_at|date:"Y-m-d H:i" }}</div>
+                <div class="text-xs text-slate-500">Last Modified: {{ plan.updated_at|date:"Y-m-d H:i" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Associated Risk Assessments (Hazards / FMEAs) -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Hazard Analyses & FMEAs ({{ assessments.count }})</h2>
+            <p class="text-xs text-slate-500">ISO 14971 causal event chains and pre/post mitigation scoring</p>
+        </div>
+        <a href="{% url 'quality:risk_assessment_create' %}?plan={{ plan.pk }}" class="btn btn-sm btn-primary">
+            <i data-lucide="plus"></i> Add Risk Item
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Type</th>
+                    <th>Hazard / Failure Mode</th>
+                    <th>Harm / Effect</th>
+                    <th>Pre-Mitigation (S×P=RPN)</th>
+                    <th>Initial Level</th>
+                    <th>Residual Level</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in assessments %}
+                <tr>
+                    <td class="font-mono text-xs font-medium">
+                        <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="text-brand hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.analysis_type_badge }}">
+                            {{ item.get_analysis_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800 text-sm">
+                            {{ item.hazard_description|default:item.failure_mode }}
+                        </div>
+                        <div class="text-xs text-slate-400">{{ item.get_hazard_category_display }}</div>
+                    </td>
+                    <td class="text-xs text-slate-600 max-w-xs truncate">
+                        {{ item.potential_harm|default:item.failure_effect }}
+                    </td>
+                    <td class="font-mono text-xs">
+                        S:{{ item.initial_severity }} × P:{{ item.initial_probability }}
+                        {% if item.initial_detectability %}× D:{{ item.initial_detectability }}{% endif %}
+                        = <strong>{{ item.initial_rpn }}</strong>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.initial_risk_level_badge }}">
+                            {{ item.get_initial_risk_level_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if item.residual_risk_level %}
+                        <span class="badge {{ item.residual_risk_level_badge }}">
+                            {{ item.get_residual_risk_level_display }}
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400 text-xs">Unassessed</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.lifecycle_status_badge }}">
+                            {{ item.get_lifecycle_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'quality:risk_assessment_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:risk_assessment_edit' item.pk %}" class="btn btn-icon" title="Edit Item">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-6 text-slate-400 text-sm">
+                        No hazard analysis or FMEA records added yet. Click "Add Risk Item" to begin hazard logging.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Associated Risk Review Records -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Risk Management Reviews & Reports ({{ reviews.count }})</h2>
+            <p class="text-xs text-slate-500">Periodic evaluations, PMS triggers, and living file reconfirmations</p>
+        </div>
+        <a href="{% url 'quality:risk_review_record_create' %}?plan={{ plan.pk }}" class="btn btn-sm btn-primary">
+            <i data-lucide="plus"></i> Log Review
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Title</th>
+                    <th>Review Type</th>
+                    <th>Date</th>
+                    <th>Lead Reviewer</th>
+                    <th>Residual Risk Reconfirmed</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in reviews %}
+                <tr>
+                    <td class="font-mono text-xs font-medium">
+                        <a href="{% url 'quality:risk_review_record_detail' r.pk %}" class="text-brand hover:underline">
+                            {{ r.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-800 text-sm">{{ r.review_title }}</td>
+                    <td>
+                        <span class="badge {{ r.review_type_badge }}">{{ r.get_review_type_display }}</span>
+                    </td>
+                    <td class="text-xs text-slate-600">{{ r.review_date }}</td>
+                    <td class="text-xs text-slate-600">
+                        {{ r.lead_reviewer.get_full_name|default:r.lead_reviewer.username }}
+                    </td>
+                    <td>
+                        {% if r.overall_residual_risk_reconfirmed %}
+                        <span class="badge badge-green">Yes</span>
+                        {% else %}
+                        <span class="badge badge-red">No — Action Required</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ r.status_badge }}">{{ r.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'quality:risk_review_record_detail' r.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:risk_review_record_edit' r.pk %}" class="btn btn-icon" title="Edit Review">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-slate-400 text-sm">
+                        No risk reviews conducted yet. Periodic reviews ensure risk files remain live per ISO 14971 Clause 9.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
