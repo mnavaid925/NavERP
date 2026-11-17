@@ -29,6 +29,13 @@ def csv_safe(value):
 def capa_investigation_list(request):
     qs = quality_scope(CapaInvestigation.objects.all(), request).select_related(
         "lead_investigator", "quality_owner", "department"
+    ).annotate(
+        actions_count=Count("actions", distinct=True),
+        pending_actions_count=Count(
+            "actions",
+            filter=Q(actions__status__in=["pending", "in_progress"]),
+            distinct=True,
+        ),
     )
 
     q = request.GET.get("q", "").strip()
