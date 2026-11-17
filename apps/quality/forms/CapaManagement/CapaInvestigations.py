@@ -84,6 +84,15 @@ class CapaInvestigationForm(TenantUniqueMixin, TenantModelForm):
             self.fields["quality_owner"].queryset = User.objects.none()
             self.fields["containment_verified_by"].queryset = User.objects.none()
 
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status in ["closed", "voided"]:
+            if not self.instance.pk or self.instance.status != status:
+                raise forms.ValidationError(
+                    f"Status '{status}' cannot be set directly. Use dedicated workflow actions."
+                )
+        return status
+
     def clean(self):
         cleaned = super().clean()
         reject_foreign(
