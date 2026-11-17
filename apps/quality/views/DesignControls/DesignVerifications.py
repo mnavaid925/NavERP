@@ -184,9 +184,18 @@ def design_verification_edit(request, pk):
             with transaction.atomic():
                 verification = form.save()
                 if verification.pass_fail_result == "pass" and verification.status == "passed":
-                    verification.primary_input.status = "verified"
-                    verification.primary_input.save(update_fields=["status", "updated_at"])
-                    write_audit_log(request.user, verification.primary_input, "verify", tenant=request.tenant)
+                    if verification.primary_input.status != "verified":
+                        verification.primary_input.status = "verified"
+                        verification.primary_input.save(update_fields=["status", "updated_at"])
+                        write_audit_log(request.user, verification.primary_input, "verify", tenant=request.tenant)
+                elif verification.primary_input.status == "verified":
+                    has_other_pass = verification.primary_input.verifications.exclude(pk=verification.pk).filter(
+                        pass_fail_result="pass", status="passed"
+                    ).exists()
+                    if not has_other_pass:
+                        verification.primary_input.status = "approved"
+                        verification.primary_input.save(update_fields=["status", "updated_at"])
+                        write_audit_log(request.user, verification.primary_input, "unverify", tenant=request.tenant)
                 write_audit_log(request.user, verification, "update", tenant=request.tenant)
             messages.success(request, f"Verification protocol {verification.number} updated successfully.")
             return redirect("quality:design_verification_detail", pk=verification.pk)
@@ -208,8 +217,17 @@ def design_verification_delete(request, pk):
         messages.error(request, "Cannot delete verification protocol from a locked Design History File.")
         return redirect("quality:design_verification_detail", pk=verification.pk)
 
+    primary_input = verification.primary_input
     num = verification.number
-    write_audit_log(request.user, verification, "delete", tenant=request.tenant)
-    verification.delete()
+    with transaction.atomic():
+        write_audit_log(request.user, verification, "delete", tenant=request.tenant)
+        verification.delete()
+        if primary_input and primary_input.status == "verified":
+            has_other_pass = primary_input.verifications.filter(pass_fail_result="pass", status="passed").exists()
+            if not has_other_pass:
+                primary_input.status = "approved"
+                primary_input.save(update_fields=["status", "updated_at"])
+                write_audit_log(request.user, primary_input, "unverify", tenant=request.tenant)
+
     messages.success(request, f"Verification protocol {num} removed.")
     return redirect("quality:design_verification_list")
