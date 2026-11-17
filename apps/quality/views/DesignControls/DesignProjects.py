@@ -210,7 +210,7 @@ def design_project_delete(request, pk):
 @require_POST
 def design_project_advance_phase(request, pk):
     project = quality_object(request, DesignProject, pk)
-    phase_order = ["planning", "input", "output_verification", "validation", "transfer", "commercial_closure", "closed"]
+    phase_order = ["planning", "input", "output_verification", "validation", "commercial_closure", "closed"]
     curr_idx = phase_order.index(project.current_phase) if project.current_phase in phase_order else 0
 
     if curr_idx < len(phase_order) - 1:
