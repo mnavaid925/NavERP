@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if lpa %}Edit {{ lpa.number }}{% else %}Schedule Layered Process Audit{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:layered_process_audit_list' %}" class="hover:underline">Layered Process Audits</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if lpa %}Edit {{ lpa.number }}{% else %}New Audit{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="check-check" class="w-6 h-6 text-blue-600"></i>
+        {% if lpa %}Edit {{ lpa.number }} — {{ lpa.title }}{% else %}Schedule Layered Process Audit (LPA / CQI-8){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Record short-cycle verification of standard work, setup integrity, error-proofing, and supervisor sign-offs.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if lpa %}{% url 'quality:layered_process_audit_detail' lpa.pk %}{% else %}{% url 'quality:layered_process_audit_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Management Tier & Timing -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i>
+          Management Tier & Scheduling
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Audit Title *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.audit_layer.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Audit Management Tier *</label>
+            {{ form.audit_layer }}
+            {% if form.audit_layer.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.audit_layer.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.focus_area.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Focus Area *</label>
+            {{ form.focus_area }}
+            {% if form.focus_area.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.focus_area.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Workflow Status *</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.auditor.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Auditor (Leader / Manager)</label>
+            {{ form.auditor }}
+            {% if form.auditor.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.auditor.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.scheduled_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Scheduled Date *</label>
+            {{ form.scheduled_date }}
+            {% if form.scheduled_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.scheduled_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.conducted_at.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Conducted Timestamp</label>
+            {{ form.conducted_at }}
+            {% if form.conducted_at.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.conducted_at.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Location & Work Center -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="factory" class="w-4 h-4 text-blue-600"></i>
+          Location, Cell & Shift
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.work_center.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Center</label>
+            {{ form.work_center }}
+            {% if form.work_center.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_center.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_center_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Center Code</label>
+            {{ form.work_center_code }}
+            {% if form.work_center_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_center_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.org_unit.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Department / Unit</label>
+            {{ form.org_unit }}
+            {% if form.org_unit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.org_unit.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.shift.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Shift</label>
+            {{ form.shift }}
+            {% if form.shift.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.shift.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Questions & Conformance Scoring -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="check-square" class="w-4 h-4 text-blue-600"></i>
+          Checklist Execution & Conformance
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.total_questions_audited.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Total Questions *</label>
+            {{ form.total_questions_audited }}
+            {% if form.total_questions_audited.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_questions_audited.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.questions_conforming.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Conforming Questions *</label>
+            {{ form.questions_conforming }}
+            {% if form.questions_conforming.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.questions_conforming.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.questions_non_conforming.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Non-Conforming Items</label>
+            {{ form.questions_non_conforming }}
+            {% if form.questions_non_conforming.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.questions_non_conforming.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label for="{{ form.findings_summary.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Findings & Non-Conformance Summary</label>
+            {{ form.findings_summary }}
+            {% if form.findings_summary.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.findings_summary.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Fast-Response Mitigation & Escalation -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="wrench" class="w-4 h-4 text-blue-600"></i>
+          On-The-Spot Containment & Governance
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.controlled_document.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Standard Work Checklist (SOP)</label>
+            {{ form.controlled_document }}
+            {% if form.controlled_document.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.controlled_document.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.non_conformance.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Non-Conformance Report (NCR)</label>
+            {{ form.non_conformance }}
+            {% if form.non_conformance.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.non_conformance.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2 flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+            {{ form.on_the_spot_mitigation }}
+            <label for="{{ form.on_the_spot_mitigation.id_for_label }}" class="text-sm font-medium text-slate-700 cursor-pointer">
+              On-The-Spot Mitigation Executed: Non-conforming condition was corrected immediately during the audit.
+            </label>
+            {% if form.on_the_spot_mitigation.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.on_the_spot_mitigation.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.mitigation_details.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Immediate Mitigation Details</label>
+            {{ form.mitigation_details }}
+            {% if form.mitigation_details.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.mitigation_details.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">General Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if lpa %}{% url 'quality:layered_process_audit_detail' lpa.pk %}{% else %}{% url 'quality:layered_process_audit_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if lpa %}Save Changes{% else %}Schedule Audit{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
