@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}{{ inspection.number }} — In-Process Inspection — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:in_process_inspection_list' %}" class="hover:underline">In-Process Inspections</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ inspection.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="clipboard-check" class="w-6 h-6 text-blue-600"></i>
+          {{ inspection.number }} — {{ inspection.title }}
+        </h1>
+        <span class="badge {{ inspection.disposition_css }} text-sm">{{ inspection.get_disposition_display }}</span>
+        <span class="badge {{ inspection.status_css }} text-sm">{{ inspection.get_status_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        {{ inspection.get_inspection_type_display }} · Stage Gate: {{ inspection.stage_gate|default:"General In-Line" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:in_process_inspection_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <a href="{% url 'quality:in_process_inspection_edit' inspection.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+      </a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <form method="post" action="{% url 'quality:in_process_inspection_delete' inspection.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete inspection {{ inspection.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="percent" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Conforming Pass Rate</div>
+        <div class="text-xl font-bold text-slate-900">
+          {{ inspection.pass_rate_percentage }}%
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="box" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Inspected / Batch</div>
+        <div class="text-xl font-bold text-slate-900">
+          {{ inspection.sample_size_inspected }} / {{ inspection.batch_quantity }}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon {% if inspection.quantity_rejected > 0 %}red bg-red-50 text-red-600{% else %}slate bg-slate-50 text-slate-600{% endif %} p-3 rounded-lg">
+        <i data-lucide="alert-octagon" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Rejected Parts</div>
+        <div class="text-xl font-bold {% if inspection.quantity_rejected > 0 %}text-red-600{% else %}text-slate-900{% endif %}">
+          {{ inspection.quantity_rejected }}
+          {% if inspection.quantity_reworked > 0 %}
+            <span class="text-xs font-normal text-amber-600">({{ inspection.quantity_reworked }} rework)</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="user-check" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Operator Sign-Off</div>
+        <div class="text-lg font-bold">
+          {% if inspection.operator_sign_off %}
+            <span class="badge badge-green">Verified</span>
+          {% else %}
+            <span class="badge badge-amber">Pending Sign-Off</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Left Details (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Manufacturing Metadata Card -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="factory" class="w-5 h-5 text-slate-600"></i>
+            Manufacturing & Routing Context
+          </h2>
+        </div>
+        <div class="card-body p-4">
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Part / Item Code</dt>
+              <dd class="font-semibold text-slate-900">{{ inspection.item_code|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Part Name</dt>
+              <dd>{{ inspection.item_name|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Lot / Heat Number</dt>
+              <dd>{{ inspection.lot_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Serial Number</dt>
+              <dd>{{ inspection.serial_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Production Order #</dt>
+              <dd>{{ inspection.production_order_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Work Order</dt>
+              <dd>
+                {% if inspection.work_order %}
+                  <span class="font-medium text-blue-600">{{ inspection.work_order }}</span>
+                {% else %}
+                  <span class="text-slate-400">Not Linked</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Work Center / Cell</dt>
+              <dd>
+                {% if inspection.work_center %}
+                  {{ inspection.work_center.code }} - {{ inspection.work_center.name }}
+                {% elif inspection.work_center_code %}
+                  {{ inspection.work_center_code }}
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Operation Step</dt>
+              <dd>{{ inspection.operation_step|default:"—" }}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Inspection Quantities & Findings Card -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="check-square" class="w-5 h-5 text-slate-600"></i>
+            Inspection Sampling & Defect Disposition
+          </h2>
+        </div>
+        <div class="card-body p-4 space-y-4">
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Total Batch Quantity</dt>
+              <dd class="font-semibold">{{ inspection.batch_quantity }} units</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Sample Size Inspected</dt>
+              <dd class="font-semibold">{{ inspection.sample_size_inspected }} units</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Quantity Conforming (Pass)</dt>
+              <dd class="text-green-600 font-semibold">{{ inspection.quantity_passed }} units</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Quantity Reworked</dt>
+              <dd class="text-amber-600 font-semibold">{{ inspection.quantity_reworked }} units</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Quantity Scrapped / Rejected</dt>
+              <dd class="text-red-600 font-semibold">{{ inspection.quantity_rejected }} units</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Defect Category</dt>
+              <dd>
+                {% if inspection.defect_category %}
+                  <span class="badge {{ inspection.defect_css }}">{{ inspection.get_defect_category_display }}</span>
+                {% else %}
+                  <span class="text-slate-400">None (Conforming)</span>
+                {% endif %}
+              </dd>
+            </div>
+          </dl>
+
+          {% if inspection.defect_description %}
+            <div class="mt-4 pt-4 border-t border-slate-200">
+              <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Defect Findings & Failure Analysis</h3>
+              <div class="p-3 bg-red-50 text-red-900 rounded text-sm border border-red-200">
+                {{ inspection.defect_description|linebreaks }}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Work Instruction Adherence & Sign-Off -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="file-check" class="w-5 h-5 text-slate-600"></i>
+            Work Instruction Verification & Operator Sign-Off
+          </h2>
+        </div>
+        <div class="card-body p-4">
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Digital Work Instruction (SOP)</dt>
+              <dd>
+                {% if inspection.controlled_document %}
+                  <a href="{% url 'quality:controlled_document_detail' inspection.controlled_document.pk %}" class="text-blue-600 hover:underline font-medium">
+                    {{ inspection.controlled_document.document_number }} — {{ inspection.controlled_document.title }}
+                  </a>
+                {% else %}
+                  <span class="text-slate-400">Not Linked</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Work Instruction Step</dt>
+              <dd>{{ inspection.work_instruction_step|default:"Standard Procedure" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Operator Sign-Off</dt>
+              <dd>
+                {% if inspection.operator_sign_off %}
+                  <span class="badge badge-green">Operator Verified</span>
+                {% else %}
+                  <span class="badge badge-amber">Awaiting Operator Check</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Assigned Operator</dt>
+              <dd>
+                {% if inspection.operator %}
+                  {{ inspection.operator.get_full_name|default:inspection.operator.email }}
+                {% else %}
+                  <span class="text-slate-400">Unassigned</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Quality Inspector</dt>
+              <dd>
+                {% if inspection.inspector %}
+                  {{ inspection.inspector.get_full_name|default:inspection.inspector.email }}
+                {% else %}
+                  <span class="text-slate-400">Unassigned</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Inspection Date</dt>
+              <dd>{{ inspection.inspection_date|date:"Y-m-d"|default:"Not Recorded" }}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar (1 col) -->
+    <div class="space-y-6">
+      <!-- Quality Escalation Card -->
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>
+          Quality Escalation & Actions
+        </h3>
+        <div class="space-y-3 text-sm">
+          <div>
+            <div class="text-xs text-slate-500">Non-Conformance Report (NCR)</div>
+            <div class="mt-1">
+              {% if inspection.non_conformance %}
+                <a href="{% url 'quality:nonconformance_detail' inspection.non_conformance.pk %}" class="text-red-600 hover:underline font-semibold flex items-center gap-1">
+                  <i data-lucide="link" class="w-3.5 h-3.5"></i>
+                  {{ inspection.non_conformance.number }} — {{ inspection.non_conformance.title }}
+                </a>
+              {% else %}
+                <span class="text-slate-400">No NCR Escalated</span>
+              {% endif %}
+            </div>
+          </div>
+          {% if inspection.is_failed and not inspection.non_conformance %}
+            <div class="p-3 bg-amber-50 rounded border border-amber-200 text-xs text-amber-800">
+              This inspection had rejected or quarantined units. Consider logging a formal Non-Conformance Report.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Record Audit Info -->
+      <div class="card p-4 text-xs text-slate-500 space-y-2">
+        <div class="font-semibold text-slate-700 text-sm mb-2">Record Audit Trail</div>
+        <div class="flex justify-between py-1 border-b border-slate-100">
+          <span>Created:</span>
+          <span class="font-medium text-slate-700">{{ inspection.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-slate-100">
+          <span>Last Updated:</span>
+          <span class="font-medium text-slate-700">{{ inspection.updated_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-1">
+          <span>Tenant Workspace:</span>
+          <span class="font-medium text-slate-700">{{ inspection.tenant.name }}</span>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="card p-4 space-y-2">
+        <div class="font-semibold text-slate-700 text-sm mb-1">Quick Links</div>
+        <a href="{% url 'quality:spc_dashboard' %}" class="btn btn-outline text-xs w-full flex items-center justify-center gap-1.5 py-2">
+          <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+          <span>Shop Floor SPC Monitor</span>
+        </a>
+        <a href="{% url 'quality:in_process_inspection_create' %}" class="btn btn-primary text-xs w-full flex items-center justify-center gap-1.5 py-2">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+          <span>Log Another Inspection</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
