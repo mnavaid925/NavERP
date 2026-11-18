@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 
 from apps.quality.models.NonConformance.MrbDispositions import MrbDisposition
@@ -16,31 +16,53 @@ def ncr_analytics_dashboard(request):
     containment_qs = quality_scope(QuarantineContainment.objects.all(), request)
     mrb_qs = quality_scope(MrbDisposition.objects.all(), request)
 
-    total_ncrs = ncr_qs.count()
-    open_ncrs = ncr_qs.exclude(status__in=["closed", "voided"]).count()
+    ncr_stats = ncr_qs.aggregate(
+        total=Count("id"),
+        open=Count("id", filter=~Q(status__in=["closed", "voided"])),
+    )
+    total_ncrs = ncr_stats["total"] or 0
+    open_ncrs = ncr_stats["open"] or 0
+
     active_quarantines = containment_qs.filter(status="active").count()
-    pending_mrbs = mrb_qs.filter(status__in=["draft", "under_review"]).count()
 
-    total_scrap_cost = mrb_qs.aggregate(s=Sum("scrap_cost"))["s"] or Decimal("0.00")
-    total_rework_cost = mrb_qs.aggregate(s=Sum("rework_labor_cost"))["s"] or Decimal("0.00")
+    mrb_stats = mrb_qs.aggregate(
+        pending=Count("id", filter=Q(status__in=["draft", "under_review"])),
+        scrap=Sum("scrap_cost"),
+        rework=Sum("rework_labor_cost"),
+    )
+    pending_mrbs = mrb_stats["pending"] or 0
+    total_scrap_cost = mrb_stats["scrap"] or Decimal("0.00")
+    total_rework_cost = mrb_stats["rework"] or Decimal("0.00")
 
-    severity_breakdown = []
-    for val, label in NonConformanceReport.SEVERITY_CHOICES:
-        count = ncr_qs.filter(severity=val).count()
-        css = NonConformanceReport.SEVERITY_CSS.get(val, "badge-slate")
-        severity_breakdown.append({"severity": label, "count": count, "css": css})
+    sev_counts = dict(ncr_qs.values("severity").annotate(c=Count("id")).values_list("severity", "c"))
+    severity_breakdown = [
+        {
+            "severity": label,
+            "count": sev_counts.get(val, 0),
+            "css": NonConformanceReport.SEVERITY_CSS.get(val, "badge-slate"),
+        }
+        for val, label in NonConformanceReport.SEVERITY_CHOICES
+    ]
 
-    category_breakdown = []
-    for val, label in NonConformanceReport.CATEGORY_CHOICES:
-        count = ncr_qs.filter(category=val).count()
-        css = NonConformanceReport.CATEGORY_CSS.get(val, "badge-slate")
-        category_breakdown.append({"category": label, "count": count, "css": css})
+    cat_counts = dict(ncr_qs.values("category").annotate(c=Count("id")).values_list("category", "c"))
+    category_breakdown = [
+        {
+            "category": label,
+            "count": cat_counts.get(val, 0),
+            "css": NonConformanceReport.CATEGORY_CSS.get(val, "badge-slate"),
+        }
+        for val, label in NonConformanceReport.CATEGORY_CHOICES
+    ]
 
-    source_breakdown = []
-    for val, label in NonConformanceReport.SOURCE_TYPE_CHOICES:
-        count = ncr_qs.filter(source_type=val).count()
-        css = NonConformanceReport.SOURCE_TYPE_CSS.get(val, "badge-slate")
-        source_breakdown.append({"source": label, "count": count, "css": css})
+    src_counts = dict(ncr_qs.values("source_type").annotate(c=Count("id")).values_list("source_type", "c"))
+    source_breakdown = [
+        {
+            "source": label,
+            "count": src_counts.get(val, 0),
+            "css": NonConformanceReport.SOURCE_TYPE_CSS.get(val, "badge-slate"),
+        }
+        for val, label in NonConformanceReport.SOURCE_TYPE_CHOICES
+    ]
 
     recent_ncrs = ncr_qs.select_related("initiator", "owner").order_by("-created_at")[:10]
 
