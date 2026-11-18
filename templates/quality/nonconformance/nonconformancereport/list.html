@@ -32,7 +32,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div>
                 <label class="form-label" for="search-input">Search</label>
                 <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Number, title, item, lot, code...">
@@ -61,6 +61,15 @@
                     <option value="">All Sources</option>
                     {% for val, label in source_type_choices %}
                     <option value="{{ val }}" {% if selected_source_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="category-filter">Category</label>
+                <select id="category-filter" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
