@@ -22,6 +22,10 @@ from apps.quality.models import (
     RootCauseAnalysis,
     CapaAction,
     CapaEffectivenessReview,
+    NonConformanceReport,
+    QuarantineContainment,
+    MrbDisposition,
+    ProcessDeviation,
 )
 
 
@@ -629,6 +633,183 @@ def capa_effectiveness_review_b(db, tenant_b, admin_b, capa_investigation_b):
         evaluator=admin_b,
         status="scheduled",
     )
+
+
+# -----------------------------------------------------------------------------
+# Sub-module 12.5 Fixtures (Non-Conformance & Deviation Management)
+# -----------------------------------------------------------------------------
+
+@pytest.fixture
+def supplier_party_a(db, tenant_a):
+    party = Party.objects.create(
+        tenant=tenant_a,
+        name="Precision Medical Tech Co",
+        party_type="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_a,
+        party=party,
+        role_type="vendor",
+    )
+    return party
+
+
+@pytest.fixture
+def supplier_party_b(db, tenant_b):
+    party = Party.objects.create(
+        tenant=tenant_b,
+        name="Apex Industrial Parts Globex",
+        party_type="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_b,
+        party=party,
+        role_type="vendor",
+    )
+    return party
+
+
+@pytest.fixture
+def ncr_a(db, tenant_a, admin_user, quality_department, supplier_party_a):
+    return NonConformanceReport.objects.create(
+        tenant=tenant_a,
+        title="Excess Micro-Burrs on Surgical Cannula Tips",
+        source_type="incoming_inspection",
+        category="workmanship",
+        severity="major",
+        status="open",
+        department=quality_department,
+        initiator=admin_user,
+        owner=admin_user,
+        item_code="CAN-TIP-004",
+        lot_number="LOT-2026-X819",
+        quantity_inspected=1000,
+        quantity_nonconforming=75,
+        defect_description="Micro-burrs exceeding 0.05mm tolerance discovered on cannula tips during optical comparator inspection.",
+        containment_action="Batch isolated in warehouse holding area Pending formal MRB disposition.",
+        supplier_party=supplier_party_a,
+    )
+
+
+@pytest.fixture
+def ncr_b(db, tenant_b, admin_b, quality_department_b, supplier_party_b):
+    return NonConformanceReport.objects.create(
+        tenant=tenant_b,
+        title="Globex Defective O-Ring Seal Batch",
+        source_type="incoming_inspection",
+        category="material",
+        severity="critical",
+        status="open",
+        department=quality_department_b,
+        initiator=admin_b,
+        owner=admin_b,
+        item_code="GLX-SEAL-99",
+        lot_number="GLX-LOT-001",
+        quantity_inspected=500,
+        quantity_nonconforming=120,
+        defect_description="Cracked seal surfaces under pressure.",
+        containment_action="Quarantine zone active.",
+        supplier_party=supplier_party_b,
+    )
+
+
+@pytest.fixture
+def quarantine_a(db, tenant_a, admin_user, ncr_a):
+    return QuarantineContainment.objects.create(
+        tenant=tenant_a,
+        ncr=ncr_a,
+        hold_type="physical_quarantine",
+        quarantine_location="Warehouse Bay 4B, Red Cage #2",
+        quantity_on_hold=75,
+        status="active",
+        hold_placed_by=admin_user,
+        containment_protocol="Physical cage padlocked. Red DO NOT MOVE tags affixed.",
+    )
+
+
+@pytest.fixture
+def quarantine_b(db, tenant_b, admin_b, ncr_b):
+    return QuarantineContainment.objects.create(
+        tenant=tenant_b,
+        ncr=ncr_b,
+        hold_type="physical_quarantine",
+        quarantine_location="Globex Vault G1",
+        quantity_on_hold=120,
+        status="active",
+        hold_placed_by=admin_b,
+        containment_protocol="Globex isolation applied.",
+    )
+
+
+@pytest.fixture
+def mrb_a(db, tenant_a, admin_user, ncr_a):
+    return MrbDisposition.objects.create(
+        tenant=tenant_a,
+        ncr=ncr_a,
+        title="MRB Disposition - Cannula Micro-Burr Rework",
+        disposition_decision="rework",
+        technical_justification="Secondary ultrasonic electropolishing run can deburr to specification without violating outer diameter tolerances.",
+        mrb_chair=admin_user,
+        rework_assignee=admin_user,
+        rework_instructions="Run cannulas through ultrasonic bath for 4 minutes at 60C, followed by DI water rinse.",
+        reinspection_required=True,
+        reinspection_criteria="Microscope inspection at 40x magnification: 0 burrs visible.",
+        scrap_cost=0,
+        rework_labor_cost=450,
+        vendor_chargeback_cost=450,
+        status="under_review",
+    )
+
+
+@pytest.fixture
+def mrb_b(db, tenant_b, admin_b, ncr_b):
+    return MrbDisposition.objects.create(
+        tenant=tenant_b,
+        ncr=ncr_b,
+        title="MRB Disposition - Globex Seal Scrap",
+        disposition_decision="scrap",
+        technical_justification="Cracked compound is unsafe for use; complete batch condemned.",
+        mrb_chair=admin_b,
+        scrap_cost=3200,
+        rework_labor_cost=0,
+        vendor_chargeback_cost=3200,
+        status="under_review",
+    )
+
+
+@pytest.fixture
+def process_deviation_a(db, tenant_a, admin_user, ncr_a):
+    return ProcessDeviation.objects.create(
+        tenant=tenant_a,
+        ncr=ncr_a,
+        title="Temporary Parameter Adjustment for Deburring Ultrasonic Bath",
+        deviation_type="temporary_process_change",
+        status="draft",
+        description="Temporarily increase bath ultrasonic power setting from 400W to 550W for lot LOT-2026-X819 rework.",
+        justification="Higher cavitation required to dissolve tough chromium-alloy oxide layer without hand grinding.",
+        risk_impact_level="minor",
+        risk_assessment="Tested on 5 dummy cannulas. No core tube deformation observed. Cleanroom particulate counts normal.",
+        requested_by=admin_user,
+        requires_customer_notification=False,
+    )
+
+
+@pytest.fixture
+def process_deviation_b(db, tenant_b, admin_b, ncr_b):
+    return ProcessDeviation.objects.create(
+        tenant=tenant_b,
+        ncr=ncr_b,
+        title="Globex Deviation Compound Blend Test",
+        deviation_type="unplanned",
+        status="draft",
+        description="Globex emergency chemical shift.",
+        justification="Globex production necessity.",
+        risk_impact_level="major",
+        risk_assessment="Risk evaluated.",
+        requested_by=admin_b,
+        requires_customer_notification=True,
+    )
+
 
 
 
