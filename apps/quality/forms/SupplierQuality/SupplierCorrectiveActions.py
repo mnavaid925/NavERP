@@ -109,7 +109,9 @@ class SupplierCorrectiveActionForm(TenantUniqueMixin, TenantModelForm):
             self.fields["internal_capa"].queryset = CapaInvestigation.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
-            users = User.objects.filter(tenant=self.tenant).order_by("first_name", "last_name", "email")
+            users = User.objects.filter(
+                tenant=self.tenant, is_active=True
+            ).order_by("first_name", "last_name", "email")
             self.fields["issued_by"].queryset = users
             self.fields["verified_by"].queryset = users
 
