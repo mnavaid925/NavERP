@@ -1,5 +1,6 @@
 """Shared fixtures for apps/quality test suite (Module 12: Quality Management System)."""
 from datetime import timedelta
+from decimal import Decimal
 import pytest
 from django.utils import timezone
 
