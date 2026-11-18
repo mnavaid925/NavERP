@@ -61,4 +61,13 @@ class QuarantineContainmentForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["ncr", "hold_applied_by", "released_by"])
+        qty_on_hold = cleaned.get("quantity_on_hold")
+        released_qty = cleaned.get("released_quantity")
+        if qty_on_hold is not None and qty_on_hold < 0:
+            self.add_error("quantity_on_hold", "Quantity on hold cannot be negative.")
+        if released_qty is not None and released_qty < 0:
+            self.add_error("released_quantity", "Released quantity cannot be negative.")
+        if qty_on_hold is not None and released_qty is not None:
+            if released_qty > qty_on_hold:
+                self.add_error("released_quantity", "Released quantity cannot exceed quantity on hold.")
         return cleaned
