@@ -119,36 +119,62 @@ def supplier_corrective_action_detail(request, pk):
 
 @login_required
 def supplier_corrective_action_create(request):
-    return crud_create(
+    if request.method == "POST":
+        form = SupplierCorrectiveActionForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            scar = form.save(commit=False)
+            scar.tenant = request.tenant
+            scar.save()
+            form.save_m2m()
+            write_audit_log(request.user, scar, "create", tenant=request.tenant)
+            messages.success(request, f"SCAR {scar.number} created successfully.")
+            return redirect("quality:supplier_corrective_action_detail", pk=scar.pk)
+    else:
+        form = SupplierCorrectiveActionForm(tenant=request.tenant)
+    context = {
+        "form": form,
+        "is_edit": False,
+        "scar": None,
+    }
+    return render(
         request,
-        form_class=SupplierCorrectiveActionForm,
-        template_name="quality/supplierquality/supplier_corrective_action/form.html",
-        redirect_url="quality:supplier_corrective_action_detail",
-        extra_context={"scar": None},
+        "quality/supplierquality/supplier_corrective_action/form.html",
+        context,
     )
 
 
 @login_required
 def supplier_corrective_action_edit(request, pk):
-    return crud_edit(
+    scar = get_object_or_404(SupplierCorrectiveAction, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = SupplierCorrectiveActionForm(request.POST, instance=scar, tenant=request.tenant)
+        if form.is_valid():
+            scar = form.save()
+            write_audit_log(request.user, scar, "update", tenant=request.tenant)
+            messages.success(request, f"SCAR {scar.number} updated successfully.")
+            return redirect("quality:supplier_corrective_action_detail", pk=scar.pk)
+    else:
+        form = SupplierCorrectiveActionForm(instance=scar, tenant=request.tenant)
+    context = {
+        "form": form,
+        "is_edit": True,
+        "scar": scar,
+    }
+    return render(
         request,
-        model=SupplierCorrectiveAction,
-        pk=pk,
-        form_class=SupplierCorrectiveActionForm,
-        template_name="quality/supplierquality/supplier_corrective_action/form.html",
-        redirect_url="quality:supplier_corrective_action_detail",
+        "quality/supplierquality/supplier_corrective_action/form.html",
+        context,
     )
 
 
 @login_required
 @require_POST
 def supplier_corrective_action_delete(request, pk):
-    return crud_delete(
-        request,
-        model=SupplierCorrectiveAction,
-        pk=pk,
-        redirect_url="quality:supplier_corrective_action_list",
-    )
+    scar = get_object_or_404(SupplierCorrectiveAction, pk=pk, tenant=request.tenant)
+    write_audit_log(request.user, scar, "delete", tenant=request.tenant)
+    scar.delete()
+    messages.success(request, f"SCAR {scar.number} deleted successfully.")
+    return redirect("quality:supplier_corrective_action_list")
 
 
 @login_required
