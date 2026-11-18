@@ -44,5 +44,22 @@
   - `apps/quality/views/NonConformance/NonConformanceReports.py:116-120`: Auto-populate `closed_at`/`closed_by` on create if status is closed.
   - `apps/quality/models/NonConformance/MrbDispositions.py:186-187`: Auto recalculate total cost in `save()`.
 
+### 3. Frontend Reviewer
+- **Praise**: Zero comment leaks, 100% adherence to color-named theme.css classes, full CRUD CSRF POST forms, flawless pagination guards.
+- **Critical**:
+  - `templates/quality/nonconformance/processdeviation/detail.html:84`: [C1] Lesson L10 None-safe crash on unapproved Process Deviation detail (`approved_by`). Fix: `{% if process_deviation.approved_by %}{{ process_deviation.approved_by.get_full_name|default:process_deviation.approved_by.username }}{% else %}Pending Approval{% endif %}`.
+  - `templates/quality/nonconformance/nonconformancereport/detail.html:126`: [C2] Lesson L10 None-safe crash on NCR detail when `closed_by` is unset. Fix: `{% if non_conformance_report.closed_by %}{{ non_conformance_report.closed_by.get_full_name|default:non_conformance_report.closed_by.username }}{% else %}—{% endif %}`.
+- **Important**:
+  - `templates/quality/nonconformance/nonconformancereport/list.html:35-75`: [I1] NCR list filter form omits Category `<select>` dropdown. Fix: add Category dropdown.
+  - `templates/quality/nonconformance/processdeviation/list.html:32-64, 153, 165`: [I2] Process Deviation list filter form & pagination omit Risk Level. Fix: add dropdown and preserve in pagination links.
+  - `templates/quality/nonconformance/ncr_analytics_dashboard.html:34-89`: [I3] Analytics dashboard uses ad-hoc KPI cards instead of design system `.stat-grid` / `.stat-card` / `.stat-value` / `.stat-label`. Fix: update KPI markup to standard stat card classes.
+  - `templates/quality/nonconformance/nonconformancereport/detail.html:173, 226, 279` & `ncr_analytics_dashboard.html:182`: [I4] Icon-only action links lack accessible `title` and `aria-label`. Fix: add accessible labels.
+- **Minor**:
+  - `templates/quality/nonconformance/nonconformancereport/list.html:123`, `detail.html:100`, `processdeviation/detail.html:183`: [M1] Physical margin `ml-1` instead of logical `ms-1` (RTL readiness).
+  - Clear filter buttons lack `aria-label`: [M2] Add `aria-label="Clear filters"`.
+  - Delete buttons bypass `.btn-icon.danger`: [M3] Add `.danger` modifier class.
+  - `ncr_analytics_dashboard.html:118, 133`: [M4] Category and Source breakdowns omit badge markup. Fix: wrap with `<span class="badge {{ item.css }}">`.
+
+
 
 
