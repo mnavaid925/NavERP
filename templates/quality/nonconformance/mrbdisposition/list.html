@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Material Review Board (MRB) Dispositions | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:non_conformance_report_list' %}">Non-Conformance Management</a>
+            <span>/</span>
+            <span>MRB Dispositions</span>
+        </div>
+        <h1 class="page-title">Material Review Board (MRB) Dispositions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:non_conformance_report_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to NCRs
+        </a>
+        <a href="{% url 'quality:mrb_disposition_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Convene MRB
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Number, justification, NCR...">
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Review Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="decision-filter">Disposition Decision</label>
+                <select id="decision-filter" name="decision" class="form-select">
+                    <option value="">All Decisions</option>
+                    {% for val, label in decision_choices %}
+                    <option value="{{ val }}" {% if selected_decision == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:mrb_disposition_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">MRB Dispositions ({{ total_count }})</h2>
+    </div>
+    {% if mrb_dispositions %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Linked NCR</th>
+                    <th>Disposition Decision</th>
+                    <th>Total Cost Impact</th>
+                    <th>MRB Chair</th>
+                    <th>Reinspection</th>
+                    <th>Status</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in mrb_dispositions %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'quality:mrb_disposition_detail' d.pk %}" class="text-blue-600 hover:underline">
+                            {{ d.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:non_conformance_report_detail' d.ncr.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ d.ncr.number }}
+                        </a>
+                        <div class="text-xs text-slate-500 truncate max-w-[180px]">{{ d.ncr.title }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ d.disposition_decision_badge }}">{{ d.get_disposition_decision_display }}</span>
+                    </td>
+                    <td class="font-mono font-semibold text-slate-900">
+                        ${{ d.total_cost_impact }}
+                    </td>
+                    <td>{{ d.mrb_chair.get_full_name|default:d.mrb_chair.username }}</td>
+                    <td>
+                        {% if d.reinspection_required %}
+                            {% if d.reinspection_passed is True %}
+                            <span class="badge badge-green">Passed</span>
+                            {% elif d.reinspection_passed is False %}
+                            <span class="badge badge-red">Failed</span>
+                            {% else %}
+                            <span class="badge badge-amber">Required</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-slate-400">None</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ d.status_badge }}">{{ d.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:mrb_disposition_detail' d.pk %}" class="btn btn-icon" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:mrb_disposition_edit' d.pk %}" class="btn btn-icon" title="Edit disposition">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:mrb_disposition_delete' d.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete MRB Disposition {{ d.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete disposition">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div>
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} dispositions
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_decision %}&decision={{ selected_decision }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="btn btn-outline btn-sm bg-slate-100 cursor-default">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_decision %}&decision={{ selected_decision }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i data-lucide="users"></i>
+        </div>
+        <h3 class="text-base font-semibold text-slate-800 mb-1">No MRB Dispositions Found</h3>
+        <p class="text-sm text-slate-500 mb-4">No Material Review Board records match your search or filter criteria.</p>
+        <a href="{% url 'quality:mrb_disposition_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Convene Material Review Board
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
