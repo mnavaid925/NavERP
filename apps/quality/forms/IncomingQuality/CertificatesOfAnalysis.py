@@ -76,7 +76,7 @@ class CertificateOfAnalysisForm(TenantUniqueMixin, TenantModelForm):
             ).order_by("number")
             self.fields["supporting_document"].queryset = ControlledDocument.objects.filter(
                 tenant=self.tenant
-            ).order_by("document_number")
+            ).order_by("number")
 
         if self.instance and self.instance.pk and self.instance.parameters_payload:
             self.fields["parameters_json"].initial = json.dumps(
