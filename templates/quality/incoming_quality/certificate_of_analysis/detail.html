@@ -117,20 +117,20 @@
         <i data-lucide="file-text" class="w-5 h-5 text-slate-600"></i>
         Certificate Information & Provenance
       </h2>
-      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-        <div>
+      <dl class="detail-grid">
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Supplier CoA / Test Report #</dt>
           <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ coa.certificate_number }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Manufacturer / Mill Name</dt>
           <dd class="text-slate-800 font-medium mt-0.5">{{ coa.manufacturer_name|default:coa.supplier.name }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Vendor Lot / Heat Number</dt>
           <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ coa.lot_number }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Linked Inspection Lot</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if coa.inspection_lot %}
@@ -142,7 +142,7 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Governing Inspection Plan</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if coa.inspection_plan %}
@@ -154,7 +154,7 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Supporting Attachment</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if coa.supporting_document %}
@@ -176,23 +176,23 @@
         <i data-lucide="shield-check" class="w-5 h-5 text-slate-600"></i>
         Verification Authority & Observations
       </h2>
-      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm mb-4">
-        <div>
+      <dl class="detail-grid mb-4">
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Verified By</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if coa.verified_by %}{{ coa.verified_by.get_full_name|default:coa.verified_by.username }}{% else %}Unverified{% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Verified At</dt>
           <dd class="text-slate-800 mt-0.5">{{ coa.verified_at|date:"M d, Y H:i"|default:"—" }}</dd>
         </div>
       </dl>
       <div>
-        <dt class="text-xs font-medium text-slate-400">CoA Notes & Analysis Comments</dt>
-        <dd class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 min-h-[5rem] whitespace-pre-wrap">
+        <div class="text-xs font-medium text-slate-400">CoA Notes & Analysis Comments</div>
+        <div class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 min-h-[5rem] whitespace-pre-wrap">
           {% if coa.notes %}{{ coa.notes }}{% else %}<span class="text-slate-400 italic">No notes recorded.</span>{% endif %}
-        </dd>
+        </div>
       </div>
     </div>
   </div>
