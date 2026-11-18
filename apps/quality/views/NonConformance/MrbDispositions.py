@@ -140,7 +140,19 @@ def mrb_disposition_delete(request, pk):
     obj = quality_object(request, MrbDisposition, pk=pk)
     number = obj.number
     ncr_pk = obj.ncr_id
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if obj.status in ("approved", "executed"):
+        messages.error(request, f"Cannot delete approved or executed MRB Disposition {obj.number}.")
+        if next_url:
+            return redirect(next_url)
+        if ncr_pk:
+            return redirect("quality:non_conformance_report_detail", pk=ncr_pk)
+        return redirect("quality:mrb_disposition_list")
     write_audit_log(request.user, obj, "delete", tenant=request.tenant)
     obj.delete()
     messages.success(request, f"MRB Disposition {number} deleted successfully.")
-    return redirect("quality:non_conformance_report_detail", pk=ncr_pk)
+    if next_url:
+        return redirect(next_url)
+    if ncr_pk:
+        return redirect("quality:non_conformance_report_detail", pk=ncr_pk)
+    return redirect("quality:mrb_disposition_list")
