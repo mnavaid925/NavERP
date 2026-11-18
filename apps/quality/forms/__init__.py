@@ -21,6 +21,18 @@ from apps.quality.forms.RiskManagement.RiskAssessments import RiskAssessmentForm
 from apps.quality.forms.RiskManagement.RiskControlMeasures import RiskControlMeasureForm
 from apps.quality.forms.RiskManagement.RiskManagementPlans import RiskManagementPlanForm
 from apps.quality.forms.RiskManagement.RiskReviewRecords import RiskReviewRecordForm
+from apps.quality.forms.SupplierQuality.SupplierChangeNotifications import (
+    SupplierChangeNotificationForm,
+)
+from apps.quality.forms.SupplierQuality.SupplierCorrectiveActions import (
+    SupplierCorrectiveActionForm,
+)
+from apps.quality.forms.SupplierQuality.SupplierQualificationAudits import (
+    SupplierQualificationAuditForm,
+)
+from apps.quality.forms.SupplierQuality.SupplierQualityScorecards import (
+    SupplierQualityScorecardForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -44,5 +56,9 @@ __all__ = [
     "QuarantineContainmentForm",
     "MrbDispositionForm",
     "ProcessDeviationForm",
+    "SupplierQualificationAuditForm",
+    "SupplierQualityScorecardForm",
+    "SupplierCorrectiveActionForm",
+    "SupplierChangeNotificationForm",
 ]
 
