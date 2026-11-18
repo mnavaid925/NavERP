@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rma.number }} — Quality Return Authorization — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:quality_return_authorization_list' %}" class="hover:underline">Return Authorizations</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ rma.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="rotate-ccw" class="w-6 h-6 text-blue-600"></i>
+          {{ rma.number }} — {{ rma.supplier.name }}
+        </h1>
+        <span class="badge {{ rma.status_css }} text-sm">{{ rma.get_status_display }}</span>
+        <span class="badge {{ rma.disposition_css }} text-sm">{{ rma.get_disposition_type_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Lot: <a href="{% url 'quality:incoming_inspection_lot_detail' rma.inspection_lot.pk %}" class="text-blue-600 font-mono hover:underline">{{ rma.inspection_lot.number }}</a> ({{ rma.inspection_lot.item_name }}) · Vendor RMA: <span class="font-mono text-slate-700">{{ rma.vendor_rma_number|default:"Pending Supplier Auth" }}</span>
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:quality_return_authorization_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <a href="{% url 'quality:quality_return_authorization_edit' rma.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit RMA
+      </a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <form method="post" action="{% url 'quality:quality_return_authorization_delete' rma.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete return authorization {{ rma.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon red p-3 rounded-lg bg-red-50 text-red-600">
+        <i data-lucide="package-minus" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Rejected Return Quantity</div>
+        <div class="text-xl font-bold text-red-600 font-mono">{{ rma.return_quantity }} {{ rma.unit_of_measure }}</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Estimated Credit Value</div>
+        <div class="text-xl font-bold text-slate-900 font-mono">${{ rma.estimated_credit_value }}</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="receipt" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Settled Credit Amount</div>
+        <div class="text-xl font-bold text-green-600 font-mono">${{ rma.settled_amount }}</div>
+        <div class="text-xs text-slate-500">DM: {{ rma.debit_memo_number|default:"Pending DM" }}</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon slate p-3 rounded-lg bg-slate-50 text-slate-600">
+        <i data-lucide="truck" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Logistics Tracking</div>
+        <div class="text-sm font-bold text-slate-900">
+          {{ rma.carrier|default:"Carrier TBD" }}
+        </div>
+        <div class="text-xs text-slate-500 font-mono">{{ rma.tracking_number|default:"No tracking #" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operational Advancement Action Panel -->
+  <div class="card p-6 bg-slate-50 border border-slate-200">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="fast-forward" class="w-5 h-5 text-blue-600"></i>
+          Advance Vendor RMA Lifecycle Status
+        </h2>
+        <p class="text-xs text-slate-500 mt-1">Current state: <span class="font-semibold text-slate-800">{{ rma.get_status_display }}</span></p>
+      </div>
+      <form method="post" action="{% url 'quality:quality_return_authorization_advance' rma.pk %}" class="flex items-center gap-2">
+        {% csrf_token %}
+        <select name="next_status" class="form-select text-sm">
+          {% if rma.status == "draft" %}
+            <option value="rma_requested">Request RMA from Vendor</option>
+            <option value="cancelled">Cancel Request</option>
+          {% elif rma.status == "rma_requested" %}
+            <option value="rma_approved">Record Vendor Approval</option>
+            <option value="cancelled">Cancel Request</option>
+          {% elif rma.status == "rma_approved" %}
+            <option value="shipped_to_vendor">Mark Shipped to Vendor</option>
+          {% elif rma.status == "shipped_to_vendor" %}
+            <option value="received_by_vendor">Confirm Received by Vendor</option>
+          {% elif rma.status == "received_by_vendor" %}
+            <option value="settled_closed">Close & Settle Debit Memo</option>
+          {% else %}
+            <option value="settled_closed">Settled & Closed</option>
+          {% endif %}
+        </select>
+        <button type="submit" class="btn btn-primary text-sm whitespace-nowrap">
+          <span>Advance Status</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Detail Information Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <i data-lucide="file-text" class="w-5 h-5 text-slate-600"></i>
+        Return Reason & Financial Disposition
+      </h2>
+      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Return Reason</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">{{ rma.get_return_reason_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Commercial Disposition</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">{{ rma.get_disposition_type_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Vendor-Issued RMA #</dt>
+          <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ rma.vendor_rma_number|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Debit Memo (AP Reference)</dt>
+          <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ rma.debit_memo_number|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Settlement Date</dt>
+          <dd class="text-slate-800 mt-0.5">{{ rma.settlement_date|date:"M d, Y"|default:"Pending" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Assigned Coordinator</dt>
+          <dd class="text-slate-800 mt-0.5">
+            {% if rma.assigned_coordinator %}{{ rma.assigned_coordinator.get_full_name|default:rma.assigned_coordinator.username }}{% else %}—{% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Logistics & Linked Documents -->
+    <div class="card p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <i data-lucide="truck" class="w-5 h-5 text-slate-600"></i>
+        Logistics & Escalations Traceability
+      </h2>
+      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm mb-4">
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Freight Carrier</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">{{ rma.carrier|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Bill of Lading (BOL)</dt>
+          <dd class="text-slate-800 font-mono mt-0.5">{{ rma.bill_of_lading|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Shipped Date</dt>
+          <dd class="text-slate-800 mt-0.5">{{ rma.shipped_date|date:"M d, Y"|default:"Not shipped" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Vendor Receipt Date</dt>
+          <dd class="text-slate-800 mt-0.5">{{ rma.vendor_receipt_date|date:"M d, Y"|default:"Pending arrival" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Linked Non-Conformance (NCR)</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if rma.linked_ncr %}
+              <a href="{% url 'quality:non_conformance_report_detail' rma.linked_ncr.pk %}" class="text-red-600 hover:underline">
+                {{ rma.linked_ncr.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Linked Corrective Action (SCAR)</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if rma.linked_scar %}
+              <a href="{% url 'quality:supplier_corrective_action_detail' rma.linked_scar.pk %}" class="text-blue-600 hover:underline">
+                {{ rma.linked_scar.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+      <div>
+        <dt class="text-xs font-medium text-slate-400">Return Instructions & Remarks</dt>
+        <dd class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">
+          {% if rma.notes %}{{ rma.notes }}{% else %}<span class="text-slate-400 italic">No notes recorded.</span>{% endif %}
+        </dd>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
