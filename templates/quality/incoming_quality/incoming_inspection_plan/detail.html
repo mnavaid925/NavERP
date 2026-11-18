@@ -136,7 +136,7 @@
             {% if plan.sop_document %}
               <a href="{% url 'quality:controlled_document_detail' plan.sop_document.pk %}" class="text-blue-600 hover:underline flex items-center gap-1">
                 <i data-lucide="file-text" class="w-4 h-4"></i>
-                {{ plan.sop_document.document_number }} — {{ plan.sop_document.title }}
+                {{ plan.sop_document.number }} — {{ plan.sop_document.title }}
               </a>
             {% else %}
               <span class="text-slate-400">—</span>
