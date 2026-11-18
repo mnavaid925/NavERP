@@ -44,6 +44,18 @@ from apps.quality.models.SupplierQuality.SupplierQualificationAudits import (
 from apps.quality.models.SupplierQuality.SupplierQualityScorecards import (
     SupplierQualityScorecard,
 )
+from apps.quality.models.InProcessQuality.FirstArticleInspections import (
+    FirstArticleInspection,
+)
+from apps.quality.models.InProcessQuality.InProcessInspections import (
+    InProcessInspection,
+)
+from apps.quality.models.InProcessQuality.LayeredProcessAudits import (
+    LayeredProcessAudit,
+)
+from apps.quality.models.InProcessQuality.ProcessParameterLogs import (
+    ProcessParameterLog,
+)
 
 
 
@@ -596,6 +608,83 @@ class QualityReturnAuthorizationAdmin(admin.ModelAdmin):
     list_filter = ("status", "disposition_type", "return_reason", "tenant")
     search_fields = ("number", "vendor_rma_number", "supplier__name", "carrier", "tracking_number")
     list_select_related = ("tenant", "supplier", "inspection_lot", "assigned_coordinator")
+
+
+@admin.register(InProcessInspection)
+class InProcessInspectionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "inspection_stage",
+        "item_code",
+        "item_name",
+        "lot_number",
+        "production_order_number",
+        "sample_size",
+        "defect_count",
+        "result",
+        "status",
+        "tenant",
+    )
+    list_filter = ("inspection_stage", "result", "status", "sampling_type", "tenant")
+    search_fields = ("number", "title", "item_code", "item_name", "lot_number", "production_order_number")
+    list_select_related = ("tenant", "inspector", "verified_by")
+
+
+@admin.register(FirstArticleInspection)
+class FirstArticleInspectionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "fai_reason",
+        "part_number",
+        "part_name",
+        "drawing_number",
+        "drawing_revision",
+        "production_order_number",
+        "overall_result",
+        "status",
+        "tenant",
+    )
+    list_filter = ("fai_reason", "overall_result", "status", "tenant")
+    search_fields = ("number", "part_number", "part_name", "drawing_number", "production_order_number")
+    list_select_related = ("tenant", "inspector", "quality_engineer", "customer_representative")
+
+
+@admin.register(ProcessParameterLog)
+class ProcessParameterLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "operation_name",
+        "parameter_name",
+        "machine_code",
+        "nominal_value",
+        "actual_value",
+        "is_out_of_spec",
+        "spc_alert",
+        "tenant",
+    )
+    list_filter = ("is_out_of_spec", "spc_alert", "parameter_type", "tenant")
+    search_fields = ("number", "operation_name", "parameter_name", "machine_code", "production_order_number")
+    list_select_related = ("tenant", "operator", "verified_by")
+
+
+@admin.register(LayeredProcessAudit)
+class LayeredProcessAuditAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "audit_level",
+        "frequency",
+        "area_name",
+        "auditor_name",
+        "conformance_rate",
+        "result",
+        "status",
+        "tenant",
+    )
+    list_filter = ("audit_level", "frequency", "result", "status", "tenant")
+    search_fields = ("number", "title", "area_name", "auditor_name")
+    list_select_related = ("tenant", "auditor", "supervisor_signoff")
 
 
 
