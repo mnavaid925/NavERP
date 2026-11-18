@@ -120,36 +120,62 @@ def supplier_change_notification_detail(request, pk):
 
 @login_required
 def supplier_change_notification_create(request):
-    return crud_create(
+    if request.method == "POST":
+        form = SupplierChangeNotificationForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            scn = form.save(commit=False)
+            scn.tenant = request.tenant
+            scn.save()
+            form.save_m2m()
+            write_audit_log(request.user, scn, "create", tenant=request.tenant)
+            messages.success(request, f"SCN {scn.number} logged successfully.")
+            return redirect("quality:supplier_change_notification_detail", pk=scn.pk)
+    else:
+        form = SupplierChangeNotificationForm(tenant=request.tenant)
+    context = {
+        "form": form,
+        "is_edit": False,
+        "scn": None,
+    }
+    return render(
         request,
-        form_class=SupplierChangeNotificationForm,
-        template_name="quality/supplierquality/supplier_change_notification/form.html",
-        redirect_url="quality:supplier_change_notification_detail",
-        extra_context={"scn": None},
+        "quality/supplierquality/supplier_change_notification/form.html",
+        context,
     )
 
 
 @login_required
 def supplier_change_notification_edit(request, pk):
-    return crud_edit(
+    scn = get_object_or_404(SupplierChangeNotification, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = SupplierChangeNotificationForm(request.POST, instance=scn, tenant=request.tenant)
+        if form.is_valid():
+            scn = form.save()
+            write_audit_log(request.user, scn, "update", tenant=request.tenant)
+            messages.success(request, f"SCN {scn.number} updated successfully.")
+            return redirect("quality:supplier_change_notification_detail", pk=scn.pk)
+    else:
+        form = SupplierChangeNotificationForm(instance=scn, tenant=request.tenant)
+    context = {
+        "form": form,
+        "is_edit": True,
+        "scn": scn,
+    }
+    return render(
         request,
-        model=SupplierChangeNotification,
-        pk=pk,
-        form_class=SupplierChangeNotificationForm,
-        template_name="quality/supplierquality/supplier_change_notification/form.html",
-        redirect_url="quality:supplier_change_notification_detail",
+        "quality/supplierquality/supplier_change_notification/form.html",
+        context,
     )
 
 
 @login_required
 @require_POST
 def supplier_change_notification_delete(request, pk):
-    return crud_delete(
-        request,
-        model=SupplierChangeNotification,
-        pk=pk,
-        redirect_url="quality:supplier_change_notification_list",
-    )
+    scn = get_object_or_404(SupplierChangeNotification, pk=pk, tenant=request.tenant)
+    write_audit_log(request.user, scn, "delete", tenant=request.tenant)
+    scn.delete()
+    messages.success(request, f"SCN {scn.number} deleted successfully.")
+    return redirect("quality:supplier_change_notification_list")
 
 
 @login_required
