@@ -20,6 +20,18 @@ from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
 from apps.quality.models.RiskManagement.RiskReviewRecords import RiskReviewRecord
+from apps.quality.models.SupplierQuality.SupplierChangeNotifications import (
+    SupplierChangeNotification,
+)
+from apps.quality.models.SupplierQuality.SupplierCorrectiveActions import (
+    SupplierCorrectiveAction,
+)
+from apps.quality.models.SupplierQuality.SupplierQualificationAudits import (
+    SupplierQualificationAudit,
+)
+from apps.quality.models.SupplierQuality.SupplierQualityScorecards import (
+    SupplierQualityScorecard,
+)
 
 
 
@@ -389,6 +401,113 @@ class ProcessDeviationAdmin(admin.ModelAdmin):
     list_filter = ("deviation_type", "category", "risk_impact_level", "status", "tenant")
     search_fields = ("number", "title", "quality_impact_assessment", "affected_lots_summary", "requested_by__username")
     list_select_related = ("tenant", "ncr", "controlled_document", "department", "requested_by", "approved_by")
+
+
+@admin.register(SupplierQualificationAudit)
+class SupplierQualificationAuditAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "supplier",
+        "assessment_type",
+        "criticality_tier",
+        "qualification_status",
+        "audit_result",
+        "score",
+        "dock_to_stock_eligible",
+        "next_audit_due_date",
+        "tenant",
+    )
+    list_filter = (
+        "assessment_type",
+        "criticality_tier",
+        "qualification_status",
+        "audit_result",
+        "dock_to_stock_eligible",
+        "requires_coa",
+        "tenant",
+    )
+    search_fields = ("number", "supplier__name", "scope_commodities", "notes")
+    list_select_related = ("tenant", "supplier", "lead_auditor", "quality_agreement")
+
+
+@admin.register(SupplierQualityScorecard)
+class SupplierQualityScorecardAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "supplier",
+        "cadence",
+        "period_start",
+        "period_end",
+        "overall_score",
+        "grade",
+        "status",
+        "evaluated_by",
+        "tenant",
+    )
+    list_filter = ("cadence", "grade", "status", "is_manual_override", "tenant")
+    search_fields = ("number", "supplier__name", "override_justification", "evaluation_notes")
+    list_select_related = ("tenant", "supplier", "evaluated_by")
+
+
+@admin.register(SupplierCorrectiveAction)
+class SupplierCorrectiveActionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "supplier",
+        "title",
+        "severity",
+        "status",
+        "root_cause_category",
+        "response_due_date",
+        "is_effective",
+        "closed_at",
+        "tenant",
+    )
+    list_filter = ("severity", "status", "root_cause_category", "is_effective", "tenant")
+    search_fields = ("number", "title", "supplier__name", "defect_summary", "affected_item_code")
+    list_select_related = ("tenant", "supplier", "purchase_order", "non_conformance", "issued_by", "verified_by")
+
+
+@admin.register(SupplierChangeNotification)
+class SupplierChangeNotificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "supplier",
+        "title",
+        "change_category",
+        "risk_level",
+        "status",
+        "disposition",
+        "proposed_effective_date",
+        "approved_by",
+        "tenant",
+    )
+    list_filter = (
+        "change_category",
+        "risk_level",
+        "status",
+        "disposition",
+        "affects_form_fit_function",
+        "requires_requalification",
+        "tenant",
+    )
+    search_fields = (
+        "number",
+        "title",
+        "supplier__name",
+        "supplier_scn_number",
+        "description",
+        "affected_item_code",
+    )
+    list_select_related = (
+        "tenant",
+        "supplier",
+        "design_project",
+        "requalification_audit",
+        "approved_by",
+        "evaluated_by",
+    )
+
 
 
 
