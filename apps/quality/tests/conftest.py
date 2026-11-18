@@ -35,6 +35,10 @@ from apps.quality.models import (
     IncomingInspectionLot,
     CertificateOfAnalysis,
     QualityReturnAuthorization,
+    InProcessInspection,
+    FirstArticleInspection,
+    ProcessParameterLog,
+    LayeredProcessAudit,
 )
 
 
@@ -1146,6 +1150,175 @@ def rma_b(db, tenant_b, supplier_party_b, incoming_lot_b, admin_b):
         estimated_credit_value=Decimal("400.00"),
         status="draft",
         assigned_coordinator=admin_b,
+    )
+
+
+@pytest.fixture
+def in_process_inspection_a(db, tenant_a, admin_user):
+    return InProcessInspection.objects.create(
+        tenant=tenant_a,
+        title="CNC Mill Line 2 In-Line Inspection",
+        inspection_type="dimensional_tolerance",
+        stage_gate="Op 020 - Turning",
+        status="completed",
+        disposition="released",
+        production_order_number="PO-2026-8801",
+        work_center_code="WC-CNC-02",
+        item_code="ST-SHAFT-22",
+        item_name="Precision Turbine Stainless Drive Shaft",
+        lot_number="LOT-2026-IP-001",
+        batch_quantity=500,
+        sample_size_inspected=5,
+        quantity_passed=5,
+        quantity_rejected=0,
+        inspector=admin_user,
+    )
+
+
+@pytest.fixture
+def in_process_inspection_b(db, tenant_b, admin_b):
+    return InProcessInspection.objects.create(
+        tenant=tenant_b,
+        title="Globex Assembly Check",
+        inspection_type="visual_surface",
+        stage_gate="Final Inspection",
+        status="in_inspection",
+        disposition="pending",
+        production_order_number="GLX-PO-001",
+        work_center_code="WC-GLX-01",
+        item_code="GLX-ITEM-01",
+        item_name="Globex Component",
+        lot_number="LOT-GLX-001",
+        batch_quantity=100,
+        sample_size_inspected=10,
+        quantity_passed=10,
+        quantity_rejected=0,
+        inspector=admin_b,
+    )
+
+
+@pytest.fixture
+def fai_a(db, tenant_a, admin_user):
+    return FirstArticleInspection.objects.create(
+        tenant=tenant_a,
+        title="AS9102 Full FAI - Bracket",
+        fai_type="full_fai",
+        setup_reason="new_product_intro",
+        status="in_inspection",
+        release_verdict="pending",
+        production_order_number="PO-2026-FAI-01",
+        work_center_code="WC-CNC-01",
+        item_code="AERO-BRKT-901",
+        item_name="Titanium Support Bracket Strut",
+        drawing_number="DWG-AERO-901",
+        drawing_revision="Rev C",
+        total_characteristics_inspected=18,
+        characteristics_conforming=18,
+        characteristics_out_of_spec=0,
+        inspector=admin_user,
+    )
+
+
+@pytest.fixture
+def fai_b(db, tenant_b, admin_b):
+    return FirstArticleInspection.objects.create(
+        tenant=tenant_b,
+        title="Globex FAI",
+        fai_type="full_fai",
+        setup_reason="new_product_intro",
+        status="draft",
+        release_verdict="pending",
+        production_order_number="GLX-PO-FAI",
+        work_center_code="WC-GLX-02",
+        item_code="GLX-ITEM-99",
+        item_name="Globex Bracket",
+        drawing_number="DWG-GLX-01",
+        drawing_revision="Rev A",
+        total_characteristics_inspected=5,
+        characteristics_conforming=5,
+        characteristics_out_of_spec=0,
+        inspector=admin_b,
+    )
+
+
+@pytest.fixture
+def parameter_log_a(db, tenant_a, admin_user):
+    return ProcessParameterLog.objects.create(
+        tenant=tenant_a,
+        parameter_name="Reflow Temperature",
+        parameter_category="temperature",
+        unit_of_measure="°C",
+        work_center_code="WC-SMT-01",
+        production_order_number="PO-2026-8802",
+        item_code="PCB-A440",
+        lot_number="LOT-2026-IP-002",
+        target_nominal_value=Decimal("245.0000"),
+        upper_spec_limit=Decimal("255.0000"),
+        lower_spec_limit=Decimal("235.0000"),
+        upper_control_limit=Decimal("250.0000"),
+        lower_control_limit=Decimal("240.0000"),
+        recorded_value=Decimal("246.2000"),
+        excursion_status="normal",
+        logged_by=admin_user,
+    )
+
+
+@pytest.fixture
+def parameter_log_b(db, tenant_b, admin_b):
+    return ProcessParameterLog.objects.create(
+        tenant=tenant_b,
+        parameter_name="Globex Pressure",
+        parameter_category="pressure",
+        unit_of_measure="bar",
+        work_center_code="WC-GLX-01",
+        production_order_number="GLX-PO-002",
+        item_code="GLX-ITEM-01",
+        lot_number="LOT-GLX-002",
+        target_nominal_value=Decimal("50.0000"),
+        upper_spec_limit=Decimal("60.0000"),
+        lower_spec_limit=Decimal("40.0000"),
+        recorded_value=Decimal("51.0000"),
+        excursion_status="normal",
+        logged_by=admin_b,
+    )
+
+
+@pytest.fixture
+def layered_audit_a(db, tenant_a, admin_user):
+    return LayeredProcessAudit.objects.create(
+        tenant=tenant_a,
+        title="Daily Supervisor LPA",
+        audit_layer="tier_2_supervisor",
+        focus_area="standard_work_wi",
+        status="completed",
+        work_center_code="WC-CNC-02",
+        shift="Shift 1 (Morning)",
+        scheduled_date=timezone.now().date(),
+        conducted_at=timezone.now(),
+        total_questions_audited=10,
+        questions_conforming=10,
+        questions_non_conforming=0,
+        compliance_percentage=Decimal("100.00"),
+        auditor=admin_user,
+    )
+
+
+@pytest.fixture
+def layered_audit_b(db, tenant_b, admin_b):
+    return LayeredProcessAudit.objects.create(
+        tenant=tenant_b,
+        title="Globex Weekly LPA",
+        audit_layer="tier_3_quality_manager",
+        focus_area="environmental_5s",
+        status="scheduled",
+        work_center_code="WC-GLX-01",
+        shift="Shift 1",
+        scheduled_date=timezone.now().date(),
+        total_questions_audited=10,
+        questions_conforming=10,
+        questions_non_conforming=0,
+        compliance_percentage=Decimal("100.00"),
+        auditor=admin_b,
     )
 
 
