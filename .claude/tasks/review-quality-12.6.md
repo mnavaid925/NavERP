@@ -61,7 +61,7 @@
     - `apps/quality/views/SupplierQuality/SupplierChangeNotifications.py:173`
   - **Fix**: Add `@tenant_admin_required` decorator to all delete views.
 
-- [ ] **I7**: Multiple isolated `.count()` queries on AVL directory stat cards.
+- [x] **I7**: Multiple isolated `.count()` queries on AVL directory stat cards.
   - **Location**: `apps/quality/views/SupplierQuality/SupplierQualityDirectory.py:20-23`
   - **Fix**: Consolidate the 4 `.count()` queries into a single `.aggregate(Count(..., filter=Q(...)))`.
 
