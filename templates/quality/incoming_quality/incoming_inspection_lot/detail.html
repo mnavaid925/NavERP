@@ -178,12 +178,12 @@
         <i data-lucide="file-text" class="w-5 h-5 text-slate-600"></i>
         Logistics & Traceability
       </h2>
-      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-        <div>
+      <dl class="detail-grid">
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Heat / Mill Batch #</dt>
           <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ lot.heat_or_batch|default:"—" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Governing Inspection Plan</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.inspection_plan %}
@@ -195,7 +195,7 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Purchase Order</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.purchase_order %}
@@ -205,7 +205,7 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Goods Receipt Note (GRN)</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.goods_receipt_note %}
@@ -215,21 +215,21 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Receipt Date</dt>
           <dd class="text-slate-800 mt-0.5">{{ lot.receipt_date|date:"M d, Y"|default:"—" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Inspection Date</dt>
           <dd class="text-slate-800 mt-0.5">{{ lot.inspection_date|date:"M d, Y"|default:"—" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Inspector</dt>
           <dd class="text-slate-800 mt-0.5">
             {% if lot.inspector %}{{ lot.inspector.get_full_name|default:lot.inspector.username }}{% else %}—{% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Usage Decision By</dt>
           <dd class="text-slate-800 mt-0.5">
             {% if lot.decided_by %}{{ lot.decided_by.get_full_name|default:lot.decided_by.username }} ({{ lot.decided_at|date:"M d, H:i" }}){% else %}Pending{% endif %}
@@ -244,8 +244,8 @@
         <i data-lucide="link-2" class="w-5 h-5 text-slate-600"></i>
         Quality Escalations & Containment Links
       </h2>
-      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm mb-4">
-        <div>
+      <dl class="detail-grid mb-4">
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Non-Conformance Report (NCR)</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.linked_ncr %}
@@ -257,7 +257,7 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Process Deviation</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.linked_deviation %}
@@ -269,7 +269,7 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Quarantine Containment</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.linked_containment %}
@@ -281,7 +281,7 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Supplier Corrective Action (SCAR)</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.linked_scar %}
@@ -295,10 +295,10 @@
         </div>
       </dl>
       <div>
-        <dt class="text-xs font-medium text-slate-400">Inspection Observations</dt>
-        <dd class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">
+        <div class="text-xs font-medium text-slate-400">Inspection Observations</div>
+        <div class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">
           {% if lot.notes %}{{ lot.notes }}{% else %}<span class="text-slate-400 italic">No notes recorded.</span>{% endif %}
-        </dd>
+        </div>
       </div>
     </div>
   </div>
