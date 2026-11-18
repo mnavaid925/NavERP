@@ -31,6 +31,10 @@ from apps.quality.models import (
     SupplierQualityScorecard,
     SupplierCorrectiveAction,
     SupplierChangeNotification,
+    IncomingInspectionPlan,
+    IncomingInspectionLot,
+    CertificateOfAnalysis,
+    QualityReturnAuthorization,
 )
 
 
@@ -967,6 +971,181 @@ def scn_b(db, tenant_b, supplier_party_b, admin_b, audit_b):
         requires_requalification=True,
         requalification_audit=audit_b,
         evaluated_by=admin_b,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 12.7 Incoming Quality Control Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def incoming_plan_a(db, tenant_a, supplier_party_a, doc_a, quality_department):
+    return IncomingInspectionPlan.objects.create(
+        tenant=tenant_a,
+        title="Receiving Plan - Titanium Rods",
+        item_code="TI-ROD-01",
+        item_name="Medical Grade Titanium Rod 10mm",
+        revision="A",
+        sampling_standard="ansi_asq_z14",
+        inspection_level="level_2",
+        inspection_severity="normal",
+        inspection_frequency="every_lot",
+        skip_lot_interval=5,
+        aql_critical=Decimal("0.00"),
+        aql_major=Decimal("1.00"),
+        aql_minor=Decimal("4.00"),
+        requires_coa=True,
+        requires_coc=False,
+        status="active",
+        characteristics_matrix=[
+            {"name": "Diameter", "type": "variable", "target": 10.0, "lsl": 9.95, "usl": 10.05, "unit": "mm"},
+            {"name": "Surface Finish", "type": "attribute", "target": "Ra < 0.4", "unit": "um"},
+        ],
+        supplier=supplier_party_a,
+        sop_document=doc_a,
+        assigned_team=quality_department,
+    )
+
+
+@pytest.fixture
+def incoming_plan_b(db, tenant_b, supplier_party_b, doc_b, quality_department_b):
+    return IncomingInspectionPlan.objects.create(
+        tenant=tenant_b,
+        title="Globex Plan - Ceramic Seals",
+        item_code="CER-SEAL-09",
+        item_name="High-Alumina Ceramic Gasket Seal",
+        revision="B",
+        sampling_standard="iso_2859_1",
+        inspection_level="level_1",
+        inspection_severity="normal",
+        inspection_frequency="every_lot",
+        status="active",
+        supplier=supplier_party_b,
+        sop_document=doc_b,
+        assigned_team=quality_department_b,
+    )
+
+
+@pytest.fixture
+def incoming_lot_a(db, tenant_a, supplier_party_a, incoming_plan_a, admin_user):
+    return IncomingInspectionLot.objects.create(
+        tenant=tenant_a,
+        inspection_plan=incoming_plan_a,
+        supplier=supplier_party_a,
+        item_code="TI-ROD-01",
+        item_name="Medical Grade Titanium Rod 10mm",
+        lot_number="LOT-2026-IQC-001",
+        lot_quantity=Decimal("500.000"),
+        sample_size=32,
+        inspected_quantity=32,
+        accepted_quantity=Decimal("500.000"),
+        stage="completed",
+        usage_decision="accepted",
+        spc_mean=Decimal("10.0010"),
+        spc_std_dev=Decimal("0.0120"),
+        spc_cp=Decimal("1.390"),
+        spc_cpk=Decimal("1.360"),
+        spc_out_of_control=False,
+        inspector=admin_user,
+        decided_by=admin_user,
+        measurements_data=[
+            {"sample_no": 1, "characteristic": "Diameter", "value": 10.001, "is_pass": True},
+            {"sample_no": 2, "characteristic": "Diameter", "value": 9.998, "is_pass": True},
+        ],
+    )
+
+
+@pytest.fixture
+def incoming_lot_b(db, tenant_b, supplier_party_b, incoming_plan_b, admin_b):
+    return IncomingInspectionLot.objects.create(
+        tenant=tenant_b,
+        inspection_plan=incoming_plan_b,
+        supplier=supplier_party_b,
+        item_code="CER-SEAL-09",
+        item_name="High-Alumina Ceramic Gasket Seal",
+        lot_number="LOT-GLX-9901",
+        lot_quantity=Decimal("200.000"),
+        sample_size=13,
+        stage="in_inspection",
+        usage_decision="pending",
+        inspector=admin_b,
+    )
+
+
+@pytest.fixture
+def coa_a(db, tenant_a, supplier_party_a, incoming_lot_a, incoming_plan_a, admin_user, doc_a):
+    return CertificateOfAnalysis.objects.create(
+        tenant=tenant_a,
+        certificate_number="COA-VND-2026-001",
+        item_code="TI-ROD-01",
+        item_name="Medical Grade Titanium Rod 10mm",
+        lot_number="LOT-2026-IQC-001",
+        manufacturer_name="Advanced Titanium Alloys LLC",
+        supplier=supplier_party_a,
+        inspection_lot=incoming_lot_a,
+        inspection_plan=incoming_plan_a,
+        supporting_document=doc_a,
+        parameters_payload=[
+            {"parameter": "Tensile Strength", "lsl": 860, "usl": 950, "actual_value": 895, "unit": "MPa", "is_pass": True},
+            {"parameter": "Yield Strength", "lsl": 790, "usl": 880, "actual_value": 830, "unit": "MPa", "is_pass": True},
+        ],
+        variance_count=0,
+        is_within_spec=True,
+        status="verified_compliant",
+        verified_by=admin_user,
+    )
+
+
+@pytest.fixture
+def coa_b(db, tenant_b, supplier_party_b, incoming_lot_b, incoming_plan_b, admin_b, doc_b):
+    return CertificateOfAnalysis.objects.create(
+        tenant=tenant_b,
+        certificate_number="COA-GLX-9988",
+        item_code="CER-SEAL-09",
+        item_name="High-Alumina Ceramic Gasket Seal",
+        lot_number="LOT-GLX-9901",
+        supplier=supplier_party_b,
+        inspection_lot=incoming_lot_b,
+        inspection_plan=incoming_plan_b,
+        supporting_document=doc_b,
+        variance_count=1,
+        is_within_spec=False,
+        status="received",
+    )
+
+
+@pytest.fixture
+def rma_a(db, tenant_a, supplier_party_a, incoming_lot_a, admin_user):
+    return QualityReturnAuthorization.objects.create(
+        tenant=tenant_a,
+        inspection_lot=incoming_lot_a,
+        supplier=supplier_party_a,
+        vendor_rma_number="RMA-RET-2026-01",
+        return_reason="dimensional_oos",
+        disposition_type="return_for_credit",
+        return_quantity=Decimal("50.000"),
+        unit_of_measure="EA",
+        estimated_credit_value=Decimal("1250.00"),
+        status="rma_requested",
+        assigned_coordinator=admin_user,
+    )
+
+
+@pytest.fixture
+def rma_b(db, tenant_b, supplier_party_b, incoming_lot_b, admin_b):
+    return QualityReturnAuthorization.objects.create(
+        tenant=tenant_b,
+        inspection_lot=incoming_lot_b,
+        supplier=supplier_party_b,
+        vendor_rma_number="RMA-GLX-0099",
+        return_reason="functional_failure",
+        disposition_type="return_for_replacement",
+        return_quantity=Decimal("20.000"),
+        unit_of_measure="EA",
+        estimated_credit_value=Decimal("400.00"),
+        status="draft",
+        assigned_coordinator=admin_b,
     )
 
 
