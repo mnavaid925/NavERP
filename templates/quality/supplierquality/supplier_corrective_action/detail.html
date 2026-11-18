@@ -54,7 +54,7 @@
         <div class="text-xs font-medium text-slate-500">Response Due Date</div>
         <div class="text-lg font-bold {% if scar.is_overdue %}text-red-600{% else %}text-slate-900{% endif %}">
           {{ scar.response_due_date|date:"Y-m-d"|default:"Not Set" }}
-          {% if scar.is_overdue %}<span class="badge badge-red text-2xs ml-1">Overdue</span>{% endif %}
+          {% if scar.is_overdue %}<span class="badge badge-red text-xs ml-1">Overdue</span>{% endif %}
         </div>
       </div>
     </div>
