@@ -36,7 +36,7 @@
     - `templates/quality/supplierquality/supplier_change_notification/detail.html:184` (`<span class="badge badge-purple text-xs">`)
   - **Fix**: Change to standard theme.css badge classes (`badge-slate`, `badge-info`, or `badge-green`).
 
-- [ ] **I3**: Manual override disconnect in `SupplierQualityScorecard` Form & Model.
+- [x] **I3**: Manual override disconnect in `SupplierQualityScorecard` Form & Model.
   - **Locations**:
     - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:199-204`
   - **Fix**: In `save()`, if `is_manual_override=True` but `overall_score is None`, calculate default composite score as baseline fallback.
