@@ -33,9 +33,7 @@ def _csv_safe(val):
 
 @login_required
 def supplier_change_notification_list(request):
-    qs = SupplierChangeNotification.objects.filter(tenant=request.tenant).select_related(
-        "supplier", "approved_by", "evaluated_by", "design_project", "requalification_audit"
-    )
+    qs = SupplierChangeNotification.objects.filter(tenant=request.tenant).select_related("supplier")
 
     search_query = request.GET.get("q", "").strip()
     if search_query:
