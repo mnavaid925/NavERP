@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}{{ log.number }} — Process Parameter Log — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:process_parameter_log_list' %}" class="hover:underline">Parameter Logs</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ log.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="activity" class="w-6 h-6 text-blue-600"></i>
+          {{ log.number }} — {{ log.parameter_name }}
+        </h1>
+        <span class="badge {{ log.excursion_css }} text-sm">{{ log.get_excursion_status_display }}</span>
+        <span class="badge {{ log.containment_css }} text-sm">{{ log.get_containment_action_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Category: {{ log.get_parameter_category_display }} · Logged: {{ log.recorded_at|date:"Y-m-d H:i" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:process_parameter_log_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <a href="{% url 'quality:process_parameter_log_edit' log.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+      </a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <form method="post" action="{% url 'quality:process_parameter_log_delete' log.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete log {{ log.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="gauge" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Recorded Value</div>
+        <div class="text-2xl font-bold font-mono {% if log.excursion_status == 'out_of_spec' %}text-red-600{% elif log.excursion_status == 'out_of_control' %}text-amber-600{% else %}text-slate-900{% endif %}">
+          {{ log.recorded_value }} <span class="text-xs font-sans font-normal text-slate-500">{{ log.unit_of_measure }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="target" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Target Nominal</div>
+        <div class="text-xl font-bold font-mono text-slate-900">
+          {{ log.target_nominal_value }} <span class="text-xs font-sans font-normal text-slate-500">{{ log.unit_of_measure }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="git-commit" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Tolerance Limits (USL / LSL)</div>
+        <div class="text-sm font-bold font-mono text-slate-800">
+          [{{ log.lower_spec_limit }} ... {{ log.upper_spec_limit }}]
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="trending-up" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Deviation from Target</div>
+        <div class="text-xl font-bold font-mono {% if log.is_out_of_spec %}text-red-600{% else %}text-slate-900{% endif %}">
+          {% if log.deviation_from_target > 0 %}+{% endif %}{{ log.deviation_from_target }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Left Details (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Limits & Analysis Card -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="sliders" class="w-5 h-5 text-slate-600"></i>
+            Dual-Limit Tolerance & Statistical Control Analysis
+          </h2>
+        </div>
+        <div class="card-body p-4 space-y-4">
+          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">SPC Control Limit Bandwidth</div>
+            <div class="flex items-center justify-between text-xs font-mono py-1 border-b border-slate-200">
+              <span class="text-slate-500">Upper Spec Limit (USL):</span>
+              <span class="font-bold text-red-600">{{ log.upper_spec_limit }} {{ log.unit_of_measure }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs font-mono py-1 border-b border-slate-200">
+              <span class="text-slate-500">Upper Control Limit (UCL, +3σ):</span>
+              <span class="font-semibold text-amber-600">{{ log.upper_control_limit|default:"—" }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs font-mono py-1 bg-green-50 px-2 rounded font-bold">
+              <span class="text-green-800">Target Nominal (Centerline μ):</span>
+              <span class="text-green-800">{{ log.target_nominal_value }} {{ log.unit_of_measure }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs font-mono py-1 border-b border-slate-200">
+              <span class="text-slate-500">Lower Control Limit (LCL, -3σ):</span>
+              <span class="font-semibold text-amber-600">{{ log.lower_control_limit|default:"—" }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs font-mono py-1">
+              <span class="text-slate-500">Lower Spec Limit (LSL):</span>
+              <span class="font-bold text-red-600">{{ log.lower_spec_limit }} {{ log.unit_of_measure }}</span>
+            </div>
+          </div>
+
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Parameter Name</dt>
+              <dd class="font-semibold text-slate-900">{{ log.parameter_name }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Parameter Category</dt>
+              <dd><span class="badge {{ log.category_css }}">{{ log.get_parameter_category_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+              <dt>Measurement Unit</dt>
+              <dd>{{ log.unit_of_measure }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Logged By Operator / Tech</dt>
+              <dd>{% if log.logged_by %}{{ log.logged_by.get_full_name|default:log.logged_by.email }}{% else %}Automated Ingestion{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Timestamp Recorded</dt>
+              <dd>{{ log.recorded_at|date:"Y-m-d H:i:s" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Excursion Status</dt>
+              <dd><span class="badge {{ log.excursion_css }}">{{ log.get_excursion_status_display }}</span></dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Containment & Action Card -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="shield-alert" class="w-5 h-5 text-slate-600"></i>
+            Excursion Response & Containment Action
+          </h2>
+        </div>
+        <div class="card-body p-4 space-y-4">
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Containment Action Taken</dt>
+              <dd><span class="badge {{ log.containment_css }}">{{ log.get_containment_action_display }}</span></dd>
+            </div>
+          </dl>
+          {% if log.containment_notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200">
+              <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Containment Execution Details</h3>
+              <div class="p-3 bg-slate-50 text-slate-800 rounded text-sm border border-slate-200">
+                {{ log.containment_notes|linebreaks }}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Manufacturing Context Card -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="factory" class="w-5 h-5 text-slate-600"></i>
+            Manufacturing Context
+          </h2>
+        </div>
+        <div class="card-body p-4">
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Work Center / Machine</dt>
+              <dd>
+                {% if log.work_center %}
+                  {{ log.work_center.code }} - {{ log.work_center.name }}
+                {% elif log.work_center_code %}
+                  {{ log.work_center_code }}
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Operation Step</dt>
+              <dd>{{ log.operation_step|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Part / Item Code</dt>
+              <dd>{{ log.item_code|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Material Lot #</dt>
+              <dd>{{ log.lot_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Production Order #</dt>
+              <dd>{{ log.production_order_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Work Order</dt>
+              <dd>
+                {% if log.work_order %}
+                  <span class="font-medium text-blue-600">{{ log.work_order }}</span>
+                {% else %}
+                  <span class="text-slate-400">Not Linked</span>
+                {% endif %}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar (1 col) -->
+    <div class="space-y-6">
+      <!-- Quality Escalation Card -->
+      <div class="card p-4 space-y-3">
+        <h3 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <i data-lucide="link" class="w-4 h-4 text-blue-600"></i>
+          Quality Governance Links
+        </h3>
+        <div class="space-y-3 text-xs">
+          <div>
+            <div class="text-slate-500 font-medium">Non-Conformance Report (NCR):</div>
+            <div class="mt-1">
+              {% if log.non_conformance %}
+                <a href="{% url 'quality:nonconformance_detail' log.non_conformance.pk %}" class="text-red-600 font-semibold hover:underline">
+                  {{ log.non_conformance.number }} — {{ log.non_conformance.title }}
+                </a>
+              {% else %}
+                <span class="text-slate-400">None Linked</span>
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-slate-500 font-medium">Process Deviation / Concession:</div>
+            <div class="mt-1">
+              {% if log.process_deviation %}
+                <a href="{% url 'quality:process_deviation_detail' log.process_deviation.pk %}" class="text-amber-600 font-semibold hover:underline">
+                  {{ log.process_deviation.number }} — {{ log.process_deviation.title }}
+                </a>
+              {% else %}
+                <span class="text-slate-400">No Temporary Waiver</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Record Audit Info -->
+      <div class="card p-4 text-xs text-slate-500 space-y-2">
+        <div class="font-semibold text-slate-700 text-sm mb-2">Audit Trail</div>
+        <div class="flex justify-between py-1 border-b border-slate-100">
+          <span>Created:</span>
+          <span class="font-medium text-slate-700">{{ log.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-slate-100">
+          <span>Last Updated:</span>
+          <span class="font-medium text-slate-700">{{ log.updated_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-1">
+          <span>Tenant Workspace:</span>
+          <span class="font-medium text-slate-700">{{ log.tenant.name }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
