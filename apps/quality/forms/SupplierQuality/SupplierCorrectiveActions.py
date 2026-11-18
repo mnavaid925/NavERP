@@ -86,6 +86,10 @@ class SupplierCorrectiveActionForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not (self.instance and self.instance.pk and self.instance.status == "closed"):
+            self.fields["status"].choices = [
+                c for c in SupplierCorrectiveAction.STATUS_CHOICES if c[0] != "closed"
+            ]
         if self.tenant:
             suppliers = Party.objects.filter(
                 tenant=self.tenant, roles__role__in=("supplier", "vendor")
@@ -108,6 +112,12 @@ class SupplierCorrectiveActionForm(TenantUniqueMixin, TenantModelForm):
             users = User.objects.filter(tenant=self.tenant).order_by("first_name", "last_name", "email")
             self.fields["issued_by"].queryset = users
             self.fields["verified_by"].queryset = users
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status == "closed" and not (self.instance and self.instance.pk and self.instance.status == "closed"):
+            raise forms.ValidationError("SCARs must be closed via the official Status update action.")
+        return status
 
     def clean(self):
         cleaned_data = super().clean()
