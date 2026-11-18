@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Layered Process Audits (LPA) — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:spc_dashboard' %}" class="hover:underline">In-Process Quality</a>
+        <span class="mx-1">/</span>
+        <span>Layered Process Audits</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="check-check" class="w-6 h-6 text-blue-600"></i>
+        Layered Process Audits (LPA / CQI-8)
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Multi-tiered management audits (Tiers 1–4), standard work verification, and immediate on-the-spot mitigation.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:spc_dashboard' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="activity" class="w-4 h-4"></i>
+        <span>SPC Dashboard</span>
+      </a>
+      <a href="{% url 'quality:layered_process_audit_export_csv' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export CSV</span>
+      </a>
+      <a href="{% url 'quality:layered_process_audit_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Schedule LPA</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="clipboard-list" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ total_audits_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total Audits</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="check-circle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ completed_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Completed</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="calendar" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ scheduled_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Scheduled / In-Progress</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="percent" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ avg_compliance_rate }}%</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Avg Compliance Score</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+      <div>
+        <label for="q" class="form-label text-xs font-semibold text-slate-600">Search</label>
+        <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Number, title, cell..." class="form-input text-sm w-full">
+      </div>
+      <div>
+        <label for="audit_layer" class="form-label text-xs font-semibold text-slate-600">Audit Tier</label>
+        <select name="audit_layer" id="audit_layer" class="form-select text-sm w-full">
+          <option value="">All Tiers</option>
+          {% for val, label in layer_choices %}
+            <option value="{{ val }}" {% if current_layer == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="focus_area" class="form-label text-xs font-semibold text-slate-600">Focus Area</label>
+        <select name="focus_area" id="focus_area" class="form-select text-sm w-full">
+          <option value="">All Areas</option>
+          {% for val, label in focus_choices %}
+            <option value="{{ val }}" {% if current_focus == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="status" class="form-label text-xs font-semibold text-slate-600">Status</label>
+        <select name="status" id="status" class="form-select text-sm w-full">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if current_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="work_center" class="form-label text-xs font-semibold text-slate-600">Work Center</label>
+        <select name="work_center" id="work_center" class="form-select text-sm w-full">
+          <option value="">All Work Centers</option>
+          {% for wc in work_centers %}
+            <option value="{{ wc.pk|stringformat:'d' }}" {% if current_work_center == wc.pk|stringformat:'d' %}selected{% endif %}>
+              {{ wc.code }} - {{ wc.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary text-sm flex-1">
+          <i data-lucide="filter" class="w-4 h-4 mr-1"></i>Filter
+        </button>
+        <a href="{% url 'quality:layered_process_audit_list' %}" class="btn btn-outline text-sm" title="Clear Filters">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Records Table -->
+  <div class="card overflow-hidden">
+    {% if page_obj.object_list %}
+      <div class="table-wrap overflow-x-auto">
+        <table class="table w-full text-left text-sm">
+          <thead class="bg-slate-50 text-slate-600 text-xs uppercase border-b border-slate-200">
+            <tr>
+              <th class="py-3 px-4 font-semibold">Audit #</th>
+              <th class="py-3 px-4 font-semibold">Management Tier</th>
+              <th class="py-3 px-4 font-semibold">Focus Area</th>
+              <th class="py-3 px-4 font-semibold">Location / Center</th>
+              <th class="py-3 px-4 font-semibold text-center">Conformance (Pass / Fail)</th>
+              <th class="py-3 px-4 font-semibold text-center">Compliance Score</th>
+              <th class="py-3 px-4 font-semibold text-center">Status</th>
+              <th class="py-3 px-4 font-semibold text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200 text-slate-700">
+            {% for item in page_obj %}
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3 px-4">
+                  <a href="{% url 'quality:layered_process_audit_detail' item.pk %}" class="font-bold text-blue-600 hover:underline">
+                    {{ item.number }}
+                  </a>
+                  <div class="text-xs text-slate-500 truncate max-w-xs">{{ item.title }}</div>
+                </td>
+                <td class="py-3 px-4">
+                  <span class="badge {{ item.layer_css }} text-xs">
+                    {{ item.get_audit_layer_display }}
+                  </span>
+                  <div class="text-xs text-slate-400 mt-0.5">Date: {{ item.scheduled_date|date:"Y-m-d" }}</div>
+                </td>
+                <td class="py-3 px-4 text-xs">
+                  <span class="badge {{ item.focus_css }} text-xs">
+                    {{ item.get_focus_area_display }}
+                  </span>
+                </td>
+                <td class="py-3 px-4 text-xs">
+                  <div class="font-medium text-slate-800">{{ item.work_center.code|default:item.work_center_code|default:"Plant-Wide" }}</div>
+                  <div class="text-slate-500">{{ item.shift|default:"All Shifts" }}</div>
+                </td>
+                <td class="py-3 px-4 text-center text-xs">
+                  <span class="text-green-600 font-semibold">{{ item.questions_conforming }}</span>
+                  /
+                  <span class="{% if item.questions_non_conforming > 0 %}text-red-600 font-bold{% else %}text-slate-400{% endif %}">
+                    {{ item.questions_non_conforming }}
+                  </span>
+                  <div class="text-slate-400 font-normal">of {{ item.total_questions_audited }} questions</div>
+                </td>
+                <td class="py-3 px-4 text-center">
+                  <span class="font-bold font-mono text-sm {% if item.compliance_percentage >= 90 %}text-green-600{% elif item.compliance_percentage >= 75 %}text-amber-600{% else %}text-red-600{% endif %}">
+                    {{ item.compliance_percentage }}%
+                  </span>
+                  {% if item.on_the_spot_mitigation %}
+                    <div class="text-xs text-amber-600 font-semibold mt-0.5">Mitigated</div>
+                  {% endif %}
+                </td>
+                <td class="py-3 px-4 text-center">
+                  <span class="badge {{ item.status_css }} text-xs">
+                    {{ item.get_status_display }}
+                  </span>
+                </td>
+                <td class="py-3 px-4 text-right table-actions whitespace-nowrap">
+                  <div class="flex items-center justify-end gap-1">
+                    <a href="{% url 'quality:layered_process_audit_detail' item.pk %}" class="btn btn-icon text-slate-600 hover:text-blue-600" title="View Details">
+                      <i data-lucide="eye" class="w-4 h-4"></i>
+                    </a>
+                    <a href="{% url 'quality:layered_process_audit_edit' item.pk %}" class="btn btn-icon text-slate-600 hover:text-amber-600" title="Edit">
+                      <i data-lucide="pencil" class="w-4 h-4"></i>
+                    </a>
+                    <form method="post" action="{% url 'quality:layered_process_audit_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete audit {{ item.number|escapejs }}?');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-icon text-slate-600 hover:text-red-600" title="Delete">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      {% if page_obj.paginator.num_pages > 1 %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm">
+          <div class="text-slate-500">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} records
+          </div>
+          <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+              <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_layer %}&audit_layer={{ current_layer }}{% endif %}{% if current_focus %}&focus_area={{ current_focus }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_work_center %}&work_center={{ current_work_center }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">
+                Previous
+              </a>
+            {% endif %}
+            <span class="px-2 text-slate-600 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+              <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_layer %}&audit_layer={{ current_layer }}{% endif %}{% if current_focus %}&focus_area={{ current_focus }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_work_center %}&work_center={{ current_work_center }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">
+                Next
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="empty-state p-12 text-center">
+        <i data-lucide="check-check" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
+        <h3 class="text-base font-semibold text-slate-800">No Layered Process Audits Found</h3>
+        <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+          No layered process audits match your filter criteria.
+        </p>
+        <div class="mt-4">
+          <a href="{% url 'quality:layered_process_audit_create' %}" class="btn btn-primary text-sm inline-flex items-center gap-1">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Schedule First LPA</span>
+          </a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
