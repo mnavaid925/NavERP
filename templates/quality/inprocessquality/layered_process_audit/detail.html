@@ -247,7 +247,7 @@
             <div class="mt-1">
               {% if lpa.controlled_document %}
                 <a href="{% url 'quality:controlled_document_detail' lpa.controlled_document.pk %}" class="text-blue-600 font-semibold hover:underline">
-                  {{ lpa.controlled_document.document_number }} — {{ lpa.controlled_document.title }}
+                  {{ lpa.controlled_document.number }} — {{ lpa.controlled_document.title }}
                 </a>
               {% else %}
                 <span class="text-slate-400">None Linked</span>
