@@ -94,7 +94,7 @@ def quarantine_containment_create(request):
             obj.tenant = request.tenant
             obj.save()
             form.save_m2m()
-            write_audit_log(request.user, obj, "contain", tenant=request.tenant)
+            write_audit_log(request.user, obj, "create", tenant=request.tenant)
             messages.success(request, f"Quarantine Hold {obj.number} established successfully.")
             return redirect("quality:quarantine_containment_detail", pk=obj.pk)
     else:
