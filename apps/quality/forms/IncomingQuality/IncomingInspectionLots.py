@@ -112,7 +112,7 @@ class IncomingInspectionLotForm(TenantUniqueMixin, TenantModelForm):
             self.fields["supplier"].queryset = Party.objects.filter(
                 tenant=self.tenant,
                 roles__role__in=("supplier", "vendor"),
-            ).order_by("name")
+            ).only("id", "name").order_by("name").distinct()
             self.fields["purchase_order"].queryset = PurchaseOrder.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
