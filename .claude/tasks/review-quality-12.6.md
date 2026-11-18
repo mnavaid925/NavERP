@@ -65,7 +65,7 @@
   - **Location**: `apps/quality/views/SupplierQuality/SupplierQualityDirectory.py:20-23`
   - **Fix**: Consolidate the 4 `.count()` queries into a single `.aggregate(Count(..., filter=Q(...)))`.
 
-- [ ] **I8**: Missing compound index for default ordering on `SupplierQualityScorecard`.
+- [x] **I8**: Missing compound index for default ordering on `SupplierQualityScorecard`.
   - **Location**: `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:147-154`
   - **Fix**: Add `models.Index(fields=["tenant", "-period_end", "-created_at"], name="idx_qssc_ten_pend_created")` in `Meta.indexes`.
 
