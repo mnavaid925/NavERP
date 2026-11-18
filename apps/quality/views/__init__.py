@@ -196,6 +196,45 @@ from apps.quality.views.RiskManagement.RiskReviewRecords import (
     risk_review_record_export,
     risk_review_record_list,
 )
+from apps.quality.views.SupplierQuality.SupplierChangeNotifications import (
+    supplier_change_notification_create,
+    supplier_change_notification_delete,
+    supplier_change_notification_detail,
+    supplier_change_notification_disposition,
+    supplier_change_notification_edit,
+    supplier_change_notification_export,
+    supplier_change_notification_list,
+)
+from apps.quality.views.SupplierQuality.SupplierCorrectiveActions import (
+    supplier_corrective_action_create,
+    supplier_corrective_action_delete,
+    supplier_corrective_action_detail,
+    supplier_corrective_action_edit,
+    supplier_corrective_action_export,
+    supplier_corrective_action_list,
+    supplier_corrective_action_status,
+)
+from apps.quality.views.SupplierQuality.SupplierQualificationAudits import (
+    supplier_qualification_audit_create,
+    supplier_qualification_audit_delete,
+    supplier_qualification_audit_detail,
+    supplier_qualification_audit_edit,
+    supplier_qualification_audit_export,
+    supplier_qualification_audit_list,
+    supplier_qualification_audit_status,
+)
+from apps.quality.views.SupplierQuality.SupplierQualityDirectory import (
+    avl_directory,
+)
+from apps.quality.views.SupplierQuality.SupplierQualityScorecards import (
+    supplier_quality_scorecard_create,
+    supplier_quality_scorecard_delete,
+    supplier_quality_scorecard_detail,
+    supplier_quality_scorecard_edit,
+    supplier_quality_scorecard_export,
+    supplier_quality_scorecard_list,
+    supplier_quality_scorecard_publish,
+)
 
 
 __all__ = [
@@ -349,5 +388,34 @@ __all__ = [
     "process_deviation_edit",
     "process_deviation_delete",
     "ncr_analytics_dashboard",
+    "supplier_qualification_audit_list",
+    "supplier_qualification_audit_detail",
+    "supplier_qualification_audit_create",
+    "supplier_qualification_audit_edit",
+    "supplier_qualification_audit_delete",
+    "supplier_qualification_audit_export",
+    "supplier_qualification_audit_status",
+    "supplier_quality_scorecard_list",
+    "supplier_quality_scorecard_detail",
+    "supplier_quality_scorecard_create",
+    "supplier_quality_scorecard_edit",
+    "supplier_quality_scorecard_delete",
+    "supplier_quality_scorecard_export",
+    "supplier_quality_scorecard_publish",
+    "supplier_corrective_action_list",
+    "supplier_corrective_action_detail",
+    "supplier_corrective_action_create",
+    "supplier_corrective_action_edit",
+    "supplier_corrective_action_delete",
+    "supplier_corrective_action_export",
+    "supplier_corrective_action_status",
+    "supplier_change_notification_list",
+    "supplier_change_notification_detail",
+    "supplier_change_notification_create",
+    "supplier_change_notification_edit",
+    "supplier_change_notification_delete",
+    "supplier_change_notification_export",
+    "supplier_change_notification_disposition",
+    "avl_directory",
 ]
 
