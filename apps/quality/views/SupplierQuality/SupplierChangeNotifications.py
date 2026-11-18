@@ -9,7 +9,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from apps.core.crud import crud_create, crud_delete, crud_edit
 from apps.core.decorators import tenant_admin_required
 from apps.core.models import Party
 from apps.core.utils import write_audit_log
