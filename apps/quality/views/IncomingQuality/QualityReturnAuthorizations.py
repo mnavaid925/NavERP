@@ -235,7 +235,7 @@ def quality_return_authorization_export(request):
         "Created At",
     ])
 
-    for r in qs:
+    for r in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(r.number),
             _csv_safe(r.vendor_rma_number),
