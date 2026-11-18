@@ -117,7 +117,7 @@ def first_article_inspection_list(request):
 def first_article_inspection_detail(request, pk):
     fai = get_object_or_404(
         FirstArticleInspection.objects.filter(tenant=request.tenant).select_related(
-            "work_order", "work_center", "inspector", "approved_by", "non_conformance"
+            "work_order__item", "work_center", "inspector", "approved_by", "non_conformance"
         ),
         pk=pk,
     )
