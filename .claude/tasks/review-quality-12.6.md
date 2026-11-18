@@ -108,7 +108,7 @@
     - `apps/quality/forms/SupplierQuality/SupplierChangeNotifications.py:89`
   - **Fix**: Add `.filter(is_active=True)` to User querysets.
 
-- [ ] **M6**: Optimize supplier filter dropdown population with `.only("id", "name")`.
+- [x] **M6**: Optimize supplier filter dropdown population with `.only("id", "name")`.
   - **Locations**: List views in `SupplierQualificationAudits.py`, `SupplierQualityScorecards.py`, `SupplierCorrectiveActions.py`, `SupplierChangeNotifications.py`.
   - **Fix**: Materialize list once with `.only("id", "name")`.
 
