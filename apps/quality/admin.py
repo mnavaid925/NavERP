@@ -615,57 +615,58 @@ class InProcessInspectionAdmin(admin.ModelAdmin):
     list_display = (
         "number",
         "title",
-        "inspection_stage",
+        "inspection_type",
         "item_code",
         "item_name",
         "lot_number",
         "production_order_number",
-        "sample_size",
-        "defect_count",
-        "result",
+        "sample_size_inspected",
+        "quantity_rejected",
+        "disposition",
         "status",
         "tenant",
     )
-    list_filter = ("inspection_stage", "result", "status", "sampling_type", "tenant")
+    list_filter = ("inspection_type", "disposition", "status", "defect_category", "tenant")
     search_fields = ("number", "title", "item_code", "item_name", "lot_number", "production_order_number")
-    list_select_related = ("tenant", "inspector", "verified_by")
+    list_select_related = ("tenant", "inspector", "operator")
 
 
 @admin.register(FirstArticleInspection)
 class FirstArticleInspectionAdmin(admin.ModelAdmin):
     list_display = (
         "number",
-        "fai_reason",
-        "part_number",
-        "part_name",
+        "title",
+        "setup_reason",
+        "item_code",
+        "item_name",
         "drawing_number",
         "drawing_revision",
         "production_order_number",
-        "overall_result",
+        "release_verdict",
         "status",
         "tenant",
     )
-    list_filter = ("fai_reason", "overall_result", "status", "tenant")
-    search_fields = ("number", "part_number", "part_name", "drawing_number", "production_order_number")
-    list_select_related = ("tenant", "inspector", "quality_engineer", "customer_representative")
+    list_filter = ("fai_type", "setup_reason", "release_verdict", "status", "tenant")
+    search_fields = ("number", "title", "item_code", "item_name", "drawing_number", "production_order_number")
+    list_select_related = ("tenant", "inspector", "approved_by")
 
 
 @admin.register(ProcessParameterLog)
 class ProcessParameterLogAdmin(admin.ModelAdmin):
     list_display = (
         "number",
-        "operation_name",
         "parameter_name",
-        "machine_code",
-        "nominal_value",
-        "actual_value",
-        "is_out_of_spec",
-        "spc_alert",
+        "parameter_category",
+        "work_center_code",
+        "target_nominal_value",
+        "recorded_value",
+        "excursion_status",
+        "containment_action",
         "tenant",
     )
-    list_filter = ("is_out_of_spec", "spc_alert", "parameter_type", "tenant")
-    search_fields = ("number", "operation_name", "parameter_name", "machine_code", "production_order_number")
-    list_select_related = ("tenant", "operator", "verified_by")
+    list_filter = ("parameter_category", "excursion_status", "containment_action", "tenant")
+    search_fields = ("number", "parameter_name", "work_center_code", "production_order_number", "item_code")
+    list_select_related = ("tenant", "logged_by")
 
 
 @admin.register(LayeredProcessAudit)
@@ -673,18 +674,17 @@ class LayeredProcessAuditAdmin(admin.ModelAdmin):
     list_display = (
         "number",
         "title",
-        "audit_level",
-        "frequency",
-        "area_name",
-        "auditor_name",
-        "conformance_rate",
-        "result",
+        "audit_layer",
+        "focus_area",
+        "work_center_code",
+        "shift",
+        "compliance_percentage",
         "status",
         "tenant",
     )
-    list_filter = ("audit_level", "frequency", "result", "status", "tenant")
-    search_fields = ("number", "title", "area_name", "auditor_name")
-    list_select_related = ("tenant", "auditor", "supervisor_signoff")
+    list_filter = ("audit_layer", "focus_area", "status", "tenant")
+    search_fields = ("number", "title", "work_center_code", "shift")
+    list_select_related = ("tenant", "auditor")
 
 
 
