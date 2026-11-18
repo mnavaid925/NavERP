@@ -14,21 +14,28 @@ from apps.quality.models.IncomingQuality.IncomingInspectionLots import (
 def iqc_spc_dashboard(request):
     lots_qs = IncomingInspectionLot.objects.filter(tenant=request.tenant)
 
-    total_lots = lots_qs.count()
-    completed_lots = lots_qs.filter(stage="completed").count()
+    kpis = lots_qs.aggregate(
+        total_lots=Count("id"),
+        accepted_lots=Count(
+            "id",
+            filter=Q(usage_decision__in=("accepted", "skip_lot_passed", "accepted_with_deviation")),
+        ),
+        avg_cpk=Avg("spc_cpk"),
+        out_of_control_count=Count(
+            "id",
+            filter=Q(spc_out_of_control=True) | Q(spc_cpk__lt=1.33, spc_cpk__isnull=False),
+        ),
+        crit=Sum("critical_defects"),
+        maj=Sum("major_defects"),
+        min_def=Sum("minor_defects"),
+    )
 
-    accepted_lots = lots_qs.filter(
-        usage_decision__in=("accepted", "skip_lot_passed", "accepted_with_deviation")
-    ).count()
-
+    total_lots = kpis["total_lots"] or 0
+    accepted_lots = kpis["accepted_lots"] or 0
     acceptance_rate = round((accepted_lots / total_lots * 100), 1) if total_lots > 0 else 100.0
 
-    avg_cpk_res = lots_qs.filter(spc_cpk__isnull=False).aggregate(avg=Avg("spc_cpk"))
-    avg_cpk = round(float(avg_cpk_res["avg"]), 2) if avg_cpk_res["avg"] else 1.45
-
-    out_of_control_count = lots_qs.filter(
-        Q(spc_out_of_control=True) | Q(spc_cpk__lt=1.33, spc_cpk__isnull=False)
-    ).count()
+    avg_cpk = round(float(kpis["avg_cpk"]), 2) if kpis["avg_cpk"] else 1.45
+    out_of_control_count = kpis["out_of_control_count"] or 0
 
     recent_alerts = list(
         lots_qs.filter(
@@ -38,15 +45,10 @@ def iqc_spc_dashboard(request):
         .order_by("-created_at")[:10]
     )
 
-    defect_totals = lots_qs.aggregate(
-        crit=Sum("critical_defects"),
-        maj=Sum("major_defects"),
-        min_def=Sum("minor_defects"),
-    )
     defect_pareto = {
-        "critical": defect_totals["crit"] or 0,
-        "major": defect_totals["maj"] or 0,
-        "minor": defect_totals["min_def"] or 0,
+        "critical": kpis["crit"] or 0,
+        "major": kpis["maj"] or 0,
+        "minor": kpis["min_def"] or 0,
     }
 
     # Supplier leaderboard
