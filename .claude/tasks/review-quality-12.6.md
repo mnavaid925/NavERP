@@ -47,7 +47,7 @@
     - `templates/quality/supplierquality/supplier_change_notification/form.html:132-160`
   - **Fix**: Exclude `"disposition"`, `"approved_by"`, `"disposition_notes"` from form `Meta.fields` and form template so disposition is governed exclusively by the `@tenant_admin_required` action view.
 
-- [ ] **I5**: Privileged status transition bypass via CRUD edit forms.
+- [x] **I5**: Privileged status transition bypass via CRUD edit forms.
   - **Locations**:
     - `apps/quality/forms/SupplierQuality/SupplierQualityScorecards.py:22` (`status`)
     - `apps/quality/forms/SupplierQuality/SupplierCorrectiveActions.py:26` (`status`)
