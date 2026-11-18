@@ -304,7 +304,7 @@
           Linked Non-Conformance
         </h3>
         {% if fai.non_conformance %}
-          <a href="{% url 'quality:nonconformance_detail' fai.non_conformance.pk %}" class="text-sm font-semibold text-red-600 hover:underline flex items-center gap-1">
+          <a href="{% url 'quality:non_conformance_report_detail' fai.non_conformance.pk %}" class="text-sm font-semibold text-red-600 hover:underline flex items-center gap-1">
             <i data-lucide="link" class="w-3.5 h-3.5"></i>
             {{ fai.non_conformance.number }} — {{ fai.non_conformance.title }}
           </a>
