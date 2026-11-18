@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Disposition {{ mrb_disposition.number }}{% else %}Convene MRB{% endif %} | Quality Management
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:mrb_disposition_list' %}">MRB Dispositions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ mrb_disposition.number }}{% else %}Convene MRB{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit MRB Disposition: {{ mrb_disposition.number }}{% else %}Convene Material Review Board (MRB){% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:mrb_disposition_detail' mrb_disposition.pk %}{% else %}{% url 'quality:mrb_disposition_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200 p-4">
+        <div class="text-sm text-red-700 font-medium">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 1. Disposition Decision & Rationale -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">1. Disposition Decision & Technical Justification</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.ncr.id_for_label }}">Associated Non-Conformance Report (NCR) *</label>
+                {{ form.ncr }}
+                {% if form.ncr.errors %}<div class="form-error">{{ form.ncr.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Disposition Protocol Title *</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.disposition_decision.id_for_label }}">Disposition Decision *</label>
+                {{ form.disposition_decision }}
+                {% if form.disposition_decision.errors %}<div class="form-error">{{ form.disposition_decision.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Review Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.technical_justification.id_for_label }}">Technical Justification & Rationale *</label>
+                {{ form.technical_justification }}
+                {% if form.technical_justification.errors %}<div class="form-error">{{ form.technical_justification.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.concession_rationale.id_for_label }}">Use-As-Is Concession Safety Rationale (if applicable)</label>
+                {{ form.concession_rationale }}
+                {% if form.concession_rationale.errors %}<div class="form-error">{{ form.concession_rationale.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Rework Protocol & Reinspection -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">2. Rework Execution & Post-Rework Reinspection</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.rework_instructions.id_for_label }}">Step-by-Step Rework / Repair Instructions</label>
+                {{ form.rework_instructions }}
+                {% if form.rework_instructions.errors %}<div class="form-error">{{ form.rework_instructions.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rework_assignee.id_for_label }}">Rework Assignee / Technician</label>
+                {{ form.rework_assignee }}
+                {% if form.rework_assignee.errors %}<div class="form-error">{{ form.rework_assignee.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rework_completed_date.id_for_label }}">Rework Completion Date</label>
+                {{ form.rework_completed_date }}
+                {% if form.rework_completed_date.errors %}<div class="form-error">{{ form.rework_completed_date.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group flex items-center gap-3 mt-2 md:col-span-2">
+                {{ form.reinspection_required }}
+                <label class="form-label mb-0" for="{{ form.reinspection_required.id_for_label }}">
+                    Mandatory Quality Reinspection Required Post-Rework
+                </label>
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.reinspection_criteria.id_for_label }}">Reinspection Acceptance Criteria</label>
+                {{ form.reinspection_criteria }}
+                {% if form.reinspection_criteria.errors %}<div class="form-error">{{ form.reinspection_criteria.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.reinspection_passed.id_for_label }}">Reinspection Outcome</label>
+                {{ form.reinspection_passed }}
+                {% if form.reinspection_passed.errors %}<div class="form-error">{{ form.reinspection_passed.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.reinspection_by.id_for_label }}">Reinspected By</label>
+                {{ form.reinspection_by }}
+                {% if form.reinspection_by.errors %}<div class="form-error">{{ form.reinspection_by.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Cost of Poor Quality & Tripartite Sign-Offs -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">3. Cost Accounting & Board Sign-Offs</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.scrap_cost.id_for_label }}">Scrap Cost ($)</label>
+                {{ form.scrap_cost }}
+                {% if form.scrap_cost.errors %}<div class="form-error">{{ form.scrap_cost.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rework_labor_cost.id_for_label }}">Rework Labor Cost ($)</label>
+                {{ form.rework_labor_cost }}
+                {% if form.rework_labor_cost.errors %}<div class="form-error">{{ form.rework_labor_cost.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.vendor_chargeback_cost.id_for_label }}">Vendor Chargeback ($)</label>
+                {{ form.vendor_chargeback_cost }}
+                {% if form.vendor_chargeback_cost.errors %}<div class="form-error">{{ form.vendor_chargeback_cost.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.total_cost_impact.id_for_label }}">Total Cost Impact ($)</label>
+                {{ form.total_cost_impact }}
+                {% if form.total_cost_impact.errors %}<div class="form-error">{{ form.total_cost_impact.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.mrb_chair.id_for_label }}">MRB Chair *</label>
+                {{ form.mrb_chair }}
+                {% if form.mrb_chair.errors %}<div class="form-error">{{ form.mrb_chair.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.quality_approved_by.id_for_label }}">Quality Assurance Approver</label>
+                {{ form.quality_approved_by }}
+                {% if form.quality_approved_by.errors %}<div class="form-error">{{ form.quality_approved_by.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.engineering_approved_by.id_for_label }}">Engineering Approver</label>
+                {{ form.engineering_approved_by }}
+                {% if form.engineering_approved_by.errors %}<div class="form-error">{{ form.engineering_approved_by.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.operations_approved_by.id_for_label }}">Operations Approver</label>
+                {{ form.operations_approved_by }}
+                {% if form.operations_approved_by.errors %}<div class="form-error">{{ form.operations_approved_by.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'quality:mrb_disposition_detail' mrb_disposition.pk %}{% else %}{% url 'quality:mrb_disposition_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            {% if is_edit %}Save Changes{% else %}Record MRB Disposition{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
