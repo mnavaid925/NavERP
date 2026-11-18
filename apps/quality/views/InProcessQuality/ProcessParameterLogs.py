@@ -192,6 +192,7 @@ def process_parameter_log_delete(request, pk):
 
 @login_required
 def process_parameter_log_export_csv(request):
+    write_audit_log(request.user, ProcessParameterLog(), "export", tenant=request.tenant)
     qs = ProcessParameterLog.objects.filter(tenant=request.tenant).order_by("-recorded_at")
 
     response = HttpResponse(content_type="text/csv")
