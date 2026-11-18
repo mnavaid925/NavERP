@@ -233,7 +233,7 @@
           </div>
           <div class="detail-item">
             <dt>Verified By</dt>
-            <dd>{{ scar.verified_by.get_full_name|default:scar.verified_by.email|default:"Not Verified" }}</dd>
+            <dd>{% if scar.verified_by %}{{ scar.verified_by.get_full_name|default:scar.verified_by.email }}{% else %}Not Verified{% endif %}</dd>
           </div>
           <div class="detail-item">
             <dt>Closure Date</dt>
