@@ -33,9 +33,7 @@ def _csv_safe(val):
 
 @login_required
 def supplier_corrective_action_list(request):
-    qs = SupplierCorrectiveAction.objects.filter(tenant=request.tenant).select_related(
-        "supplier", "issued_by", "verified_by", "purchase_order", "non_conformance"
-    )
+    qs = SupplierCorrectiveAction.objects.filter(tenant=request.tenant).select_related("supplier")
 
     search_query = request.GET.get("q", "").strip()
     if search_query:
