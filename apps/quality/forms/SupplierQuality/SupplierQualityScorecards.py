@@ -83,4 +83,22 @@ class SupplierQualityScorecardForm(TenantUniqueMixin, TenantModelForm):
         justification = cleaned_data.get("override_justification", "").strip()
         if is_override and not justification:
             self.add_error("override_justification", "Override justification is mandatory when manual override is enabled.")
+        for field in [
+            "lot_acceptance_rate_score",
+            "defect_ppm_score",
+            "scar_responsiveness_score",
+            "audit_compliance_score",
+            "documentation_coa_score",
+        ]:
+            val = cleaned_data.get(field)
+            if val is not None and (val < 0 or val > 100):
+                self.add_error(field, "Score must be between 0 and 100.")
+        total_lots = cleaned_data.get("total_lots_received") or 0
+        lots_rejected = cleaned_data.get("lots_rejected") or 0
+        if lots_rejected > total_lots:
+            self.add_error("lots_rejected", "Rejected lots count cannot exceed total lots received.")
+        period_start = cleaned_data.get("period_start")
+        period_end = cleaned_data.get("period_end")
+        if period_start and period_end and period_end < period_start:
+            self.add_error("period_end", "Period end date cannot be earlier than period start date.")
         return cleaned_data
