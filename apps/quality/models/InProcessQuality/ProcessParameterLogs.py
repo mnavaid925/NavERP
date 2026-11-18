@@ -179,10 +179,12 @@ class ProcessParameterLog(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "excursion_status"], name="idx_qpar_ten_excurs"),
+            models.Index(fields=["tenant", "containment_action"], name="idx_qpar_ten_contain"),
             models.Index(fields=["tenant", "parameter_category"], name="idx_qpar_ten_cat"),
             models.Index(fields=["tenant", "work_center"], name="idx_qpar_ten_wc"),
             models.Index(fields=["tenant", "work_order"], name="idx_qpar_ten_wo"),
             models.Index(fields=["tenant", "recorded_at"], name="idx_qpar_ten_rec_at"),
+            models.Index(fields=["tenant", "excursion_status", "-recorded_at"], name="idx_qpar_ten_ex_rec"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qpar_ten_created"),
         ]
 
