@@ -82,7 +82,7 @@ class SupplierChangeNotificationForm(TenantUniqueMixin, TenantModelForm):
             self.fields["supplier"].queryset = suppliers
             self.fields["design_project"].queryset = DesignProject.objects.filter(
                 tenant=self.tenant
-            ).order_by("name")
+            ).order_by("title")
             self.fields["requalification_audit"].queryset = SupplierQualificationAudit.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
