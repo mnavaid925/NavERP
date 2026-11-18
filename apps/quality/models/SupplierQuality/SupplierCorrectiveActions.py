@@ -223,3 +223,9 @@ class SupplierCorrectiveAction(TenantNumbered):
         if self.response_due_date and self.response_due_date < timezone.now().date():
             return True
         return False
+
+    @property
+    def days_open(self):
+        end = self.closed_at or timezone.now().date()
+        start = self.issued_date or (self.created_at.date() if self.created_at else timezone.now().date())
+        return max(0, (end - start).days)
