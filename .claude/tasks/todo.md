@@ -204,37 +204,37 @@
 
 ## Execution Steps
 
-- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.6.md`)
-- [ ] **Step 2: Build Entity by Entity**
-  - [ ] Entity 1: `SupplierQualificationAudit` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 2: `SupplierQualityScorecard` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 3: `SupplierCorrectiveAction` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 4: `SupplierChangeNotification` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Governance & Directory View: `SupplierQualityDirectory.py` + `templates/quality/supplierquality/avl_directory.html`
-- [ ] **Step 3: Integrate**
-  - [ ] Update `apps/quality/models/__init__.py` re-exports (`SupplierQualificationAudit`, `SupplierQualityScorecard`, `SupplierCorrectiveAction`, `SupplierChangeNotification`)
-  - [ ] Update `apps/quality/forms/__init__.py` re-exports (`SupplierQualificationAuditForm`, `SupplierQualityScorecardForm`, `SupplierCorrectiveActionForm`, `SupplierChangeNotificationForm`)
-  - [ ] Update `apps/quality/views/__init__.py` re-exports
-  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
-  - [ ] Register 4 models in `apps/quality/admin.py`
-  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data
-  - [ ] Wire `LIVE_LINKS["12.6"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration
-  - [ ] Run `migrate quality`
-  - [ ] Run `seed_quality` twice (verify idempotency)
-  - [ ] Run `manage.py check`
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.6.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings
-- [ ] **Step 7: Automated Tests** -> `test_supplierquality_models.py`, `test_supplierquality_forms.py`, `test_supplierquality_views.py`, `test_supplierquality_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations**
+- [x] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.6.md`)
+- [x] **Step 2: Build Entity by Entity**
+  - [x] Entity 1: `SupplierQualificationAudit` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 2: `SupplierQualityScorecard` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 3: `SupplierCorrectiveAction` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 4: `SupplierChangeNotification` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Governance & Directory View: `SupplierQualityDirectory.py` + `templates/quality/supplierquality/avl_directory.html`
+- [x] **Step 3: Integrate**
+  - [x] Update `apps/quality/models/__init__.py` re-exports (`SupplierQualificationAudit`, `SupplierQualityScorecard`, `SupplierCorrectiveAction`, `SupplierChangeNotification`)
+  - [x] Update `apps/quality/forms/__init__.py` re-exports (`SupplierQualificationAuditForm`, `SupplierQualityScorecardForm`, `SupplierCorrectiveActionForm`, `SupplierChangeNotificationForm`)
+  - [x] Update `apps/quality/views/__init__.py` re-exports
+  - [x] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [x] Register 4 models in `apps/quality/admin.py`
+  - [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data
+  - [x] Wire `LIVE_LINKS["12.6"]` in `apps/core/navigation.py`
+  - [x] Run `makemigrations quality` -> incremental migrations `0010_...` and `0012_...`
+  - [x] Run `migrate quality`
+  - [x] Run `seed_quality` twice (verify idempotency)
+  - [x] Run `manage.py check` (0 issues)
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: 21 endpoints, 0 500s, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.6.md`
+- [x] **Step 6: Code Fixer** -> burn down findings (C1, I1-I8, M1-M9 all fixed)
+- [x] **Step 7: Automated Tests** -> `test_supplierquality_models.py`, `test_supplierquality_forms.py`, `test_supplierquality_views.py`, `test_supplierquality_security.py` -> 151 passed, 100% green
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations**
 
 ---
 
 ## Wire-up Details
 
-- [ ] `apps/core/navigation.py`:
+- [x] `apps/core/navigation.py`:
   - `LIVE_LINKS["12.6"]`:
     - `"Supplier Qualification & Audit"`: `"quality:supplier_qualification_audit_list"`
     - `"Incoming Inspection & Receiving"`: `"quality:avl_directory"`
@@ -246,32 +246,52 @@
 
 ## Templates Layout (`templates/quality/supplierquality/`)
 
-- [ ] `supplier_qualification_audit/list.html`: AVL status, tier, audit result badges, filter bar, export CSV
-- [ ] `supplier_qualification_audit/detail.html`: Vendor profile, audit scorecard, findings breakdown, dock-to-stock & CoA indicators
-- [ ] `supplier_qualification_audit/form.html`: Crisp form with date pickers, tenant-scoped FKs
-- [ ] `supplier_quality_scorecard/list.html`: Supplier, cadence, composite score, letter grade badge (A/B/C/D), status
-- [ ] `supplier_quality_scorecard/detail.html`: 5-dimension weighted radar/progress metrics, override audit trail
-- [ ] `supplier_quality_scorecard/form.html`: Dimension score inputs (0-100), override justification
-- [ ] `supplier_corrective_action/list.html`: SCARs table, severity badges, containment/response deadlines, status
-- [ ] `supplier_corrective_action/detail.html`: 8D-style timeline, containment actions, vendor 5 Whys RCA, effectiveness proof
-- [ ] `supplier_corrective_action/form.html`: Defect summary, item stand-in, FK selectors, action commitments
-- [ ] `supplier_change_notification/list.html`: SCN register, category, risk level (Level 1-3), disposition badge
-- [ ] `supplier_change_notification/detail.html`: FFF impact assessment checklist, linked design project/requalification audit
-- [ ] `supplier_change_notification/form.html`: Change description, impact booleans, disposition notes
-- [ ] `avl_directory.html`: Unified Approved Vendor List (AVL) governance dashboard with dock-to-stock overview, audit calendar, and quick CSV export
+- [x] `supplier_qualification_audit/list.html`: AVL status, tier, audit result badges, filter bar, export CSV
+- [x] `supplier_qualification_audit/detail.html`: Vendor profile, audit scorecard, findings breakdown, dock-to-stock & CoA indicators
+- [x] `supplier_qualification_audit/form.html`: Crisp form with date pickers, tenant-scoped FKs
+- [x] `supplier_quality_scorecard/list.html`: Supplier, cadence, composite score, letter grade badge (A/B/C/D), status
+- [x] `supplier_quality_scorecard/detail.html`: 5-dimension weighted radar/progress metrics, override audit trail
+- [x] `supplier_quality_scorecard/form.html`: Dimension score inputs (0-100), override justification
+- [x] `supplier_corrective_action/list.html`: SCARs table, severity badges, containment/response deadlines, status
+- [x] `supplier_corrective_action/detail.html`: 8D-style timeline, containment actions, vendor 5 Whys RCA, effectiveness proof
+- [x] `supplier_corrective_action/form.html`: Defect summary, item stand-in, FK selectors, action commitments
+- [x] `supplier_change_notification/list.html`: SCN register, category, risk level (Level 1-3), disposition badge
+- [x] `supplier_change_notification/detail.html`: FFF impact assessment checklist, linked design project/requalification audit
+- [x] `supplier_change_notification/form.html`: Change description, impact booleans, disposition notes
+- [x] `avl_directory.html`: Unified Approved Vendor List (AVL) governance dashboard with dock-to-stock overview, audit calendar, and quick CSV export
 
 ---
 
 ## Later passes / deferred
 
-- [ ] External Supplier Portal Web Access — Direct supplier portal login for containment/8D uploads without consuming internal user seats.
-- [ ] EDI 856 / ASN & eCoA Automated Ingestion — Automated processing of supplier electronic advance shipment notices and digital Certificate of Analysis payloads.
-- [ ] Automated PO Block Enforcement — Middleware / signal in SCM 4.1 & Procurement preventing purchase order issuance to suspended/disqualified vendors.
+- [~] External Supplier Portal Web Access — Direct supplier portal login for containment/8D uploads without consuming internal user seats. (`GAP-quality-12.6-01`)
+- [~] EDI 856 / ASN & eCoA Automated Ingestion — Automated processing of supplier electronic advance shipment notices and digital Certificate of Analysis payloads. (`GAP-quality-12.6-02`)
+- [~] Automated PO Block Enforcement — Middleware / signal in SCM 4.1 & Procurement preventing purchase order issuance to suspended/disqualified vendors. (`GAP-quality-12.6-03`)
 
 ---
 
 ## Review notes
-(filled in at the end of Sub-module 12.6 build)
+- **Completed**: November 18, 2026.
+- **Scope Built**:
+  - 4 Models: `SupplierQualificationAudit` (`QSQA-`), `SupplierQualityScorecard` (`QSSC-`), `SupplierCorrectiveAction` (`QSCA-`), `SupplierChangeNotification` (`QSCN-`).
+  - 1 Directory & Governance Workbench: `avl_directory` (`SupplierQualityDirectory.py` + `templates/quality/supplierquality/avl_directory.html`).
+  - 4 ModelForms: `SupplierQualificationAuditForm`, `SupplierQualityScorecardForm`, `SupplierCorrectiveActionForm`, `SupplierChangeNotificationForm`.
+  - 17 Views across 5 modules (`SupplierQualificationAudits.py`, `SupplierQualityScorecards.py`, `SupplierCorrectiveActions.py`, `SupplierChangeNotifications.py`, `SupplierQualityDirectory.py`).
+  - 29 URL routes registered under `apps/quality/urls/SupplierQuality/` and wired in `urls/__init__.py`.
+  - 13 responsive server-rendered Tailwind + HTMX templates in `templates/quality/supplierquality/`.
+  - Django Admin registration in `apps/quality/admin.py` with `list_select_related`.
+  - Idempotent seeder extension in `seed_quality.py` (`_seed_submodule_12_6`).
+  - Sidebar navigation wired in `apps/core/navigation.py` (`LIVE_LINKS["12.6"]`).
+- **Review Passes**: 6 sequential specialist passes completed (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) documented in `.claude/tasks/review-quality-12.6.md`.
+- **Review Burn-down**: All 18 findings (1 Critical C1, 8 Important I1-I8, 9 Minor M1-M9) resolved and verified by `code-fixer`.
+- **Automated Tests**: 151 dedicated passing tests across 4 test modules:
+  - `test_supplierquality_models.py` (24 passed)
+  - `test_supplierquality_forms.py` (39 passed)
+  - `test_supplierquality_views.py` (47 passed)
+  - `test_supplierquality_security.py` (41 passed)
+  - Full quality app test suite: 1,119 passed, 0 failed.
+- **Gaps Register**: Documented in `.agents/tasks/gaps-quality-12.6.md` (`GAP-quality-12.6-01` through `GAP-quality-12.6-03`). Zero unresolved in-scope defects.
+- **Status**: Production Ready.
 
 ---
 # Sub-module 12.5: Non-Conformance & Deviation Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.5.md` (2026-11-18)
