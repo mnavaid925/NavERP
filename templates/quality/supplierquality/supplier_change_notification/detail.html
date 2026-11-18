@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scn.number }} — Supplier Change Notification (SCN) — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:supplier_change_notification_list' %}" class="hover:underline">Supplier Quality</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ scn.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="git-pull-request" class="w-6 h-6 text-blue-600"></i>
+          {{ scn.number }} — {{ scn.title }}
+        </h1>
+        <span class="badge {{ scn.category_css }} text-sm">{{ scn.get_change_category_display }}</span>
+        <span class="badge {{ scn.risk_css }} text-sm">{{ scn.get_risk_level_display }}</span>
+        <span class="badge {{ scn.status_css }} text-sm">{{ scn.get_status_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Notified by <strong class="text-slate-800">{{ scn.supplier.name }}</strong>
+        {% if scn.supplier_scn_number %} · Supplier Reference: <span class="font-mono text-slate-700">{{ scn.supplier_scn_number }}</span>{% endif %}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:supplier_change_notification_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <a href="{% url 'quality:supplier_change_notification_edit' scn.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+      </a>
+      <form method="post" action="{% url 'quality:supplier_change_notification_delete' scn.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete SCN {{ scn.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="shield" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Risk Triage Level</div>
+        <div class="text-base font-bold text-slate-900">
+          <span class="badge {{ scn.risk_css }}">{{ scn.get_risk_level_display }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="check-circle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Final Disposition</div>
+        <div class="text-base font-bold text-slate-900">
+          <span class="badge {{ scn.disposition_css }}">{{ scn.get_disposition_display }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="calendar" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Proposed Effective Date</div>
+        <div class="text-base font-bold text-slate-900">
+          {{ scn.proposed_effective_date|date:"Y-m-d"|default:"Immediate" }}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Form-Fit-Function (FFF)</div>
+        <div class="text-base font-bold text-slate-900">
+          {% if scn.affects_form_fit_function %}
+            <span class="badge badge-red">Affects FFF</span>
+          {% else %}
+            <span class="badge badge-green">No FFF Impact</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Left Details (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Change Scope & Description Card -->
+      <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-4">
+          <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i>
+          Proposed Change Description & Justification
+        </h2>
+        <div class="text-sm text-slate-800 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+          {{ scn.description }}
+        </div>
+
+        <dl class="detail-grid">
+          <div class="detail-item">
+            <dt>Affected Part / Item SKU</dt>
+            <dd class="font-mono font-medium text-slate-900">{{ scn.affected_item_code|default:"Unspecified" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Item Description</dt>
+            <dd>{{ scn.affected_item_name|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>First Affected Lot / Batch</dt>
+            <dd class="font-mono">{{ scn.first_affected_lot|default:"Pending production run" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Supplier Reference #</dt>
+            <dd class="font-mono">{{ scn.supplier_scn_number|default:"—" }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Form-Fit-Function (FFF) & Impact Evaluation Checklist -->
+      <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-4">
+          <i data-lucide="check-square" class="w-5 h-5 text-green-600"></i>
+          Technical & Regulatory Impact Assessment Checklist
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span class="text-sm text-slate-700">Form, Fit, or Functional Impact</span>
+            {% if scn.affects_form_fit_function %}
+              <span class="badge badge-red text-xs">Yes — Critical</span>
+            {% else %}
+              <span class="badge badge-green text-xs">No Impact</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span class="text-sm text-slate-700">Vendor Re-qualification Required</span>
+            {% if scn.requires_requalification %}
+              <span class="badge badge-amber text-xs">Mandatory Re-Audit</span>
+            {% else %}
+              <span class="badge badge-slate text-xs">Not Required</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span class="text-sm text-slate-700">Design History File (DHF) Change</span>
+            {% if scn.requires_design_change %}
+              <span class="badge badge-amber text-xs">DHF ECO Required</span>
+            {% else %}
+              <span class="badge badge-slate text-xs">No Change</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span class="text-sm text-slate-700">Regulatory Notification / Filing</span>
+            {% if scn.requires_regulatory_filing %}
+              <span class="badge badge-red text-xs">Filing Required</span>
+            {% else %}
+              <span class="badge badge-slate text-xs">Exempt</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span class="text-sm text-slate-700">Customer Prior Notification</span>
+            {% if scn.requires_customer_notification %}
+              <span class="badge badge-info text-xs">Mandatory Notice</span>
+            {% else %}
+              <span class="badge badge-slate text-xs">Internal Only</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span class="text-sm text-slate-700">Pre-Production Validation Samples</span>
+            {% if scn.samples_required %}
+              <span class="badge badge-purple text-xs">Samples Requested</span>
+            {% else %}
+              <span class="badge badge-slate text-xs">Not Needed</span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if scn.impact_assessment_notes %}
+          <div class="mt-4 pt-4 border-t border-slate-100">
+            <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Impact Assessment Rationale & Notes</h3>
+            <p class="text-sm text-slate-800 whitespace-pre-line">{{ scn.impact_assessment_notes }}</p>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Disposition Rationale -->
+      {% if scn.disposition_notes %}
+        <div class="card p-6">
+          <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-3">
+            <i data-lucide="clipboard-check" class="w-5 h-5 text-purple-600"></i>
+            Disposition Decision & Caveats
+          </h2>
+          <div class="text-sm text-slate-800 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200">
+            {{ scn.disposition_notes }}
+          </div>
+          <div class="flex items-center gap-6 text-xs text-slate-500 mt-3">
+            <div><strong>Approved By:</strong> {{ scn.approved_by.get_full_name|default:scn.approved_by.email|default:"Not Assigned" }}</div>
+            <div><strong>Disposition Date:</strong> {{ scn.disposition_date|date:"Y-m-d"|default:"Pending" }}</div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Right Sidebar Controls (1 col) -->
+    <div class="space-y-6">
+      <!-- Quick Disposition Form -->
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+          Render Disposition Decision
+        </h3>
+        <form method="post" action="{% url 'quality:supplier_change_notification_disposition' scn.pk %}">
+          {% csrf_token %}
+          <div class="form-group mb-3">
+            <label for="disp_select" class="form-label text-xs">Disposition Ruling</label>
+            <select name="disposition" id="disp_select" class="form-select text-sm w-full">
+              {% for val, label in scn.DISPOSITION_CHOICES %}
+                <option value="{{ val }}" {% if scn.disposition == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group mb-3">
+            <label for="disp_notes" class="form-label text-xs">Decision Notes & Caveats</label>
+            <textarea name="disposition_notes" id="disp_notes" rows="3" class="form-textarea text-xs w-full" placeholder="Rationale for approval/rejection...">{{ scn.disposition_notes }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary text-sm w-full">
+            Submit Disposition
+          </button>
+        </form>
+      </div>
+
+      <!-- Linked Traceability Card -->
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <i data-lucide="link" class="w-4 h-4 text-purple-600"></i>
+          Linked Quality Projects
+        </h3>
+        <ul class="divide-y divide-slate-100 text-xs">
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Design Project</span>
+            {% if scn.design_project %}
+              <a href="{% url 'quality:design_project_detail' scn.design_project.pk %}" class="text-blue-600 hover:underline">
+                {{ scn.design_project.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </li>
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Re-qualification Audit</span>
+            {% if scn.requalification_audit %}
+              <a href="{% url 'quality:supplier_qualification_audit_detail' scn.requalification_audit.pk %}" class="text-blue-600 hover:underline">
+                {{ scn.requalification_audit.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </li>
+        </ul>
+      </div>
+
+      <!-- Metadata Card -->
+      <div class="card p-4 text-xs text-slate-500 space-y-2">
+        <div class="flex justify-between">
+          <span>Evaluator:</span>
+          <span class="text-slate-700 font-medium">{{ scn.evaluated_by.get_full_name|default:scn.evaluated_by.email|default:"Not Assigned" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Logged Date:</span>
+          <span class="text-slate-700 font-medium">{{ scn.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Last Updated:</span>
+          <span class="text-slate-700 font-medium">{{ scn.updated_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
