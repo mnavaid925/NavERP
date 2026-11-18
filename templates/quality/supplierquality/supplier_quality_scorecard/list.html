@@ -38,10 +38,19 @@
 
   <!-- Filters Bar -->
   <div class="card p-4">
-    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
       <div>
         <label for="q" class="form-label text-xs font-semibold text-slate-600">Search</label>
         <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Number, supplier, notes..." class="form-input text-sm w-full">
+      </div>
+      <div>
+        <label for="status" class="form-label text-xs font-semibold text-slate-600">Status</label>
+        <select name="status" id="status" class="form-select text-sm w-full">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if current_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div>
         <label for="cadence" class="form-label text-xs font-semibold text-slate-600">Cadence</label>
