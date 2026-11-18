@@ -152,7 +152,7 @@ class QualityReturnAuthorization(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} - RMA for {self.supplier.name} (Lot {self.inspection_lot.lot_number})"
+        return f"{self.number} - Lot {self.inspection_lot_id}"
 
     def get_absolute_url(self):
         return reverse("quality:quality_return_authorization_detail", kwargs={"pk": self.pk})
