@@ -100,7 +100,7 @@ def mrb_disposition_create(request):
             obj.tenant = request.tenant
             obj.save()
             form.save_m2m()
-            write_audit_log(request.user, obj, "disposition", tenant=request.tenant)
+            write_audit_log(request.user, obj, "create", tenant=request.tenant)
             messages.success(request, f"MRB Disposition {obj.number} created successfully.")
             return redirect("quality:mrb_disposition_detail", pk=obj.pk)
     else:
