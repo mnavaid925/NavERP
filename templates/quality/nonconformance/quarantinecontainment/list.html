@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Quarantine & Containment Holds | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:non_conformance_report_list' %}">Non-Conformance Management</a>
+            <span>/</span>
+            <span>Quarantine Holds</span>
+        </div>
+        <h1 class="page-title">Quarantine & Containment Holds</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:non_conformance_report_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to NCRs
+        </a>
+        <a href="{% url 'quality:quarantine_containment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Quarantine Hold
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Number, red tag, location, NCR...">
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Hold Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="hold-type-filter">Hold Type</label>
+                <select id="hold-type-filter" name="hold_type" class="form-select">
+                    <option value="">All Hold Types</option>
+                    {% for val, label in hold_type_choices %}
+                    <option value="{{ val }}" {% if selected_hold_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:quarantine_containment_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Quarantine & Containment Holds ({{ total_count }})</h2>
+    </div>
+    {% if quarantine_containments %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Hold Number</th>
+                    <th>Linked NCR</th>
+                    <th>Title & Red Tag</th>
+                    <th>Hold Type</th>
+                    <th>Quarantine Location</th>
+                    <th>Qty On Hold</th>
+                    <th>Status</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for hold in quarantine_containments %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'quality:quarantine_containment_detail' hold.pk %}" class="text-blue-600 hover:underline">
+                            {{ hold.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:non_conformance_report_detail' hold.ncr.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ hold.ncr.number }}
+                        </a>
+                        <div class="text-xs text-slate-500 truncate max-w-[180px]">{{ hold.ncr.title }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ hold.title }}</div>
+                        {% if hold.red_tag_number %}
+                        <div class="text-xs font-mono text-red-600">Red Tag: {{ hold.red_tag_number }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ hold.hold_type_badge }}">{{ hold.get_hold_type_display }}</span>
+                    </td>
+                    <td class="text-slate-700">{{ hold.quarantine_location }}</td>
+                    <td>
+                        <span class="font-bold text-slate-900">{{ hold.quantity_on_hold }}</span>
+                        <span class="text-xs text-slate-500">{{ hold.unit_of_measure }}</span>
+                        {% if hold.released_quantity > 0 %}
+                        <div class="text-xs text-green-600">Released: {{ hold.released_quantity }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ hold.status_badge }}">{{ hold.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:quarantine_containment_detail' hold.pk %}" class="btn btn-icon" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:quarantine_containment_edit' hold.pk %}" class="btn btn-icon" title="Edit hold">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:quarantine_containment_delete' hold.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Quarantine Hold {{ hold.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete hold">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div>
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} holds
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_hold_type %}&hold_type={{ selected_hold_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="btn btn-outline btn-sm bg-slate-100 cursor-default">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_hold_type %}&hold_type={{ selected_hold_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <h3 class="text-base font-semibold text-slate-800 mb-1">No Quarantine Holds Found</h3>
+        <p class="text-sm text-slate-500 mb-4">No quarantine records match your search or filter criteria.</p>
+        <a href="{% url 'quality:quarantine_containment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Create Quarantine Hold
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
