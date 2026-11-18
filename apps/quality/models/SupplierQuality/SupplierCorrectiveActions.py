@@ -49,7 +49,7 @@ class SupplierCorrectiveAction(TenantNumbered):
         "rca_submitted": "badge-info",
         "action_plan_approved": "badge-info",
         "implemented": "badge-info",
-        "effectiveness_verified": "badge-purple",
+        "effectiveness_verified": "badge-green",
         "closed": "badge-green",
         "cancelled": "badge-muted",
     }
