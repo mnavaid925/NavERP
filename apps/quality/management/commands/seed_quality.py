@@ -51,6 +51,18 @@ from apps.quality.models.SupplierQuality.SupplierQualificationAudits import (
 from apps.quality.models.SupplierQuality.SupplierQualityScorecards import (
     SupplierQualityScorecard,
 )
+from apps.quality.models.InProcessQuality.FirstArticleInspections import (
+    FirstArticleInspection,
+)
+from apps.quality.models.InProcessQuality.InProcessInspections import (
+    InProcessInspection,
+)
+from apps.quality.models.InProcessQuality.LayeredProcessAudits import (
+    LayeredProcessAudit,
+)
+from apps.quality.models.InProcessQuality.ProcessParameterLogs import (
+    ProcessParameterLog,
+)
 
 
 User = get_user_model()
@@ -69,6 +81,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            LayeredProcessAudit.objects.all().delete()
+            ProcessParameterLog.objects.all().delete()
+            FirstArticleInspection.objects.all().delete()
+            InProcessInspection.objects.all().delete()
             QualityReturnAuthorization.objects.all().delete()
             CertificateOfAnalysis.objects.all().delete()
             IncomingInspectionLot.objects.all().delete()
@@ -113,6 +129,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_5(tenant)
             self._seed_submodule_12_6(tenant)
             self._seed_submodule_12_7(tenant)
+            self._seed_submodule_12_8(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -2355,6 +2372,336 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.7 Incoming Quality Control (IQC) seeded successfully."))
+
+    def _seed_submodule_12_8(self, tenant):
+        if InProcessInspection.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.8 In-Process Quality Control (IPQC) data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.8 In-Process Quality Control (IPQC)...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not admin_user:
+            self.stdout.write(f"[{tenant.name}] Warning: No user found for tenant.")
+            return
+
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
+        inspector_user = users[1] if len(users) > 1 else admin_user
+        verifier_user = users[2] if len(users) > 2 else admin_user
+
+        today = timezone.now().date()
+        now = timezone.now()
+
+        with transaction.atomic():
+            # 1. In-Process Inspections (QIPQ)
+            insp_setup = InProcessInspection.objects.create(
+                tenant=tenant,
+                title="CNC Mill Line 2 - First Piece & Fixture Verification",
+                inspection_stage="setup_verification",
+                item_code="ST-SHAFT-22",
+                item_name="Precision Turbine Stainless Drive Shaft",
+                lot_number="LOT-2026-IP-001",
+                serial_number="SN-IP-9901",
+                production_order_number="PO-2026-8801",
+                work_center_code="WC-CNC-02",
+                sampling_type="fixed",
+                inspection_frequency="batch_start_end",
+                batch_quantity=Decimal("500.000"),
+                sample_size=5,
+                defect_count=0,
+                defect_details=[],
+                measurement_payload=[
+                    {"parameter": "Outer Diameter", "nominal": "25.000", "actual": "25.002", "unit": "mm", "pass": True},
+                    {"parameter": "Surface Roughness Ra", "nominal": "0.800", "actual": "0.750", "unit": "um", "pass": True},
+                    {"parameter": "Runout Concentricity", "nominal": "0.015", "actual": "0.012", "unit": "mm", "pass": True},
+                ],
+                result="pass_accepted",
+                status="completed",
+                inspector=inspector_user,
+                inspection_date=today,
+                verified_by=verifier_user,
+                verification_date=today,
+                notes="Tool offset calibrated. Spindle runout within allowable tolerance. Approved to run batch.",
+            )
+
+            insp_smt = InProcessInspection.objects.create(
+                tenant=tenant,
+                title="SMT Assembly Line 1 - Hourly Solder Paste & Component Alignment",
+                inspection_stage="in_process",
+                item_code="PCB-A440",
+                item_name="Telemetry Core PCB Controller Assembly",
+                lot_number="LOT-2026-IP-002",
+                production_order_number="PO-2026-8802",
+                work_center_code="WC-SMT-01",
+                sampling_type="ansi_asq_z14",
+                inspection_frequency="every_hour",
+                batch_quantity=Decimal("1200.000"),
+                sample_size=32,
+                defect_count=1,
+                defect_details=[
+                    {"type": "Minor Solder Bridging", "location": "Pin 14 U3", "severity": "minor", "disposition": "reworked"}
+                ],
+                measurement_payload=[
+                    {"parameter": "Solder Paste Height", "nominal": "120.000", "actual": "118.500", "unit": "um", "pass": True},
+                    {"parameter": "Pick-and-Place Offset X", "nominal": "0.000", "actual": "0.015", "unit": "mm", "pass": True},
+                    {"parameter": "Pick-and-Place Offset Y", "nominal": "0.000", "actual": "0.018", "unit": "mm", "pass": True},
+                ],
+                result="conditional_pass",
+                status="completed",
+                inspector=inspector_user,
+                inspection_date=today,
+                verified_by=admin_user,
+                verification_date=today,
+                notes="One minor bridge reworked on bench. Stencil wiper frequency increased to 10 boards.",
+            )
+
+            InProcessInspection.objects.create(
+                tenant=tenant,
+                title="Assembly Line 3 - Shift Changeover Line Clearance",
+                inspection_stage="line_clearance",
+                item_code="ASM-VALVE-X1",
+                item_name="Hydraulic Proportional Flow Valve Assembly",
+                lot_number="LOT-2026-IP-003",
+                production_order_number="PO-2026-8805",
+                work_center_code="WC-ASM-03",
+                sampling_type="c0_zero_defect",
+                inspection_frequency="every_shift",
+                batch_quantity=Decimal("250.000"),
+                sample_size=10,
+                defect_count=0,
+                defect_details=[],
+                measurement_payload=[
+                    {"check": "Prior batch parts and labels removed", "result": "Verified Clean"},
+                    {"check": "Tools and torque drivers calibrated", "result": "Cal Valid"},
+                    {"check": "Work instructions revision matches router", "result": "Rev D Match"},
+                ],
+                result="pass_accepted",
+                status="completed",
+                inspector=admin_user,
+                inspection_date=today,
+                notes="Line clearance audited and verified. No leftover parts from PO-2026-8799 found.",
+            )
+
+            # 2. First Article Inspections (QFAI - AS9102 / PPAP)
+            FirstArticleInspection.objects.create(
+                tenant=tenant,
+                fai_reason="new_product",
+                part_number="AERO-BRKT-901",
+                part_name="Titanium Support Bracket Strut",
+                drawing_number="DWG-AERO-901-REV-C",
+                drawing_revision="Rev C",
+                production_order_number="PO-2026-FAI-01",
+                serial_number="FAI-SN-001",
+                form_1_part_number_accountability={
+                    "organization_name": tenant.name,
+                    "supplier_code": "NAV-MFG-01",
+                    "fai_report_number": "FAI-AERO-901-001",
+                    "baseline_part_number": "N/A",
+                    "fai_type": "Full",
+                    "reason_for_fai": "New Product Introduction (NPI)",
+                },
+                form_2_product_accountability={
+                    "materials": [
+                        {"spec": "AMS 4928 Titanium 6Al-4V", "cert_number": "CERT-TI-88392", "approved": True}
+                    ],
+                    "special_processes": [
+                        {"process": "Anodize per MIL-A-8625 Type II", "supplier": "Cascade Anodizing", "nadcap_accredited": True}
+                    ],
+                    "functional_tests": [
+                        {"test": "Tensile Proof Load 15kN", "result": "Passed 16.4kN", "cert_number": "FT-9912"}
+                    ],
+                },
+                form_3_characteristic_accountability=[
+                    {"char_no": "1", "feature": "Length", "spec": "150.00 +/- 0.10", "measured": "150.04", "pass": True},
+                    {"char_no": "2", "feature": "Bore Diameter", "spec": "20.000 +0.020/-0.000", "measured": "20.012", "pass": True},
+                    {"char_no": "3", "feature": "True Position", "spec": "0.05 MMC", "measured": "0.03", "pass": True},
+                ],
+                total_characteristics=18,
+                conforming_characteristics=18,
+                non_conforming_characteristics=0,
+                overall_result="conforming",
+                status="customer_approved",
+                inspector=inspector_user,
+                quality_engineer=admin_user,
+                approved_date=today,
+                customer_representative=verifier_user,
+                notes="AS9102 Rev C complete package approved. Customer signed off on Form 1.",
+            )
+
+            FirstArticleInspection.objects.create(
+                tenant=tenant,
+                fai_reason="tooling_change",
+                part_number="HSG-ALUM-402",
+                part_name="Die-Cast Electronic Module Housing",
+                drawing_number="DWG-HSG-402-REV-B",
+                drawing_revision="Rev B",
+                production_order_number="PO-2026-FAI-02",
+                serial_number="FAI-SN-002",
+                form_1_part_number_accountability={
+                    "organization_name": tenant.name,
+                    "supplier_code": "NAV-MFG-01",
+                    "fai_report_number": "FAI-HSG-402-002",
+                    "fai_type": "Partial / Delta",
+                    "reason_for_fai": "New Core Insert Tooling Tool #T4",
+                },
+                form_2_product_accountability={
+                    "materials": [{"spec": "A380 Aluminum Die Cast", "cert_number": "CERT-AL-99104", "approved": True}]
+                },
+                form_3_characteristic_accountability=[
+                    {"char_no": "1", "feature": "Cavity Depth", "spec": "35.50 +/- 0.15", "measured": "35.58", "pass": True},
+                    {"char_no": "2", "feature": "Mounting Hole Pitch", "spec": "80.00 +/- 0.05", "measured": "80.02", "pass": True},
+                ],
+                total_characteristics=12,
+                conforming_characteristics=12,
+                non_conforming_characteristics=0,
+                overall_result="conforming",
+                status="internal_approved",
+                inspector=inspector_user,
+                quality_engineer=admin_user,
+                approved_date=today,
+                notes="Tool insert T4 qualified. Dimensions conforming to Rev B drawing.",
+            )
+
+            # 3. Process Parameter Logs (QPAR)
+            ProcessParameterLog.objects.create(
+                tenant=tenant,
+                operation_name="SMT Reflow Soldering Zone 4",
+                parameter_name="Peak Reflow Temperature",
+                parameter_type="temperature",
+                machine_code="OVEN-REFLOW-01",
+                work_center_code="WC-SMT-01",
+                production_order_number="PO-2026-8802",
+                lot_number="LOT-2026-IP-002",
+                target_nominal=Decimal("245.000"),
+                nominal_value=Decimal("245.000"),
+                upper_spec_limit=Decimal("255.000"),
+                lower_spec_limit=Decimal("235.000"),
+                upper_control_limit=Decimal("250.000"),
+                lower_control_limit=Decimal("240.000"),
+                actual_value=Decimal("246.200"),
+                unit_of_measure="degC",
+                is_out_of_spec=False,
+                spc_alert="none",
+                log_timestamp=now - datetime.timedelta(hours=2),
+                operator=inspector_user,
+                verified_by=admin_user,
+                notes="Peak temperature stable across 10 thermocouple channels.",
+            )
+
+            ProcessParameterLog.objects.create(
+                tenant=tenant,
+                operation_name="Injection Molding Clamp & Pack",
+                parameter_name="Pack Pressure",
+                parameter_type="pressure",
+                machine_code="MOLD-ENG-03",
+                work_center_code="WC-MOLD-01",
+                production_order_number="PO-2026-8808",
+                lot_number="LOT-2026-IP-008",
+                target_nominal=Decimal("85.000"),
+                nominal_value=Decimal("85.000"),
+                upper_spec_limit=Decimal("95.000"),
+                lower_spec_limit=Decimal("75.000"),
+                upper_control_limit=Decimal("90.000"),
+                lower_control_limit=Decimal("80.000"),
+                actual_value=Decimal("96.500"),
+                unit_of_measure="bar",
+                is_out_of_spec=True,
+                spc_alert="out_of_control",
+                log_timestamp=now - datetime.timedelta(hours=1),
+                operator=inspector_user,
+                verified_by=admin_user,
+                corrective_action_taken="Hydraulic proportional relief valve calibrated. Pressure returned to 84.8 bar.",
+                notes="Overpressure exceeded USL by 1.5 bar. Mold shut down automatically until inspected.",
+            )
+
+            ProcessParameterLog.objects.create(
+                tenant=tenant,
+                operation_name="Finish Turn Outside Diameter",
+                parameter_name="Spindle Speed",
+                parameter_type="speed_feed",
+                machine_code="LATHE-CNC-04",
+                work_center_code="WC-CNC-02",
+                production_order_number="PO-2026-8801",
+                lot_number="LOT-2026-IP-001",
+                target_nominal=Decimal("3200.000"),
+                nominal_value=Decimal("3200.000"),
+                upper_spec_limit=Decimal("3300.000"),
+                lower_spec_limit=Decimal("3100.000"),
+                upper_control_limit=Decimal("3250.000"),
+                lower_control_limit=Decimal("3150.000"),
+                actual_value=Decimal("3195.000"),
+                unit_of_measure="RPM",
+                is_out_of_spec=False,
+                spc_alert="none",
+                log_timestamp=now - datetime.timedelta(minutes=30),
+                operator=admin_user,
+                notes="Spindle drive tachometer feedback within 0.2% of setpoint.",
+            )
+
+            # 4. Layered Process Audits (QLPA)
+            LayeredProcessAudit.objects.create(
+                tenant=tenant,
+                title="Level 1 Daily LPA - Machining Line 2 Standard Work",
+                audit_level="level_1_supervisor",
+                frequency="daily",
+                area_name="Machining Center Line 2",
+                work_center_code="WC-CNC-02",
+                shift="shift_1_morning",
+                audit_date=today,
+                auditor=inspector_user,
+                auditor_name="Sarah Miller (Line Supervisor)",
+                checklist_items=[
+                    {"question": "Operator is following standard work sheet rev D?", "category": "Standard Work", "status": "pass", "finding": ""},
+                    {"question": "First piece inspection logged before starting run?", "category": "Quality Verification", "status": "pass", "finding": ""},
+                    {"question": "Scrap and nonconforming parts in red quarantine bin?", "category": "Containment", "status": "pass", "finding": ""},
+                    {"question": "Calibrated gauges verified within calibration sticker date?", "category": "Measurement", "status": "pass", "finding": ""},
+                    {"question": "5S workplace organization maintained in cell?", "category": "5S", "status": "pass", "finding": ""},
+                ],
+                items_checked=5,
+                items_passed=5,
+                items_failed=0,
+                conformance_rate=Decimal("100.00"),
+                result="pass_conforming",
+                status="completed",
+                supervisor_signoff=admin_user,
+                supervisor_signoff_date=today,
+                notes="Excellent compliance observed on CNC Mill Line 2. Clean workstation and all gauges current.",
+            )
+
+            LayeredProcessAudit.objects.create(
+                tenant=tenant,
+                title="Level 2 Weekly LPA - Electronics Assembly & ESD Controls",
+                audit_level="level_2_middle_mgr",
+                frequency="weekly",
+                area_name="Electronics SMT & Box Build",
+                work_center_code="WC-SMT-01",
+                shift="shift_2_evening",
+                audit_date=today,
+                auditor=verifier_user,
+                auditor_name="Marcus Vance (Operations Quality Manager)",
+                checklist_items=[
+                    {"question": "ESD wrist straps / heel grounders tested and logged?", "category": "ESD Protection", "status": "pass", "finding": ""},
+                    {"question": "Feeder setup verification sheets signed by certified technician?", "category": "Setup Verification", "status": "pass", "finding": ""},
+                    {"question": "Solder paste storage temperature logged within 2-8 degC?", "category": "Material Handling", "status": "fail", "finding": "Log was blank for morning shift"},
+                    {"question": "Reflow oven profile verified within last 7 days?", "category": "Process Control", "status": "pass", "finding": ""},
+                    {"question": "Visual inspection lighting meets 1000 lux requirement?", "category": "Ergonomics", "status": "pass", "finding": ""},
+                ],
+                items_checked=5,
+                items_passed=4,
+                items_failed=1,
+                conformance_rate=Decimal("80.00"),
+                result="action_required",
+                status="pending_corrective_action",
+                corrective_action_assigned="Supervisor to retrain shift leads on mandatory solder paste fridge daily temperature logging.",
+                supervisor_signoff=admin_user,
+                supervisor_signoff_date=today,
+                notes="Paste fridge temp was actually 4 degC upon check, but log sheet was not initialed.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.8 In-Process Quality Control (IPQC) seeded successfully."))
 
 
 
