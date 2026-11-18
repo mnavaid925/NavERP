@@ -124,8 +124,7 @@ def process_parameter_log_create(request):
         if form.is_valid():
             log = form.save(commit=False)
             log.tenant = request.tenant
-            if not log.logged_by:
-                log.logged_by = request.user
+            log.logged_by = request.user
             log.save()
             form.save_m2m()
             write_audit_log(request.user, log, "create", tenant=request.tenant)
