@@ -37,12 +37,14 @@
       <a href="{% url 'quality:supplier_change_notification_edit' scn.pk %}" class="btn btn-outline text-sm">
         <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
       </a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
       <form method="post" action="{% url 'quality:supplier_change_notification_delete' scn.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete SCN {{ scn.number|escapejs }}?');">
         {% csrf_token %}
         <button type="submit" class="btn btn-danger text-sm">
           <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
         </button>
       </form>
+      {% endif %}
     </div>
   </div>
 
@@ -217,6 +219,7 @@
     <!-- Right Sidebar Controls (1 col) -->
     <div class="space-y-6">
       <!-- Quick Disposition Form -->
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
       <div class="card p-4">
         <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
@@ -241,6 +244,7 @@
           </button>
         </form>
       </div>
+      {% endif %}
 
       <!-- Linked Traceability Card -->
       <div class="card p-4">
