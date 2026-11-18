@@ -160,7 +160,7 @@
             {% if coa.supporting_document %}
               <a href="{% url 'quality:controlled_document_detail' coa.supporting_document.pk %}" class="text-blue-600 hover:underline flex items-center gap-1">
                 <i data-lucide="paperclip" class="w-3.5 h-3.5"></i>
-                {{ coa.supporting_document.document_number }}
+                {{ coa.supporting_document.number }}
               </a>
             {% else %}
               <span class="text-slate-400">No file attached</span>
