@@ -274,6 +274,46 @@ from apps.quality.views.SupplierQuality.SupplierQualityScorecards import (
     supplier_quality_scorecard_list,
     supplier_quality_scorecard_publish,
 )
+from apps.quality.views.InProcessQuality.FirstArticleInspections import (
+    first_article_inspection_advance,
+    first_article_inspection_create,
+    first_article_inspection_delete,
+    first_article_inspection_detail,
+    first_article_inspection_edit,
+    first_article_inspection_export,
+    first_article_inspection_list,
+)
+from apps.quality.views.InProcessQuality.InProcessInspections import (
+    in_process_inspection_create,
+    in_process_inspection_delete,
+    in_process_inspection_detail,
+    in_process_inspection_edit,
+    in_process_inspection_export,
+    in_process_inspection_list,
+    in_process_inspection_make_decision,
+    in_process_inspection_record_sample,
+)
+from apps.quality.views.InProcessQuality.LayeredProcessAudits import (
+    layered_process_audit_advance,
+    layered_process_audit_create,
+    layered_process_audit_delete,
+    layered_process_audit_detail,
+    layered_process_audit_edit,
+    layered_process_audit_export,
+    layered_process_audit_list,
+)
+from apps.quality.views.InProcessQuality.ProcessParameterLogs import (
+    process_parameter_log_create,
+    process_parameter_log_delete,
+    process_parameter_log_detail,
+    process_parameter_log_edit,
+    process_parameter_log_export,
+    process_parameter_log_list,
+    process_parameter_log_verify,
+)
+from apps.quality.views.InProcessQuality.SpcDashboard import (
+    ipqc_spc_dashboard,
+)
 
 
 __all__ = [
@@ -485,5 +525,35 @@ __all__ = [
     "quality_return_authorization_export",
     "quality_return_authorization_advance",
     "iqc_spc_dashboard",
+    "in_process_inspection_list",
+    "in_process_inspection_detail",
+    "in_process_inspection_create",
+    "in_process_inspection_edit",
+    "in_process_inspection_delete",
+    "in_process_inspection_export",
+    "in_process_inspection_record_sample",
+    "in_process_inspection_make_decision",
+    "first_article_inspection_list",
+    "first_article_inspection_detail",
+    "first_article_inspection_create",
+    "first_article_inspection_edit",
+    "first_article_inspection_delete",
+    "first_article_inspection_export",
+    "first_article_inspection_advance",
+    "process_parameter_log_list",
+    "process_parameter_log_detail",
+    "process_parameter_log_create",
+    "process_parameter_log_edit",
+    "process_parameter_log_delete",
+    "process_parameter_log_export",
+    "process_parameter_log_verify",
+    "layered_process_audit_list",
+    "layered_process_audit_detail",
+    "layered_process_audit_create",
+    "layered_process_audit_edit",
+    "layered_process_audit_delete",
+    "layered_process_audit_export",
+    "layered_process_audit_advance",
+    "ipqc_spc_dashboard",
 ]
 
