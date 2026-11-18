@@ -192,6 +192,7 @@ class InProcessInspection(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_qipq_ten_status"),
             models.Index(fields=["tenant", "disposition"], name="idx_qipq_ten_disp"),
             models.Index(fields=["tenant", "inspection_type"], name="idx_qipq_ten_type"),
+            models.Index(fields=["tenant", "defect_category"], name="idx_qipq_ten_defect"),
             models.Index(fields=["tenant", "work_center"], name="idx_qipq_ten_wc"),
             models.Index(fields=["tenant", "work_order"], name="idx_qipq_ten_wo"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qipq_ten_created"),
