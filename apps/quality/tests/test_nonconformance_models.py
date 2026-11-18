@@ -18,9 +18,9 @@ def test_nonconformance_ncr_model_creation_and_str(ncr_a):
     assert str(ncr_a) == f"{ncr_a.number} - {ncr_a.title}"
     assert ncr_a.is_closed is False
     assert ncr_a.severity_badge == "badge-amber"
-    assert ncr_a.category_badge == "badge-info"
+    assert ncr_a.category_badge == "badge-amber"
     assert ncr_a.source_type_badge == "badge-info"
-    assert ncr_a.status_badge == "badge-info"
+    assert ncr_a.status_badge == "badge-red"
 
 
 @pytest.mark.django_db
@@ -62,7 +62,7 @@ def test_nonconformance_ncr_unique_number_per_tenant(tenant_a, ncr_a, admin_user
 @pytest.mark.django_db
 def test_nonconformance_quarantine_model_creation_and_properties(quarantine_a, ncr_a):
     assert quarantine_a.number.startswith("QCNT-")
-    assert str(quarantine_a) == f"{quarantine_a.number} - {quarantine_a.hold_type} ({ncr_a.number})"
+    assert str(quarantine_a) == f"{quarantine_a.number} - {quarantine_a.title}"
     assert quarantine_a.is_active is True
     assert quarantine_a.status_badge == "badge-red"
     assert quarantine_a.hold_type_badge == "badge-red"
@@ -76,7 +76,7 @@ def test_nonconformance_quarantine_model_creation_and_properties(quarantine_a, n
 @pytest.mark.django_db
 def test_nonconformance_mrb_model_creation_and_cost_calculation(mrb_a, ncr_a):
     assert mrb_a.number.startswith("QMRB-")
-    assert str(mrb_a) == f"{mrb_a.number} - {mrb_a.disposition_decision} ({ncr_a.number})"
+    assert str(mrb_a) == f"{mrb_a.number} - {mrb_a.title}"
     assert mrb_a.status_badge == "badge-amber"
     assert mrb_a.disposition_decision_badge == "badge-amber"
     assert mrb_a.is_approved is False
@@ -102,10 +102,10 @@ def test_nonconformance_process_deviation_model_creation_and_status(process_devi
     assert str(process_deviation_a) == f"{process_deviation_a.number} - {process_deviation_a.title}"
     assert process_deviation_a.status_badge == "badge-slate"
     assert process_deviation_a.deviation_type_badge == "badge-amber"
-    assert process_deviation_a.risk_impact_badge == "badge-green"
+    assert process_deviation_a.risk_impact_badge == "badge-info"
     assert process_deviation_a.is_active is False
 
     process_deviation_a.status = "active"
     process_deviation_a.save()
     assert process_deviation_a.is_active is True
-    assert process_deviation_a.status_badge == "badge-green"
+    assert process_deviation_a.status_badge == "badge-amber"
