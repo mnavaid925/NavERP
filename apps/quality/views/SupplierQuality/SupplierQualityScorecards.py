@@ -110,36 +110,62 @@ def supplier_quality_scorecard_detail(request, pk):
 
 @login_required
 def supplier_quality_scorecard_create(request):
-    return crud_create(
+    if request.method == "POST":
+        form = SupplierQualityScorecardForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            scorecard = form.save(commit=False)
+            scorecard.tenant = request.tenant
+            scorecard.save()
+            form.save_m2m()
+            write_audit_log(request.user, scorecard, "create", tenant=request.tenant)
+            messages.success(request, f"Scorecard {scorecard.number} generated successfully.")
+            return redirect("quality:supplier_quality_scorecard_detail", pk=scorecard.pk)
+    else:
+        form = SupplierQualityScorecardForm(tenant=request.tenant)
+    context = {
+        "form": form,
+        "is_edit": False,
+        "scorecard": None,
+    }
+    return render(
         request,
-        form_class=SupplierQualityScorecardForm,
-        template_name="quality/supplierquality/supplier_quality_scorecard/form.html",
-        redirect_url="quality:supplier_quality_scorecard_detail",
-        extra_context={"scorecard": None},
+        "quality/supplierquality/supplier_quality_scorecard/form.html",
+        context,
     )
 
 
 @login_required
 def supplier_quality_scorecard_edit(request, pk):
-    return crud_edit(
+    scorecard = get_object_or_404(SupplierQualityScorecard, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = SupplierQualityScorecardForm(request.POST, instance=scorecard, tenant=request.tenant)
+        if form.is_valid():
+            scorecard = form.save()
+            write_audit_log(request.user, scorecard, "update", tenant=request.tenant)
+            messages.success(request, f"Scorecard {scorecard.number} updated successfully.")
+            return redirect("quality:supplier_quality_scorecard_detail", pk=scorecard.pk)
+    else:
+        form = SupplierQualityScorecardForm(instance=scorecard, tenant=request.tenant)
+    context = {
+        "form": form,
+        "is_edit": True,
+        "scorecard": scorecard,
+    }
+    return render(
         request,
-        model=SupplierQualityScorecard,
-        pk=pk,
-        form_class=SupplierQualityScorecardForm,
-        template_name="quality/supplierquality/supplier_quality_scorecard/form.html",
-        redirect_url="quality:supplier_quality_scorecard_detail",
+        "quality/supplierquality/supplier_quality_scorecard/form.html",
+        context,
     )
 
 
 @login_required
 @require_POST
 def supplier_quality_scorecard_delete(request, pk):
-    return crud_delete(
-        request,
-        model=SupplierQualityScorecard,
-        pk=pk,
-        redirect_url="quality:supplier_quality_scorecard_list",
-    )
+    scorecard = get_object_or_404(SupplierQualityScorecard, pk=pk, tenant=request.tenant)
+    write_audit_log(request.user, scorecard, "delete", tenant=request.tenant)
+    scorecard.delete()
+    messages.success(request, f"Scorecard {scorecard.number} deleted successfully.")
+    return redirect("quality:supplier_quality_scorecard_list")
 
 
 @login_required
