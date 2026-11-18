@@ -49,9 +49,9 @@
 ## Models (from research — 4)
 
 ### 1. `InProcessInspection` (`QIPQ-`)
-- [ ] **File**: `apps/quality/models/InProcessQuality/InProcessInspections.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QIPQ"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/InProcessQuality/InProcessInspections.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QIPQ"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255)`
   - `inspection_type`: `CharField(max_length=30, choices=INSPECTION_TYPE_CHOICES, default="visual_surface", db_index=True)` — `"visual_surface"` (14), `"dimensional_gauging"` (19), `"functional_test"` (15), `"automated_vision"` (16), `"in_line_stage_gate"` (18) (longest: 19 <= 30)
   - `stage_gate`: `CharField(max_length=100, blank=True, help_text="Manufacturing stage-gate (e.g. Primary Machining, Sub-Assembly, Final In-Line)")`
@@ -81,8 +81,8 @@
   - `inspection_date`: `DateField(null=True, blank=True)`
   - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="in_process_inspections", help_text="Escalated NCR on inspection failure")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qipq_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qipq_ten_status")` (19)
   - `Index(fields=["tenant", "disposition"], name="idx_qipq_ten_disp")` (17)
@@ -92,9 +92,9 @@
   - `Index(fields=["tenant", "-created_at"], name="idx_qipq_ten_created")` (20)
 
 ### 2. `FirstArticleInspection` (FAI) (`QFAI-`)
-- [ ] **File**: `apps/quality/models/InProcessQuality/FirstArticleInspections.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFAI"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/InProcessQuality/FirstArticleInspections.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFAI"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255)`
   - `fai_type`: `CharField(max_length=25, choices=FAI_TYPE_CHOICES, default="full_fai", db_index=True)` — `"full_fai"` (8), `"delta_partial_fai"` (17) (longest: 17 <= 25)
   - `setup_reason`: `CharField(max_length=35, choices=SETUP_REASON_CHOICES, default="machine_setup_change", db_index=True)` — `"new_product_intro"` (17), `"machine_setup_change"` (20), `"tooling_die_change"` (18), `"process_revision"` (16), `"material_lot_change"` (19), `"drawing_revision"` (16), `"periodic_recertification"` (24) (longest: 24 <= 35)
@@ -125,8 +125,8 @@
   - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_fais")`
   - `approved_at`: `DateTimeField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Form Exclusions**: `tenant`, `number`, `approved_at`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `approved_at`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qfai_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qfai_ten_status")` (19)
   - `Index(fields=["tenant", "release_verdict"], name="idx_qfai_ten_verd")` (17)
@@ -137,9 +137,9 @@
   - `Index(fields=["tenant", "-created_at"], name="idx_qfai_ten_created")` (20)
 
 ### 3. `ProcessParameterLog` (`QPAR-`)
-- [ ] **File**: `apps/quality/models/InProcessQuality/ProcessParameterLogs.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QPAR"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/InProcessQuality/ProcessParameterLogs.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QPAR"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `parameter_name`: `CharField(max_length=150)`
   - `parameter_category`: `CharField(max_length=30, choices=PARAMETER_CATEGORY_CHOICES, default="temperature", db_index=True)` — `"temperature"` (11), `"pressure"` (8), `"speed_feed"` (10), `"torque"` (6), `"ph_chemical"` (11), `"humidity"` (8), `"dimensional_thickness"` (21), `"voltage_current"` (15), `"cycle_time"` (10), `"other"` (5) (longest: 21 <= 30)
   - `unit_of_measure`: `CharField(max_length=32, help_text="e.g. °C, bar, RPM, Nm, mm, V, sec")`
@@ -163,8 +163,8 @@
   - `containment_notes`: `TextField(blank=True)`
   - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="parameter_logs")`
   - `process_deviation`: `ForeignKey("quality.ProcessDeviation", on_delete=models.SET_NULL, null=True, blank=True, related_name="parameter_logs", help_text="Authorized temporary waiver/concession")`
-- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qpar_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "excursion_status"], name="idx_qpar_ten_excurs")` (19)
   - `Index(fields=["tenant", "parameter_category"], name="idx_qpar_ten_cat")` (16)
@@ -174,9 +174,9 @@
   - `Index(fields=["tenant", "-created_at"], name="idx_qpar_ten_created")` (20)
 
 ### 4. `LayeredProcessAudit` (LPA) (`QLPA-`)
-- [ ] **File**: `apps/quality/models/InProcessQuality/LayeredProcessAudits.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QLPA"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/InProcessQuality/LayeredProcessAudits.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QLPA"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255)`
   - `audit_layer`: `CharField(max_length=30, choices=AUDIT_LAYER_CHOICES, default="tier_1_operator_lead", db_index=True)` — `"tier_1_operator_lead"` (20), `"tier_2_supervisor"` (17), `"tier_3_quality_manager"` (22), `"tier_4_plant_executive"` (22) (longest: 22 <= 30)
   - `focus_area`: `CharField(max_length=30, choices=FOCUS_AREA_CHOICES, default="standard_work_wi", db_index=True)` — `"standard_work_wi"` (16), `"tooling_machine_setup"` (21), `"material_handling_fifo"` (22), `"gauging_calibration"` (19), `"environmental_5s"` (16), `"safety_poka_yoke"` (16) (longest: 22 <= 30)
@@ -198,8 +198,8 @@
   - `scheduled_date`: `DateField()`
   - `conducted_at`: `DateTimeField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Form Exclusions**: `tenant`, `number`, `compliance_percentage`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `compliance_percentage`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qlpa_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qlpa_ten_status")` (19)
   - `Index(fields=["tenant", "audit_layer"], name="idx_qlpa_ten_layer")` (18)
@@ -212,37 +212,37 @@
 
 ## Execution Steps
 
-- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.8.md`)
-- [ ] **Step 2: Build Entity by Entity**
-  - [ ] Entity 1: `InProcessInspection` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 2: `FirstArticleInspection` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 3: `ProcessParameterLog` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 4: `LayeredProcessAudit` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Floor & SPC Monitoring Dashboard: `SpcDashboard.py` + `templates/quality/inprocessquality/spc_dashboard.html`
-- [ ] **Step 3: Integrate**
-  - [ ] Update `apps/quality/models/__init__.py` re-exports (`InProcessInspection`, `FirstArticleInspection`, `ProcessParameterLog`, `LayeredProcessAudit`)
-  - [ ] Update `apps/quality/forms/__init__.py` re-exports (`InProcessInspectionForm`, `FirstArticleInspectionForm`, `ProcessParameterLogForm`, `LayeredProcessAuditForm`)
-  - [ ] Update `apps/quality/views/__init__.py` re-exports
-  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
-  - [ ] Register 4 models in `apps/quality/admin.py`
-  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_8`)
-  - [ ] Wire `LIVE_LINKS["12.8"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration `0013_...`
-  - [ ] Run `migrate quality`
-  - [ ] Run `seed_quality` twice (verify idempotency)
-  - [ ] Run `manage.py check` (0 issues)
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.8.md`
-- [x] **Step 6: Code Fixer** -> burn down findings (All 20 findings C1-C3, I1-I10, M1-M7 fixed; **Gaps**: None)
-- [ ] **Step 7: Automated Tests** -> `test_inprocessquality_models.py`, `test_inprocessquality_forms.py`, `test_inprocessquality_views.py`, `test_inprocessquality_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.8.md`
+- [x] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.8.md`)
+- [x] **Step 2: Build Entity by Entity**
+  - [x] Entity 1: `InProcessInspection` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 2: `FirstArticleInspection` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 3: `ProcessParameterLog` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 4: `LayeredProcessAudit` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Floor & SPC Monitoring Dashboard: `SpcDashboard.py` + `templates/quality/inprocessquality/spc_dashboard.html`
+- [x] **Step 3: Integrate**
+  - [x] Update `apps/quality/models/__init__.py` re-exports (`InProcessInspection`, `FirstArticleInspection`, `ProcessParameterLog`, `LayeredProcessAudit`)
+  - [x] Update `apps/quality/forms/__init__.py` re-exports (`InProcessInspectionForm`, `FirstArticleInspectionForm`, `ProcessParameterLogForm`, `LayeredProcessAuditForm`)
+  - [x] Update `apps/quality/views/__init__.py` re-exports
+  - [x] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [x] Register 4 models in `apps/quality/admin.py`
+  - [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_8`)
+  - [x] Wire `LIVE_LINKS["12.8"]` in `apps/core/navigation.py`
+  - [x] Run `makemigrations quality` -> incremental migration `0013_...`
+  - [x] Run `migrate quality`
+  - [x] Run `seed_quality` twice (verify idempotency)
+  - [x] Run `manage.py check` (0 issues)
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.8.md`
+- [x] **Step 6: Code Fixer** -> burn down findings (All 20 findings C1-C3, I1-I9, M1-M8 fixed; **Gaps**: None)
+- [x] **Step 7: Automated Tests** -> `test_inprocessquality_models.py`, `test_inprocessquality_forms.py`, `test_inprocessquality_views.py`, `test_inprocessquality_security.py` -> 100% green (1,490 passed)
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.8.md`
 
 ---
 
 ## Wire-up Details
 
-- [ ] `apps/core/navigation.py`:
+- [x] `apps/core/navigation.py`:
   - `LIVE_LINKS["12.8"]`:
     - `"Process Parameter Monitoring"`: `"quality:process_parameter_log_list"`
     - `"First Article Inspection (FAI)"`: `"quality:first_article_inspection_list"`
@@ -254,33 +254,62 @@
 
 ## Templates Layout (`templates/quality/inprocessquality/`)
 
-- [ ] `in_process_inspection/list.html`: Inspection runs, stage-gate, status, disposition badge, filter bar, CSV export
-- [ ] `in_process_inspection/detail.html`: Manufacturing context, sample quantities, defect tally, work instruction sign-off, linked NCR
-- [ ] `in_process_inspection/form.html`: Form with work order/center selectors, disposition dropdown, defect categories
-- [ ] `first_article_inspection/list.html`: FAI register, FAI type, setup reason, release verdict badge, approval state
-- [ ] `first_article_inspection/detail.html`: AS9102 Forms 1-3 completion status, characteristic conformance metrics, gage serials, release sign-off
-- [ ] `first_article_inspection/form.html`: Comprehensive FAI form with setup reasons, drawing numbers, AS9102 checklist toggles
-- [ ] `process_parameter_log/list.html`: CTQ parameter log, category, target vs recorded value, excursion status badge (normal/OOC/OOS)
-- [ ] `process_parameter_log/detail.html`: Parameter tolerances (USL/LSL) vs statistical limits (UCL/LCL), excursion classification, containment actions
-- [ ] `process_parameter_log/form.html`: Fast parameter data-entry form with auto-evaluating limits and containment triggers
-- [ ] `layered_process_audit/list.html`: LPA audit register, management tier (Tier 1-4), focus area, compliance %, status
-- [ ] `layered_process_audit/detail.html`: Audit scorecard, conformance breakdown, on-the-spot mitigation notes, linked document/NCR
-- [ ] `layered_process_audit/form.html`: LPA execution form with question counts, on-the-spot mitigation details, auditor selector
-- [ ] `spc_dashboard.html`: Real-time shop-floor quality & SPC control monitor displaying active stage-gates, parameter excursions (OOC/OOS), FAI release holds, and LPA compliance metrics
+- [x] `in_process_inspection/list.html`: Inspection runs, stage-gate, status, disposition badge, filter bar, CSV export
+- [x] `in_process_inspection/detail.html`: Manufacturing context, sample quantities, defect tally, work instruction sign-off, linked NCR
+- [x] `in_process_inspection/form.html`: Form with work order/center selectors, disposition dropdown, defect categories
+- [x] `first_article_inspection/list.html`: FAI register, FAI type, setup reason, release verdict badge, approval state
+- [x] `first_article_inspection/detail.html`: AS9102 Forms 1-3 completion status, characteristic conformance metrics, gage serials, release sign-off
+- [x] `first_article_inspection/form.html`: Comprehensive FAI form with setup reasons, drawing numbers, AS9102 checklist toggles
+- [x] `process_parameter_log/list.html`: CTQ parameter log, category, target vs recorded value, excursion status badge (normal/OOC/OOS)
+- [x] `process_parameter_log/detail.html`: Parameter tolerances (USL/LSL) vs statistical limits (UCL/LCL), excursion classification, containment actions
+- [x] `process_parameter_log/form.html`: Fast parameter data-entry form with auto-evaluating limits and containment triggers
+- [x] `layered_process_audit/list.html`: LPA audit register, management tier (Tier 1-4), focus area, compliance %, status
+- [x] `layered_process_audit/detail.html`: Audit scorecard, conformance breakdown, on-the-spot mitigation notes, linked document/NCR
+- [x] `layered_process_audit/form.html`: LPA execution form with question counts, on-the-spot mitigation details, auditor selector
+- [x] `spc_dashboard.html`: Real-time shop-floor quality & SPC control monitor displaying active stage-gates, parameter excursions (OOC/OOS), FAI release holds, and LPA compliance metrics
 
 ---
 
 ## Later passes / deferred
 
-- [~] Automated IoT Machine Telemetry Streaming (OPC-UA / MQTT) — Direct machine sensor parameter ingestion into `ProcessParameterLog`. (`GAP-quality-12.8-01`)
-- [~] Direct Edge Gauging USB / Bluetooth HID Interlock — Native browser WebHID/WebSerial listener capturing caliper/micrometer readings directly into form fields. (`GAP-quality-12.8-02`)
-- [~] Automated Machine Stop-Line PLC Interlock — Hardware relay triggering physical machine interlock if an FAI is rejected or critical parameter excursion occurs. (`GAP-quality-12.8-03`)
-- [~] Dynamic LPA Question Randomizer — Algorithmic question rotation per workstation from a master question pool. (`GAP-quality-12.8-04`)
+- [~] Automated IoT Machine Telemetry Streaming (OPC-UA / MQTT) — Direct machine sensor parameter ingestion into `ProcessParameterLog`. (`GAP-quality-12.8-02`)
+- [~] Automated StockMove WIP lot scrap linkage — Emit StockMove scrap transactions on scrap disposition. (`GAP-quality-12.8-01`)
+- [~] Customer Portal digital approval signature for AS9102 Form 1. (`GAP-quality-12.8-03`)
+- [~] Dynamic shop floor routing dispatch integration with MES WorkOrders. (`GAP-quality-12.8-04`)
 
 ---
 
-## Review notes
-(filled in at the end)
+## Review & Close-Out Notes (Sub-module 12.8 IPQC)
+
+- **Status**: Completed & Verified (All 7 phases executed strictly serially).
+- **Date**: 2026-11-19
+- **Base Commit**: `26ff399f4f232c2b7b5e9925b0982ff06915ed58`
+- **Artifacts Produced**:
+  - Research: `.claude/tasks/research-quality-12.8.md` (`d0b74654`)
+  - Plan / Todo: `.claude/tasks/todo.md` (`2fc2008f`)
+  - Contract: `.claude/tasks/contract-quality-12.8.md` (`5477b9a6`)
+  - Review Findings: `.claude/tasks/review-quality-12.8.md` (`65a00c22`, `321a8a24`)
+  - Gap Register: `.agents/tasks/gaps-quality-12.8.md` (`59158149`)
+  - Skill Guide: `.claude/skills/quality/SKILL.md` (`11a7311e`)
+  - README: `README.md` (`5cc5bfcc`)
+- **Review Burn-Down**:
+  - 6 Reviewers executed sequentially (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`).
+  - 20 findings identified: 3 Critical (C1-C3), 9 Important (I1-I9), 8 Minor (M1-M8).
+  - Subagent `code-fixer` resolved and verified all 20 findings in ID order with individual git commits.
+  - Zero open internal defects remaining.
+- **Verification & Test Suite**:
+  - `conftest.py` extended with 12.8 fixtures.
+  - Test modules created:
+    - `test_inprocessquality_models.py` (32 tests, 100% green)
+    - `test_inprocessquality_forms.py` (56 tests, 100% green)
+    - `test_inprocessquality_views.py` (69 tests, 100% green)
+    - `test_inprocessquality_security.py` (28 tests, 100% green)
+  - Full unfiltered test suite: `pytest apps/quality/tests/` -> **1,490 passed, 0 failures (100% green)**.
+- **Seeder Idempotency**:
+  - `seed_quality` executed twice with zero duplicate records created.
+- **Sidebar & Navigation**:
+  - All 5 NavERP 12.8 feature bullets wired to `LIVE_LINKS["12.8"]` in `apps/core/navigation.py`.
+- **Gaps**: None (all internal review findings closed; 4 cross-module external enhancements registered in `.agents/tasks/gaps-quality-12.8.md`).
 
 ---
 # Sub-module 12.7: Incoming Quality Control (IQC) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.7.md` (2026-11-18)
