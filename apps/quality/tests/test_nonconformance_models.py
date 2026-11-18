@@ -66,7 +66,7 @@ def test_nonconformance_quarantine_model_creation_and_properties(quarantine_a, n
     assert quarantine_a.status == "active"
     assert quarantine_a.remaining_on_hold == Decimal("75.00")
     assert quarantine_a.status_badge == "badge-red"
-    assert quarantine_a.hold_type_badge == "badge-red"
+    assert quarantine_a.hold_type_badge == "badge-amber"
 
     quarantine_a.released_quantity = Decimal("25.00")
     assert quarantine_a.remaining_on_hold == Decimal("50.00")
