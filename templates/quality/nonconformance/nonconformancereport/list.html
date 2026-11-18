@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Non-Conformance Reports (NCR) | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <span>Non-Conformance Management</span>
+            <span>/</span>
+            <span>Reports</span>
+        </div>
+        <h1 class="page-title">Non-Conformance Reports (NCR)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:ncr_analytics_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="bar-chart-2"></i> Analytics & Trends
+        </a>
+        <a href="{% url 'quality:non_conformance_report_export_csv' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:non_conformance_report_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New NCR
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Number, title, item, lot, code...">
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="severity-filter">Severity</label>
+                <select id="severity-filter" name="severity" class="form-select">
+                    <option value="">All Severities</option>
+                    {% for val, label in severity_choices %}
+                    <option value="{{ val }}" {% if selected_severity == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="source-filter">Source</label>
+                <select id="source-filter" name="source_type" class="form-select">
+                    <option value="">All Sources</option>
+                    {% for val, label in source_type_choices %}
+                    <option value="{{ val }}" {% if selected_source_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:non_conformance_report_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Non-Conformance Reports ({{ total_count }})</h2>
+    </div>
+    {% if non_conformance_reports %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Title & Defect</th>
+                    <th>Source & Category</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                    <th>Affected Item / Lot</th>
+                    <th>Non-Conforming Qty</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ncr in non_conformance_reports %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'quality:non_conformance_report_detail' ncr.pk %}" class="text-blue-600 hover:underline">
+                            {{ ncr.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ ncr.title }}</div>
+                        {% if ncr.defect_code %}
+                        <div class="text-xs text-slate-500 font-mono">Code: {{ ncr.defect_code }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ ncr.source_type_badge }}">{{ ncr.get_source_type_display }}</span>
+                        <div class="text-xs text-slate-500 mt-1">{{ ncr.get_category_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ ncr.severity_badge }}">{{ ncr.get_severity_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ ncr.status_badge }}">{{ ncr.get_status_display }}</span>
+                        {% if ncr.is_overdue %}
+                        <span class="badge badge-red ml-1" title="Resolution overdue">Overdue</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ncr.affected_item_code %}
+                        <div class="font-medium text-slate-800">{{ ncr.affected_item_code }}</div>
+                        {% endif %}
+                        {% if ncr.lot_serial_numbers %}
+                        <div class="text-xs text-slate-500">Lot: {{ ncr.lot_serial_numbers }}</div>
+                        {% endif %}
+                        {% if not ncr.affected_item_code and not ncr.lot_serial_numbers %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-800">{{ ncr.quantity_nonconforming }}</span>
+                        <span class="text-xs text-slate-500">{{ ncr.unit_of_measure }}</span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:non_conformance_report_detail' ncr.pk %}" class="btn btn-icon" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:non_conformance_report_edit' ncr.pk %}" class="btn btn-icon" title="Edit NCR">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:non_conformance_report_delete' ncr.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Non-Conformance Report {{ ncr.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete NCR">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div>
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} reports
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_source_type %}&source_type={{ selected_source_type }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="btn btn-outline btn-sm bg-slate-100 cursor-default">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_source_type %}&source_type={{ selected_source_type }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i data-lucide="clipboard-check"></i>
+        </div>
+        <h3 class="text-base font-semibold text-slate-800 mb-1">No Non-Conformance Reports Found</h3>
+        <p class="text-sm text-slate-500 mb-4">No non-conformance records match your current filters or search query.</p>
+        <a href="{% url 'quality:non_conformance_report_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Create Non-Conformance Report
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
