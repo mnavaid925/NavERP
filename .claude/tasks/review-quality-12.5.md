@@ -13,6 +13,41 @@
 
 ---
 
+## Consolidated Actionable Review Register
+
+### Critical (Must Fix Before Commit)
+- [ ] **C1** — `apps/quality/views/NonConformance/MrbDispositions.py:103`: `write_audit_log(..., "disposition", ...)` passes an 11-char verb into `AuditLog.action` (`max_length=10`), triggering MySQL `DataError: (1406, "Data too long for column 'action'")` 500 crash on MRB disposition creation. Fix: Change action verb to `"create"`.
+- [ ] **C2** — `templates/quality/nonconformance/processdeviation/detail.html:84`: Lesson L10 None-safe crash on unapproved Process Deviation detail: `{{ process_deviation.approved_by.get_full_name|default:process_deviation.approved_by.username|default:"Pending Approval" }}` raises `VariableDoesNotExist` and 500s when `approved_by` is None. Fix: Guard with `{% if process_deviation.approved_by %}{{ process_deviation.approved_by.get_full_name|default:process_deviation.approved_by.username }}{% else %}Pending Approval{% endif %}`.
+- [ ] **C3** — `templates/quality/nonconformance/nonconformancereport/detail.html:126`: Lesson L10 None-safe crash on closed NCR without `closed_by`: `{{ non_conformance_report.closed_by.get_full_name|default:non_conformance_report.closed_by.username }}` inside `closure_notes` check raises `VariableDoesNotExist` and 500s when `closed_by` is None. Fix: Guard with `{% if non_conformance_report.closed_by %}{{ non_conformance_report.closed_by.get_full_name|default:non_conformance_report.closed_by.username }}{% else %}Quality Assurance{% endif %}`.
+- [ ] **C4** — `apps/quality/views/NonConformance/NonConformanceReports.py:91-108` & `templates/quality/nonconformance/nonconformancereport/detail.html:223`: N+1 query on `d.mrb_chair` and invalidated prefetch cache in NCR detail view. Calling chained `.order_by(...)` in the view drops the prefetched cache and re-queries without `select_related("mrb_chair")`. Fix: Use `Prefetch("mrb_dispositions", queryset=MrbDisposition.objects.select_related("mrb_chair"))` and call `.all()`.
+- [ ] **C5** — `apps/quality/views/NonConformance/NonConformanceReports.py:164-171`: Missing lifecycle status guard on NCR deletion allows permanent destruction of closed/voided audit compliance records or deletion while active quarantine holds exist. Fix: Reject deletion if `ncr.is_closed` or `ncr.containment_records.filter(status='active').exists()`.
+
+### Important (Should Fix Before Commit)
+- [ ] **I1** — `templates/quality/nonconformance/nonconformancereport/list.html:35-75`: NCR list filter form omits Category `<select>` dropdown even though the view accepts `?category=` and passes `category_choices`. Fix: Add Category `<select name="category">` dropdown to filter bar.
+- [ ] **I2** — `templates/quality/nonconformance/processdeviation/list.html:32-64, 153, 165`: Process Deviation list filter form omits Risk Level `<select>` dropdown and pagination links drop `&risk_level={{ selected_risk_level }}`. Fix: Add `<select name="risk_level">` and preserve query param in pagination links.
+- [ ] **I3** — `apps/quality/views/NonConformance/NcrAnalytics.py:19-44`: Analytics dashboard executes 23 queries via Python loops and unaggregated counts. Fix: Replace with single `aggregate()` calls and SQL `GROUP BY` `.values(...).annotate(count=Count('id'))`, reducing queries from 23 to 7.
+- [ ] **I4** — `apps/quality/models/NonConformance/ProcessDeviations.py:173-178`: Missing composite database indexes on `ProcessDeviation` for `(tenant, ncr)` (`idx_qdev_ten_ncr`) and `(tenant, risk_impact_level)` (`idx_qdev_ten_risk_lvl`). Fix: Add to `Meta.indexes`.
+- [ ] **I5** — `apps/quality/views/NonConformance/QuarantineContainments.py:133-146`, `apps/quality/views/NonConformance/MrbDispositions.py:139-146`, `apps/quality/views/NonConformance/ProcessDeviations.py:138-147`: Missing status guards on deleting active quarantine holds (`status="active"`), approved MRB dispositions (`status in ("approved", "executed")`), and active/closed process deviations (`status in ("approved", "active", "closed")`), plus delete redirects unconditionally to parent NCR instead of honoring list/next URL. Fix: Add status guards and support `request.POST.get("next")` fallback to list.
+- [ ] **I6** — `apps/quality/forms/NonConformance/MrbDispositions.py:30, 53` & `apps/quality/models/NonConformance/MrbDispositions.py:185-188`: Mass assignment of derived financial field `total_cost_impact`. Fix: Remove `total_cost_impact` from form `Meta.fields` and recalculate automatically on `save()`.
+- [ ] **I7** — `apps/quality/forms/NonConformance/MrbDispositions.py:31-35`: Tripartite board approvals validation: `MrbDispositionForm.clean()` allows marking `status="approved"` without all 3 sign-offs (quality, engineering, operations). Fix: Validate all 3 approvers are selected when status is "approved".
+- [ ] **I8** — `templates/quality/nonconformance/ncr_analytics_dashboard.html:34-89`: Analytics dashboard uses ad-hoc KPI cards instead of design system `.stat-grid` / `.stat-card` / `.stat-value` / `.stat-label`. Fix: Update KPI markup to standard stat card classes.
+- [ ] **I9** — `templates/quality/nonconformance/nonconformancereport/detail.html:173, 226, 279` & `ncr_analytics_dashboard.html:182`: Icon-only action links lack accessible names (`title` and `aria-label`). Fix: Add accessible labels.
+- [ ] **I10** — `apps/quality/views/NonConformance/NonConformanceReports.py:141-152`: Closed NCR records can be modified via edit form without tenant admin gate. Fix: Restrict modifying closed NCRs to tenant admin / superuser.
+
+### Minor (Fix When Convenient)
+- [ ] **M1** — `apps/quality/views/NonConformance/NonConformanceReports.py:116-120`: Creating an NCR directly with `status="closed"` does not populate `closed_at` and `closed_by`. Fix: Auto-populate if closed on create.
+- [ ] **M2** — `apps/quality/forms/NonConformance/NonConformanceReports.py`, `QuarantineContainments.py`, `MrbDispositions.py`: Form numeric boundary validations: add non-negative checks and `quantity_nonconforming <= quantity_inspected`, `released_quantity <= quantity_on_hold`.
+- [ ] **M3** — All 4 list views: Duplicate `SELECT COUNT(*)` due to `qs.count()` followed by `paginator.count`. Fix: Reuse `paginator.count`.
+- [ ] **M4** — `NonConformanceReports.py:32-34`: Unused foreign keys in `non_conformance_report_list` `select_related`. Fix: Keep only `owner`.
+- [ ] **M5** — `templates/quality/nonconformance/nonconformancereport/detail.html:38-43`: Hide Delete NCR button when closed/voided (`{% if not non_conformance_report.is_closed %}`).
+- [ ] **M6** — `templates/quality/nonconformance/nonconformancereport/list.html:123`, `detail.html:100`, `processdeviation/detail.html:183`: Replace physical margin `ml-1` with logical `ms-1` (RTL readiness).
+- [ ] **M7** — List filter clear buttons lack `aria-label="Clear filters"`. Fix: Add `aria-label`.
+- [ ] **M8** — List delete buttons bypass `.btn-icon.danger`. Fix: Add `.danger` modifier class.
+- [ ] **M9** — `ncr_analytics_dashboard.html:118, 133`: Category and Source breakdowns omit badge styling. Fix: Wrap with `<span class="badge {{ item.css }}">`.
+- [ ] **M10** — `QuarantineContainments.py:97`: Audit log verb `"contain"` should be standardized to canonical `"create"`.
+
+---
+
 ## Raw Review Logs
 
 ### 1. Code Reviewer
@@ -30,6 +65,8 @@
   - `apps/quality/views/NonConformance/NonConformanceReports.py:116-120`: In `non_conformance_report_create`, creating with `status="closed"` does not populate `closed_at`/`closed_by`. Fix: auto-populate on creation.
   - `apps/quality/models/NonConformance/MrbDispositions.py:186-187`: `MrbDisposition.save()` only auto-sums when `total_cost_impact` is 0. Fix: recalculate in `save()`.
   - `templates/quality/nonconformance/nonconformancereport/detail.html:38-43`: Hide Delete NCR button when closed/voided (`{% if not non_conformance_report.is_closed %}`).
+- **Done Well**: Solid multi-tenancy (`TenantNumbered`, `quality_scope`, `reject_foreign`), clean spine reuse (`core.Party`, `core.OrgUnit`, `quality.CapaInvestigation`), strict `theme.css` badges.
+
 ### 2. Explorer (Contract & Spec)
 - **Contract Adherence**: All 4 models, 4 forms, 17 URLs, and sidebar entries in `LIVE_LINKS["12.5"]` match `.claude/tasks/contract-quality-12.5.md` and `NavERP.md`.
 - **Critical**:
@@ -82,8 +119,19 @@
   - `templates/quality/nonconformance/nonconformancereport/list.html:35-75`: [I1] Missing Category `<select>` dropdown.
   - `templates/quality/nonconformance/processdeviation/list.html:32-64, 153, 165`: [I2] Missing Risk Level `<select>` dropdown and dropped query param in pagination.
 
-
-
-
-
-
+### 6. Security Reviewer
+- **Summary**: 2 Critical, 4 High, 3 Medium, 2 Low.
+- **IDOR & AuthN/CSRF**: 100% PASS across all views and forms.
+- **Critical**:
+  - `MrbDispositions.py:103`: AuditLog action length column overflow causes 500 crash on MySQL strict mode.
+  - `NonConformanceReports.py:164-171`: Missing lifecycle status guard on NCR deletion allows permanent destruction of regulated records.
+- **High**:
+  - `forms/NonConformance/MrbDispositions.py:30, 53`: Mass assignment of derived financial field `total_cost_impact`.
+  - Deletion views: Missing status guards on deleting active quarantine holds, approved MRB dispositions, and active/closed process deviations.
+  - `MrbDispositionForm.clean()`: Tripartite board approvals validation missing when status="approved".
+  - `NonConformanceReports.py:141-152`: Closed NCR records can be modified via edit form without tenant admin gate.
+- **Medium / Low**:
+  - Non-negative boundary validation in forms.
+  - Inconsistent closure attribution on direct closed creation.
+  - Template L10 crashes on `approved_by` and `closed_by`.
+  - Canonical verb `"contain"` -> `"create"`.
