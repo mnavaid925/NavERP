@@ -72,7 +72,7 @@ class SupplierQualificationAuditForm(TenantUniqueMixin, TenantModelForm):
                 suppliers = Party.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["supplier"].queryset = suppliers
             self.fields["lead_auditor"].queryset = User.objects.filter(
-                tenant=self.tenant
+                tenant=self.tenant, is_active=True
             ).order_by("first_name", "last_name", "email")
             self.fields["quality_agreement"].queryset = ControlledDocument.objects.filter(
                 tenant=self.tenant
