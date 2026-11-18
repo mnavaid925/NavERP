@@ -644,12 +644,12 @@ def supplier_party_a(db, tenant_a):
     party = Party.objects.create(
         tenant=tenant_a,
         name="Precision Medical Tech Co",
-        party_type="organization",
+        kind="organization",
     )
     PartyRole.objects.create(
         tenant=tenant_a,
         party=party,
-        role_type="vendor",
+        role="vendor",
     )
     return party
 
@@ -659,12 +659,12 @@ def supplier_party_b(db, tenant_b):
     party = Party.objects.create(
         tenant=tenant_b,
         name="Apex Industrial Parts Globex",
-        party_type="organization",
+        kind="organization",
     )
     PartyRole.objects.create(
         tenant=tenant_b,
         party=party,
-        role_type="vendor",
+        role="vendor",
     )
     return party
 
