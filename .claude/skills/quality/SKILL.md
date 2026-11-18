@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); and 12.6 Supplier & Vendor Quality Management (Approved Vendor List (AVL) Governance Directory, Supplier Qualification Audits [QSQA-], Multi-Dimensional Weighted Quality Scorecards [QSSC-], Supplier Corrective Action Requests (SCAR) [QSCA-], and Supplier Change Notifications (SCN/PCN) [QSCN-]). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.6), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management (Approved Vendor List (AVL) Governance Directory, Supplier Qualification Audits [QSQA-], Multi-Dimensional Weighted Quality Scorecards [QSSC-], Supplier Corrective Action Requests (SCAR) [QSCA-], and Supplier Change Notifications (SCN/PCN) [QSCN-]); and 12.7 Incoming Quality Control (IQC) — Incoming Inspection Plans [QIIP-], Inspection Lots & Sampling [QIIL-], Certificate of Analysis Management [QCOA-], Quality Return Authorizations (RMA) [QRMA-], and SPC Analytics Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.7), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -59,6 +59,13 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Supplier Quality Scorecards** [`QSSC-`]: Multi-dimensional performance scorecards with automated 5-dimension weighted composite score calculation: Lot Acceptance Rate (30%), Defect PPM (25%), SCAR Responsiveness (20%), Audit Compliance (15%), and Documentation/CoA (10%), generating letter grades `A` (>=90), `B` (80-89.9), `C` (70-79.9), `D` (<70), with audited manual override capability.
   - **Supplier Corrective Action Requests (SCAR)** [`QSCA-`]: Customer-to-vendor CAPA lifecycle requiring 24-48h emergency containment, 8D problem solving, vendor 5 Whys root cause analysis, corrective/preventive plans, and independent effectiveness verification.
   - **Supplier Change Notifications (SCN/PCN)** [`QSCN-`]: Vendor-initiated material and process modifications, Form-Fit-Function (FFF) evaluation, risk triage, re-qualification triggers, and formal CCB/quality disposition sign-off.
+
+- **12.7 Incoming Quality Control (IQC)**:
+  - **Incoming Inspection Plans** [`QIIP-`]: Configurable inspection protocols governed by ANSI/ASQ Z1.4, ISO 2859-1 (attributes), and ISO 3951-1 (variables). Configures inspection levels (`level_1`, `level_2`, `level_3`, `s1`, `s2`, `s3`, `s4`), dynamic severity switching rules (`normal`, `tightened`, `reduced`), skip-lot frequencies, AQL defect thresholds (critical, major, minor), CoA/CoC verification gates, and quality SOP document linkages (`ControlledDocument`).
+  - **Goods Receipt & Inspection Lots** [`QIIL-`]: Receiving inspection execution records with automated ANSI Z1.4 code letter calculation, sample size determination, dimensional measurement capture with automated finite-number validation, defect triage (critical, major, minor), usage decision state machine (`pending` -> `accepted` / `accepted_with_deviation` / `rework` / `scrap` / `quarantine` / `return_to_vendor`), skip-lot consecutive acceptance counters, automated non-conformance logging (`QNCR-`), and automated quarantine containment hold (`QHLD-`) creation upon lot rejection.
+  - **Certificate of Analysis (CoA) Management** [`QCOA-`]: Vendor analytical test result verification conforming to receiving specifications. Parameter test result matching (min/max specification limits), verification state machine (`pending_review` -> `accepted` / `rejected` / `conditional`), and regulatory archive file attachments with MIME and extension validation.
+  - **Quality Return Authorizations (RMA)** [`QRMA-`]: Formal vendor return merchandise authorizations and debit memos. Captures return reasons (`defective_material`, `out_of_spec`, `coa_failed`, `wrong_material`, `damaged_in_transit`, `over_shipment`), return quantities, disposition tracking (`replacement_requested`, `credit_memo_requested`, `rework_at_vendor`, `scrap_on_site`), carrier tracking numbers, and replacement receipt tracking.
+  - **Inspection Data Capture & SPC Analytics Dashboard**: Interactive statistical process control dashboard displaying total lots inspected, lot acceptance rate (%), average process capability index ($C_{pk}$), out-of-control alert monitoring, defect Pareto distribution, and top supplier quality ranking leaderboard.
 
 ---
 
@@ -317,6 +324,32 @@ apps/quality/
 - **Properties & Methods:** `category_css`, `risk_css`, `status_css`, `disposition_css`, `has_critical_impact`, `is_high_risk`.
 - **Indexes:** `idx_qscn_ten_status`, `idx_qscn_ten_risk`, `idx_qscn_ten_cat`, `idx_qscn_ten_disp`, `idx_qscn_ten_supp`, `idx_qscn_ten_created`.
 
+### Sub-module 12.7 Entities
+
+#### 21. `IncomingInspectionPlan` (Prefix: `QIIP-`)
+- **Table:** `quality_incoming_inspection_plan`
+- **Key Fields:** `number`, `title`, `item_code`, `item_name`, `revision`, `supplier` (`core.Party`), `sampling_standard` (`ansi_asq_z14`, `iso_2859_1`, `iso_3951_1`, `c_zero`), `inspection_level` (`level_1`, `level_2`, `level_3`, `s1`, `s2`, `s3`, `s4`), `inspection_severity` (`normal`, `tightened`, `reduced`), `inspection_frequency` (`every_lot`, `skip_lot`, `first_article`, `dock_to_stock`), `skip_lot_interval`, `aql_critical` (Decimal), `aql_major` (Decimal), `aql_minor` (Decimal), `requires_coa`, `requires_coc`, `status` (`draft`, `active`, `under_review`, `deprecated`), `sop_document` (`ControlledDocument`), `assigned_team` (`core.OrgUnit`), `notes`, `characteristics_json`.
+- **Properties & Methods:** `status_css`, `severity_css`, `frequency_css`, `sampling_standard_badge`, `is_active`, `characteristics_count`.
+- **Compound Indexes:** `idx_qiip_ten_item_supp`, `idx_qiip_ten_status`, `idx_qiip_ten_created`.
+
+#### 22. `IncomingInspectionLot` (Prefix: `QIIL-`)
+- **Table:** `quality_incoming_inspection_lot`
+- **Key Fields:** `number`, `inspection_plan` (`IncomingInspectionPlan`), `item_code`, `item_name`, `supplier` (`core.Party`), `purchase_order` (`scm.PurchaseOrder`), `lot_number`, `lot_quantity` (Decimal), `sample_size` (int), `sample_code_letter`, `inspected_quantity` (Decimal), `accepted_quantity` (Decimal), `rejected_quantity` (Decimal), `quarantine_quantity` (Decimal), `critical_defects` (int), `major_defects` (int), `minor_defects` (int), `stage` (`pending_receipt`, `in_inspection`, `in_testing`, `under_review`, `completed`, `quarantined`, `cancelled`), `usage_decision` (`pending`, `accepted`, `accepted_with_deviation`, `rework`, `scrap`, `quarantine`, `return_to_vendor`, `skip_lot_passed`), `decision_date`, `decision_notes`, `decided_by` (`accounts.User`), `inspector` (`accounts.User`), `linked_ncr` (`NonConformanceReport`), `linked_deviation` (`ProcessDeviation`), `linked_containment` (`QuarantineContainment`), `linked_scar` (`SupplierCorrectiveAction`), `consecutive_accepted_lots` (int), `spc_mean` (Decimal), `spc_std_dev` (Decimal), `spc_cp` (Decimal), `spc_cpk` (Decimal), `spc_out_of_control` (bool), `measurements_json`, `notes`.
+- **Properties & Methods:** `stage_css`, `decision_css`, `is_decided`, `is_accepted`, `is_rejected`, `total_defects`, `defect_rate_pct`, `calculate_sample_size()`.
+- **Compound Indexes:** `idx_qiil_ten_stage`, `idx_qiil_ten_decision`, `idx_qiil_ten_supp_lot`, `idx_qiil_ten_plan`, `idx_qiil_ten_created`.
+
+#### 23. `CertificateOfAnalysis` (Prefix: `QCOA-`)
+- **Table:** `quality_certificate_of_analysis`
+- **Key Fields:** `number`, `inspection_lot` (`IncomingInspectionLot`), `supplier` (`core.Party`), `item_code`, `lot_number`, `vendor_coa_number`, `manufacture_date`, `expiration_date`, `verification_status` (`pending_review`, `accepted`, `rejected`, `conditional`), `verified_by` (`accounts.User`), `verified_at`, `verification_notes`, `coa_file`, `test_results_json`.
+- **Properties & Methods:** `status_css`, `is_verified`, `is_expired`, `test_results_count`.
+- **Compound Indexes:** `idx_qcoa_ten_status`, `idx_qcoa_ten_supp_lot`, `idx_qcoa_ten_created`.
+
+#### 24. `QualityReturnAuthorization` (Prefix: `QRMA-`)
+- **Table:** `quality_return_authorization`
+- **Key Fields:** `number`, `inspection_lot` (`IncomingInspectionLot`), `supplier` (`core.Party`), `item_code`, `lot_number`, `return_quantity` (Decimal), `reason` (`defective_material`, `out_of_spec`, `coa_failed`, `wrong_material`, `damaged_in_transit`, `over_shipment`), `description`, `disposition` (`replacement_requested`, `credit_memo_requested`, `rework_at_vendor`, `scrap_on_site`), `status` (`draft`, `authorized`, `shipped`, `delivered_to_vendor`, `completed`, `cancelled`), `authorized_by` (`accounts.User`), `authorized_at`, `debit_memo_number`, `credit_memo_number`, `tracking_number`, `carrier_name`, `shipped_at`, `replacement_received_at`, `notes`.
+- **Properties & Methods:** `status_css`, `reason_css`, `disposition_css`, `is_shipped`, `is_completed`.
+- **Compound Indexes:** `idx_qrma_ten_status`, `idx_qrma_ten_supp_lot`, `idx_qrma_ten_created`.
+
 
 ---
 
@@ -467,6 +500,39 @@ All routes use the `quality:` namespace:
 | `/quality/capa/tracking-board/` | `capa_tracking_board` | Interactive 5-column Kanban board with 4-tier aging matrix |
 | `/quality/capa/tracking-board/export/` | `capa_tracking_board_export` | CSV export of aging workbench data |
 
+### Sub-module 12.7 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/incoming-quality/plans/` | `incoming_inspection_plan_list` | Inspection plans list with item, supplier, standard, and status filters |
+| `/quality/incoming-quality/plans/create/` | `incoming_inspection_plan_create` | Create new incoming inspection plan with AQL parameters |
+| `/quality/incoming-quality/plans/<pk>/` | `incoming_inspection_plan_detail` | Inspection plan detail with sampling configuration & audit trail |
+| `/quality/incoming-quality/plans/<pk>/edit/` | `incoming_inspection_plan_edit` | Edit inspection plan parameters |
+| `/quality/incoming-quality/plans/<pk>/delete/` | `incoming_inspection_plan_delete` | POST-only delete (requires tenant admin) |
+| `/quality/incoming-quality/plans/export/` | `incoming_inspection_plan_export` | CSV export of incoming inspection plans |
+| `/quality/incoming-quality/lots/` | `incoming_inspection_lot_list` | Inspection lots list with stage and usage decision filters |
+| `/quality/incoming-quality/lots/create/` | `incoming_inspection_lot_create` | Create new inspection lot with automatic ANSI Z1.4 code letter calculation |
+| `/quality/incoming-quality/lots/<pk>/` | `incoming_inspection_lot_detail` | Detailed inspection lot dossier with defect summary and measurements |
+| `/quality/incoming-quality/lots/<pk>/edit/` | `incoming_inspection_lot_edit` | Update lot measurements and defect counts |
+| `/quality/incoming-quality/lots/<pk>/delete/` | `incoming_inspection_lot_delete` | POST-only delete (requires tenant admin) |
+| `/quality/incoming-quality/lots/<pk>/decision/` | `incoming_inspection_lot_decision` | Record usage decision (spawns QNCR and QHLD on rejection) |
+| `/quality/incoming-quality/lots/export/` | `incoming_inspection_lot_export` | CSV export of incoming inspection lots |
+| `/quality/incoming-quality/coas/` | `certificate_of_analysis_list` | Certificates of analysis list with status filters |
+| `/quality/incoming-quality/coas/create/` | `certificate_of_analysis_create` | Log and upload vendor CoA with specification limits |
+| `/quality/incoming-quality/coas/<pk>/` | `certificate_of_analysis_detail` | CoA verification dossier and test results |
+| `/quality/incoming-quality/coas/<pk>/edit/` | `certificate_of_analysis_edit` | Edit CoA metadata and test specifications |
+| `/quality/incoming-quality/coas/<pk>/delete/` | `certificate_of_analysis_delete` | POST-only delete (requires tenant admin) |
+| `/quality/incoming-quality/coas/<pk>/verify/` | `certificate_of_analysis_verify` | Record CoA verification determination |
+| `/quality/incoming-quality/coas/export/` | `certificate_of_analysis_export` | CSV export of certificates of analysis |
+| `/quality/incoming-quality/rmas/` | `quality_return_authorization_list` | Quality return authorizations list with status and reason filters |
+| `/quality/incoming-quality/rmas/create/` | `quality_return_authorization_create` | Issue RMA debit memo for rejected inspection lot |
+| `/quality/incoming-quality/rmas/<pk>/` | `quality_return_authorization_detail` | RMA tracking dossier with replacement / credit memo details |
+| `/quality/incoming-quality/rmas/<pk>/edit/` | `quality_return_authorization_edit` | Edit RMA details |
+| `/quality/incoming-quality/rmas/<pk>/delete/` | `quality_return_authorization_delete` | POST-only delete (requires tenant admin) |
+| `/quality/incoming-quality/rmas/<pk>/dispatch/` | `quality_return_authorization_dispatch` | Record carrier dispatch and shipment tracking number |
+| `/quality/incoming-quality/rmas/export/` | `quality_return_authorization_export` | CSV export of quality return authorizations |
+| `/quality/incoming-quality/spc-dashboard/` | `iqc_spc_dashboard` | Interactive SPC Analytics dashboard with Pareto charts and capability indices |
+| `/quality/incoming-quality/spc-dashboard/export/` | `iqc_spc_dashboard_export` | CSV export of SPC alerts and defect distribution |
+
 ---
 
 ## Seeder (`seed_quality`)
@@ -513,6 +579,20 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
   - 4 Root Cause Analyses (5 Whys causal stepping ladders and Ishikawa 6M fishbone models with escape point barrier gaps)
   - 5 CAPA Actions across immediate containment, corrective, and preventive types linked to DCOs and engineering specs
   - 3 Effectiveness Reviews with statistical sampling, trend evaluations, and Part 11 e-signature records
+
+- **12.7 Data**:
+  - 2 Incoming Inspection Plans per tenant:
+    - `Receiving Plan - Titanium Rods` (ANSI/ASQ Z1.4, Level II Normal, AQL 0.00/1.00/4.00, requires CoA, linked to SOP-QMS-001)
+    - `Receiving Plan - Sterile Syringe Barrels` (ISO 2859-1, Level II Reduced, skip-lot frequency interval 5)
+  - 3 Incoming Inspection Lots per tenant:
+    - Lot `LOT-2026-IQC-001` (Titanium Rods, 500 units, sample size 32, accepted, SPC Cpk=1.36)
+    - Lot `LOT-2026-IQC-002` (Titanium Rods, 300 units, rejected due to critical diameter defect, spawned NonConformanceReport and QuarantineContainment hold)
+    - Lot `LOT-2026-IQC-003` (Syringe Barrels, 1,000 units, skip-lot passed without inspection)
+  - 2 Certificates of Analysis per tenant:
+    - CoA for `LOT-2026-IQC-001` (Titanium alloy composition, accepted and verified)
+    - CoA for `LOT-2026-IQC-003` (Polypropylene resin assay, pending review)
+  - 1 Quality Return Authorization per tenant:
+    - RMA for rejected Lot `LOT-2026-IQC-002` (300 units, replacement requested, carrier dispatch tracking recorded)
 
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
@@ -561,6 +641,12 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - Because `@property` methods override annotations in class descriptors, `CapaInvestigation.actions_count` and `pending_actions_count` inspect `self.__dict__` first. When pre-annotated on the queryset, zero additional queries are generated in list tables.
 12. **Theme CSS Badges:**
     - Strictly use colour-named classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`. Never use semantic names like `badge-success`, `badge-danger`, `badge-purple`, or `badge-blue`.
+13. **Incoming Quality Control (IQC) Invariants (ISO 2859-1 / ANSI Z1.4):**
+    - `IncomingInspectionLot.calculate_sample_size(lot_qty, level)` deterministically derives sample code letters and inspection sample sizes.
+    - All measurement data ingestion must explicitly validate `math.isfinite(val)` to prevent `nan` or `inf` float poison from breaking Decimal model fields and SPC calculation routines.
+    - Automated QMS Spine Spawning: Marking usage decision as rejected (`rework`, `scrap`, `quarantine`, `return_to_vendor`) automatically generates a `NonConformanceReport` (`QNCR-`) and a `QuarantineContainment` (`QHLD-`) hold.
+    - Skip-Lot Logic: Consecutive accepted lots are tracked per supplier/item; reaching skip intervals allows lots to be usage-decided as `skip_lot_passed` without physical sampling.
+    - Scalar FK Representation: `QualityReturnAuthorization.__str__` uses scalar `self.inspection_lot_id` rather than chained FK properties to eliminate N+1 queries during audit logging.
 
 ---
 
@@ -612,6 +698,13 @@ LIVE_LINKS = {
         "quality:supplier_quality_scorecard_list",
         "quality:supplier_corrective_action_list",
         "quality:supplier_change_notification_list",
+    ],
+    "12.7": [
+        "quality:incoming_inspection_plan_list",
+        "quality:incoming_inspection_lot_list",
+        "quality:certificate_of_analysis_list",
+        "quality:iqc_spc_dashboard",
+        "quality:quality_return_authorization_list",
     ],
 }
 ```
