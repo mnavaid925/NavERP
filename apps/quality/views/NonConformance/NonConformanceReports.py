@@ -168,6 +168,12 @@ def non_conformance_report_edit(request, pk):
 @require_POST
 def non_conformance_report_delete(request, pk):
     ncr = quality_object(request, NonConformanceReport, pk=pk)
+    if ncr.is_closed:
+        messages.error(request, f"Cannot delete closed or voided Non-Conformance Report {ncr.number}.")
+        return redirect("quality:non_conformance_report_detail", pk=ncr.pk)
+    if ncr.containment_records.filter(status="active").exists():
+        messages.error(request, f"Cannot delete Non-Conformance Report {ncr.number} while active quarantine holds exist.")
+        return redirect("quality:non_conformance_report_detail", pk=ncr.pk)
     number = ncr.number
     write_audit_log(request.user, ncr, "delete", tenant=request.tenant)
     ncr.delete()
