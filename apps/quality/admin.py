@@ -20,6 +20,18 @@ from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
 from apps.quality.models.RiskManagement.RiskReviewRecords import RiskReviewRecord
+from apps.quality.models.IncomingQuality.CertificatesOfAnalysis import (
+    CertificateOfAnalysis,
+)
+from apps.quality.models.IncomingQuality.IncomingInspectionLots import (
+    IncomingInspectionLot,
+)
+from apps.quality.models.IncomingQuality.IncomingInspectionPlans import (
+    IncomingInspectionPlan,
+)
+from apps.quality.models.IncomingQuality.QualityReturnAuthorizations import (
+    QualityReturnAuthorization,
+)
 from apps.quality.models.SupplierQuality.SupplierChangeNotifications import (
     SupplierChangeNotification,
 )
@@ -507,6 +519,84 @@ class SupplierChangeNotificationAdmin(admin.ModelAdmin):
         "approved_by",
         "evaluated_by",
     )
+
+
+@admin.register(IncomingInspectionPlan)
+class IncomingInspectionPlanAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "item_code",
+        "item_name",
+        "revision",
+        "supplier",
+        "sampling_standard",
+        "inspection_frequency",
+        "status",
+        "tenant",
+    )
+    list_filter = ("sampling_standard", "inspection_frequency", "status", "tenant")
+    search_fields = ("number", "title", "item_code", "item_name", "supplier__name")
+    list_select_related = ("tenant", "supplier", "sop_document", "assigned_team")
+
+
+@admin.register(IncomingInspectionLot)
+class IncomingInspectionLotAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "lot_number",
+        "item_code",
+        "item_name",
+        "supplier",
+        "lot_quantity",
+        "sample_size",
+        "stage",
+        "usage_decision",
+        "spc_cpk",
+        "spc_out_of_control",
+        "tenant",
+    )
+    list_filter = ("stage", "usage_decision", "spc_out_of_control", "tenant")
+    search_fields = ("number", "lot_number", "item_code", "item_name", "supplier__name")
+    list_select_related = ("tenant", "supplier", "inspection_plan", "inspector", "decided_by")
+
+
+@admin.register(CertificateOfAnalysis)
+class CertificateOfAnalysisAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "certificate_number",
+        "item_code",
+        "lot_number",
+        "supplier",
+        "is_within_spec",
+        "variance_count",
+        "status",
+        "tenant",
+    )
+    list_filter = ("status", "is_within_spec", "tenant")
+    search_fields = ("number", "certificate_number", "item_code", "lot_number", "supplier__name")
+    list_select_related = ("tenant", "supplier", "inspection_lot", "inspection_plan", "verified_by")
+
+
+@admin.register(QualityReturnAuthorization)
+class QualityReturnAuthorizationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "vendor_rma_number",
+        "inspection_lot",
+        "supplier",
+        "return_reason",
+        "disposition_type",
+        "return_quantity",
+        "estimated_credit_value",
+        "status",
+        "tenant",
+    )
+    list_filter = ("status", "disposition_type", "return_reason", "tenant")
+    search_fields = ("number", "vendor_rma_number", "supplier__name", "carrier", "tracking_number")
+    list_select_related = ("tenant", "supplier", "inspection_lot", "assigned_coordinator")
+
 
 
 
