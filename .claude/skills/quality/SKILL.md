@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development including FDA 21 CFR § 820.30 / ISO 13485:2016 design projects, user needs, engineering specs, stage-gate design reviews with independent review sign-off, verification & validation protocols, Requirements Traceability Matrix (RTM), and audit-ready Design History File (DHF) dossiers; 12.3 Risk Management (ISO 14971 / FMEA) including risk management plans, hazard identification & FMEA risk assessments, risk control measures & mitigations, interactive FMEA risk matrix heatmaps, risk traceability matrices, and risk management reviews/reports; and 12.4 Corrective & Preventive Action (CAPA) compliant with ISO 13485:2016 §8.5.2/§8.5.3 and 21 CFR § 820.100 including issue detection & logging, 5 Whys & Ishikawa 6M root cause analysis, action plan development & verification, 4-tier aging Kanban tracking board, and delayed effectiveness reviews with defect recurrence guards). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1, 12.2, 12.3, or 12.4), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); and 12.6 Supplier & Vendor Quality Management (Approved Vendor List (AVL) Governance Directory, Supplier Qualification Audits [QSQA-], Multi-Dimensional Weighted Quality Scorecards [QSSC-], Supplier Corrective Action Requests (SCAR) [QSCA-], and Supplier Change Notifications (SCN/PCN) [QSCN-]). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.6), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -45,6 +45,20 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **CAPA Action Plans** [`QACT-`]: Targeted action items categorized across containment, corrective, and preventive action types. Enforces strict parent CAPA integrity, links directly to QMS engineering assets (`ControlledDocument`, `DocumentChangeOrder`, `DesignProject`), tracks completion dates and implementation evidence, and mandates independent verification by a qualified user other than the assignee.
   - **Effectiveness Reviews & Verification** [`QEFF-`]: Delayed statistical evaluation window (30/60/90 days post-implementation) verifying that underlying causes were permanently eliminated without introducing unintended consequences. Features evaluation methods (`statistical_sampling`, `trend_analysis`, `process_audit`, `customer_feedback`, `repeat_incident_check`), defect recurrence tracking, and a hard safety invariant preventing an "Effective" determination if defect recurrence is documented.
   - **CAPA Tracking & Escalation Board**: High-level visual Kanban workbench tracking open investigations across 5 operational workflow lanes (`Draft`, `Under Investigation`, `RCA in Progress`, `Action Implementation`, `Effectiveness Review`) and 4 aging tiers (`0-30`, `31-60`, `61-90`, `>90 days`), surfacing overdue alerts, escalation badges, and filtered CSV exports.
+
+- **12.5 Non-Conformance & Deviation Management**:
+  - **Non-Conformance Reports (NCR)** [`QNCR-`]: Cross-functional defect logging conforming to 21 CFR § 820.90 and ISO 13485:2016 Clause 8.3 across intake sources (`incoming_inspection`, `in_process`, `final_qa`, `warehouse_storage`, `customer_return`, `internal_audit`, `supplier_notification`), severity triage, immediate physical containment, financial loss estimation, and disposition linking.
+  - **Quarantine & Containment Holds** [`QHLD-`]: Red-tag physical and logical quarantine holds preventing unintended release, tracking segregated storage locations, initial vs. released quantity accounting, tampering seals, and authorized quality release workflows.
+  - **Material Review Board (MRB) Dispositions** [`QMRB-`]: Formal tripartite MRB disposition authority (`rework`, `repair`, `scrap`, `return_to_vendor`, `use_as_is`, `regrade`) with cost accounting (scrap, rework labor, vendor chargeback) and multi-signature engineering/quality approval.
+  - **Process Deviations & Concessions** [`QDEV-`]: Planned and unplanned departure authorization with risk classification (`minor`, `moderate`, `critical`), batch/unit quantity caps, temporal validity windows, and regulatory customer notification flags.
+  - **NCR Analytics & Quality Cost Workbench**: Enterprise analytics command center with interactive trend charting, Pareto root-cause analysis, defect distribution, scrap/rework cost telemetry, and filtered CSV exports.
+
+- **12.6 Supplier & Vendor Quality Management**:
+  - **Approved Vendor List (AVL) Governance Directory**: Centralized governance command center across all active suppliers, tracking qualification status, risk tiers, audit scores, dock-to-stock certifications, receiving inspection protocols, and open SCAR/SCN alerts.
+  - **Supplier Qualification Audits** [`QSQA-`]: Comprehensive on-site and desktop audit assessments satisfying ISO 13485:2016 Clause 7.4. Criticality tiers (`critical`, `major`, `minor`, `indirect`), audit scoring (0-100), qualification status state machine (`under_evaluation` -> `approved` / `conditional` / `suspended` / `disqualified`), dock-to-stock eligibility authorizations, CoA requirements, and quality agreement linking (`ControlledDocument`).
+  - **Supplier Quality Scorecards** [`QSSC-`]: Multi-dimensional performance scorecards with automated 5-dimension weighted composite score calculation: Lot Acceptance Rate (30%), Defect PPM (25%), SCAR Responsiveness (20%), Audit Compliance (15%), and Documentation/CoA (10%), generating letter grades `A` (>=90), `B` (80-89.9), `C` (70-79.9), `D` (<70), with audited manual override capability.
+  - **Supplier Corrective Action Requests (SCAR)** [`QSCA-`]: Customer-to-vendor CAPA lifecycle requiring 24-48h emergency containment, 8D problem solving, vendor 5 Whys root cause analysis, corrective/preventive plans, and independent effectiveness verification.
+  - **Supplier Change Notifications (SCN/PCN)** [`QSCN-`]: Vendor-initiated material and process modifications, Form-Fit-Function (FFF) evaluation, risk triage, re-qualification triggers, and formal CCB/quality disposition sign-off.
 
 ---
 
@@ -276,6 +290,32 @@ apps/quality/
 - **Key Fields:** `number`, `capa` (`CapaInvestigation`), `review_criteria`, `verification_method` (`statistical_sampling`, `trend_analysis`, `process_audit`, `customer_feedback`, `repeat_incident_check`), `planned_review_date`, `actual_review_date`, `evaluator` (`accounts.User`), `status` (`scheduled`, `in_progress`, `completed`, `cancelled`), `outcome` (`pending`, `effective`, `partially_effective`, `ineffective`), `results_summary`, `recurrence_observed`, `recurrence_details`, `follow_up_capa_required`, `formal_signature` (`ElectronicSignatureRecord`).
 - **Properties & Methods:** `verification_method_badge`, `status_badge`, `outcome_badge`, `is_effective`, `is_review_overdue`.
 - **Indexes:** `idx_qeff_ten_capa_stat`, `idx_qeff_ten_method`, `idx_qeff_ten_outcome`, `idx_qeff_ten_planned`, `idx_qeff_ten_created`.
+
+### Sub-module 12.6 Entities
+
+#### 17. `SupplierQualificationAudit` (Prefix: `QSQA-`)
+- **Table:** `quality_supplier_qualification_audit`
+- **Key Fields:** `number`, `supplier` (`core.Party`), `assessment_type` (`initial_qualification`, `periodic_reaudit`, `for_cause`, `certification_review`, `quality_agreement_review`), `criticality_tier` (`critical`, `major`, `minor`, `indirect`), `audit_method` (`on_site`, `desktop_survey`, `third_party_iso`, `virtual`), `qualification_status` (`under_evaluation`, `approved`, `conditional`, `suspended`, `disqualified`), `audit_result` (`pending`, `passed`, `passed_with_capa`, `failed`, `exempt`), `score` (0-100), `audit_date`, `next_audit_due_date`, `lead_auditor` (`accounts.User`), `quality_agreement` (`ControlledDocument`), `dock_to_stock_eligible`, `requires_coa`, `skip_lot_allowed`, `critical_findings_count`, `major_findings_count`, `minor_findings_count`, `scope_of_authorization`, `findings_summary`.
+- **Properties & Methods:** `status_css`, `tier_css`, `result_css`, `is_expired`, `is_audit_overdue`, `total_findings`.
+- **Indexes:** `idx_qsqa_ten_status`, `idx_qsqa_ten_tier`, `idx_qsqa_ten_supplier`, `idx_qsqa_ten_next_due`, `idx_qsqa_ten_created`.
+
+#### 18. `SupplierQualityScorecard` (Prefix: `QSSC-`)
+- **Table:** `quality_supplier_scorecard`
+- **Key Fields:** `number`, `supplier` (`core.Party`), `cadence` (`monthly`, `quarterly`, `semi_annual`, `annual`), `period_start`, `period_end`, `status` (`draft`, `published`, `archived`), `overall_score` (0-100), `grade` (`A`, `B`, `C`, `D`), `lot_acceptance_rate_score` (30% weight), `defect_ppm_score` (25% weight), `scar_responsiveness_score` (20% weight), `audit_compliance_score` (15% weight), `documentation_coa_score` (10% weight), `total_lots_received`, `lots_accepted`, `lots_rejected`, `total_units_received`, `defective_units_count`, `is_manual_override`, `override_justification`, `evaluated_by` (`accounts.User`), `executive_summary`.
+- **Properties & Methods:** `status_css`, `grade_css`, `cadence_css`, `is_expired`, `is_action_required`, `calculate_composite_score()`, `determine_grade()`.
+- **Indexes:** `idx_qssc_ten_supplier`, `idx_qssc_ten_status`, `idx_qssc_ten_grade`, `idx_qssc_ten_period`, `idx_qssc_ten_created`, `idx_qssc_ten_pend_created`.
+
+#### 19. `SupplierCorrectiveAction` (Prefix: `QSCA-`)
+- **Table:** `quality_supplier_corrective_action`
+- **Key Fields:** `number`, `supplier` (`core.Party`), `title`, `problem_description`, `severity` (`critical`, `major`, `minor`), `status` (`issued`, `containment_acknowledged`, `rca_submitted`, `ca_plan_approved`, `implementation_verified`, `effectiveness_verified`, `closed`, `cancelled`), `issued_date`, `response_due_date`, `containment_required`, `containment_due_date`, `containment_actions`, `root_cause_category`, `vendor_root_cause_analysis`, `corrective_action_plan`, `preventive_action_plan`, `is_effective`, `effectiveness_review_notes`, `closed_at`, `purchase_order` (`scm.PurchaseOrder`), `non_conformance` (`scm.NonConformance`), `qualification_audit` (`SupplierQualificationAudit`), `internal_capa` (`CapaInvestigation`), `issued_by` (`accounts.User`), `verified_by` (`accounts.User`).
+- **Properties & Methods:** `severity_css`, `status_css`, `category_css`, `is_overdue`, `days_open`.
+- **Indexes:** `idx_qsca_ten_status`, `idx_qsca_ten_sev`, `idx_qsca_ten_supp`, `idx_qsca_ten_resp_due`, `idx_qsca_ten_created`.
+
+#### 20. `SupplierChangeNotification` (Prefix: `QSCN-`)
+- **Table:** `quality_supplier_change_notification`
+- **Key Fields:** `number`, `supplier` (`core.Party`), `title`, `supplier_scn_number`, `change_category` (`material`, `process`, `facility_location`, `tooling`, `sub_tier_supplier`, `packaging_labeling`, `specification`, `test_method`, `software_firmware`, `other`), `risk_level` (`level_1_minor`, `level_2_moderate`, `level_3_major`), `status` (`submitted`, `initial_triage`, `technical_evaluation`, `sample_validation`, `qualification_pending`, `approved`, `rejected`, `withdrawn`), `disposition` (`pending`, `approved`, `approved_with_conditions`, `rejected`), `disposition_date`, `approved_by` (`accounts.User`), `proposed_effective_date`, `affects_form_fit_function`, `requires_requalification`, `requires_regulatory_filing`, `description`, `justification`, `impact_assessment_notes`, `design_project` (`DesignProject`), `requalification_audit` (`SupplierQualificationAudit`), `evaluated_by` (`accounts.User`).
+- **Properties & Methods:** `category_css`, `risk_css`, `status_css`, `disposition_css`, `has_critical_impact`, `is_high_risk`.
+- **Indexes:** `idx_qscn_ten_status`, `idx_qscn_ten_risk`, `idx_qscn_ten_cat`, `idx_qscn_ten_disp`, `idx_qscn_ten_supp`, `idx_qscn_ten_created`.
 
 
 ---
@@ -558,6 +598,20 @@ LIVE_LINKS = {
         "quality:capa_action_list",
         "quality:capa_tracking_board",
         "quality:capa_effectiveness_review_list",
+    ],
+    "12.5": [
+        "quality:non_conformance_report_list",
+        "quality:quarantine_containment_list",
+        "quality:mrb_disposition_list",
+        "quality:process_deviation_list",
+        "quality:ncr_analytics_dashboard",
+    ],
+    "12.6": [
+        "quality:avl_directory",
+        "quality:supplier_qualification_audit_list",
+        "quality:supplier_quality_scorecard_list",
+        "quality:supplier_corrective_action_list",
+        "quality:supplier_change_notification_list",
     ],
 }
 ```
