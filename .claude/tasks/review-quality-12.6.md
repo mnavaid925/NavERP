@@ -77,7 +77,7 @@
   - **Location**: `templates/quality/supplierquality/supplier_qualification_audit/detail.html`
   - **Fix**: Add SCNs sub-table below SCARs sub-table.
 
-- [ ] **M2**: Missing filter bar dropdowns in list templates.
+- [x] **M2**: Missing filter bar dropdowns in list templates.
   - **Locations**:
     - `templates/quality/supplierquality/supplier_qualification_audit/list.html` (add `result` dropdown)
     - `templates/quality/supplierquality/supplier_quality_scorecard/list.html` (add `status` dropdown)
