@@ -7,6 +7,203 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 12.5: Non-Conformance & Deviation Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.5.md` (2026-11-18)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), and 12.4 (CAPA).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0008_capaaction_idx_qact_ten_dept_and_more.py`, so **12.5 claims `0009_...`** (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QNCR`** (`NonConformanceReport`), **`QCNT`** (`QuarantineContainment`), **`QMRB`** (`MrbDisposition`), **`QDEV`** (`ProcessDeviation`).
+> Plan written from `.claude/tasks/research-quality-12.5.md` (Phase 1) and `NavERP.md` (`### 12.5 Non-Conformance & Deviation Management`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/NonConformance/<Entity>.py` (`NonConformanceReports.py`, `QuarantineContainments.py`, `MrbDispositions.py`, `ProcessDeviations.py`, plus dedicated analytics module `NcrAnalytics.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/nonconformance/{nonconformancereport,quarantinecontainment,mrbdisposition,processdeviation}/{list,detail,form}.html` + `templates/quality/nonconformance/ncr_analytics_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QNCR`** (`NonConformanceReport`), **`QCNT`** (`QuarantineContainment`), **`QMRB`** (`MrbDisposition`), **`QDEV`** (`ProcessDeviation`), all 4 model classes, and all URL stems (`non_conformance_report_*`, `quarantine_containment_*`, `mrb_disposition_*`, `process_deviation_*`, `ncr_analytics_dashboard*`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `core.Party` (`apps/core/models/Party.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - Module 12 siblings (12.1, 12.3, 12.4): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`), `quality.RiskAssessment` (`apps/quality/models/RiskManagement/RiskAssessments.py`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`, `Location`): Text fields `affected_item_code`, `affected_item_name`, `lot_serial_numbers`, `quarantine_location` with future migration path.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`core.OrgUnit`, `core.Party`, `accounts.User`, `quality.ControlledDocument`, `quality.CapaInvestigation`, `quality.RiskAssessment`, `NonConformanceReport`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Regulatory Alignment (ISO 9001:2015 §8.7, ISO 13485:2016 §8.3, 21 CFR 820.90 / 820.100 QMSR)**:
+  - Immediate Quarantine & Containment isolation to prevent unintended use, movement, or shipment of non-conforming items.
+  - Multi-signature Material Review Board (MRB) dispositions (Scrap, Rework, Repair, Use-As-Is/Concession, Return to Vendor, Regrade) with technical rationale.
+  - Controlled Quarantine Release workflows ensuring release criteria verification before lifting hold.
+  - Planned vs. unplanned process deviations with time and batch expiration controls.
+  - Direct escalation trigger into `quality.CapaInvestigation` for high-severity or recurring non-conformances.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `closed_at`, `hold_date`, `release_date`), auto-numbers (`number`), and computed values MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_overdue`, `days_open`, `containment_active`, `open_containments_count`, `mrb_dispositions_count`, `has_capa`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `NonConformanceReport` (`QNCR-`)
+- [ ] **File**: `apps/quality/models/NonConformance/NonConformanceReports.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QNCR"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `description`: `TextField(help_text="Detailed description of the non-conformance event or defect observed")`
+  - `source_type`: `CharField(max_length=24, choices=SOURCE_TYPE_CHOICES, default="in_process", db_index=True)` — `"incoming"` (8), `"in_process"` (10), `"final_inspection"` (16), `"customer_return"` (15), `"internal_audit"` (14), `"supplier"` (8) (longest: 16 <= 24)
+  - `category`: `CharField(max_length=24, choices=CATEGORY_CHOICES, default="material", db_index=True)` — `"material"` (8), `"process"` (7), `"product"` (7), `"supplier"` (8), `"facility"` (8), `"documentation"` (13) (longest: 13 <= 24)
+  - `severity`: `CharField(max_length=16, choices=SEVERITY_CHOICES, default="major", db_index=True)` — `"minor"` (5), `"major"` (5), `"critical"` (8) (longest: 8 <= 16)
+  - `status`: `CharField(max_length=32, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"containment_active"` (18), `"under_investigation"` (19), `"mrb_review"` (10), `"disposition_approved"` (20), `"rework_in_progress"` (18), `"closed"` (6), `"voided"` (6) (longest: 20 <= 32)
+  - `defect_code`: `CharField(max_length=64, blank=True, help_text="Standardized defect or error code (e.g. DIM-OOS, CONTAM, PKG-FAIL)")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="non_conformance_reports")`
+  - `initiator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="initiated_ncrs")`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_ncrs")`
+  - `supplier_party`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_ncrs", help_text="Associated vendor or external supplier")`
+  - `affected_item_code`: `CharField(max_length=100, blank=True, help_text="Item SKU or part number")`
+  - `affected_item_name`: `CharField(max_length=255, blank=True, help_text="Item name or description")`
+  - `lot_serial_numbers`: `CharField(max_length=255, blank=True, help_text="Batch, lot, or serial numbers affected")`
+  - `quantity_inspected`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `quantity_nonconforming`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `unit_of_measure`: `CharField(max_length=32, default="EA", blank=True)`
+  - `estimated_financial_loss`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `immediate_containment_required`: `BooleanField(default=True, help_text="Requires physical quarantine or stop-shipment hold")`
+  - `capa_required`: `BooleanField(default=False, help_text="Critical or recurring defect requiring CAPA escalation")`
+  - `capa_investigation`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="originating_ncrs", help_text="Linked enterprise CAPA investigation")`
+  - `target_resolution_date`: `DateField(null=True, blank=True)`
+  - `closed_at`: `DateTimeField(null=True, blank=True)`
+  - `closed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="closed_ncrs")`
+  - `closure_notes`: `TextField(blank=True)`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qncr_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qncr_ten_status")` (19)
+  - `Index(fields=["tenant", "severity"], name="idx_qncr_ten_severity")` (21)
+  - `Index(fields=["tenant", "source_type"], name="idx_qncr_ten_src_type")` (21)
+  - `Index(fields=["tenant", "category"], name="idx_qncr_ten_category")` (21)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qncr_ten_created")` (20)
+
+### 2. `QuarantineContainment` (`QCNT-`)
+- [ ] **File**: `apps/quality/models/NonConformance/QuarantineContainments.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCNT"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `ncr`: `ForeignKey("quality.NonConformanceReport", on_delete=models.CASCADE, related_name="containment_records")`
+  - `title`: `CharField(max_length=255)`
+  - `hold_type`: `CharField(max_length=24, choices=HOLD_TYPE_CHOICES, default="physical_quarantine", db_index=True)` — `"physical_quarantine"` (19), `"digital_hold"` (12), `"stop_shipment"` (13), `"stop_production"` (15) (longest: 19 <= 24)
+  - `quarantine_location`: `CharField(max_length=150, help_text="Quarantine storage location or holding bin")`
+  - `red_tag_number`: `CharField(max_length=64, blank=True, help_text="Physical red tag identifier attached to items")`
+  - `quantity_on_hold`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `unit_of_measure`: `CharField(max_length=32, default="EA", blank=True)`
+  - `hold_date`: `DateField(default=timezone.now)`
+  - `hold_applied_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="applied_quarantines")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="active", db_index=True)` — `"active"` (6), `"partially_released"` (18), `"released"` (8), `"disposed"` (8) (longest: 18 <= 24)
+  - `release_criteria`: `TextField(blank=True, help_text="Conditions required before lifting quarantine")`
+  - `released_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `release_date`: `DateField(null=True, blank=True)`
+  - `released_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="released_quarantines")`
+  - `disposition_notes`: `TextField(blank=True)`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcnt_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qcnt_ten_status")` (19)
+  - `Index(fields=["tenant", "hold_type"], name="idx_qcnt_ten_hold_type")` (22)
+  - `Index(fields=["tenant", "ncr"], name="idx_qcnt_ten_ncr")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcnt_ten_created")` (20)
+
+### 3. `MrbDisposition` (`QMRB-`)
+- [ ] **File**: `apps/quality/models/NonConformance/MrbDispositions.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMRB"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `ncr`: `ForeignKey("quality.NonConformanceReport", on_delete=models.CASCADE, related_name="mrb_dispositions")`
+  - `title`: `CharField(max_length=255)`
+  - `disposition_decision`: `CharField(max_length=24, choices=DISPOSITION_DECISION_CHOICES, default="rework", db_index=True)` — `"scrap"` (5), `"rework"` (6), `"repair"` (6), `"use_as_is"` (9), `"return_to_vendor"` (16), `"regrade"` (7) (longest: 16 <= 24)
+  - `technical_justification`: `TextField(help_text="Engineering and quality rationale for the chosen disposition")`
+  - `concession_rationale`: `TextField(blank=True, help_text="Safety and efficacy rationale if Use-As-Is concession is granted")`
+  - `rework_instructions`: `TextField(blank=True, help_text="Detailed step-by-step rework or repair instructions")`
+  - `rework_assignee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_reworks")`
+  - `rework_completed_date`: `DateField(null=True, blank=True)`
+  - `reinspection_required`: `BooleanField(default=True, help_text="Requires quality reinspection after rework")`
+  - `reinspection_criteria`: `TextField(blank=True, help_text="Acceptance test criteria for post-rework inspection")`
+  - `reinspection_passed`: `BooleanField(null=True, blank=True, help_text="Outcome of reinspection (None=pending, True=passed, False=failed)")`
+  - `reinspection_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="reinspected_mrb_items")`
+  - `scrap_cost`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `rework_labor_cost`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `vendor_chargeback_cost`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `total_cost_impact`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `mrb_chair`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="chaired_mrb_dispositions")`
+  - `quality_approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_approved_mrbs")`
+  - `engineering_approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="engineering_approved_mrbs")`
+  - `operations_approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="operations_approved_mrbs")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="under_review", db_index=True)` — `"draft"` (5), `"under_review"` (12), `"approved"` (8), `"rejected"` (8), `"executed"` (8) (longest: 12 <= 24)
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qmrb_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qmrb_ten_status")` (19)
+  - `Index(fields=["tenant", "disposition_decision"], name="idx_qmrb_ten_disp_dec")` (21)
+  - `Index(fields=["tenant", "ncr"], name="idx_qmrb_ten_ncr")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qmrb_ten_created")` (20)
+
+### 4. `ProcessDeviation` (`QDEV-`)
+- [ ] **File**: `apps/quality/models/NonConformance/ProcessDeviations.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QDEV"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `deviation_type`: `CharField(max_length=16, choices=DEVIATION_TYPE_CHOICES, default="unplanned", db_index=True)` — `"planned"` (7), `"unplanned"` (9) (longest: 9 <= 16)
+  - `category`: `CharField(max_length=32, choices=CATEGORY_CHOICES, default="process_parameter", db_index=True)` — `"process_parameter"` (17), `"equipment_substitution"` (22), `"material_substitution"` (21), `"procedural_exemption"` (20), `"environmental"` (13) (longest: 22 <= 32)
+  - `ncr`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="process_deviations", help_text="Associated non-conformance if deviation was unplanned")`
+  - `controlled_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="process_deviations", help_text="Operating procedure or work instruction being temporarily deviated from")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="process_deviations")`
+  - `requested_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="requested_deviations")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_deviations")`
+  - `risk_impact_level`: `CharField(max_length=16, choices=RISK_IMPACT_CHOICES, default="minor", db_index=True)` — `"negligible"` (10), `"minor"` (5), `"moderate"` (8), `"critical"` (8) (longest: 10 <= 16)
+  - `quality_impact_assessment`: `TextField(help_text="Detailed assessment of impact on product safety, efficacy, validation, and stability")`
+  - `affected_lots_summary`: `TextField(blank=True, help_text="List of batches, lots, or serial runs produced under this deviation")`
+  - `customer_notification_required`: `BooleanField(default=False, help_text="Customer notification or concession approval required")`
+  - `customer_concession_obtained`: `BooleanField(default=False)`
+  - `regulatory_reporting_required`: `BooleanField(default=False, help_text="Regulatory health authority notification required")`
+  - `regulatory_authority_notified`: `BooleanField(default=False)`
+  - `valid_from`: `DateField(null=True, blank=True)`
+  - `valid_until`: `DateField(null=True, blank=True, help_text="Mandatory expiration date for temporary deviation")`
+  - `max_batches_permitted`: `PositiveIntegerField(default=1, help_text="Maximum number of batches/lots permitted under this deviation")`
+  - `batches_produced_count`: `PositiveIntegerField(default=0, help_text="Actual number of batches produced to date")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"under_assessment"` (16), `"approved"` (8), `"active"` (6), `"expired"` (7), `"closed"` (6), `"cancelled"` (9) (longest: 16 <= 24)
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qdev_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qdev_ten_status")` (19)
+  - `Index(fields=["tenant", "deviation_type"], name="idx_qdev_ten_dev_type")` (21)
+  - `Index(fields=["tenant", "valid_until"], name="idx_qdev_ten_valid_until")` (24)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qdev_ten_created")` (20)
+
+---
+
+## Execution Steps
+
+- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.5.md`)
+- [ ] **Step 2: Build Entity by Entity**
+  - [ ] Entity 1: `NonConformanceReport` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 2: `QuarantineContainment` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 3: `MrbDisposition` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 4: `ProcessDeviation` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Analytics & Trending View: `NcrAnalytics.py` + `templates/quality/nonconformance/ncr_analytics_dashboard.html`
+- [ ] **Step 3: Integrate**
+  - [ ] Update `apps/quality/models/__init__.py` re-exports
+  - [ ] Update `apps/quality/forms/__init__.py` re-exports
+  - [ ] Update `apps/quality/views/__init__.py` re-exports
+  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [ ] Register 4 models in `apps/quality/admin.py`
+  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data
+  - [ ] Wire `LIVE_LINKS["12.5"]` in `apps/core/navigation.py`
+  - [ ] Run `makemigrations quality` -> `0009_...`
+  - [ ] Run `migrate quality`
+  - [ ] Run `seed_quality` twice (verify idempotency)
+  - [ ] Run `manage.py check`
+- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification)
+- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.5.md`
+- [ ] **Step 6: Code Fixer** -> burn down findings
+- [ ] **Step 7: Automated Tests** -> `test_nonconformance_models.py`, `test_nonconformance_forms.py`, `test_nonconformance_views.py`, `test_nonconformance_security.py` -> 100% green
+- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [ ] **Step 9: Close-out & Gaps Declarations**
+
+---
 # Sub-module 12.4: Corrective & Preventive Action (CAPA) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.4.md` (2026-11-17)
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control & Management), 12.2 (Design Controls & Development), and 12.3 (Risk Management / ISO 14971).
