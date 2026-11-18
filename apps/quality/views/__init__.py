@@ -121,6 +121,38 @@ from apps.quality.views.DocumentControl.ElectronicSignatures import (
     electronic_signature_list,
     electronic_signature_verify,
 )
+from apps.quality.views.NonConformance.MrbDispositions import (
+    mrb_disposition_create,
+    mrb_disposition_delete,
+    mrb_disposition_detail,
+    mrb_disposition_edit,
+    mrb_disposition_list,
+)
+from apps.quality.views.NonConformance.NcrAnalytics import (
+    ncr_analytics_dashboard,
+)
+from apps.quality.views.NonConformance.NonConformanceReports import (
+    non_conformance_report_create,
+    non_conformance_report_delete,
+    non_conformance_report_detail,
+    non_conformance_report_edit,
+    non_conformance_report_export_csv,
+    non_conformance_report_list,
+)
+from apps.quality.views.NonConformance.ProcessDeviations import (
+    process_deviation_create,
+    process_deviation_delete,
+    process_deviation_detail,
+    process_deviation_edit,
+    process_deviation_list,
+)
+from apps.quality.views.NonConformance.QuarantineContainments import (
+    quarantine_containment_create,
+    quarantine_containment_delete,
+    quarantine_containment_detail,
+    quarantine_containment_edit,
+    quarantine_containment_list,
+)
 from apps.quality.views.RiskManagement.FmeaMatrix import (
     fmea_matrix,
     fmea_matrix_export,
@@ -295,5 +327,27 @@ __all__ = [
     "capa_effectiveness_review_export",
     "capa_tracking_board",
     "capa_tracking_board_export",
+    "non_conformance_report_list",
+    "non_conformance_report_detail",
+    "non_conformance_report_create",
+    "non_conformance_report_edit",
+    "non_conformance_report_delete",
+    "non_conformance_report_export_csv",
+    "quarantine_containment_list",
+    "quarantine_containment_detail",
+    "quarantine_containment_create",
+    "quarantine_containment_edit",
+    "quarantine_containment_delete",
+    "mrb_disposition_list",
+    "mrb_disposition_detail",
+    "mrb_disposition_create",
+    "mrb_disposition_edit",
+    "mrb_disposition_delete",
+    "process_deviation_list",
+    "process_deviation_detail",
+    "process_deviation_create",
+    "process_deviation_edit",
+    "process_deviation_delete",
+    "ncr_analytics_dashboard",
 ]
 
