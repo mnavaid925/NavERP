@@ -79,7 +79,7 @@ class QualityReturnAuthorizationForm(TenantUniqueMixin, TenantModelForm):
             self.fields["supplier"].queryset = Party.objects.filter(
                 tenant=self.tenant,
                 roles__role__in=("supplier", "vendor"),
-            ).order_by("name")
+            ).only("id", "name").order_by("name").distinct()
             self.fields["assigned_coordinator"].queryset = User.objects.filter(
                 tenant=self.tenant, is_active=True
             ).order_by("username")
