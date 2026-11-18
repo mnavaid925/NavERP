@@ -70,6 +70,21 @@ from apps.quality.urls.RiskManagement.RiskManagementPlans import (
 from apps.quality.urls.RiskManagement.RiskReviewRecords import (
     urlpatterns as risk_review_records_urls,
 )
+from apps.quality.urls.SupplierQuality.SupplierChangeNotifications import (
+    urlpatterns as supplier_change_notifications_urls,
+)
+from apps.quality.urls.SupplierQuality.SupplierCorrectiveActions import (
+    urlpatterns as supplier_corrective_actions_urls,
+)
+from apps.quality.urls.SupplierQuality.SupplierQualificationAudits import (
+    urlpatterns as supplier_qualification_audits_urls,
+)
+from apps.quality.urls.SupplierQuality.SupplierQualityDirectory import (
+    urlpatterns as supplier_quality_directory_urls,
+)
+from apps.quality.urls.SupplierQuality.SupplierQualityScorecards import (
+    urlpatterns as supplier_quality_scorecards_urls,
+)
 
 app_name = "quality"
 
@@ -98,5 +113,10 @@ urlpatterns = (
     + mrb_dispositions_urls
     + process_deviations_urls
     + ncr_analytics_urls
+    + supplier_qualification_audits_urls
+    + supplier_quality_scorecards_urls
+    + supplier_corrective_actions_urls
+    + supplier_change_notifications_urls
+    + supplier_quality_directory_urls
 )
 
