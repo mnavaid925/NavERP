@@ -107,7 +107,7 @@ class FirstArticleInspectionForm(TenantUniqueMixin, TenantModelForm):
         conforming_chars = cleaned_data.get("characteristics_conforming") or 0
         oos_chars = cleaned_data.get("characteristics_out_of_spec") or 0
 
-        if (conforming_chars + oos_chars) > total_chars and total_chars > 0:
+        if (conforming_chars + oos_chars) > total_chars:
             self.add_error(
                 "characteristics_conforming",
                 "Total conforming plus out-of-spec characteristics cannot exceed total inspected characteristics."
