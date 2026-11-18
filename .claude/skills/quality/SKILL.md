@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management (Approved Vendor List (AVL) Governance Directory, Supplier Qualification Audits [QSQA-], Multi-Dimensional Weighted Quality Scorecards [QSSC-], Supplier Corrective Action Requests (SCAR) [QSCA-], and Supplier Change Notifications (SCN/PCN) [QSCN-]); and 12.7 Incoming Quality Control (IQC) — Incoming Inspection Plans [QIIP-], Inspection Lots & Sampling [QIIL-], Certificate of Analysis Management [QCOA-], Quality Return Authorizations (RMA) [QRMA-], and SPC Analytics Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.7), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management (Approved Vendor List (AVL) Governance Directory, Supplier Qualification Audits [QSQA-], Multi-Dimensional Weighted Quality Scorecards [QSSC-], Supplier Corrective Action Requests (SCAR) [QSCA-], and Supplier Change Notifications (SCN/PCN) [QSCN-]); 12.7 Incoming Quality Control (IQC) — Incoming Inspection Plans [QIIP-], Inspection Lots & Sampling [QIIL-], Certificate of Analysis Management [QCOA-], Quality Return Authorizations (RMA) [QRMA-], and SPC Analytics Dashboard; and 12.8 In-Process Quality Control (IPQC) — In-Process Inspections [QIPQ-], First Article Inspection (FAI) [QFAI-], Process Parameter Monitoring & SPC Excursions [QPAR-], and Layered Process Audits (LPA) [QLPA-]). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.8), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -67,6 +67,12 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Quality Return Authorizations (RMA)** [`QRMA-`]: Formal vendor return merchandise authorizations and debit memos. Captures return reasons (`defective_material`, `out_of_spec`, `coa_failed`, `wrong_material`, `damaged_in_transit`, `over_shipment`), return quantities, disposition tracking (`replacement_requested`, `credit_memo_requested`, `rework_at_vendor`, `scrap_on_site`), carrier tracking numbers, and replacement receipt tracking.
   - **Inspection Data Capture & SPC Analytics Dashboard**: Interactive statistical process control dashboard displaying total lots inspected, lot acceptance rate (%), average process capability index ($C_{pk}$), out-of-control alert monitoring, defect Pareto distribution, and top supplier quality ranking leaderboard.
 
+- **12.8 In-Process Quality Control (IPQC)**:
+  - **In-Process Inspections** [`QIPQ-`]: Production floor inspections across execution stages (`first_piece`, `in_process_patrol`, `setup_verification`, `last_off`, `shift_handover`, `sampling`), inspection types (`attribute_go_no_go`, `variable_dimensional`, `visual_cosmetic`, `functional_test`), sample size, defect counts (critical, major, minor), defect categories (`dimensional`, `surface_defect`, `assembly_error`, `contamination`, `labeling_packaging`, `functional_failure`), pass/fail results (`pass`, `fail`, `conditional_pass`), disposition (`accept_to_run`, `rework_in_station`, `scrap_lot`, `quarantine_hold`, `escalate_to_ncr`), automated NCR spawning (`quality:non_conformance_report_detail`), and operator/inspector verification.
+  - **First Article Inspection (FAI)** [`QFAI-`]: AS9102 Rev C and ISO 9001 compliant First Article Inspection protocols across setup reasons (`new_part_introduction`, `drawing_revision`, `machine_tooling_change`, `process_parameter_shift`, `material_lot_change`, `relocation_facility`, `extended_downtime`), AS9102 Form 1/2/3 characteristic verification (`characteristics_json`), drawing revision tracking, customer approval gating, and production authorization release state machine (`draft` -> `submitted` -> `in_review` -> `approved` / `rejected` -> `released_to_production`).
+  - **Process Parameter Logs** [`QPAR-`]: Machine & environmental telemetry logs across parameter types (`temperature`, `pressure`, `speed_feed`, `humidity`, `dwell_time`, `torque_force`, `voltage_current`, `cycle_time`, `concentration_ph`), target nominal, USL/LSL tolerances, measured values, excursion flags (`in_control`, `warning_trend`, `out_of_control_excursion`), automated SPC excursion detection via standard deviations and control limits, immediate containment actions, and production order/work center tracking.
+  - **Layered Process Audits (LPA)** [`QLPA-`]: CQI-8 compliant multi-tier hierarchical audit checklists across audit levels (`layer_1_shift_supervisor`, `layer_2_area_manager`, `layer_3_plant_executive`, `layer_4_specialist_safety_quality`), manufacturing work center and shift evaluations, question compliance scoring, automated compliance score calculation ($0-100\%$), findings count, and audit closure sign-off.
+
 ---
 
 ## App Layout & Architecture
@@ -97,6 +103,26 @@ apps/quality/
       RootCauseAnalyses.py                    <- RootCauseAnalysis [QRCA-]
       CapaActions.py                          <- CapaAction [QACT-]
       CapaEffectivenessReviews.py             <- CapaEffectivenessReview [QEFF-]
+    NonConformance/                           <- Sub-module 12.5 models
+      NonConformanceReports.py                <- NonConformanceReport [QNCR-]
+      QuarantineContainments.py               <- QuarantineContainment [QHLD-]
+      MrbDispositions.py                      <- MrbDisposition [QMRB-]
+      ProcessDeviations.py                    <- ProcessDeviation [QDEV-]
+    SupplierQuality/                          <- Sub-module 12.6 models
+      SupplierQualificationAudits.py          <- SupplierQualificationAudit [QSQA-]
+      SupplierQualityScorecards.py            <- SupplierQualityScorecard [QSSC-]
+      SupplierCorrectiveActions.py            <- SupplierCorrectiveAction [QSCA-]
+      SupplierChangeNotifications.py          <- SupplierChangeNotification [QSCN-]
+    IncomingQuality/                          <- Sub-module 12.7 models
+      IncomingInspectionPlans.py              <- IncomingInspectionPlan [QIIP-]
+      IncomingInspectionLots.py               <- IncomingInspectionLot [QIIL-]
+      CertificatesOfAnalysis.py               <- CertificateOfAnalysis [QCOA-]
+      QualityReturnAuthorizations.py          <- QualityReturnAuthorization [QRMA-]
+    InProcessQuality/                         <- Sub-module 12.8 models
+      InProcessInspections.py                 <- InProcessInspection [QIPQ-]
+      FirstArticleInspections.py              <- FirstArticleInspection [QFAI-]
+      ProcessParameterLogs.py                 <- ProcessParameterLog [QPAR-]
+      LayeredProcessAudits.py                 <- LayeredProcessAudit [QLPA-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -120,6 +146,26 @@ apps/quality/
       RootCauseAnalyses.py                    <- RootCauseAnalysisForm (with parent CAPA immutability check)
       CapaActions.py                          <- CapaActionForm (with cross-CAPA root cause verification)
       CapaEffectivenessReviews.py             <- CapaEffectivenessReviewForm (with recurrence safety invariant)
+    NonConformance/                           <- Sub-module 12.5 forms
+      NonConformanceReports.py                <- NonConformanceReportForm
+      QuarantineContainments.py               <- QuarantineContainmentForm
+      MrbDispositions.py                      <- MrbDispositionForm
+      ProcessDeviations.py                    <- ProcessDeviationForm
+    SupplierQuality/                          <- Sub-module 12.6 forms
+      SupplierQualificationAudits.py          <- SupplierQualificationAuditForm
+      SupplierQualityScorecards.py            <- SupplierQualityScorecardForm
+      SupplierCorrectiveActions.py            <- SupplierCorrectiveActionForm
+      SupplierChangeNotifications.py          <- SupplierChangeNotificationForm
+    IncomingQuality/                          <- Sub-module 12.7 forms
+      IncomingInspectionPlans.py              <- IncomingInspectionPlanForm
+      IncomingInspectionLots.py               <- IncomingInspectionLotForm
+      CertificatesOfAnalysis.py               <- CertificateOfAnalysisForm
+      QualityReturnAuthorizations.py          <- QualityReturnAuthorizationForm
+    InProcessQuality/                         <- Sub-module 12.8 forms
+      InProcessInspections.py                 <- InProcessInspectionForm
+      FirstArticleInspections.py              <- FirstArticleInspectionForm
+      ProcessParameterLogs.py                 <- ProcessParameterLogForm
+      LayeredProcessAudits.py                 <- LayeredProcessAuditForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -146,6 +192,30 @@ apps/quality/
       CapaActions.py                          <- List, Detail, Create, Edit, Delete, Mark Completed, Verify, Export
       CapaEffectivenessReviews.py             <- List, Detail, Create, Edit, Delete, Sign Off, Export
       CapaTrackingBoard.py                    <- Kanban Tracking Board, Tracking Board Export
+    NonConformance/                           <- Sub-module 12.5 views
+      NonConformanceReports.py                <- List, Detail, Create, Edit, Delete, Advance Status, Export
+      QuarantineContainments.py               <- List, Detail, Create, Edit, Delete, Release, Export
+      MrbDispositions.py                      <- List, Detail, Create, Edit, Delete, Approve, Export
+      ProcessDeviations.py                    <- List, Detail, Create, Edit, Delete, Authorize, Close, Export
+      NcrAnalytics.py                         <- Analytics Dashboard, Cost Analysis, Export
+    SupplierQuality/                          <- Sub-module 12.6 views
+      SupplierQualificationAudits.py          <- List, Detail, Create, Edit, Delete, Approve, Export
+      SupplierQualityScorecards.py            <- List, Detail, Create, Edit, Delete, Publish, Recalculate, Export
+      SupplierCorrectiveActions.py            <- List, Detail, Create, Edit, Delete, Verify, Close, Export
+      SupplierChangeNotifications.py          <- List, Detail, Create, Edit, Delete, Disposition, Export
+      AvlDirectory.py                         <- Directory View, Export
+    IncomingQuality/                          <- Sub-module 12.7 views
+      IncomingInspectionPlans.py              <- List, Detail, Create, Edit, Delete, Export
+      IncomingInspectionLots.py               <- List, Detail, Create, Edit, Delete, Record Decision, Export
+      CertificatesOfAnalysis.py               <- List, Detail, Create, Edit, Delete, Verify, Export
+      QualityReturnAuthorizations.py          <- List, Detail, Create, Edit, Delete, Dispatch, Export
+      IqcSpcDashboard.py                      <- SPC Dashboard, Export
+    InProcessQuality/                         <- Sub-module 12.8 views
+      InProcessInspections.py                 <- List, Detail, Create, Edit, Delete, Export
+      FirstArticleInspections.py              <- List, Detail, Create, Edit, Delete, Release, Export
+      ProcessParameterLogs.py                 <- List, Detail, Create, Edit, Delete, Export
+      LayeredProcessAudits.py                 <- List, Detail, Create, Edit, Delete, Export
+      SpcAnalytics.py                         <- SPC Analytics Dashboard, Export
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -171,12 +241,36 @@ apps/quality/
       CapaActions.py
       CapaEffectivenessReviews.py
       CapaTrackingBoard.py
+    NonConformance/                           <- Sub-module 12.5 URLs
+      NonConformanceReports.py
+      QuarantineContainments.py
+      MrbDispositions.py
+      ProcessDeviations.py
+      NcrAnalytics.py
+    SupplierQuality/                          <- Sub-module 12.6 URLs
+      SupplierQualificationAudits.py
+      SupplierQualityScorecards.py
+      SupplierCorrectiveActions.py
+      SupplierChangeNotifications.py
+      AvlDirectory.py
+    IncomingQuality/                          <- Sub-module 12.7 URLs
+      IncomingInspectionPlans.py
+      IncomingInspectionLots.py
+      CertificatesOfAnalysis.py
+      QualityReturnAuthorizations.py
+      IqcSpcDashboard.py
+    InProcessQuality/                         <- Sub-module 12.8 URLs
+      InProcessInspections.py
+      FirstArticleInspections.py
+      ProcessParameterLogs.py
+      LayeredProcessAudits.py
+      SpcAnalytics.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1, 12.2, 12.3, 12.4)
-  tests/                                      <- Pytest test suite (100% green, 946 passing tests)
-    conftest.py                               <- Shared 12.1, 12.2, 12.3, and 12.4 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.8)
+  tests/                                      <- Pytest test suite (100% green, 1,490 passing tests)
+    conftest.py                               <- Shared 12.1 through 12.8 fixtures
     test_documentcontrol_models.py
     test_documentcontrol_forms.py
     test_documentcontrol_views.py
@@ -193,6 +287,22 @@ apps/quality/
     test_capamanagement_forms.py
     test_capamanagement_views.py
     test_capamanagement_security.py
+    test_nonconformance_models.py
+    test_nonconformance_forms.py
+    test_nonconformance_views.py
+    test_nonconformance_security.py
+    test_supplierquality_models.py
+    test_supplierquality_forms.py
+    test_supplierquality_views.py
+    test_supplierquality_security.py
+    test_incomingquality_models.py
+    test_incomingquality_forms.py
+    test_incomingquality_views.py
+    test_incomingquality_security.py
+    test_inprocessquality_models.py
+    test_inprocessquality_forms.py
+    test_inprocessquality_views.py
+    test_inprocessquality_security.py
 ```
 
 ---
@@ -349,6 +459,32 @@ apps/quality/
 - **Key Fields:** `number`, `inspection_lot` (`IncomingInspectionLot`), `supplier` (`core.Party`), `item_code`, `lot_number`, `return_quantity` (Decimal), `reason` (`defective_material`, `out_of_spec`, `coa_failed`, `wrong_material`, `damaged_in_transit`, `over_shipment`), `description`, `disposition` (`replacement_requested`, `credit_memo_requested`, `rework_at_vendor`, `scrap_on_site`), `status` (`draft`, `authorized`, `shipped`, `delivered_to_vendor`, `completed`, `cancelled`), `authorized_by` (`accounts.User`), `authorized_at`, `debit_memo_number`, `credit_memo_number`, `tracking_number`, `carrier_name`, `shipped_at`, `replacement_received_at`, `notes`.
 - **Properties & Methods:** `status_css`, `reason_css`, `disposition_css`, `is_shipped`, `is_completed`.
 - **Compound Indexes:** `idx_qrma_ten_status`, `idx_qrma_ten_supp_lot`, `idx_qrma_ten_created`.
+
+### Sub-module 12.8 Entities
+
+#### 25. `InProcessInspection` (Prefix: `QIPQ-`)
+- **Table:** `quality_in_process_inspection`
+- **Key Fields:** `number`, `inspection_stage` (`first_piece`, `in_process_patrol`, `setup_verification`, `last_off`, `shift_handover`, `sampling`), `inspection_type` (`attribute_go_no_go`, `variable_dimensional`, `visual_cosmetic`, `functional_test`), `item_code`, `item_name`, `lot_number`, `serial_number`, `work_order` (`scm.WorkOrder`), `production_order_number`, `work_center` (`scm.WorkCenter`), `work_center_code`, `sample_size` (int), `sample_frequency_minutes` (int), `critical_defects` (int), `major_defects` (int), `minor_defects` (int), `defect_category` (`dimensional`, `surface_defect`, `assembly_error`, `contamination`, `labeling_packaging`, `functional_failure`), `result` (`pass`, `fail`, `conditional_pass`), `disposition` (`accept_to_run`, `rework_in_station`, `scrap_lot`, `quarantine_hold`, `escalate_to_ncr`), `inspector` (`accounts.User`), `operator_name`, `notes`, `inspection_plan_document` (`ControlledDocument`), `linked_ncr` (`NonConformanceReport`), `inspected_at`.
+- **Properties & Methods:** `stage_css`, `type_css`, `result_css`, `defect_category_css`, `disposition_css`, `is_pass`, `total_defects`.
+- **Compound Indexes:** `idx_qipq_ten_stage`, `idx_qipq_ten_res`, `idx_qipq_ten_created`, `idx_qipq_ten_item_lot`, `idx_qipq_ten_wo`.
+
+#### 26. `FirstArticleInspection` (Prefix: `QFAI-`)
+- **Table:** `quality_first_article_inspection`
+- **Key Fields:** `number`, `item_code`, `item_name`, `drawing_number`, `drawing_revision`, `setup_reason` (`new_part_introduction`, `drawing_revision`, `machine_tooling_change`, `process_parameter_shift`, `material_lot_change`, `relocation_facility`, `extended_downtime`), `work_order` (`scm.WorkOrder`), `production_order_number`, `work_center` (`scm.WorkCenter`), `work_center_code`, `status` (`draft`, `submitted`, `in_review`, `approved`, `rejected`, `released_to_production`), `is_full_fai` (bool), `baseline_fai_number`, `total_characteristics_count` (int), `characteristics_conforming_count` (int), `characteristics_nonconforming_count` (int), `inspection_date`, `inspector` (`accounts.User`), `approved_by` (`accounts.User`), `approval_date`, `customer_approval_required` (bool), `customer_approval_reference`, `linked_ncr` (`NonConformanceReport`), `linked_sop` (`ControlledDocument`), `notes`, `characteristics_json`.
+- **Properties & Methods:** `status_css`, `setup_reason_css`, `is_approved`, `is_released`, `conformance_pct`.
+- **Compound Indexes:** `idx_qfai_ten_stat`, `idx_qfai_ten_reason`, `idx_qfai_ten_item_dwg`, `idx_qfai_ten_wo`, `idx_qfai_ten_created`.
+
+#### 27. `ProcessParameterLog` (Prefix: `QPAR-`)
+- **Table:** `quality_process_parameter_log`
+- **Key Fields:** `number`, `parameter_name`, `parameter_type` (`temperature`, `pressure`, `speed_feed`, `humidity`, `dwell_time`, `torque_force`, `voltage_current`, `cycle_time`, `concentration_ph`), `unit_of_measure`, `work_center` (`scm.WorkCenter`), `work_center_code`, `work_order` (`scm.WorkOrder`), `production_order_number`, `target_nominal_value` (Decimal), `upper_spec_limit` (Decimal), `lower_spec_limit` (Decimal), `upper_control_limit` (Decimal), `lower_control_limit` (Decimal), `measured_value` (Decimal), `excursion_flag` (`in_control`, `warning_trend`, `out_of_control_excursion`), `logged_at`, `logged_by` (`accounts.User`), `spc_sigma_deviation` (Decimal), `containment_action_taken`, `linked_deviation` (`ProcessDeviation`), `notes`.
+- **Properties & Methods:** `type_css`, `excursion_css`, `is_excursion`, `is_within_spec`.
+- **Compound Indexes:** `idx_qpar_ten_param_type`, `idx_qpar_ten_excursion`, `idx_qpar_ten_wc_time`, `idx_qpar_ten_wo`, `idx_qpar_ten_created`.
+
+#### 28. `LayeredProcessAudit` (Prefix: `QLPA-`)
+- **Table:** `quality_layered_process_audit`
+- **Key Fields:** `number`, `audit_layer` (`layer_1_shift_supervisor`, `layer_2_area_manager`, `layer_3_plant_executive`, `layer_4_specialist_safety_quality`), `title`, `work_center` (`scm.WorkCenter`), `work_center_code`, `shift` (`shift_1_morning`, `shift_2_afternoon`, `shift_3_night`), `audit_date`, `auditor` (`accounts.User`), `status` (`scheduled`, `in_progress`, `completed`, `findings_pending_ca`, `closed`), `questions_evaluated_count` (int), `questions_passed_count` (int), `questions_failed_count` (int), `compliance_score_pct` (Decimal), `critical_findings_count` (int), `findings_summary`, `corrective_action_required` (bool), `linked_capa` (`CapaInvestigation`), `checklist_items_json`, `notes`.
+- **Properties & Methods:** `layer_css`, `status_css`, `is_compliant`, `total_findings`.
+- **Compound Indexes:** `idx_qlpa_ten_layer`, `idx_qlpa_ten_status`, `idx_qlpa_ten_wc_date`, `idx_qlpa_ten_created`.
 
 
 ---
@@ -533,6 +669,37 @@ All routes use the `quality:` namespace:
 | `/quality/incoming-quality/spc-dashboard/` | `iqc_spc_dashboard` | Interactive SPC Analytics dashboard with Pareto charts and capability indices |
 | `/quality/incoming-quality/spc-dashboard/export/` | `iqc_spc_dashboard_export` | CSV export of SPC alerts and defect distribution |
 
+### Sub-module 12.8 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/in-process-quality/inspections/` | `in_process_inspection_list` | In-process inspections list with stage, type, result, disposition, and date filters |
+| `/quality/in-process-quality/inspections/create/` | `in_process_inspection_create` | Log production inspection with defect classification and disposition |
+| `/quality/in-process-quality/inspections/<pk>/` | `in_process_inspection_detail` | Detailed inspection dossier with linked NCR route and action buttons |
+| `/quality/in-process-quality/inspections/<pk>/edit/` | `in_process_inspection_edit` | Edit inspection results and defect counts |
+| `/quality/in-process-quality/inspections/<pk>/delete/` | `in_process_inspection_delete` | POST-only delete (requires tenant admin) |
+| `/quality/in-process-quality/inspections/export/` | `in_process_inspection_export` | CSV export of in-process inspections with audit logging |
+| `/quality/in-process-quality/fai/` | `first_article_inspection_list` | First article inspections list with status and setup reason filters |
+| `/quality/in-process-quality/fai/create/` | `first_article_inspection_create` | Create new FAI protocol conforming to AS9102 / ISO 9001 |
+| `/quality/in-process-quality/fai/<pk>/` | `first_article_inspection_detail` | FAI dossier with characteristic verification breakdown and approval status |
+| `/quality/in-process-quality/fai/<pk>/edit/` | `first_article_inspection_edit` | Edit FAI characteristic counts and drawing revision metadata |
+| `/quality/in-process-quality/fai/<pk>/delete/` | `first_article_inspection_delete` | POST-only delete (requires tenant admin) |
+| `/quality/in-process-quality/fai/<pk>/release/` | `first_article_inspection_release` | Production authorization release gate (requires tenant admin, checks approval) |
+| `/quality/in-process-quality/fai/export/` | `first_article_inspection_export` | CSV export of first article inspections with audit logging |
+| `/quality/in-process-quality/parameters/` | `process_parameter_log_list` | Machine and environmental parameter telemetry logs with excursion filters |
+| `/quality/in-process-quality/parameters/create/` | `process_parameter_log_create` | Log telemetry reading with automated SPC excursion detection |
+| `/quality/in-process-quality/parameters/<pk>/` | `process_parameter_log_detail` | Parameter log dossier with control limits and containment action |
+| `/quality/in-process-quality/parameters/<pk>/edit/` | `process_parameter_log_edit` | Edit parameter measurement and excursion notes |
+| `/quality/in-process-quality/parameters/<pk>/delete/` | `process_parameter_log_delete` | POST-only delete (requires tenant admin) |
+| `/quality/in-process-quality/parameters/export/` | `process_parameter_log_export` | CSV export of parameter telemetry logs with audit logging |
+| `/quality/in-process-quality/audits/` | `layered_process_audit_list` | CQI-8 layered process audits list with layer, shift, and status filters |
+| `/quality/in-process-quality/audits/create/` | `layered_process_audit_create` | Schedule or execute layered process audit across management layers |
+| `/quality/in-process-quality/audits/<pk>/` | `layered_process_audit_detail` | Audit dossier with question compliance score and corrective action alerts |
+| `/quality/in-process-quality/audits/<pk>/edit/` | `layered_process_audit_edit` | Edit audit questions, findings count, and compliance score |
+| `/quality/in-process-quality/audits/<pk>/delete/` | `layered_process_audit_delete` | POST-only delete (requires tenant admin) |
+| `/quality/in-process-quality/audits/export/` | `layered_process_audit_export` | CSV export of layered process audits with audit logging |
+| `/quality/in-process-quality/spc-dashboard/` | `spc_dashboard` | Interactive In-Process Quality SPC dashboard and Work Instruction compliance |
+| `/quality/in-process-quality/spc-dashboard/export/` | `spc_dashboard_export` | CSV export of in-process quality control summary metrics |
+
 ---
 
 ## Seeder (`seed_quality`)
@@ -594,6 +761,21 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
   - 1 Quality Return Authorization per tenant:
     - RMA for rejected Lot `LOT-2026-IQC-002` (300 units, replacement requested, carrier dispatch tracking recorded)
 
+- **12.8 Data**:
+  - 2 In-Process Inspections per tenant:
+    - `QIPQ-2026-00001` (First piece inspection on Titanium Rod machining, Pass, Accept to run)
+    - `QIPQ-2026-00002` (In-process patrol on Syringe Barrel molding, Fail with surface defect, Escalate to NCR)
+  - 2 First Article Inspections per tenant:
+    - `QFAI-2026-00001` (New Part Introduction FAI, AS9102 Form 1/2/3 complete, 100% conforming, Released to production)
+    - `QFAI-2026-00002` (Machine Tooling Change FAI, partial re-inspection, In review)
+  - 3 Process Parameter Logs per tenant:
+    - `QPAR-2026-00001` (Barrel Injection Temperature: 245°C nominal, In control)
+    - `QPAR-2026-00002` (Injection Pack Pressure: 142 bar, Out-of-control excursion with containment action)
+    - `QPAR-2026-00003` (CNC Spindle Speed: 4,500 RPM nominal, In control)
+  - 2 Layered Process Audits per tenant:
+    - `QLPA-2026-00001` (Layer 1 Shift Supervisor audit on Work Center CNC-01, Shift 1, 100% compliance score)
+    - `QLPA-2026-00002` (Layer 2 Area Manager audit on Cleanroom Molding, Shift 2, 85% compliance score with minor finding)
+
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
 ---
@@ -647,6 +829,12 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - Automated QMS Spine Spawning: Marking usage decision as rejected (`rework`, `scrap`, `quarantine`, `return_to_vendor`) automatically generates a `NonConformanceReport` (`QNCR-`) and a `QuarantineContainment` (`QHLD-`) hold.
     - Skip-Lot Logic: Consecutive accepted lots are tracked per supplier/item; reaching skip intervals allows lots to be usage-decided as `skip_lot_passed` without physical sampling.
     - Scalar FK Representation: `QualityReturnAuthorization.__str__` uses scalar `self.inspection_lot_id` rather than chained FK properties to eliminate N+1 queries during audit logging.
+14. **In-Process Quality Control (IPQC) Invariants (AS9102 Rev C / CQI-8 / ISO 9001):**
+    - Production Authorization Release Gate: Authorizing an FAI for production release (`first_article_inspection_release`) requires tenant-admin privileges, checks that status is `approved`, verifies that all characteristics are conforming (`characteristics_nonconforming_count == 0`), and transitions status atomically to `released_to_production`.
+    - Automated SPC Excursion Detection: `ProcessParameterLog.save()` evaluates parameter measurements against USL/LSL and control limits, calculating sigma deviations and automatically flagging `out_of_control_excursion` or `warning_trend`, demanding documented containment actions.
+    - Automated QMS NCR Escalation: In-process inspections with failed disposition (`escalate_to_ncr`) or critical defects link directly to `quality:non_conformance_report_detail` across list and detail interfaces.
+    - CQI-8 Audit Score Clamping: `LayeredProcessAudit.save()` automatically computes compliance score percentage and clamps values between $0.00\%$ and $100.00\%$ to prevent division by zero or out-of-range scoring anomalies.
+    - Server-Side User Attribution: Critical audit fields (`logged_by` on `ProcessParameterLog` and `approved_by` on `FirstArticleInspection`) are strictly excluded from edit forms and assigned server-side from `request.user` to prevent client-side credential spoofing.
 
 ---
 
@@ -705,6 +893,13 @@ LIVE_LINKS = {
         "quality:certificate_of_analysis_list",
         "quality:iqc_spc_dashboard",
         "quality:quality_return_authorization_list",
+    ],
+    "12.8": [
+        "quality:process_parameter_log_list",
+        "quality:first_article_inspection_list",
+        "quality:in_process_inspection_list",
+        "quality:spc_dashboard",
+        "quality:layered_process_audit_list",
     ],
 }
 ```
