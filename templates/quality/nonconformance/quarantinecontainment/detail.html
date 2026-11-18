@@ -77,7 +77,7 @@
                     </div>
                     <div class="detail-item">
                         <dt>Released By</dt>
-                        <dd>{{ quarantine_containment.released_by.get_full_name|default:quarantine_containment.released_by.username|default:"—" }}</dd>
+                        <dd>{% if quarantine_containment.released_by %}{{ quarantine_containment.released_by.get_full_name|default:quarantine_containment.released_by.username }}{% else %}—{% endif %}</dd>
                     </div>
                 </dl>
 
