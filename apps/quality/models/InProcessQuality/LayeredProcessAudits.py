@@ -167,7 +167,8 @@ class LayeredProcessAudit(TenantNumbered):
     def save(self, *args, **kwargs):
         if self.total_questions_audited and self.total_questions_audited > 0:
             score = (Decimal(self.questions_conforming) / Decimal(self.total_questions_audited)) * Decimal("100.00")
-            self.compliance_percentage = round(score, 2)
+            clamped_score = max(Decimal("0.00"), min(Decimal("100.00"), score))
+            self.compliance_percentage = round(clamped_score, 2)
         super().save(*args, **kwargs)
 
     @property
