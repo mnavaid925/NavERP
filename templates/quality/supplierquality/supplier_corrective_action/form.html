@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if scar %}Edit {{ scar.number }}{% else %}Issue Supplier Corrective Action (SCAR){% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:supplier_corrective_action_list' %}" class="hover:underline">Supplier SCARs</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if scar %}Edit {{ scar.number }}{% else %}Issue SCAR{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600"></i>
+        {% if scar %}Edit {{ scar.number }} — {{ scar.title }}{% else %}Issue Supplier Corrective Action (SCAR){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Initiate formal vendor CAPA contract, define defect impact, establish containment mandates, and track 8D problem-solving.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if scar %}{% url 'quality:supplier_corrective_action_detail' scar.pk %}{% else %}{% url 'quality:supplier_corrective_action_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Issue & Supplier -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="file-text" class="w-4 h-4 text-red-600"></i>
+          SCAR Identification & Target Supplier
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.supplier.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supplier / Vendor *</label>
+            {{ form.supplier }}
+            {% if form.supplier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supplier.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">SCAR Subject / Title *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.severity.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Severity Tier *</label>
+            {{ form.severity }}
+            {% if form.severity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.severity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Status *</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.defect_summary.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Defect Summary & Problem Statement *</label>
+          {{ form.defect_summary }}
+          {% if form.defect_summary.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.defect_summary.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Section 2: Affected Product & Stand-in Masters -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="package" class="w-4 h-4 text-blue-600"></i>
+          Affected Component / Item Scope
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.affected_item_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item SKU / Part Code</label>
+            {{ form.affected_item_code }}
+            {% if form.affected_item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.affected_item_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.affected_item_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item Name</label>
+            {{ form.affected_item_name }}
+            {% if form.affected_item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.affected_item_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.affected_lots.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Impacted Lot / Batch #</label>
+            {{ form.affected_lots }}
+            {% if form.affected_lots.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.affected_lots.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.purchase_order.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Associated Purchase Order (PO)</label>
+            {{ form.purchase_order }}
+            {% if form.purchase_order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.purchase_order.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.non_conformance.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Originating NCR</label>
+            {{ form.non_conformance }}
+            {% if form.non_conformance.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.non_conformance.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.qualification_audit.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Triggering Supplier Audit</label>
+            {{ form.qualification_audit }}
+            {% if form.qualification_audit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.qualification_audit.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.internal_capa.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Enterprise CAPA</label>
+            {{ form.internal_capa }}
+            {% if form.internal_capa.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.internal_capa.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Containment & Root Cause -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="shield-alert" class="w-4 h-4 text-amber-600"></i>
+          Immediate Containment & Root Cause Analysis
+        </h2>
+        <div class="form-group">
+          <label for="{{ form.containment_action.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Immediate Containment Action (24–48h)</label>
+          {{ form.containment_action }}
+          {% if form.containment_action.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.containment_action.errors }}</div>{% endif %}
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.containment_due_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Containment Due Date</label>
+            {{ form.containment_due_date }}
+            {% if form.containment_due_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.containment_due_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.containment_verified_at.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Containment Verified Date</label>
+            {{ form.containment_verified_at }}
+            {% if form.containment_verified_at.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.containment_verified_at.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.root_cause_category.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Root Cause Category</label>
+            {{ form.root_cause_category }}
+            {% if form.root_cause_category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.root_cause_category.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.response_due_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">SCAR Response Due Date</label>
+            {{ form.response_due_date }}
+            {% if form.response_due_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.response_due_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.root_cause_summary.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Root Cause Summary</label>
+          {{ form.root_cause_summary }}
+          {% if form.root_cause_summary.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.root_cause_summary.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.vendor_investigation_details.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Vendor 5 Whys / Fishbone Details</label>
+          {{ form.vendor_investigation_details }}
+          {% if form.vendor_investigation_details.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.vendor_investigation_details.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Section 4: Corrective & Preventive Action Plan -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="check-square" class="w-4 h-4 text-green-600"></i>
+          Corrective & Preventive Action Plan
+        </h2>
+        <div class="form-group">
+          <label for="{{ form.corrective_action_plan.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Corrective Action Plan</label>
+          {{ form.corrective_action_plan }}
+          {% if form.corrective_action_plan.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.corrective_action_plan.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.preventive_action_plan.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Preventive Action Plan</label>
+          {{ form.preventive_action_plan }}
+          {% if form.preventive_action_plan.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.preventive_action_plan.errors }}</div>{% endif %}
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.implementation_due_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Implementation Due Date</label>
+            {{ form.implementation_due_date }}
+            {% if form.implementation_due_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.implementation_due_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.implemented_at.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Actual Implemented Date</label>
+            {{ form.implemented_at }}
+            {% if form.implemented_at.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.implemented_at.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Verification & Governance -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="award" class="w-4 h-4 text-purple-600"></i>
+          Effectiveness Verification & Sign-Off
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.effectiveness_due_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Verification Due Date</label>
+            {{ form.effectiveness_due_date }}
+            {% if form.effectiveness_due_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.effectiveness_due_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.is_effective.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Effective Determination</label>
+            {{ form.is_effective }}
+            {% if form.is_effective.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.is_effective.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.verified_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Quality Verifier</label>
+            {{ form.verified_by }}
+            {% if form.verified_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.verified_by.errors }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="{{ form.effectiveness_method.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Verification Method / Protocol</label>
+          {{ form.effectiveness_method }}
+          {% if form.effectiveness_method.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.effectiveness_method.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.effectiveness_results.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Effectiveness Results & Findings</label>
+          {{ form.effectiveness_results }}
+          {% if form.effectiveness_results.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.effectiveness_results.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="pt-6 border-t border-slate-200 flex items-center justify-end gap-3">
+        <a href="{% if scar %}{% url 'quality:supplier_corrective_action_detail' scar.pk %}{% else %}{% url 'quality:supplier_corrective_action_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if scar %}Save Changes{% else %}Issue SCAR{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
