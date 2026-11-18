@@ -119,8 +119,12 @@ class IncomingInspectionLotForm(TenantUniqueMixin, TenantModelForm):
             self.fields["goods_receipt_note"].queryset = GoodsReceiptNote.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
-            self.fields["decided_by"].queryset = User.objects.filter(is_active=True).order_by("username")
-            self.fields["inspector"].queryset = User.objects.filter(is_active=True).order_by("username")
+            self.fields["decided_by"].queryset = User.objects.filter(
+                tenant=self.tenant, is_active=True
+            ).order_by("username")
+            self.fields["inspector"].queryset = User.objects.filter(
+                tenant=self.tenant, is_active=True
+            ).order_by("username")
             self.fields["linked_ncr"].queryset = NonConformanceReport.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
@@ -161,6 +165,8 @@ class IncomingInspectionLotForm(TenantUniqueMixin, TenantModelForm):
                 "supplier",
                 "purchase_order",
                 "goods_receipt_note",
+                "decided_by",
+                "inspector",
                 "linked_ncr",
                 "linked_deviation",
                 "linked_containment",
