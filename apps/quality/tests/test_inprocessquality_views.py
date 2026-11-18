@@ -356,7 +356,7 @@ def test_inprocessquality_view_inspection_create_post_valid(client, admin_user, 
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="create",
-        object_repr__contains=created.number,
+        target__contains=created.number,
     ).exists()
 
 
@@ -401,7 +401,7 @@ def test_inprocessquality_view_inspection_edit_post_valid(client, admin_user, in
     assert AuditLog.objects.filter(
         tenant=in_process_inspection_a.tenant,
         action="update",
-        object_repr__contains=in_process_inspection_a.number,
+        target__contains=in_process_inspection_a.number,
     ).exists()
 
 
@@ -443,7 +443,7 @@ def test_inprocessquality_view_inspection_delete_success(client, admin_user, ten
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="delete",
-        object_repr__contains=to_delete.number,
+        target__contains=to_delete.number,
     ).exists()
 
 
@@ -634,7 +634,7 @@ def test_inprocessquality_view_fai_create_post_valid(client, admin_user, tenant_
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="create",
-        object_repr__contains=created.number,
+        target__contains=created.number,
     ).exists()
 
 
@@ -678,7 +678,7 @@ def test_inprocessquality_view_fai_edit_post_valid(client, admin_user, fai_a):
     assert AuditLog.objects.filter(
         tenant=fai_a.tenant,
         action="update",
-        object_repr__contains=fai_a.number,
+        target__contains=fai_a.number,
     ).exists()
 
 
@@ -718,7 +718,7 @@ def test_inprocessquality_view_fai_release_success(client, admin_user, fai_a):
     assert AuditLog.objects.filter(
         tenant=fai_a.tenant,
         action="release",
-        object_repr__contains=fai_a.number,
+        target__contains=fai_a.number,
     ).exists()
 
 
@@ -813,7 +813,7 @@ def test_inprocessquality_view_fai_delete_success(client, admin_user, tenant_a):
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="delete",
-        object_repr__contains=to_delete.number,
+        target__contains=to_delete.number,
     ).exists()
 
 
@@ -997,7 +997,7 @@ def test_inprocessquality_view_param_log_create_post_valid(client, admin_user, t
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="create",
-        object_repr__contains=created.number,
+        target__contains=created.number,
     ).exists()
 
 
@@ -1041,7 +1041,7 @@ def test_inprocessquality_view_param_log_edit_post_valid(client, admin_user, par
     assert AuditLog.objects.filter(
         tenant=parameter_log_a.tenant,
         action="update",
-        object_repr__contains=parameter_log_a.number,
+        target__contains=parameter_log_a.number,
     ).exists()
 
 
@@ -1079,7 +1079,7 @@ def test_inprocessquality_view_param_log_delete_success(client, admin_user, tena
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="delete",
-        object_repr__contains=to_delete.number,
+        target__contains=to_delete.number,
     ).exists()
 
 
@@ -1266,7 +1266,7 @@ def test_inprocessquality_view_layered_audit_create_post_valid(client, admin_use
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="create",
-        object_repr__contains=created.number,
+        target__contains=created.number,
     ).exists()
 
 
@@ -1310,7 +1310,7 @@ def test_inprocessquality_view_layered_audit_edit_post_valid(client, admin_user,
     assert AuditLog.objects.filter(
         tenant=layered_audit_a.tenant,
         action="update",
-        object_repr__contains=layered_audit_a.number,
+        target__contains=layered_audit_a.number,
     ).exists()
 
 
@@ -1348,7 +1348,7 @@ def test_inprocessquality_view_layered_audit_delete_success(client, admin_user, 
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="delete",
-        object_repr__contains=to_delete.number,
+        target__contains=to_delete.number,
     ).exists()
 
 
