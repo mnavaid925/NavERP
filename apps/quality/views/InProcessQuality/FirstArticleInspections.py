@@ -189,8 +189,17 @@ def first_article_inspection_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def first_article_inspection_release(request, pk):
     fai = get_object_or_404(FirstArticleInspection, pk=pk, tenant=request.tenant)
+    if fai.status == "approved_run_released":
+        messages.info(request, "Production run is already approved and released.")
+        return redirect("quality:first_article_inspection_detail", pk=fai.pk)
+
+    if fai.total_characteristics_inspected <= 0:
+        messages.error(request, "Cannot release production run: Total characteristics inspected must be greater than zero.")
+        return redirect("quality:first_article_inspection_detail", pk=fai.pk)
+
     if fai.characteristics_out_of_spec > 0:
         messages.error(request, "Cannot release production run: Characteristics have out-of-spec dimensions.")
         return redirect("quality:first_article_inspection_detail", pk=fai.pk)
