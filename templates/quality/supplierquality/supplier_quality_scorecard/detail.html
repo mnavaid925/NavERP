@@ -33,23 +33,27 @@
       <a href="{% url 'quality:supplier_quality_scorecard_list' %}" class="btn btn-outline text-sm">
         <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
       </a>
-      {% if scorecard.status != "published" %}
-        <form method="post" action="{% url 'quality:supplier_quality_scorecard_publish' scorecard.pk %}" class="inline">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-primary text-sm">
-            <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Publish Scorecard
-          </button>
-        </form>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if scorecard.status != "published" %}
+          <form method="post" action="{% url 'quality:supplier_quality_scorecard_publish' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary text-sm">
+              <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Publish Scorecard
+            </button>
+          </form>
+        {% endif %}
       {% endif %}
       <a href="{% url 'quality:supplier_quality_scorecard_edit' scorecard.pk %}" class="btn btn-outline text-sm">
         <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
       </a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
       <form method="post" action="{% url 'quality:supplier_quality_scorecard_delete' scorecard.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete scorecard {{ scorecard.number|escapejs }}?');">
         {% csrf_token %}
         <button type="submit" class="btn btn-danger text-sm">
           <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
         </button>
       </form>
+      {% endif %}
     </div>
   </div>
 
