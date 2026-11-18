@@ -116,7 +116,7 @@
   - **Locations**: List views in all 4 view files.
   - **Fix**: Limit list views to `.select_related("supplier")`.
 
-- [ ] **M8**: Privileged action forms rendered to non-admin users in detail templates.
+- [x] **M8**: Privileged action forms rendered to non-admin users in detail templates.
   - **Locations**: Detail templates across the 4 entities.
   - **Fix**: Wrap administrative action cards in `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
 
