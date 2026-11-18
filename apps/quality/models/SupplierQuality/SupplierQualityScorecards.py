@@ -151,6 +151,7 @@ class SupplierQualityScorecard(TenantNumbered):
             models.Index(fields=["tenant", "cadence"], name="idx_qssc_ten_cadence"),
             models.Index(fields=["tenant", "period_start", "period_end"], name="idx_qssc_ten_period"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qssc_ten_created"),
+            models.Index(fields=["tenant", "-period_end", "-created_at"], name="idx_qssc_ten_pend_created"),
         ]
 
     def __str__(self):
