@@ -178,11 +178,11 @@
         </div>
       </div>
 
-      <!-- Section 4: Traceability & Disposition -->
+      <!-- Section 4: Traceability & Technical Review -->
       <div class="space-y-4 pt-4 border-t border-slate-200">
         <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
           <i data-lucide="award" class="w-4 h-4 text-amber-600"></i>
-          Traceability & Disposition Ruling
+          Traceability & Technical Review
         </h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="form-group">
@@ -196,26 +196,10 @@
             {% if form.requalification_audit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.requalification_audit.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label for="{{ form.disposition.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Disposition Decision *</label>
-            {{ form.disposition }}
-            {% if form.disposition.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.disposition.errors }}</div>{% endif %}
-          </div>
-          <div class="form-group">
             <label for="{{ form.evaluated_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Technical Evaluator</label>
             {{ form.evaluated_by }}
             {% if form.evaluated_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.evaluated_by.errors }}</div>{% endif %}
           </div>
-          <div class="form-group">
-            <label for="{{ form.approved_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Approving Authority</label>
-            {{ form.approved_by }}
-            {% if form.approved_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.approved_by.errors }}</div>{% endif %}
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="{{ form.disposition_notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Disposition Justification & Caveats</label>
-          {{ form.disposition_notes }}
-          {% if form.disposition_notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.disposition_notes.errors }}</div>{% endif %}
         </div>
       </div>
 
