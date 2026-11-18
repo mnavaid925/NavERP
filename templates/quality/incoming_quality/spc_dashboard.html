@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Incoming Quality SPC Analytics Dashboard — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:incoming_inspection_lot_list' %}" class="hover:underline">Incoming Quality Control</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">SPC Dashboard</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="line-chart" class="w-6 h-6 text-blue-600"></i>
+        IQC Statistical Process Control (SPC) Analytics
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Real-time statistical capability (Cp, Cpk), receiving lot acceptance rates, defect Pareto distribution, and 3-sigma out-of-control alerts.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:incoming_inspection_lot_list' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="boxes" class="w-4 h-4"></i>
+        <span>Inspection Lots</span>
+      </a>
+      <a href="{% url 'quality:incoming_inspection_plan_list' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+        <span>Sampling Plans</span>
+      </a>
+      <a href="{% url 'quality:incoming_inspection_lot_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Record Inbound Lot</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Key Metrics Summary Row -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="boxes" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Total Lots Inspected</div>
+        <div class="text-2xl font-bold text-slate-900 font-mono">{{ lots_inspected_count }}</div>
+        <div class="text-xs text-slate-500">Dock receiving throughput</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="check-circle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">First-Pass Acceptance Rate</div>
+        <div class="text-2xl font-bold text-green-600 font-mono">{{ acceptance_rate }}%</div>
+        <div class="text-xs text-slate-500">Overall vendor compliance</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="activity" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Average Process Capability (Cpk)</div>
+        <div class="text-2xl font-bold text-slate-900 font-mono">{{ avg_cpk }}</div>
+        <div class="text-xs text-slate-500">Industry benchmark: &ge; 1.33</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon red p-3 rounded-lg bg-red-50 text-red-600">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Active Out-of-Control Alerts</div>
+        <div class="text-2xl font-bold {% if out_of_control_count > 0 %}text-red-600{% else %}text-slate-800{% endif %} font-mono">
+          {{ out_of_control_count }}
+        </div>
+        <div class="text-xs text-slate-500">Lots below capability threshold</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts & Pareto Breakdown Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Defect Pareto Breakdown Card -->
+    <div class="card p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
+        <i data-lucide="bar-chart-2" class="w-5 h-5 text-blue-600"></i>
+        Defect Severity Pareto
+      </h2>
+      <p class="text-xs text-slate-500 mb-4">Total non-conformances classified by severity impact.</p>
+
+      <div class="space-y-4">
+        <div>
+          <div class="flex items-center justify-between text-sm mb-1">
+            <span class="font-medium text-red-600 flex items-center gap-1">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-600"></span> Critical Defects (AQL 0.0)
+            </span>
+            <span class="font-mono font-bold text-slate-800">{{ defect_pareto.critical }}</span>
+          </div>
+          <div class="progress w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+            <div class="progress-bar bg-red-600 h-2.5 rounded-full" style="width: {% if defect_pareto.critical > 0 %}100%{% else %}0%{% endif %}"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between text-sm mb-1">
+            <span class="font-medium text-amber-600 flex items-center gap-1">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Major Defects (AQL 1.0)
+            </span>
+            <span class="font-mono font-bold text-slate-800">{{ defect_pareto.major }}</span>
+          </div>
+          <div class="progress w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+            <div class="progress-bar bg-amber-500 h-2.5 rounded-full" style="width: {% if defect_pareto.major > 0 %}75%{% else %}0%{% endif %}"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between text-sm mb-1">
+            <span class="font-medium text-slate-700 flex items-center gap-1">
+              <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Minor Defects (AQL 4.0)
+            </span>
+            <span class="font-mono font-bold text-slate-800">{{ defect_pareto.minor }}</span>
+          </div>
+          <div class="progress w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+            <div class="progress-bar bg-slate-400 h-2.5 rounded-full" style="width: {% if defect_pareto.minor > 0 %}40%{% else %}0%{% endif %}"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 bg-slate-50 p-3 rounded text-xs text-slate-500">
+        <i data-lucide="info" class="w-4 h-4 inline-block mr-1 text-blue-600"></i>
+        ANSI/ASQ Z1.4 switching rules trigger Tightened Inspection when 2 out of 5 consecutive lots fail acceptance.
+      </div>
+    </div>
+
+    <!-- Supplier Process Capability Leaderboard Card -->
+    <div class="card p-6 lg:col-span-2">
+      <h2 class="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
+        <i data-lucide="award" class="w-5 h-5 text-blue-600"></i>
+        Supplier Process Capability & Acceptance Leaderboard
+      </h2>
+      <p class="text-xs text-slate-500 mb-4">Volume, quality acceptance rate, and average process capability index (Cpk) per vendor.</p>
+
+      {% if supplier_leaderboard %}
+        <div class="table-wrap overflow-x-auto">
+          <table class="table w-full text-left text-sm text-slate-600">
+            <thead class="bg-slate-50 text-slate-700 text-xs uppercase font-semibold border-b border-slate-200">
+              <tr>
+                <th class="px-4 py-3">Supplier Name</th>
+                <th class="px-4 py-3">Total Lots</th>
+                <th class="px-4 py-3">Acceptance Rate</th>
+                <th class="px-4 py-3">Average Cpk</th>
+                <th class="px-4 py-3 text-right">Process Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              {% for s in supplier_leaderboard %}
+                <tr class="hover:bg-slate-50">
+                  <td class="px-4 py-3 font-semibold text-slate-900">{{ s.name }}</td>
+                  <td class="px-4 py-3 font-mono text-xs text-slate-800">{{ s.total_lots }} lots</td>
+                  <td class="px-4 py-3 font-mono text-xs font-bold {% if s.acceptance_rate >= 95 %}text-green-600{% elif s.acceptance_rate >= 80 %}text-amber-600{% else %}text-red-600{% endif %}">
+                    {{ s.acceptance_rate }}%
+                  </td>
+                  <td class="px-4 py-3 font-mono text-xs">
+                    {% if s.avg_cpk %}
+                      <span class="{% if s.avg_cpk >= 1.33 %}text-green-600 font-bold{% else %}text-amber-600 font-bold{% endif %}">
+                        {{ s.avg_cpk }}
+                      </span>
+                    {% else %}
+                      <span class="text-slate-400">N/A</span>
+                    {% endif %}
+                  </td>
+                  <td class="px-4 py-3 text-right whitespace-nowrap">
+                    {% if s.avg_cpk and s.avg_cpk >= 1.33 %}
+                      <span class="badge badge-green text-xs">Capable (Cpk &ge; 1.33)</span>
+                    {% elif s.avg_cpk %}
+                      <span class="badge badge-amber text-xs">Moderate (Cpk &lt; 1.33)</span>
+                    {% else %}
+                      <span class="badge badge-slate text-xs">Attribute Sampling</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="p-8 text-center text-slate-400">
+          <i data-lucide="users-round" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
+          <p class="text-sm">No supplier inspection data recorded yet.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Out-of-Control & Statistical Trend Alerts Table -->
+  <div class="card">
+    <div class="card-header px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div>
+        <h2 class="font-semibold text-slate-900 text-base flex items-center gap-2">
+          <i data-lucide="bell" class="w-5 h-5 text-red-600"></i>
+          Active Statistical Out-of-Control & Capability Alerts
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">Receiving lots breaching 3-sigma limits or exhibiting inadequate process capability (Cpk &lt; 1.33).</p>
+      </div>
+    </div>
+    {% if recent_alerts %}
+      <div class="table-wrap overflow-x-auto">
+        <table class="table w-full text-left text-sm text-slate-600">
+          <thead class="bg-slate-50 text-slate-700 text-xs uppercase font-semibold border-b border-slate-200">
+            <tr>
+              <th class="px-6 py-3">Lot #</th>
+              <th class="px-6 py-3">Item / Part</th>
+              <th class="px-6 py-3">Supplier</th>
+              <th class="px-6 py-3">Cpk Index</th>
+              <th class="px-6 py-3">Defects (Crit/Maj/Min)</th>
+              <th class="px-6 py-3">Usage Decision</th>
+              <th class="px-6 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            {% for alert in recent_alerts %}
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">
+                  <a href="{% url 'quality:incoming_inspection_lot_detail' alert.pk %}" class="text-blue-600 hover:underline">
+                    {{ alert.number }}
+                  </a>
+                  <div class="text-xs text-slate-500 font-mono">Lot: {{ alert.lot_number }}</div>
+                </td>
+                <td class="px-6 py-4">
+                  <div class="font-medium text-slate-900">{{ alert.item_name }}</div>
+                  <div class="text-xs text-slate-500 font-mono">{{ alert.item_code }}</div>
+                </td>
+                <td class="px-6 py-4">
+                  <span class="text-slate-800 font-medium">{{ alert.supplier.name }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap font-mono">
+                  {% if alert.spc_cpk is not None %}
+                    <span class="text-red-600 font-bold">{{ alert.spc_cpk }}</span>
+                    <span class="text-xs text-slate-400 block">x̄={{ alert.spc_mean }} (s={{ alert.spc_std_dev }})</span>
+                  {% else %}
+                    <span class="text-slate-400">—</span>
+                  {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap font-mono text-xs">
+                  <span class="text-red-600 font-bold">{{ alert.critical_defects }}</span> /
+                  <span class="text-amber-600 font-bold">{{ alert.major_defects }}</span> /
+                  <span class="text-slate-600">{{ alert.minor_defects }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="badge {{ alert.usage_decision_css }}">
+                    {{ alert.get_usage_decision_display }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-right whitespace-nowrap">
+                  <a href="{% url 'quality:incoming_inspection_lot_detail' alert.pk %}" class="btn btn-outline text-xs inline-flex items-center gap-1">
+                    <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                    <span>Review Lot</span>
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-slate-400">
+        <i data-lucide="shield-check" class="w-8 h-8 mx-auto mb-2 text-green-500"></i>
+        <p class="text-sm font-medium text-slate-700">No active statistical out-of-control alerts!</p>
+        <p class="text-xs text-slate-500 mt-0.5">All receiving lots with variable measurement data satisfy capability thresholds (Cpk &ge; 1.33).</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
