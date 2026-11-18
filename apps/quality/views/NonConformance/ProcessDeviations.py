@@ -44,10 +44,10 @@ def process_deviation_list(request):
     if selected_risk_level:
         qs = qs.filter(risk_impact_level=selected_risk_level)
 
-    total_count = qs.count()
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
+    total_count = paginator.count
 
     context = {
         "process_deviations": page_obj.object_list,
