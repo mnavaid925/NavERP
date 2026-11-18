@@ -120,6 +120,6 @@
   - **Locations**: Detail templates across the 4 entities.
   - **Fix**: Wrap administrative action cards in `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
 
-- [ ] **M9**: Whitespace-stripping defense-in-depth for formula injection in `_csv_safe`.
+- [x] **M9**: Whitespace-stripping defense-in-depth for formula injection in `_csv_safe`.
   - **Locations**: All 4 view files `_csv_safe` helper.
   - **Fix**: Use `s.lstrip().startswith(("=", "+", "-", "@", "\t", "\r"))`.
