@@ -53,7 +53,7 @@
     - `apps/quality/forms/SupplierQuality/SupplierCorrectiveActions.py:26` (`status`)
   - **Fix**: Restrict selectable choices in forms so `"published"` and `"closed"` transitions are performed via dedicated workflow action views.
 
-- [ ] **I6**: Delete endpoints lack `@tenant_admin_required`.
+- [x] **I6**: Delete endpoints lack `@tenant_admin_required`.
   - **Locations**:
     - `apps/quality/views/SupplierQuality/SupplierQualificationAudits.py:171`
     - `apps/quality/views/SupplierQuality/SupplierQualityScorecards.py:163`
