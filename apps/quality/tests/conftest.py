@@ -129,6 +129,11 @@ def quality_doc_effective(db, tenant_a, admin_user, quality_department):
 
 
 @pytest.fixture
+def doc_a(quality_doc_effective):
+    return quality_doc_effective
+
+
+@pytest.fixture
 def quality_doc_b(db, tenant_b, admin_b, quality_department_b):
     return ControlledDocument.objects.create(
         tenant=tenant_b,
