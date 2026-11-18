@@ -4,7 +4,7 @@ from django.apps import apps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -59,10 +59,16 @@ def process_parameter_log_list(request):
     if current_work_center.isdigit():
         qs = qs.filter(work_center_id=int(current_work_center))
 
-    total_logs_count = ProcessParameterLog.objects.filter(tenant=request.tenant).count()
-    normal_count = ProcessParameterLog.objects.filter(tenant=request.tenant, excursion_status="normal").count()
-    out_of_control_count = ProcessParameterLog.objects.filter(tenant=request.tenant, excursion_status="out_of_control").count()
-    out_of_spec_count = ProcessParameterLog.objects.filter(tenant=request.tenant, excursion_status="out_of_spec").count()
+    stats = ProcessParameterLog.objects.filter(tenant=request.tenant).aggregate(
+        total_logs_count=Count("id"),
+        normal_count=Count("id", filter=Q(excursion_status="normal")),
+        out_of_control_count=Count("id", filter=Q(excursion_status="out_of_control")),
+        out_of_spec_count=Count("id", filter=Q(excursion_status="out_of_spec")),
+    )
+    total_logs_count = stats["total_logs_count"] or 0
+    normal_count = stats["normal_count"] or 0
+    out_of_control_count = stats["out_of_control_count"] or 0
+    out_of_spec_count = stats["out_of_spec_count"] or 0
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
