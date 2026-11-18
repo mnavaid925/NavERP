@@ -139,9 +139,19 @@ def process_deviation_delete(request, pk):
     obj = quality_object(request, ProcessDeviation, pk=pk)
     number = obj.number
     ncr_pk = obj.ncr_id
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if obj.status in ("approved", "active", "closed"):
+        messages.error(request, f"Cannot delete process deviation {obj.number} with status '{obj.get_status_display()}'.")
+        if next_url:
+            return redirect(next_url)
+        if ncr_pk:
+            return redirect("quality:non_conformance_report_detail", pk=ncr_pk)
+        return redirect("quality:process_deviation_list")
     write_audit_log(request.user, obj, "delete", tenant=request.tenant)
     obj.delete()
     messages.success(request, f"Process Deviation {number} deleted successfully.")
+    if next_url:
+        return redirect(next_url)
     if ncr_pk:
         return redirect("quality:non_conformance_report_detail", pk=ncr_pk)
     return redirect("quality:process_deviation_list")
