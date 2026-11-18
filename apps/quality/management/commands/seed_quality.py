@@ -2399,10 +2399,10 @@ class Command(BaseCommand):
             InProcessInspection.objects.create(
                 tenant=tenant,
                 title="CNC Mill Line 2 - Routine In-Line Inspection",
-                inspection_type="dimensional_tolerance",
+                inspection_type="dimensional_gauging",
                 stage_gate="Op 020 - Turning",
                 status="completed",
-                disposition="released",
+                disposition="pass",
                 production_order_number="PO-2026-8801",
                 work_center_code="WC-CNC-02",
                 operation_step="Op 020 - Turning",
@@ -2418,19 +2418,17 @@ class Command(BaseCommand):
                 defect_category="",
                 defect_description="",
                 inspector=inspector_user,
-                inspected_at=now,
-                supervisor=admin_user,
-                supervisor_approved_at=now,
+                inspection_date=now.date(),
                 notes="Tool offset calibrated. Spindle runout within allowable tolerance. Approved to run batch.",
             )
 
             InProcessInspection.objects.create(
                 tenant=tenant,
                 title="SMT Assembly Line 1 - Hourly Solder Paste Check",
-                inspection_type="solder_paste_inspection",
+                inspection_type="visual_surface",
                 stage_gate="SMT Screen Printing",
                 status="completed",
-                disposition="conditional_release",
+                disposition="conditional_pass",
                 production_order_number="PO-2026-8802",
                 work_center_code="WC-SMT-01",
                 operation_step="Op 010 - Screen Print",
@@ -2445,18 +2443,16 @@ class Command(BaseCommand):
                 defect_category="assembly_error",
                 defect_description="Minor solder bridging reworked on bench. Stencil wiper frequency increased.",
                 inspector=inspector_user,
-                inspected_at=now,
-                supervisor=admin_user,
-                supervisor_approved_at=now,
+                inspection_date=now.date(),
                 notes="Minor solder bridging reworked on bench.",
             )
 
             InProcessInspection.objects.create(
                 tenant=tenant,
                 title="Line 3 Clearance & Changeover Verification",
-                inspection_type="line_clearance",
+                inspection_type="in_line_stage_gate",
                 stage_gate="Assembly Final Changeover",
-                status="in_inspection",
+                status="in_progress",
                 disposition="pending",
                 production_order_number="PO-2026-8805",
                 work_center_code="WC-ASM-03",
@@ -2470,7 +2466,7 @@ class Command(BaseCommand):
                 quantity_rejected=0,
                 quantity_reworked=0,
                 inspector=inspector_user,
-                inspected_at=now,
+                inspection_date=now.date(),
                 notes="Changeover line clearance verification in progress.",
             )
 
@@ -2557,7 +2553,7 @@ class Command(BaseCommand):
                 excursion_status="normal",
                 logged_by=inspector_user,
                 containment_action="none",
-                mitigation_notes="Peak temperature stable across all 10 thermocouple channels.",
+                containment_notes="Peak temperature stable across all 10 thermocouple channels.",
             )
 
             ProcessParameterLog.objects.create(
@@ -2580,7 +2576,7 @@ class Command(BaseCommand):
                 excursion_status="out_of_spec",
                 logged_by=inspector_user,
                 containment_action="machine_parameter_adjusted",
-                mitigation_notes="Overpressure exceeded USL. Hydraulic relief valve calibrated and returned to 84.8 bar.",
+                containment_notes="Overpressure exceeded USL. Hydraulic relief valve calibrated and returned to 84.8 bar.",
             )
 
             ProcessParameterLog.objects.create(
@@ -2603,7 +2599,7 @@ class Command(BaseCommand):
                 excursion_status="normal",
                 logged_by=admin_user,
                 containment_action="none",
-                mitigation_notes="Spindle drive tachometer feedback within 0.2% of setpoint.",
+                containment_notes="Spindle drive tachometer feedback within 0.2% of setpoint.",
             )
 
             # 4. Layered Process Audits (QLPA)
@@ -2615,6 +2611,8 @@ class Command(BaseCommand):
                 status="completed",
                 work_center_code="WC-CNC-02",
                 shift="Shift 1 (Morning)",
+                scheduled_date=now.date(),
+                conducted_at=now,
                 total_questions_audited=10,
                 questions_conforming=10,
                 questions_non_conforming=0,
@@ -2622,9 +2620,6 @@ class Command(BaseCommand):
                 findings_summary="Excellent compliance observed on CNC Mill Line 2. Clean workstation, standard work displayed, gauges valid.",
                 on_the_spot_mitigation=False,
                 auditor=inspector_user,
-                audited_at=now,
-                reviewed_by=admin_user,
-                reviewed_at=now,
                 notes="Clean pass on daily supervisor tier 2 LPA.",
             )
 
@@ -2636,6 +2631,8 @@ class Command(BaseCommand):
                 status="completed",
                 work_center_code="WC-SMT-01",
                 shift="Shift 2 (Evening)",
+                scheduled_date=now.date(),
+                conducted_at=now,
                 total_questions_audited=10,
                 questions_conforming=9,
                 questions_non_conforming=1,
@@ -2644,13 +2641,8 @@ class Command(BaseCommand):
                 on_the_spot_mitigation=True,
                 mitigation_details="Tool swapped from calibration crib immediately. Serial #TQ-881 checked in for recalibration.",
                 auditor=verifier_user,
-                audited_at=now,
-                reviewed_by=admin_user,
-                reviewed_at=now,
                 notes="On-the-spot mitigation verified.",
             )
-
-        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.8 In-Process Quality Control (IPQC) seeded successfully."))
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.8 In-Process Quality Control (IPQC) seeded successfully."))
 
