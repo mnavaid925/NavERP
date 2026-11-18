@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if scn %}Edit {{ scn.number }}{% else %}Log Supplier Change Notification (SCN){% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:supplier_change_notification_list' %}" class="hover:underline">Supplier Change Notifications</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if scn %}Edit {{ scn.number }}{% else %}New SCN{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="git-pull-request" class="w-6 h-6 text-blue-600"></i>
+        {% if scn %}Edit {{ scn.number }} — {{ scn.title }}{% else %}Log Supplier Change Notification (SCN){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Capture supplier-initiated material/process modifications, evaluate Form-Fit-Function impact, and coordinate re-qualification.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if scn %}{% url 'quality:supplier_change_notification_detail' scn.pk %}{% else %}{% url 'quality:supplier_change_notification_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Change Overview -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+          Change Overview & Supplier
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.supplier.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supplier / Vendor *</label>
+            {{ form.supplier }}
+            {% if form.supplier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supplier.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Change Subject / Title *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.supplier_scn_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supplier Reference / PCN #</label>
+            {{ form.supplier_scn_number }}
+            {% if form.supplier_scn_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supplier_scn_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.change_category.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Change Category *</label>
+            {{ form.change_category }}
+            {% if form.change_category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.change_category.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.risk_level.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Risk Triage Level *</label>
+            {{ form.risk_level }}
+            {% if form.risk_level.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.risk_level.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Status *</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.description.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Detailed Change Description & Rationale *</label>
+          {{ form.description }}
+          {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Section 2: Items & Schedule -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="package" class="w-4 h-4 text-purple-600"></i>
+          Affected Component Scope & Timing
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.affected_item_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Part SKU / Code</label>
+            {{ form.affected_item_code }}
+            {% if form.affected_item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.affected_item_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.affected_item_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item Description</label>
+            {{ form.affected_item_name }}
+            {% if form.affected_item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.affected_item_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.proposed_effective_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Proposed Effective Date</label>
+            {{ form.proposed_effective_date }}
+            {% if form.proposed_effective_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.proposed_effective_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.first_affected_lot.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">First Affected Lot #</label>
+            {{ form.first_affected_lot }}
+            {% if form.first_affected_lot.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.first_affected_lot.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Technical Impact Checklist -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="check-square" class="w-4 h-4 text-green-600"></i>
+          Technical & Regulatory Impact Checklist
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+            {{ form.affects_form_fit_function }}
+            <div>
+              <label for="{{ form.affects_form_fit_function.id_for_label }}" class="form-label text-sm font-semibold text-slate-800 block">Affects Form, Fit, or Function (FFF)</label>
+              <span class="text-xs text-slate-500">Critical trigger requiring validation protocol</span>
+            </div>
+          </div>
+          <div class="form-group flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+            {{ form.requires_requalification }}
+            <div>
+              <label for="{{ form.requires_requalification.id_for_label }}" class="form-label text-sm font-semibold text-slate-800 block">Requires Vendor Re-Qualification</label>
+              <span class="text-xs text-slate-500">Facility re-audit or desktop survey mandated</span>
+            </div>
+          </div>
+          <div class="form-group flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+            {{ form.requires_design_change }}
+            <div>
+              <label for="{{ form.requires_design_change.id_for_label }}" class="form-label text-sm font-semibold text-slate-800 block">Requires Design History File Change</label>
+              <span class="text-xs text-slate-500">Initiate medical device DHF ECO</span>
+            </div>
+          </div>
+          <div class="form-group flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+            {{ form.requires_regulatory_filing }}
+            <div>
+              <label for="{{ form.requires_regulatory_filing.id_for_label }}" class="form-label text-sm font-semibold text-slate-800 block">Requires Regulatory Filing / Notice</label>
+              <span class="text-xs text-slate-500">510(k), PMA supplement, or CE mark technical file</span>
+            </div>
+          </div>
+          <div class="form-group flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+            {{ form.requires_customer_notification }}
+            <div>
+              <label for="{{ form.requires_customer_notification.id_for_label }}" class="form-label text-sm font-semibold text-slate-800 block">Requires Customer Notification</label>
+              <span class="text-xs text-slate-500">Quality agreement mandates prior customer consent</span>
+            </div>
+          </div>
+          <div class="form-group flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+            {{ form.samples_required }}
+            <div>
+              <label for="{{ form.samples_required.id_for_label }}" class="form-label text-sm font-semibold text-slate-800 block">Pre-Production Samples Required</label>
+              <span class="text-xs text-slate-500">Request physical samples for lab/fit verification</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.impact_assessment_notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Impact Assessment Notes & Risk Analysis</label>
+          {{ form.impact_assessment_notes }}
+          {% if form.impact_assessment_notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.impact_assessment_notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Section 4: Traceability & Disposition -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="award" class="w-4 h-4 text-amber-600"></i>
+          Traceability & Disposition Ruling
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.design_project.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Associated Design Project</label>
+            {{ form.design_project }}
+            {% if form.design_project.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.design_project.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.requalification_audit.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Re-Qualification Audit</label>
+            {{ form.requalification_audit }}
+            {% if form.requalification_audit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.requalification_audit.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.disposition.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Disposition Decision *</label>
+            {{ form.disposition }}
+            {% if form.disposition.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.disposition.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.evaluated_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Technical Evaluator</label>
+            {{ form.evaluated_by }}
+            {% if form.evaluated_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.evaluated_by.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.approved_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Approving Authority</label>
+            {{ form.approved_by }}
+            {% if form.approved_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.approved_by.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.disposition_notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Disposition Justification & Caveats</label>
+          {{ form.disposition_notes }}
+          {% if form.disposition_notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.disposition_notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="pt-6 border-t border-slate-200 flex items-center justify-end gap-3">
+        <a href="{% if scn %}{% url 'quality:supplier_change_notification_detail' scn.pk %}{% else %}{% url 'quality:supplier_change_notification_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if scn %}Save Changes{% else %}Log SCN{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
