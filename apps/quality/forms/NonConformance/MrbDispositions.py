@@ -100,4 +100,12 @@ class MrbDispositionForm(TenantUniqueMixin, TenantModelForm):
                 self.add_error("engineering_approved_by", "Engineering sign-off is required to approve an MRB disposition.")
             if not cleaned.get("operations_approved_by"):
                 self.add_error("operations_approved_by", "Operations sign-off is required to approve an MRB disposition.")
+        for cost_field, label in [
+            ("scrap_cost", "Scrap cost"),
+            ("rework_labor_cost", "Rework labor cost"),
+            ("vendor_chargeback_cost", "Vendor chargeback cost"),
+        ]:
+            val = cleaned.get(cost_field)
+            if val is not None and val < 0:
+                self.add_error(cost_field, f"{label} cannot be negative.")
         return cleaned
