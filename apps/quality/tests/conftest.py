@@ -676,7 +676,7 @@ def ncr_a(db, tenant_a, admin_user, quality_department, supplier_party_a):
         title="Excess Micro-Burrs on Surgical Cannula Tips",
         description="Micro-burrs exceeding 0.05mm tolerance discovered on cannula tips during optical comparator inspection.",
         source_type="incoming_inspection",
-        category="workmanship",
+        category="material",
         severity="major",
         status="containment_active",
         department=quality_department,
