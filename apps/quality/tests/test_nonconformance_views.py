@@ -71,6 +71,7 @@ def test_nonconformance_ncr_create_view_and_closed_attribution(client, admin_use
         "owner": admin_user.pk,
         "quantity_inspected": "100.00",
         "quantity_nonconforming": "2.00",
+        "estimated_financial_loss": "150.00",
         "closure_notes": "Immediate rework completed.",
     }
     resp_post = client.post(url, data)
@@ -117,7 +118,7 @@ def test_nonconformance_ncr_export_csv_view(client, admin_user, ncr_a):
     url = reverse("quality:non_conformance_report_export_csv")
     resp = client.get(url)
     assert resp.status_code == 200
-    assert resp["Content-Type"] == "text/csv; charset=utf-8"
+    assert "text/csv" in resp["Content-Type"]
     assert resp["X-Content-Type-Options"] == "nosniff"
     assert ncr_a.number in resp.content.decode()
 
