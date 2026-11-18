@@ -26,6 +26,10 @@ from apps.quality.models import (
     QuarantineContainment,
     MrbDisposition,
     ProcessDeviation,
+    SupplierQualificationAudit,
+    SupplierQualityScorecard,
+    SupplierCorrectiveAction,
+    SupplierChangeNotification,
 )
 
 
@@ -809,6 +813,161 @@ def process_deviation_b(db, tenant_b, admin_b, ncr_b):
         requested_by=admin_b,
         customer_notification_required=True,
     )
+
+
+# -----------------------------------------------------------------------------
+# Sub-module 12.6 Fixtures (Supplier & Vendor Quality Management)
+# -----------------------------------------------------------------------------
+
+@pytest.fixture
+def audit_a(db, tenant_a, supplier_party_a, admin_user, doc_a):
+    return SupplierQualificationAudit.objects.create(
+        tenant=tenant_a,
+        supplier=supplier_party_a,
+        assessment_type="initial_qualification",
+        criticality_tier="critical",
+        audit_method="on_site",
+        qualification_status="approved",
+        audit_result="passed",
+        score=94.50,
+        dock_to_stock_eligible=True,
+        requires_coa=True,
+        lead_auditor=admin_user,
+        quality_agreement=doc_a,
+        scope_of_authorization="Surgical cannulas, medical catheter components",
+        findings_summary="Compliant facility. ISO 13485 cleanroom certified.",
+    )
+
+
+@pytest.fixture
+def audit_b(db, tenant_b, supplier_party_b, admin_b):
+    return SupplierQualificationAudit.objects.create(
+        tenant=tenant_b,
+        supplier=supplier_party_b,
+        assessment_type="periodic_reaudit",
+        criticality_tier="major",
+        audit_method="desktop_survey",
+        qualification_status="under_evaluation",
+        audit_result="pending",
+        score=78.00,
+        dock_to_stock_eligible=False,
+        lead_auditor=admin_b,
+        scope_of_authorization="Industrial seals",
+    )
+
+
+@pytest.fixture
+def scorecard_a(db, tenant_a, supplier_party_a, admin_user):
+    return SupplierQualityScorecard.objects.create(
+        tenant=tenant_a,
+        supplier=supplier_party_a,
+        cadence="quarterly",
+        period_start=timezone.now().date() - timedelta(days=90),
+        period_end=timezone.now().date(),
+        status="published",
+        lot_acceptance_rate_score=96.00,
+        defect_ppm_score=92.00,
+        scar_responsiveness_score=90.00,
+        audit_compliance_score=95.00,
+        documentation_coa_score=98.00,
+        total_lots_received=120,
+        lots_accepted=118,
+        lots_rejected=2,
+        total_units_received=50000,
+        defective_units_count=12,
+        evaluated_by=admin_user,
+        executive_summary="Solid Q3 quality performance.",
+    )
+
+
+@pytest.fixture
+def scorecard_b(db, tenant_b, supplier_party_b, admin_b):
+    return SupplierQualityScorecard.objects.create(
+        tenant=tenant_b,
+        supplier=supplier_party_b,
+        cadence="monthly",
+        period_start=timezone.now().date() - timedelta(days=30),
+        period_end=timezone.now().date(),
+        status="draft",
+        lot_acceptance_rate_score=75.00,
+        defect_ppm_score=68.00,
+        scar_responsiveness_score=80.00,
+        audit_compliance_score=70.00,
+        documentation_coa_score=85.00,
+        evaluated_by=admin_b,
+    )
+
+
+@pytest.fixture
+def scar_a(db, tenant_a, supplier_party_a, admin_user, audit_a, ncr_a):
+    return SupplierCorrectiveAction.objects.create(
+        tenant=tenant_a,
+        supplier=supplier_party_a,
+        title="Excess Micro-Burrs on Delivery Lot CAN-TIP-004",
+        problem_description="Tip burrs exceeding 0.05mm limit discovered during optical comparator check.",
+        severity="major",
+        status="containment_acknowledged",
+        containment_required=True,
+        containment_actions="Immediate quarantine of remaining 925 units in warehouse.",
+        issued_date=timezone.now().date(),
+        response_due_date=timezone.now().date() + timedelta(days=14),
+        issued_by=admin_user,
+        qualification_audit=audit_a,
+        non_conformance=ncr_a,
+        affected_item_code="CAN-TIP-004",
+    )
+
+
+@pytest.fixture
+def scar_b(db, tenant_b, supplier_party_b, admin_b, audit_b, ncr_b):
+    return SupplierCorrectiveAction.objects.create(
+        tenant=tenant_b,
+        supplier=supplier_party_b,
+        title="Globex Seal Defect SCAR",
+        problem_description="Cracked seals delivered.",
+        severity="critical",
+        status="issued",
+        issued_date=timezone.now().date(),
+        issued_by=admin_b,
+        qualification_audit=audit_b,
+        non_conformance=ncr_b,
+    )
+
+
+@pytest.fixture
+def scn_a(db, tenant_a, supplier_party_a, admin_user, audit_a):
+    return SupplierChangeNotification.objects.create(
+        tenant=tenant_a,
+        supplier=supplier_party_a,
+        title="Ultrasonic Bath Frequency Upgrade from 40kHz to 68kHz",
+        change_category="process",
+        risk_level="level_2_moderate",
+        status="technical_evaluation",
+        description="Supplier is changing ultrasonic cleaning frequency to improve surface finish.",
+        affected_item_code="CAN-TIP-004",
+        affects_form_fit_function=False,
+        requires_requalification=False,
+        requalification_audit=audit_a,
+        evaluated_by=admin_user,
+    )
+
+
+@pytest.fixture
+def scn_b(db, tenant_b, supplier_party_b, admin_b, audit_b):
+    return SupplierChangeNotification.objects.create(
+        tenant=tenant_b,
+        supplier=supplier_party_b,
+        title="Globex Vendor Tooling Relocation",
+        change_category="tooling",
+        risk_level="level_3_major",
+        status="submitted",
+        description="Vendor moving molding tool to new plant.",
+        affects_form_fit_function=True,
+        requires_requalification=True,
+        requalification_audit=audit_b,
+        evaluated_by=admin_b,
+    )
+
 
 
 
