@@ -150,7 +150,7 @@
                     <span class="text-slate-400">—</span>
                   {% endif %}
                   {% if scar.affected_lots %}
-                    <div class="text-slate-500 text-2xs truncate">Lots: {{ scar.affected_lots }}</div>
+                    <div class="text-slate-500 text-xs truncate">Lots: {{ scar.affected_lots }}</div>
                   {% endif %}
                 </td>
                 <td class="py-3 px-4 text-xs whitespace-nowrap">
@@ -159,7 +159,7 @@
                       {{ scar.response_due_date|date:"Y-m-d" }}
                     </span>
                     {% if scar.is_overdue %}
-                      <span class="badge badge-red text-2xs ml-1">Overdue</span>
+                      <span class="badge badge-red text-xs ml-1">Overdue</span>
                     {% endif %}
                   {% else %}
                     <span class="text-slate-400">—</span>
