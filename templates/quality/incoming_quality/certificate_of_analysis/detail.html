@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}{{ coa.number }} — Certificate of Analysis — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:certificate_of_analysis_list' %}" class="hover:underline">Certificates of Analysis</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ coa.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="file-check-2" class="w-6 h-6 text-blue-600"></i>
+          {{ coa.number }} — CoA {{ coa.certificate_number }}
+        </h1>
+        <span class="badge {{ coa.status_css }} text-sm">{{ coa.get_status_display }}</span>
+        {% if coa.is_within_spec %}
+          <span class="badge badge-green text-sm flex items-center gap-1">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i> In-Spec
+          </span>
+        {% else %}
+          <span class="badge badge-red text-sm flex items-center gap-1">
+            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> {{ coa.variance_count }} Exception(s)
+          </span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Part: <span class="font-mono font-medium text-slate-700">{{ coa.item_code }}</span> ({{ coa.item_name }}) · Supplier: {{ coa.supplier.name }} · Lot: {{ coa.lot_number }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:certificate_of_analysis_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <form method="post" action="{% url 'quality:certificate_of_analysis_verify' coa.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5" title="Re-evaluate analytical values against tolerances">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Verify Specs</span>
+        </button>
+      </form>
+      <a href="{% url 'quality:certificate_of_analysis_edit' coa.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit CoA
+      </a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <form method="post" action="{% url 'quality:certificate_of_analysis_delete' coa.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete CoA {{ coa.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon {% if coa.is_within_spec %}green{% else %}red{% endif %} p-3 rounded-lg {% if coa.is_within_spec %}bg-green-50 text-green-600{% else %}bg-red-50 text-red-600{% endif %}">
+        <i data-lucide="{% if coa.is_within_spec %}check-circle{% else %}alert-octagon{% endif %}" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Specification Conformance</div>
+        <div class="text-xl font-bold {% if coa.is_within_spec %}text-green-600{% else %}text-red-600{% endif %}">
+          {% if coa.is_within_spec %}100% Conforming{% else %}Non-Conformant{% endif %}
+        </div>
+        <div class="text-xs text-slate-500">{{ coa.variance_count }} parameter out-of-spec</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="list-checks" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Parameters Tested</div>
+        <div class="text-xl font-bold text-slate-900 font-mono">{{ coa.parameters_payload|length }}</div>
+        <div class="text-xs text-slate-500">Analytical assays / CTQs</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="award" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Laboratory Accreditation</div>
+        <div class="text-sm font-bold text-slate-800 truncate max-w-[12rem]">
+          {{ coa.lab_accreditation|default:"Accredited Supplier Lab" }}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon slate p-3 rounded-lg bg-slate-50 text-slate-600">
+        <i data-lucide="calendar" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Shelf-Life Retest / Expiry</div>
+        <div class="text-sm font-bold text-slate-900">
+          {{ coa.expiry_or_retest_date|date:"M d, Y"|default:"Not specified" }}
+        </div>
+        <div class="text-xs text-slate-500">DOM: {{ coa.date_of_manufacture|date:"M d, Y"|default:"—" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CoA Details & Traceability -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <i data-lucide="file-text" class="w-5 h-5 text-slate-600"></i>
+        Certificate Information & Provenance
+      </h2>
+      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Supplier CoA / Test Report #</dt>
+          <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ coa.certificate_number }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Manufacturer / Mill Name</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">{{ coa.manufacturer_name|default:coa.supplier.name }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Vendor Lot / Heat Number</dt>
+          <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ coa.lot_number }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Linked Inspection Lot</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if coa.inspection_lot %}
+              <a href="{% url 'quality:incoming_inspection_lot_detail' coa.inspection_lot.pk %}" class="text-blue-600 hover:underline">
+                {{ coa.inspection_lot.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">Unlinked</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Governing Inspection Plan</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if coa.inspection_plan %}
+              <a href="{% url 'quality:incoming_inspection_plan_detail' coa.inspection_plan.pk %}" class="text-blue-600 hover:underline">
+                {{ coa.inspection_plan.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Supporting Attachment</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if coa.supporting_document %}
+              <a href="{% url 'quality:controlled_document_detail' coa.supporting_document.pk %}" class="text-blue-600 hover:underline flex items-center gap-1">
+                <i data-lucide="paperclip" class="w-3.5 h-3.5"></i>
+                {{ coa.supporting_document.document_number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">No file attached</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Verification Log & Comments -->
+    <div class="card p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <i data-lucide="shield-check" class="w-5 h-5 text-slate-600"></i>
+        Verification Authority & Observations
+      </h2>
+      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm mb-4">
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Verified By</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if coa.verified_by %}{{ coa.verified_by.get_full_name|default:coa.verified_by.username }}{% else %}Unverified{% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Verified At</dt>
+          <dd class="text-slate-800 mt-0.5">{{ coa.verified_at|date:"M d, Y H:i"|default:"—" }}</dd>
+        </div>
+      </dl>
+      <div>
+        <dt class="text-xs font-medium text-slate-400">CoA Notes & Analysis Comments</dt>
+        <dd class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 min-h-[5rem] whitespace-pre-wrap">
+          {% if coa.notes %}{{ coa.notes }}{% else %}<span class="text-slate-400 italic">No notes recorded.</span>{% endif %}
+        </dd>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytical Parameters Spec Comparison Table -->
+  <div class="card">
+    <div class="card-header px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div>
+        <h2 class="font-semibold text-slate-900 text-base flex items-center gap-2">
+          <i data-lucide="microscope" class="w-5 h-5 text-blue-600"></i>
+          Analytical Parameter Specification Comparison Engine
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">Automated tolerance verification of supplier test results against acceptance criteria.</p>
+      </div>
+    </div>
+    {% if coa.parameters_payload %}
+      <div class="table-wrap overflow-x-auto">
+        <table class="table w-full text-left text-sm text-slate-600">
+          <thead class="bg-slate-50 text-slate-700 text-xs uppercase font-semibold border-b border-slate-200">
+            <tr>
+              <th class="px-6 py-3">#</th>
+              <th class="px-6 py-3">Parameter / Assay</th>
+              <th class="px-6 py-3">Test Method</th>
+              <th class="px-6 py-3">Tolerance Limits (LSL - USL)</th>
+              <th class="px-6 py-3">Actual Value</th>
+              <th class="px-6 py-3">Unit</th>
+              <th class="px-6 py-3 text-right">Conformance</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            {% for p in coa.parameters_payload %}
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-3 font-mono text-xs text-slate-400">{{ forloop.counter }}</td>
+                <td class="px-6 py-3 font-semibold text-slate-900">{{ p.parameter|default:"—" }}</td>
+                <td class="px-6 py-3 text-slate-600 text-xs">{{ p.method|default:"Standard Analytical" }}</td>
+                <td class="px-6 py-3 font-mono text-sm text-slate-800">
+                  {% if p.lsl is not None or p.usl is not None %}
+                    {{ p.lsl|default:"-∞" }} to {{ p.usl|default:"+∞" }}
+                  {% else %}
+                    {{ p.expected|default:"Conforming" }}
+                  {% endif %}
+                </td>
+                <td class="px-6 py-3 font-mono font-bold text-sm {% if p.is_pass %}text-slate-900{% else %}text-red-600{% endif %}">
+                  {{ p.actual_value|default:"—" }}
+                </td>
+                <td class="px-6 py-3 text-slate-600 text-xs">{{ p.unit|default:"—" }}</td>
+                <td class="px-6 py-3 text-right whitespace-nowrap">
+                  {% if p.is_pass %}
+                    <span class="badge badge-green text-xs">Conforms</span>
+                  {% else %}
+                    <span class="badge badge-red text-xs">Out-of-Spec Exception</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-slate-400">
+        <i data-lucide="clipboard-x" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
+        <p class="text-sm">No structured analytical parameters logged. Click "Edit CoA" to add parameter specifications and test results.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
