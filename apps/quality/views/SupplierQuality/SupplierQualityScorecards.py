@@ -25,7 +25,7 @@ def _csv_safe(val):
     if val is None:
         return ""
     s = str(val)
-    if s.startswith(("=", "+", "-", "@", "\t", "\r")):
+    if s.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")):
         return "'" + s
     return s
 
