@@ -3426,6 +3426,13 @@ LIVE_LINKS = {
         "Supplier CAPA & Development": "quality:supplier_corrective_action_list",
         "Supplier Change Notification (SCN)": "quality:supplier_change_notification_list",
     },
+    "12.7": {
+        "Inspection Planning & Sampling": "quality:incoming_inspection_plan_list",
+        "Goods Receipt & Inspection Execution": "quality:incoming_inspection_lot_list",
+        "Certificate of Analysis (CoA) Management": "quality:certificate_of_analysis_list",
+        "Inspection Data Capture & SPC": "quality:iqc_spc_dashboard",
+        "Reject & Return Material Authorization (RMA)": "quality:quality_return_authorization_list",
+    },
 
 
 
