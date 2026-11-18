@@ -64,10 +64,10 @@ def non_conformance_report_list(request):
     if selected_category:
         qs = qs.filter(category=selected_category)
 
-    total_count = qs.count()
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
+    total_count = paginator.count
 
     context = {
         "non_conformance_reports": page_obj.object_list,
