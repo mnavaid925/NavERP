@@ -108,10 +108,10 @@ class ProcessParameterLogForm(TenantUniqueMixin, TenantModelForm):
             self.add_error("upper_control_limit", "Upper control limit (UCL) cannot be less than lower control limit (LCL).")
 
         # Auto-detect excursion state if limits exist
-        if recorded is not None and lsl is not None and usl is not None:
-            if recorded < lsl or recorded > usl:
+        if recorded is not None:
+            if (usl is not None and recorded > usl) or (lsl is not None and recorded < lsl):
                 cleaned_data["excursion_status"] = "out_of_spec"
-            elif lcl is not None and ucl is not None and (recorded < lcl or recorded > ucl):
+            elif (ucl is not None and recorded > ucl) or (lcl is not None and recorded < lcl):
                 if cleaned_data.get("excursion_status") != "out_of_spec":
                     cleaned_data["excursion_status"] = "out_of_control"
 
