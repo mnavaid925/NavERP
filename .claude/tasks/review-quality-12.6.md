@@ -100,7 +100,7 @@
     - `templates/quality/supplierquality/supplier_change_notification/list.html:146, 148`
   - **Fix**: Replace with `text-xs`.
 
-- [ ] **M5**: Inactive user selection allowed in form dropdowns.
+- [x] **M5**: Inactive user selection allowed in form dropdowns.
   - **Locations**:
     - `apps/quality/forms/SupplierQuality/SupplierQualificationAudits.py:74`
     - `apps/quality/forms/SupplierQuality/SupplierQualityScorecards.py:65`
