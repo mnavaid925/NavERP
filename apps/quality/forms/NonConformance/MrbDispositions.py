@@ -92,4 +92,12 @@ class MrbDispositionForm(TenantUniqueMixin, TenantModelForm):
                 "operations_approved_by",
             ],
         )
+        status = cleaned.get("status")
+        if status in ("approved", "executed"):
+            if not cleaned.get("quality_approved_by"):
+                self.add_error("quality_approved_by", "Quality Assurance sign-off is required to approve an MRB disposition.")
+            if not cleaned.get("engineering_approved_by"):
+                self.add_error("engineering_approved_by", "Engineering sign-off is required to approve an MRB disposition.")
+            if not cleaned.get("operations_approved_by"):
+                self.add_error("operations_approved_by", "Operations sign-off is required to approve an MRB disposition.")
         return cleaned
