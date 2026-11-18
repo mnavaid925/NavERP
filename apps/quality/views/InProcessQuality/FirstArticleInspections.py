@@ -237,6 +237,7 @@ def first_article_inspection_delete(request, pk):
 
 @login_required
 def first_article_inspection_export_csv(request):
+    write_audit_log(request.user, FirstArticleInspection(), "export", tenant=request.tenant)
     qs = FirstArticleInspection.objects.filter(tenant=request.tenant).order_by("-created_at")
 
     response = HttpResponse(content_type="text/csv")
