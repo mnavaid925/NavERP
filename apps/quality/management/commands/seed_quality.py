@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.models import OrgUnit, Tenant
+from apps.core.models import OrgUnit, Party, Tenant
 from apps.hrm.models.EmployeeManagement.EmployeeProfiles import EmployeeProfile
 from apps.quality.models.CapaManagement.CapaActions import CapaAction
 from apps.quality.models.CapaManagement.CapaEffectivenessReviews import CapaEffectivenessReview
@@ -27,6 +27,18 @@ from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
 from apps.quality.models.RiskManagement.RiskReviewRecords import RiskReviewRecord
+from apps.quality.models.SupplierQuality.SupplierChangeNotifications import (
+    SupplierChangeNotification,
+)
+from apps.quality.models.SupplierQuality.SupplierCorrectiveActions import (
+    SupplierCorrectiveAction,
+)
+from apps.quality.models.SupplierQuality.SupplierQualificationAudits import (
+    SupplierQualificationAudit,
+)
+from apps.quality.models.SupplierQuality.SupplierQualityScorecards import (
+    SupplierQualityScorecard,
+)
 
 
 User = get_user_model()
@@ -45,6 +57,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            SupplierChangeNotification.objects.all().delete()
+            SupplierCorrectiveAction.objects.all().delete()
+            SupplierQualityScorecard.objects.all().delete()
+            SupplierQualificationAudit.objects.all().delete()
             ProcessDeviation.objects.all().delete()
             MrbDisposition.objects.all().delete()
             QuarantineContainment.objects.all().delete()
@@ -79,6 +95,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_3(tenant)
             self._seed_submodule_12_4(tenant)
             self._seed_submodule_12_5(tenant)
+            self._seed_submodule_12_6(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -1439,5 +1456,395 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.5 Non-Conformance & Deviation Management seeded successfully."))
+
+    def _seed_submodule_12_6(self, tenant):
+        if SupplierQualificationAudit.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.6 Supplier Quality data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.6 Supplier & Vendor Quality Management...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        lead_auditor = User.objects.filter(tenant=tenant).order_by("pk").last() or admin_user
+
+        # Fetch supplier parties
+        cascade = Party.objects.filter(tenant=tenant, name="Cascade Components Ltd").first()
+        northwind = Party.objects.filter(tenant=tenant, name="Northwind Industrial Supply").first()
+        umbrella = Party.objects.filter(tenant=tenant, name="Umbrella Supplies").first()
+        initech = Party.objects.filter(tenant=tenant, name="Initech LLC").first()
+
+        # Fallback to any suppliers/parties if specific demo parties don't exist
+        suppliers = list(Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor")).distinct())
+        if not suppliers:
+            suppliers = list(Party.objects.filter(tenant=tenant).order_by("name"))
+
+        if not cascade and suppliers:
+            cascade = suppliers[0]
+        if not northwind and len(suppliers) > 1:
+            northwind = suppliers[1]
+        elif not northwind:
+            northwind = cascade
+        if not umbrella and len(suppliers) > 2:
+            umbrella = suppliers[2]
+        elif not umbrella:
+            umbrella = northwind
+        if not initech and len(suppliers) > 3:
+            initech = suppliers[3]
+        elif not initech:
+            initech = umbrella
+
+        if not cascade:
+            self.stdout.write(f"[{tenant.name}] No supplier parties available to seed 12.6, skipping.")
+            return
+
+        today = timezone.now().date()
+        quality_agreement = ControlledDocument.objects.filter(tenant=tenant).first()
+        design_project = DesignProject.objects.filter(tenant=tenant).first()
+        capa = CapaInvestigation.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
+            # 1. Supplier Qualification Audits (AVL)
+            # Record 1: Cascade Components Ltd (Approved, Critical Tier, Dock-to-Stock)
+            audit_cas = SupplierQualificationAudit.objects.create(
+                tenant=tenant,
+                supplier=cascade,
+                assessment_type="initial_qualification",
+                criticality_tier="critical",
+                audit_method="on_site",
+                qualification_status="approved",
+                scope_commodities="Precision machined stainless steel shafts, titanium surgical implant blanks",
+                score=Decimal("94.50"),
+                audit_result="passed",
+                critical_findings=0,
+                major_findings=1,
+                minor_findings=2,
+                lead_auditor=lead_auditor,
+                audit_date=today - datetime.timedelta(days=90),
+                qualified_date=today - datetime.timedelta(days=80),
+                next_audit_due_date=today + datetime.timedelta(days=275),
+                certificate_expiry_date=today + datetime.timedelta(days=640),
+                dock_to_stock_eligible=True,
+                skip_lot_approved=True,
+                requires_coa=True,
+                quality_agreement=quality_agreement,
+                notes="Facility audited under ISO 13485:2016 scope. Cleanroom particle counts well within Class 7 limits.",
+            )
+
+            # Record 2: Northwind Industrial Supply (Approved, Major Tier, Standard Receiving)
+            audit_nw = SupplierQualificationAudit.objects.create(
+                tenant=tenant,
+                supplier=northwind,
+                assessment_type="periodic_reaudit",
+                criticality_tier="major",
+                audit_method="desktop_survey",
+                qualification_status="approved",
+                scope_commodities="Industrial fasteners, silicone gaskets, O-rings, and molded seals",
+                score=Decimal("88.00"),
+                audit_result="passed",
+                critical_findings=0,
+                major_findings=2,
+                minor_findings=3,
+                lead_auditor=admin_user,
+                audit_date=today - datetime.timedelta(days=120),
+                qualified_date=today - datetime.timedelta(days=110),
+                next_audit_due_date=today + datetime.timedelta(days=245),
+                certificate_expiry_date=today + datetime.timedelta(days=400),
+                dock_to_stock_eligible=False,
+                skip_lot_approved=False,
+                requires_coa=True,
+                quality_agreement=quality_agreement,
+                notes="Desktop questionnaire audit complete. Verified ISO 9001:2015 third-party certificate validity.",
+            )
+
+            # Record 3: Umbrella Supplies (Conditional, Major Tier, Passed with CAPA)
+            audit_umb = SupplierQualificationAudit.objects.create(
+                tenant=tenant,
+                supplier=umbrella,
+                assessment_type="for_cause",
+                criticality_tier="major",
+                audit_method="on_site",
+                qualification_status="conditional",
+                scope_commodities="Medical grade polymers, polycarbonate housings",
+                score=Decimal("72.00"),
+                audit_result="passed_with_capa",
+                critical_findings=1,
+                major_findings=4,
+                minor_findings=5,
+                lead_auditor=lead_auditor,
+                audit_date=today - datetime.timedelta(days=45),
+                qualified_date=today - datetime.timedelta(days=30),
+                next_audit_due_date=today + datetime.timedelta(days=45),
+                certificate_expiry_date=today + datetime.timedelta(days=180),
+                dock_to_stock_eligible=False,
+                skip_lot_approved=False,
+                requires_coa=True,
+                notes="For-cause audit triggered by wall thickness non-conformances. Status conditioned on SCAR closure.",
+            )
+
+            # Record 4: Initech LLC (Under Evaluation, Minor Tier)
+            SupplierQualificationAudit.objects.create(
+                tenant=tenant,
+                supplier=initech,
+                assessment_type="certification_review",
+                criticality_tier="minor",
+                audit_method="third_party_iso",
+                qualification_status="under_evaluation",
+                scope_commodities="Calibration standards and secondary metrology laboratory services",
+                score=None,
+                audit_result="pending",
+                critical_findings=0,
+                major_findings=0,
+                minor_findings=0,
+                lead_auditor=admin_user,
+                audit_date=today - datetime.timedelta(days=10),
+                qualified_date=None,
+                next_audit_due_date=today + datetime.timedelta(days=20),
+                certificate_expiry_date=today + datetime.timedelta(days=365),
+                dock_to_stock_eligible=False,
+                skip_lot_approved=False,
+                requires_coa=False,
+                notes="Initial onboarding qualification underway. Awaiting accreditation certificate ISO/IEC 17025.",
+            )
+
+            # 2. Supplier Quality Scorecards
+            # Scorecard 1: Cascade Components Ltd (Q3 2026, Grade A)
+            SupplierQualityScorecard.objects.create(
+                tenant=tenant,
+                supplier=cascade,
+                cadence="quarterly",
+                period_start=today - datetime.timedelta(days=90),
+                period_end=today,
+                status="published",
+                lot_acceptance_rate_score=Decimal("98.00"),
+                defect_ppm_score=Decimal("95.00"),
+                scar_responsiveness_score=Decimal("92.00"),
+                audit_compliance_score=Decimal("94.50"),
+                documentation_coa_score=Decimal("96.00"),
+                total_lots_received=45,
+                lots_rejected=1,
+                total_scars_issued=0,
+                evaluated_by=admin_user,
+                evaluation_notes="Exemplary performance across all titanium machining lots. 98% lot acceptance rate.",
+            )
+
+            # Scorecard 2: Northwind Industrial Supply (Q3 2026, Grade B)
+            SupplierQualityScorecard.objects.create(
+                tenant=tenant,
+                supplier=northwind,
+                cadence="quarterly",
+                period_start=today - datetime.timedelta(days=90),
+                period_end=today,
+                status="published",
+                lot_acceptance_rate_score=Decimal("89.00"),
+                defect_ppm_score=Decimal("86.00"),
+                scar_responsiveness_score=Decimal("85.00"),
+                audit_compliance_score=Decimal("88.00"),
+                documentation_coa_score=Decimal("90.00"),
+                total_lots_received=38,
+                lots_rejected=4,
+                total_scars_issued=1,
+                evaluated_by=admin_user,
+                evaluation_notes="Solid delivery reliability; minor defect PPM bump caused by silicone heat cure issue.",
+            )
+
+            # Scorecard 3: Umbrella Supplies (Q3 2026, Grade C)
+            SupplierQualityScorecard.objects.create(
+                tenant=tenant,
+                supplier=umbrella,
+                cadence="quarterly",
+                period_start=today - datetime.timedelta(days=90),
+                period_end=today,
+                status="published",
+                lot_acceptance_rate_score=Decimal("74.00"),
+                defect_ppm_score=Decimal("70.00"),
+                scar_responsiveness_score=Decimal("75.00"),
+                audit_compliance_score=Decimal("72.00"),
+                documentation_coa_score=Decimal("80.00"),
+                total_lots_received=25,
+                lots_rejected=6,
+                total_scars_issued=2,
+                evaluated_by=admin_user,
+                evaluation_notes="At risk performance due to mold sink mark issues. Conditional AVL hold active.",
+            )
+
+            # 3. Supplier Corrective Actions (SCAR)
+            # SCAR 1: Umbrella Supplies (Critical, Action Plan Approved)
+            SupplierCorrectiveAction.objects.create(
+                tenant=tenant,
+                supplier=umbrella,
+                title="Polycarbonate Housing Wall Thickness Non-Conformance below 2.0mm Specification",
+                severity="critical",
+                status="action_plan_approved",
+                defect_summary="Wall thickness measured 1.65mm - 1.82mm across 15 sample parts, failing the 2.00mm +/- 0.10mm drawing specification.",
+                affected_item_code="POL-HOU-01",
+                affected_item_name="Diagnostic Device Base Enclosure",
+                affected_lots="LOT-UMB-2026-088",
+                qualification_audit=audit_umb,
+                internal_capa=capa,
+                issued_date=today - datetime.timedelta(days=35),
+                response_due_date=today + datetime.timedelta(days=10),
+                issued_by=admin_user,
+                containment_action="Quarantined 450 units at incoming dock; supplier placed shipping hold on remaining warehouse inventory and audited mold tooling temperature calibration.",
+                containment_due_date=today - datetime.timedelta(days=33),
+                containment_verified_at=today - datetime.timedelta(days=32),
+                root_cause_category="tooling_equipment",
+                root_cause_summary="Core pin thermal cooling channel calcification caused localized mold core overheating, inducing polymer thermal shrink sink marks.",
+                vendor_investigation_details="5 Whys: 1. Thin wall? Polymer sink mark. 2. Sink mark? Core temp >140C. 3. High temp? Cooling water restricted. 4. Restricted? Calcium scale. 5. Scale? Demineralized water filter bypassed during maintenance.",
+                corrective_action_plan="Acid-descaled all tool cooling channels; installed automated flow rate telemetry sensors with hard interlocks.",
+                preventive_action_plan="Updated preventative maintenance SOP-MOLD-04 to mandate bi-weekly demineralizer conductivity checks.",
+                implementation_due_date=today + datetime.timedelta(days=20),
+                implemented_at=today - datetime.timedelta(days=5),
+                effectiveness_due_date=today + datetime.timedelta(days=60),
+                effectiveness_method="Cpk evaluation and dimensional measurement on next 3 consecutive production shipments of 500 units.",
+            )
+
+            # SCAR 2: Northwind Industrial Supply (Major, Implemented)
+            SupplierCorrectiveAction.objects.create(
+                tenant=tenant,
+                supplier=northwind,
+                title="Silicone O-Ring Tensile Strength Degradation Under Heat Aging",
+                severity="major",
+                status="implemented",
+                defect_summary="Batch LOT-NW-442 exhibited 35% tensile strength loss after 72-hour thermal stress screening.",
+                affected_item_code="SL-RING-08",
+                affected_item_name="High-Purity Fluorosilicone O-Ring Seal",
+                affected_lots="LOT-NW-442",
+                qualification_audit=audit_nw,
+                issued_date=today - datetime.timedelta(days=50),
+                response_due_date=today - datetime.timedelta(days=20),
+                issued_by=lead_auditor,
+                containment_action="Segregated suspect batch in quarantine area; audited cure cycle timer records.",
+                containment_due_date=today - datetime.timedelta(days=48),
+                containment_verified_at=today - datetime.timedelta(days=47),
+                root_cause_category="process_parameter",
+                root_cause_summary="Post-curing oven heat distribution baffle dislodged, resulting in a 15C cold zone in oven rack tier 3.",
+                vendor_investigation_details="Oven thermal profiling confirmed temperature variance between top and bottom racks.",
+                corrective_action_plan="Re-welded air circulation plenum and re-profiled oven 9-point thermal mapping.",
+                preventive_action_plan="Implemented daily thermocouple data logger review before releasing cured elastomer lots.",
+                implementation_due_date=today - datetime.timedelta(days=10),
+                implemented_at=today - datetime.timedelta(days=8),
+                effectiveness_due_date=today + datetime.timedelta(days=30),
+                effectiveness_method="Destructive tensile elongation pull testing on 10 samples per lot for 5 consecutive lots.",
+            )
+
+            # SCAR 3: Cascade Components Ltd (Minor, Closed / Verified)
+            SupplierCorrectiveAction.objects.create(
+                tenant=tenant,
+                supplier=cascade,
+                title="Titanium Mandrel Micro-Burrs on Distal Bevel Edge",
+                severity="minor",
+                status="closed",
+                defect_summary="Micro-burrs exceeding 0.05mm observed under 20x optical inspection on batch LOT-CAS-102.",
+                affected_item_code="TI-MND-40",
+                affected_item_name="Titanium Endoscopic Mandrel Shaft",
+                affected_lots="LOT-CAS-102",
+                qualification_audit=audit_cas,
+                issued_date=today - datetime.timedelta(days=80),
+                response_due_date=today - datetime.timedelta(days=60),
+                issued_by=admin_user,
+                containment_action="100% optical deburring and re-inspection performed on all in-house inventory.",
+                containment_due_date=today - datetime.timedelta(days=78),
+                containment_verified_at=today - datetime.timedelta(days=77),
+                root_cause_category="tooling_equipment",
+                root_cause_summary="Diamond grinding wheel reached 500-cycle end-of-life wear threshold prematurely due to harder alloy lot.",
+                vendor_investigation_details="Wheel wear log confirmed diamond grit glazing after 380 cycles.",
+                corrective_action_plan="Adjusted grinding wheel redress interval from 500 to 350 cycles.",
+                preventive_action_plan="Added automated optical in-line edge inspection station at CNC grinding cell.",
+                implementation_due_date=today - datetime.timedelta(days=50),
+                implemented_at=today - datetime.timedelta(days=52),
+                effectiveness_due_date=today - datetime.timedelta(days=20),
+                effectiveness_method="Zero burrs detected across 1,200 consecutive components manufactured under revised dress frequency.",
+                effectiveness_results="Verified 100% pass rate with zero optical burrs across 3 subsequent delivery lots.",
+                is_effective=True,
+                verified_by=lead_auditor,
+                closed_at=today - datetime.timedelta(days=15),
+            )
+
+            # 4. Supplier Change Notifications (SCN)
+            # SCN 1: Cascade Components Ltd (Relocation, Level 2 Moderate)
+            SupplierChangeNotification.objects.create(
+                tenant=tenant,
+                supplier=cascade,
+                title="Relocation of Titanium Passivation and Ultrasonic Cleaning Line to Plant 3",
+                supplier_scn_number="SCN-CAS-2026-004",
+                change_category="facility_location",
+                risk_level="level_2_moderate",
+                status="under_assessment",
+                description="Moving automated ultrasonic nitric acid passivation line 200 meters to new cleanroom facility Plant 3 to double processing capacity.",
+                proposed_effective_date=today + datetime.timedelta(days=60),
+                first_affected_lot="CAS-TI-2026-P3-01",
+                affected_item_code="TI-MND-40",
+                affected_item_name="Titanium Endoscopic Mandrel Shaft",
+                affects_form_fit_function=False,
+                requires_requalification=True,
+                requires_design_change=False,
+                requires_regulatory_filing=False,
+                requires_customer_notification=False,
+                samples_required=True,
+                impact_assessment_notes="ASTM A967 chemical passivation testing and residual bioburden validation protocol required before approval.",
+                requalification_audit=audit_cas,
+                disposition="pending",
+                evaluated_by=admin_user,
+            )
+
+            # SCN 2: Umbrella Supplies (Raw Material Alt Source, Level 3 Major)
+            SupplierChangeNotification.objects.create(
+                tenant=tenant,
+                supplier=umbrella,
+                title="Polycarbonate Resin Raw Material Supplier Alternative Sourcing (Covestro Makrolon 2808)",
+                supplier_scn_number="PCN-UMB-2026-11",
+                change_category="raw_material",
+                risk_level="level_3_major",
+                status="technical_evaluation",
+                description="Primary polycarbonate resin supplier experiencing force majeure supply interruption. Proposing secondary qualified source Covestro Makrolon 2808 with identical ISO 10993 biocompatibility certification.",
+                proposed_effective_date=today + datetime.timedelta(days=45),
+                first_affected_lot="UMB-POL-2026-R2",
+                affected_item_code="POL-HOU-01",
+                affected_item_name="Diagnostic Device Base Enclosure",
+                affects_form_fit_function=True,
+                requires_requalification=True,
+                requires_design_change=True,
+                requires_regulatory_filing=True,
+                requires_customer_notification=True,
+                samples_required=True,
+                impact_assessment_notes="Critical raw material change. Requires drop-impact testing, biocompatibility review, and technical file update.",
+                design_project=design_project,
+                requalification_audit=audit_umb,
+                disposition="pending",
+                evaluated_by=lead_auditor,
+            )
+
+            # SCN 3: Northwind Industrial Supply (Packaging Upgrade, Level 1 Minor, Approved)
+            SupplierChangeNotification.objects.create(
+                tenant=tenant,
+                supplier=northwind,
+                title="Secondary Packaging Blister Pack Heat Seal Adhesive Upgrade to Tyvek 1073B",
+                supplier_scn_number="SCN-NW-2026-08",
+                change_category="packaging_labeling",
+                risk_level="level_1_minor",
+                status="approved",
+                description="Upgrading outer moisture barrier adhesive on non-sterile bulk packaging to improve peel durability during export transit.",
+                proposed_effective_date=today - datetime.timedelta(days=15),
+                first_affected_lot="NW-PKG-882",
+                affected_item_code="SL-RING-08",
+                affected_item_name="High-Purity Fluorosilicone O-Ring Seal",
+                affects_form_fit_function=False,
+                requires_requalification=False,
+                requires_design_change=False,
+                requires_regulatory_filing=False,
+                requires_customer_notification=False,
+                samples_required=False,
+                impact_assessment_notes="Low risk outer carton packaging improvement. Tested peel seal strength exceeds 1.5 N/15mm.",
+                disposition="approved",
+                disposition_notes="Approved for immediate implementation. Low risk packaging specification improvement.",
+                disposition_date=today - datetime.timedelta(days=10),
+                approved_by=admin_user,
+                evaluated_by=admin_user,
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.6 Supplier & Vendor Quality Management seeded successfully."))
 
 
