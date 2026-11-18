@@ -40,6 +40,21 @@ from apps.quality.urls.DocumentControl.DocumentChangeOrders import (
 from apps.quality.urls.DocumentControl.ElectronicSignatures import (
     urlpatterns as electronic_signatures_urls,
 )
+from apps.quality.urls.NonConformance.MrbDispositions import (
+    urlpatterns as mrb_dispositions_urls,
+)
+from apps.quality.urls.NonConformance.NcrAnalytics import (
+    urlpatterns as ncr_analytics_urls,
+)
+from apps.quality.urls.NonConformance.NonConformanceReports import (
+    urlpatterns as non_conformance_reports_urls,
+)
+from apps.quality.urls.NonConformance.ProcessDeviations import (
+    urlpatterns as process_deviations_urls,
+)
+from apps.quality.urls.NonConformance.QuarantineContainments import (
+    urlpatterns as quarantine_containments_urls,
+)
 from apps.quality.urls.RiskManagement.FmeaMatrix import (
     urlpatterns as fmea_matrix_urls,
 )
@@ -78,5 +93,10 @@ urlpatterns = (
     + capa_actions_urls
     + capa_effectiveness_reviews_urls
     + capa_tracking_board_urls
+    + non_conformance_reports_urls
+    + quarantine_containments_urls
+    + mrb_dispositions_urls
+    + process_deviations_urls
+    + ncr_analytics_urls
 )
 
