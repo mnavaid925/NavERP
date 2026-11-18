@@ -40,7 +40,6 @@ class FirstArticleInspectionForm(TenantUniqueMixin, TenantModelForm):
             "conditional_release_notes",
             "non_conformance",
             "inspector",
-            "approved_by",
             "notes",
         ]
         widgets = {
@@ -71,7 +70,6 @@ class FirstArticleInspectionForm(TenantUniqueMixin, TenantModelForm):
             "conditional_release_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
             "non_conformance": forms.Select(attrs={"class": "form-select"}),
             "inspector": forms.Select(attrs={"class": "form-select"}),
-            "approved_by": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
@@ -80,7 +78,6 @@ class FirstArticleInspectionForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant:
             users = User.objects.filter(tenant=self.tenant, is_active=True).order_by("first_name", "last_name", "email")
             self.fields["inspector"].queryset = users
-            self.fields["approved_by"].queryset = users
 
             try:
                 NonConformanceReport = apps.get_model("quality", "NonConformanceReport")
@@ -103,7 +100,7 @@ class FirstArticleInspectionForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, [
-            "inspector", "approved_by", "non_conformance", "work_order", "work_center"
+            "inspector", "non_conformance", "work_order", "work_center"
         ])
 
         total_chars = cleaned_data.get("total_characteristics_inspected") or 0
