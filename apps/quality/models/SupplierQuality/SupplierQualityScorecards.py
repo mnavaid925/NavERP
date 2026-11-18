@@ -34,7 +34,7 @@ class SupplierQualityScorecard(TenantNumbered):
         "monthly": "badge-info",
         "quarterly": "badge-slate",
         "semi_annual": "badge-amber",
-        "annual": "badge-purple",
+        "annual": "badge-slate",
     }
 
     STATUS_CSS = {
