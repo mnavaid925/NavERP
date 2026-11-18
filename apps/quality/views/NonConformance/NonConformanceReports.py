@@ -3,7 +3,7 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 
 from apps.core.utils import write_audit_log
 from apps.quality.forms.NonConformance.NonConformanceReports import NonConformanceReportForm
+from apps.quality.models.NonConformance.MrbDispositions import MrbDisposition
 from apps.quality.models.NonConformance.NonConformanceReports import NonConformanceReport
 from apps.quality.views._common import quality_object, quality_scope
 
@@ -93,11 +94,15 @@ def non_conformance_report_detail(request, pk):
         NonConformanceReport,
         pk=pk,
         select_related=("department", "initiator", "owner", "supplier_party", "capa_investigation", "closed_by"),
-        prefetch_related=("containment_records", "mrb_dispositions", "process_deviations"),
+        prefetch_related=(
+            "containment_records",
+            Prefetch("mrb_dispositions", queryset=MrbDisposition.objects.select_related("mrb_chair")),
+            "process_deviations",
+        ),
     )
-    containment_records = ncr.containment_records.all().order_by("-created_at")
-    mrb_dispositions = ncr.mrb_dispositions.all().order_by("-created_at")
-    process_deviations = ncr.process_deviations.all().order_by("-created_at")
+    containment_records = ncr.containment_records.all()
+    mrb_dispositions = ncr.mrb_dispositions.all()
+    process_deviations = ncr.process_deviations.all()
 
     context = {
         "non_conformance_report": ncr,
