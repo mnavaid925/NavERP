@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if log %}Edit {{ log.number }}{% else %}Log Process Parameter{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:process_parameter_log_list' %}" class="hover:underline">Parameter Logs</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if log %}Edit {{ log.number }}{% else %}New Entry{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="activity" class="w-6 h-6 text-blue-600"></i>
+        {% if log %}Edit {{ log.number }} — {{ log.parameter_name }}{% else %}Record Critical Process Parameter (SPC){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Capture real-time temperature, pressure, torque, or dimension against engineering tolerances and 3-sigma control limits.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if log %}{% url 'quality:process_parameter_log_detail' log.pk %}{% else %}{% url 'quality:process_parameter_log_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Parameter Identification -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          Parameter Definition & Timing
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.parameter_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Parameter Name *</label>
+            {{ form.parameter_name }}
+            {% if form.parameter_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.parameter_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.parameter_category.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Category *</label>
+            {{ form.parameter_category }}
+            {% if form.parameter_category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.parameter_category.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.unit_of_measure.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Unit of Measure *</label>
+            {{ form.unit_of_measure }}
+            {% if form.unit_of_measure.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.unit_of_measure.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.logged_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Logged By (User)</label>
+            {{ form.logged_by }}
+            {% if form.logged_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.logged_by.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.recorded_at.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Timestamp</label>
+            {{ form.recorded_at }}
+            {% if form.recorded_at.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.recorded_at.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Limits, Target & Recorded Measurement -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+          Engineering Tolerances & Statistical Limits
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.target_nominal_value.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Target Nominal (μ) *</label>
+            {{ form.target_nominal_value }}
+            {% if form.target_nominal_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_nominal_value.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lower_spec_limit.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Lower Spec Limit (LSL) *</label>
+            {{ form.lower_spec_limit }}
+            {% if form.lower_spec_limit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lower_spec_limit.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.upper_spec_limit.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Upper Spec Limit (USL) *</label>
+            {{ form.upper_spec_limit }}
+            {% if form.upper_spec_limit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.upper_spec_limit.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lower_control_limit.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Lower Control Limit (LCL, -3σ)</label>
+            {{ form.lower_control_limit }}
+            {% if form.lower_control_limit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lower_control_limit.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.upper_control_limit.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Upper Control Limit (UCL, +3σ)</label>
+            {{ form.upper_control_limit }}
+            {% if form.upper_control_limit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.upper_control_limit.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.recorded_value.id_for_label }}" class="form-label text-sm font-semibold text-slate-700 font-bold text-blue-600">Recorded Value *</label>
+            {{ form.recorded_value }}
+            {% if form.recorded_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.recorded_value.errors }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div class="form-group">
+            <label for="{{ form.excursion_status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Excursion Classification *</label>
+            {{ form.excursion_status }}
+            <p class="text-xs text-slate-500 mt-1">Leave as Normal for automated classification based on limits.</p>
+            {% if form.excursion_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.excursion_status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.containment_action.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Containment Action</label>
+            {{ form.containment_action }}
+            {% if form.containment_action.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.containment_action.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.containment_notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Containment & Adjustment Notes</label>
+            {{ form.containment_notes }}
+            {% if form.containment_notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.containment_notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Manufacturing Context -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="factory" class="w-4 h-4 text-blue-600"></i>
+          Manufacturing Routing & Governance Links
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.work_center.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Center</label>
+            {{ form.work_center }}
+            {% if form.work_center.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_center.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_center_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Center Code</label>
+            {{ form.work_center_code }}
+            {% if form.work_center_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_center_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.operation_step.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Operation Step</label>
+            {{ form.operation_step }}
+            {% if form.operation_step.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.operation_step.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Part / Item Code</label>
+            {{ form.item_code }}
+            {% if form.item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lot_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Material Lot #</label>
+            {{ form.lot_number }}
+            {% if form.lot_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lot_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.production_order_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Production Order #</label>
+            {{ form.production_order_number }}
+            {% if form.production_order_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.production_order_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_order.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Order</label>
+            {{ form.work_order }}
+            {% if form.work_order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_order.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.non_conformance.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked NCR</label>
+            {{ form.non_conformance }}
+            {% if form.non_conformance.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.non_conformance.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.process_deviation.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Process Deviation</label>
+            {{ form.process_deviation }}
+            {% if form.process_deviation.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.process_deviation.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if log %}{% url 'quality:process_parameter_log_detail' log.pk %}{% else %}{% url 'quality:process_parameter_log_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if log %}Save Changes{% else %}Save Parameter Reading{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
