@@ -100,6 +100,21 @@ from apps.quality.urls.IncomingQuality.QualityReturnAuthorizations import (
 from apps.quality.urls.SupplierQuality.SupplierQualityScorecards import (
     urlpatterns as supplier_quality_scorecards_urls,
 )
+from apps.quality.urls.InProcessQuality.FirstArticleInspections import (
+    urlpatterns as first_article_inspections_urls,
+)
+from apps.quality.urls.InProcessQuality.InProcessInspections import (
+    urlpatterns as in_process_inspections_urls,
+)
+from apps.quality.urls.InProcessQuality.LayeredProcessAudits import (
+    urlpatterns as layered_process_audits_urls,
+)
+from apps.quality.urls.InProcessQuality.ProcessParameterLogs import (
+    urlpatterns as process_parameter_logs_urls,
+)
+from apps.quality.urls.InProcessQuality.SpcDashboard import (
+    urlpatterns as ipqc_spc_dashboard_urls,
+)
 
 app_name = "quality"
 
@@ -138,5 +153,10 @@ urlpatterns = (
     + certificates_of_analysis_urls
     + quality_return_authorizations_urls
     + iqc_spc_dashboard_urls
+    + in_process_inspections_urls
+    + first_article_inspections_urls
+    + process_parameter_logs_urls
+    + layered_process_audits_urls
+    + ipqc_spc_dashboard_urls
 )
 
