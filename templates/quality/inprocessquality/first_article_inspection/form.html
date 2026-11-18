@@ -229,15 +229,10 @@
           Approvals, Containment & Quality Escalation
         </h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="form-group">
+          <div class="form-group md:col-span-2">
             <label for="{{ form.inspector.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Quality Inspector</label>
             {{ form.inspector }}
             {% if form.inspector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspector.errors }}</div>{% endif %}
-          </div>
-          <div class="form-group">
-            <label for="{{ form.approved_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Approved By (Engineering / Quality Authority)</label>
-            {{ form.approved_by }}
-            {% if form.approved_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.approved_by.errors }}</div>{% endif %}
           </div>
           <div class="form-group md:col-span-2">
             <label for="{{ form.conditional_release_notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Conditional Pilot Release Boundaries</label>
