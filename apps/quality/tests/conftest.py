@@ -674,19 +674,19 @@ def ncr_a(db, tenant_a, admin_user, quality_department, supplier_party_a):
     return NonConformanceReport.objects.create(
         tenant=tenant_a,
         title="Excess Micro-Burrs on Surgical Cannula Tips",
+        description="Micro-burrs exceeding 0.05mm tolerance discovered on cannula tips during optical comparator inspection.",
         source_type="incoming_inspection",
         category="workmanship",
         severity="major",
-        status="open",
+        status="containment_active",
         department=quality_department,
         initiator=admin_user,
         owner=admin_user,
-        item_code="CAN-TIP-004",
-        lot_number="LOT-2026-X819",
+        affected_item_code="CAN-TIP-004",
+        lot_serial_numbers="LOT-2026-X819",
         quantity_inspected=1000,
         quantity_nonconforming=75,
-        defect_description="Micro-burrs exceeding 0.05mm tolerance discovered on cannula tips during optical comparator inspection.",
-        containment_action="Batch isolated in warehouse holding area Pending formal MRB disposition.",
+        immediate_containment_required=True,
         supplier_party=supplier_party_a,
     )
 
@@ -696,19 +696,19 @@ def ncr_b(db, tenant_b, admin_b, quality_department_b, supplier_party_b):
     return NonConformanceReport.objects.create(
         tenant=tenant_b,
         title="Globex Defective O-Ring Seal Batch",
+        description="Cracked seal surfaces under pressure.",
         source_type="incoming_inspection",
         category="material",
         severity="critical",
-        status="open",
+        status="containment_active",
         department=quality_department_b,
         initiator=admin_b,
         owner=admin_b,
-        item_code="GLX-SEAL-99",
-        lot_number="GLX-LOT-001",
+        affected_item_code="GLX-SEAL-99",
+        lot_serial_numbers="GLX-LOT-001",
         quantity_inspected=500,
         quantity_nonconforming=120,
-        defect_description="Cracked seal surfaces under pressure.",
-        containment_action="Quarantine zone active.",
+        immediate_containment_required=True,
         supplier_party=supplier_party_b,
     )
 
@@ -718,12 +718,13 @@ def quarantine_a(db, tenant_a, admin_user, ncr_a):
     return QuarantineContainment.objects.create(
         tenant=tenant_a,
         ncr=ncr_a,
+        title="Quarantine Hold - Cannula Batch X819",
         hold_type="physical_quarantine",
         quarantine_location="Warehouse Bay 4B, Red Cage #2",
         quantity_on_hold=75,
         status="active",
-        hold_placed_by=admin_user,
-        containment_protocol="Physical cage padlocked. Red DO NOT MOVE tags affixed.",
+        hold_applied_by=admin_user,
+        release_criteria="MRB rework and 100% reinspection pass required.",
     )
 
 
@@ -732,12 +733,13 @@ def quarantine_b(db, tenant_b, admin_b, ncr_b):
     return QuarantineContainment.objects.create(
         tenant=tenant_b,
         ncr=ncr_b,
+        title="Quarantine Hold - Globex Seal Vault",
         hold_type="physical_quarantine",
         quarantine_location="Globex Vault G1",
         quantity_on_hold=120,
         status="active",
-        hold_placed_by=admin_b,
-        containment_protocol="Globex isolation applied.",
+        hold_applied_by=admin_b,
+        release_criteria="Globex isolation applied.",
     )
 
 
@@ -783,14 +785,14 @@ def process_deviation_a(db, tenant_a, admin_user, ncr_a):
         tenant=tenant_a,
         ncr=ncr_a,
         title="Temporary Parameter Adjustment for Deburring Ultrasonic Bath",
-        deviation_type="temporary_process_change",
+        deviation_type="unplanned",
         status="draft",
         description="Temporarily increase bath ultrasonic power setting from 400W to 550W for lot LOT-2026-X819 rework.",
         justification="Higher cavitation required to dissolve tough chromium-alloy oxide layer without hand grinding.",
         risk_impact_level="minor",
-        risk_assessment="Tested on 5 dummy cannulas. No core tube deformation observed. Cleanroom particulate counts normal.",
+        quality_impact_assessment="Tested on 5 dummy cannulas. No core tube deformation observed. Cleanroom particulate counts normal.",
         requested_by=admin_user,
-        requires_customer_notification=False,
+        customer_notification_required=False,
     )
 
 
@@ -804,10 +806,10 @@ def process_deviation_b(db, tenant_b, admin_b, ncr_b):
         status="draft",
         description="Globex emergency chemical shift.",
         justification="Globex production necessity.",
-        risk_impact_level="major",
-        risk_assessment="Risk evaluated.",
+        risk_impact_level="moderate",
+        quality_impact_assessment="Risk evaluated.",
         requested_by=admin_b,
-        requires_customer_notification=True,
+        customer_notification_required=True,
     )
 
 
