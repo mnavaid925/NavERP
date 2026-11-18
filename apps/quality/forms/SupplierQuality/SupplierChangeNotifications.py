@@ -39,9 +39,6 @@ class SupplierChangeNotificationForm(TenantUniqueMixin, TenantModelForm):
             "impact_assessment_notes",
             "design_project",
             "requalification_audit",
-            "disposition",
-            "disposition_notes",
-            "approved_by",
             "evaluated_by",
         ]
         widgets = {
@@ -65,9 +62,6 @@ class SupplierChangeNotificationForm(TenantUniqueMixin, TenantModelForm):
             "impact_assessment_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
             "design_project": forms.Select(attrs={"class": "form-select"}),
             "requalification_audit": forms.Select(attrs={"class": "form-select"}),
-            "disposition": forms.Select(attrs={"class": "form-select"}),
-            "disposition_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
-            "approved_by": forms.Select(attrs={"class": "form-select"}),
             "evaluated_by": forms.Select(attrs={"class": "form-select"}),
         }
 
@@ -87,7 +81,6 @@ class SupplierChangeNotificationForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant
             ).order_by("-created_at")
             users = User.objects.filter(tenant=self.tenant).order_by("first_name", "last_name", "email")
-            self.fields["approved_by"].queryset = users
             self.fields["evaluated_by"].queryset = users
 
     def clean(self):
@@ -95,6 +88,6 @@ class SupplierChangeNotificationForm(TenantUniqueMixin, TenantModelForm):
         reject_foreign(
             self,
             cleaned_data,
-            ["supplier", "design_project", "requalification_audit", "approved_by", "evaluated_by"],
+            ["supplier", "design_project", "requalification_audit", "evaluated_by"],
         )
         return cleaned_data
