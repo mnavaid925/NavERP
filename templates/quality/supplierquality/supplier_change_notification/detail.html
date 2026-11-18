@@ -207,7 +207,7 @@
             {{ scn.disposition_notes }}
           </div>
           <div class="flex items-center gap-6 text-xs text-slate-500 mt-3">
-            <div><strong>Approved By:</strong> {{ scn.approved_by.get_full_name|default:scn.approved_by.email|default:"Not Assigned" }}</div>
+            <div><strong>Approved By:</strong> {% if scn.approved_by %}{{ scn.approved_by.get_full_name|default:scn.approved_by.email }}{% else %}Not Assigned{% endif %}</div>
             <div><strong>Disposition Date:</strong> {{ scn.disposition_date|date:"Y-m-d"|default:"Pending" }}</div>
           </div>
         </div>
@@ -276,7 +276,7 @@
       <div class="card p-4 text-xs text-slate-500 space-y-2">
         <div class="flex justify-between">
           <span>Evaluator:</span>
-          <span class="text-slate-700 font-medium">{{ scn.evaluated_by.get_full_name|default:scn.evaluated_by.email|default:"Not Assigned" }}</span>
+          <span class="text-slate-700 font-medium">{% if scn.evaluated_by %}{{ scn.evaluated_by.get_full_name|default:scn.evaluated_by.email }}{% else %}Not Assigned{% endif %}</span>
         </div>
         <div class="flex justify-between">
           <span>Logged Date:</span>
