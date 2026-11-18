@@ -200,6 +200,9 @@ class SupplierQualityScorecard(TenantNumbered):
             calculated = self.calculate_composite_score()
             self.overall_score = calculated
             self.grade = self.determine_grade(calculated)
-        elif self.overall_score is not None and not self.grade:
-            self.grade = self.determine_grade(self.overall_score)
+        else:
+            if self.overall_score is None:
+                self.overall_score = self.calculate_composite_score()
+            if not self.grade and self.overall_score is not None:
+                self.grade = self.determine_grade(self.overall_score)
         super().save(*args, **kwargs)
