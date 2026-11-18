@@ -11,6 +11,10 @@ from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDo
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
+from apps.quality.models.NonConformance.MrbDispositions import MrbDisposition
+from apps.quality.models.NonConformance.NonConformanceReports import NonConformanceReport
+from apps.quality.models.NonConformance.ProcessDeviations import ProcessDeviation
+from apps.quality.models.NonConformance.QuarantineContainments import QuarantineContainment
 from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
@@ -35,5 +39,9 @@ __all__ = [
     "RootCauseAnalysis",
     "CapaAction",
     "CapaEffectivenessReview",
+    "NonConformanceReport",
+    "QuarantineContainment",
+    "MrbDisposition",
+    "ProcessDeviation",
 ]
 
