@@ -118,36 +118,62 @@ def supplier_qualification_audit_detail(request, pk):
 
 @login_required
 def supplier_qualification_audit_create(request):
-    return crud_create(
+    if request.method == "POST":
+        form = SupplierQualificationAuditForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            audit = form.save(commit=False)
+            audit.tenant = request.tenant
+            audit.save()
+            form.save_m2m()
+            write_audit_log(request.user, audit, "create", tenant=request.tenant)
+            messages.success(request, f"Audit {audit.number} created successfully.")
+            return redirect("quality:supplier_qualification_audit_detail", pk=audit.pk)
+    else:
+        form = SupplierQualificationAuditForm(tenant=request.tenant)
+    context = {
+        "form": form,
+        "is_edit": False,
+        "audit": None,
+    }
+    return render(
         request,
-        form_class=SupplierQualificationAuditForm,
-        template_name="quality/supplierquality/supplier_qualification_audit/form.html",
-        redirect_url="quality:supplier_qualification_audit_detail",
-        extra_context={"audit": None},
+        "quality/supplierquality/supplier_qualification_audit/form.html",
+        context,
     )
 
 
 @login_required
 def supplier_qualification_audit_edit(request, pk):
-    return crud_edit(
+    audit = get_object_or_404(SupplierQualificationAudit, pk=pk, tenant=request.tenant)
+    if request.method == "POST":
+        form = SupplierQualificationAuditForm(request.POST, instance=audit, tenant=request.tenant)
+        if form.is_valid():
+            audit = form.save()
+            write_audit_log(request.user, audit, "update", tenant=request.tenant)
+            messages.success(request, f"Audit {audit.number} updated successfully.")
+            return redirect("quality:supplier_qualification_audit_detail", pk=audit.pk)
+    else:
+        form = SupplierQualificationAuditForm(instance=audit, tenant=request.tenant)
+    context = {
+        "form": form,
+        "is_edit": True,
+        "audit": audit,
+    }
+    return render(
         request,
-        model=SupplierQualificationAudit,
-        pk=pk,
-        form_class=SupplierQualificationAuditForm,
-        template_name="quality/supplierquality/supplier_qualification_audit/form.html",
-        redirect_url="quality:supplier_qualification_audit_detail",
+        "quality/supplierquality/supplier_qualification_audit/form.html",
+        context,
     )
 
 
 @login_required
 @require_POST
 def supplier_qualification_audit_delete(request, pk):
-    return crud_delete(
-        request,
-        model=SupplierQualificationAudit,
-        pk=pk,
-        redirect_url="quality:supplier_qualification_audit_list",
-    )
+    audit = get_object_or_404(SupplierQualificationAudit, pk=pk, tenant=request.tenant)
+    write_audit_log(request.user, audit, "delete", tenant=request.tenant)
+    audit.delete()
+    messages.success(request, f"Audit {audit.number} deleted successfully.")
+    return redirect("quality:supplier_qualification_audit_list")
 
 
 @login_required
