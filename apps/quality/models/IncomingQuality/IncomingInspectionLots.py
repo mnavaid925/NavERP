@@ -199,6 +199,31 @@ class IncomingInspectionLot(TenantNumbered):
         if not self.measurements_data:
             return
 
+        if (lsl is None or usl is None) and self.inspection_plan and self.inspection_plan.characteristics_matrix:
+            matrix = self.inspection_plan.characteristics_matrix
+            if isinstance(matrix, list):
+                target_char = None
+                for spec in matrix:
+                    if not isinstance(spec, dict):
+                        continue
+                    spec_name = spec.get("name") or spec.get("characteristic") or ""
+                    if characteristic_name and spec_name.strip().lower() == characteristic_name.strip().lower():
+                        target_char = spec
+                        break
+                if target_char is None and len(matrix) == 1 and isinstance(matrix[0], dict):
+                    target_char = matrix[0]
+                if target_char:
+                    if lsl is None and target_char.get("lsl") is not None:
+                        try:
+                            lsl = float(target_char["lsl"])
+                        except (ValueError, TypeError):
+                            pass
+                    if usl is None and target_char.get("usl") is not None:
+                        try:
+                            usl = float(target_char["usl"])
+                        except (ValueError, TypeError):
+                            pass
+
         values = []
         for m in self.measurements_data:
             if not isinstance(m, dict):
