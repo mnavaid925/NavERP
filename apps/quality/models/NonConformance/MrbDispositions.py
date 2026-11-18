@@ -183,6 +183,5 @@ class MrbDisposition(TenantNumbered):
         return self.scrap_cost + self.rework_labor_cost + self.vendor_chargeback_cost
 
     def save(self, *args, **kwargs):
-        if not self.total_cost_impact:
-            self.total_cost_impact = self.calculate_total_cost()
+        self.total_cost_impact = self.calculate_total_cost()
         super().save(*args, **kwargs)
