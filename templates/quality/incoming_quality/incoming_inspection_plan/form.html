@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if plan %}Edit {{ plan.number }}{% else %}New Incoming Inspection Plan{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:incoming_inspection_plan_list' %}" class="hover:underline">Inspection Plans</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if plan %}Edit {{ plan.number }}{% else %}New Plan{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="clipboard-list" class="w-6 h-6 text-blue-600"></i>
+        {% if plan %}Edit {{ plan.number }} — {{ plan.title }}{% else %}New Incoming Inspection Plan{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Configure item specifications, ANSI/ASQ Z1.4 sampling protocols, AQL defect thresholds, and CTQ parameters.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if plan %}{% url 'quality:incoming_inspection_plan_detail' plan.pk %}{% else %}{% url 'quality:incoming_inspection_plan_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Item & Basic Plan Details -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="package" class="w-4 h-4 text-blue-600"></i>
+          Part / Item Identification
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Plan Title *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item / Part Code *</label>
+            {{ form.item_code }}
+            {% if form.item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item / Part Name *</label>
+            {{ form.item_name }}
+            {% if form.item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.revision.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Drawing / Spec Revision</label>
+            {{ form.revision }}
+            {% if form.revision.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.revision.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.supplier.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Specific Supplier (Optional)</label>
+            {{ form.supplier }}
+            <p class="text-xs text-slate-400 mt-1">Leave empty if this is the default plan across all suppliers.</p>
+            {% if form.supplier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supplier.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Sampling Protocol & AQL -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+          Sampling Protocol & Acceptance Quality Limits (AQL)
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.sampling_standard.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Sampling Standard</label>
+            {{ form.sampling_standard }}
+            {% if form.sampling_standard.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sampling_standard.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_level.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Level</label>
+            {{ form.inspection_level }}
+            {% if form.inspection_level.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_level.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_severity.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Severity</label>
+            {{ form.inspection_severity }}
+            {% if form.inspection_severity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_severity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_frequency.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Frequency</label>
+            {{ form.inspection_frequency }}
+            {% if form.inspection_frequency.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_frequency.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.skip_lot_interval.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Skip-Lot Interval (1 in N)</label>
+            {{ form.skip_lot_interval }}
+            {% if form.skip_lot_interval.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.skip_lot_interval.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Plan Status</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+          <div class="form-group">
+            <label for="{{ form.aql_critical.id_for_label }}" class="form-label text-sm font-semibold text-red-700">Critical Defect AQL (%)</label>
+            {{ form.aql_critical }}
+            <p class="text-xs text-slate-400 mt-1">Default 0.00 (Zero-Defect)</p>
+            {% if form.aql_critical.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.aql_critical.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.aql_major.id_for_label }}" class="form-label text-sm font-semibold text-amber-700">Major Defect AQL (%)</label>
+            {{ form.aql_major }}
+            <p class="text-xs text-slate-400 mt-1">Default 1.00 (or 0.65)</p>
+            {% if form.aql_major.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.aql_major.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.aql_minor.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Minor Defect AQL (%)</label>
+            {{ form.aql_minor }}
+            <p class="text-xs text-slate-400 mt-1">Default 4.00 (or 2.50)</p>
+            {% if form.aql_minor.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.aql_minor.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-6 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.requires_coa }}
+            <span class="text-sm font-medium text-slate-800">Mandate Certificate of Analysis (CoA)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.requires_coc }}
+            <span class="text-sm font-medium text-slate-800">Mandate Certificate of Conformance (CoC)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Section 3: Characteristics & Documents -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="ruler" class="w-4 h-4 text-blue-600"></i>
+          Characteristics Matrix & Governance Documents
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.sop_document.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Governing SOP / Specification Document</label>
+            {{ form.sop_document }}
+            {% if form.sop_document.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sop_document.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.assigned_team.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Assigned Inspection Org Unit</label>
+            {{ form.assigned_team }}
+            {% if form.assigned_team.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.assigned_team.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.characteristics_json.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">
+              CTQ Characteristics Matrix (JSON)
+            </label>
+            {{ form.characteristics_json }}
+            <p class="text-xs text-slate-400 mt-1">{{ form.characteristics_json.help_text }}</p>
+            {% if form.characteristics_json.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.characteristics_json.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Instructions & Special Criteria</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if plan %}{% url 'quality:incoming_inspection_plan_detail' plan.pk %}{% else %}{% url 'quality:incoming_inspection_plan_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if plan %}Update Plan{% else %}Save Inspection Plan{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
