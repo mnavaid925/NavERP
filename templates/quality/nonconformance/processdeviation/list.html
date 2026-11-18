@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Process Deviations & Concessions | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:non_conformance_report_list' %}">Non-Conformance Management</a>
+            <span>/</span>
+            <span>Deviations</span>
+        </div>
+        <h1 class="page-title">Process Deviations & Temporary Concessions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:non_conformance_report_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to NCRs
+        </a>
+        <a href="{% url 'quality:process_deviation_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Request Deviation
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input" placeholder="Number, title, assessment, NCR...">
+            </div>
+            <div>
+                <label class="form-label" for="status-filter">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="type-filter">Deviation Type</label>
+                <select id="type-filter" name="deviation_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in deviation_type_choices %}
+                    <option value="{{ val }}" {% if selected_deviation_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:process_deviation_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Process Deviations ({{ total_count }})</h2>
+    </div>
+    {% if process_deviations %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Type & Category</th>
+                    <th>Title</th>
+                    <th>Risk Level</th>
+                    <th>Validity Expiry</th>
+                    <th>Batches Produced</th>
+                    <th>Status</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dev in process_deviations %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'quality:process_deviation_detail' dev.pk %}" class="text-blue-600 hover:underline">
+                            {{ dev.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge {{ dev.deviation_type_badge }}">{{ dev.get_deviation_type_display }}</span>
+                        <div class="text-xs text-slate-500 mt-1">{{ dev.get_category_display }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ dev.title }}</div>
+                        {% if dev.ncr %}
+                        <div class="text-xs text-blue-600 mt-0.5">NCR: {{ dev.ncr.number }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ dev.risk_impact_badge }}">{{ dev.get_risk_impact_level_display }}</span>
+                    </td>
+                    <td>
+                        {% if dev.valid_until %}
+                            <div class="text-slate-800">{{ dev.valid_until }}</div>
+                            {% if dev.is_expired %}
+                            <span class="badge badge-red mt-1">Expired</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-slate-400">Indefinite</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-semibold text-slate-800">{{ dev.batches_produced_count }}</span>
+                        <span class="text-xs text-slate-500">/ {{ dev.max_batches_permitted }} limit</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ dev.status_badge }}">{{ dev.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:process_deviation_detail' dev.pk %}" class="btn btn-icon" title="View details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:process_deviation_edit' dev.pk %}" class="btn btn-icon" title="Edit deviation">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:process_deviation_delete' dev.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Process Deviation {{ dev.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete deviation">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div>
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} deviations
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_deviation_type %}&deviation_type={{ selected_deviation_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="btn btn-outline btn-sm bg-slate-100 cursor-default">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_deviation_type %}&deviation_type={{ selected_deviation_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i data-lucide="git-branch"></i>
+        </div>
+        <h3 class="text-base font-semibold text-slate-800 mb-1">No Process Deviations Found</h3>
+        <p class="text-sm text-slate-500 mb-4">No deviation or temporary concession records match your query.</p>
+        <a href="{% url 'quality:process_deviation_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Log Process Deviation
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
