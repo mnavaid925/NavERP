@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if scorecard %}Edit {{ scorecard.number }}{% else %}New Supplier Quality Scorecard{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:supplier_quality_scorecard_list' %}" class="hover:underline">Quality Scorecards</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if scorecard %}Edit {{ scorecard.number }}{% else %}New Scorecard{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="bar-chart-3" class="w-6 h-6 text-blue-600"></i>
+        {% if scorecard %}Edit {{ scorecard.number }} — {{ scorecard.supplier.name }}{% else %}New Supplier Quality Scorecard{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Record multi-dimensional quality metrics. Overall composite score and grade will be auto-calculated upon save.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if scorecard %}{% url 'quality:supplier_quality_scorecard_detail' scorecard.pk %}{% else %}{% url 'quality:supplier_quality_scorecard_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Period & Supplier -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="building-2" class="w-4 h-4 text-blue-600"></i>
+          Supplier & Evaluation Cadence
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.supplier.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supplier / Vendor *</label>
+            {{ form.supplier }}
+            {% if form.supplier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supplier.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.cadence.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Evaluation Cadence *</label>
+            {{ form.cadence }}
+            {% if form.cadence.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.cadence.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.period_start.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Period Start *</label>
+            {{ form.period_start }}
+            {% if form.period_start.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.period_start.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.period_end.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Period End *</label>
+            {{ form.period_end }}
+            {% if form.period_end.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.period_end.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Status *</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.evaluated_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Evaluator</label>
+            {{ form.evaluated_by }}
+            {% if form.evaluated_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.evaluated_by.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: 5 Performance Dimension Scores -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-green-600"></i>
+          Performance Dimension Scores (0–100)
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group p-3 bg-slate-50 rounded-lg">
+            <label for="{{ form.lot_acceptance_rate_score.id_for_label }}" class="form-label text-sm font-semibold text-slate-800">
+              Lot Acceptance Rate (Weight 30%)
+            </label>
+            <span class="text-xs text-slate-500 block mb-2">Percentage of lots accepted without non-conformance</span>
+            {{ form.lot_acceptance_rate_score }}
+            {% if form.lot_acceptance_rate_score.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lot_acceptance_rate_score.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group p-3 bg-slate-50 rounded-lg">
+            <label for="{{ form.defect_ppm_score.id_for_label }}" class="form-label text-sm font-semibold text-slate-800">
+              Defect PPM Score (Weight 25%)
+            </label>
+            <span class="text-xs text-slate-500 block mb-2">Score based on parts per million defect frequency</span>
+            {{ form.defect_ppm_score }}
+            {% if form.defect_ppm_score.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.defect_ppm_score.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group p-3 bg-slate-50 rounded-lg">
+            <label for="{{ form.scar_responsiveness_score.id_for_label }}" class="form-label text-sm font-semibold text-slate-800">
+              SCAR Responsiveness (Weight 20%)
+            </label>
+            <span class="text-xs text-slate-500 block mb-2">On-time 24-48h containment and effective RCA</span>
+            {{ form.scar_responsiveness_score }}
+            {% if form.scar_responsiveness_score.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.scar_responsiveness_score.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group p-3 bg-slate-50 rounded-lg">
+            <label for="{{ form.audit_compliance_score.id_for_label }}" class="form-label text-sm font-semibold text-slate-800">
+              Audit Compliance Score (Weight 15%)
+            </label>
+            <span class="text-xs text-slate-500 block mb-2">QMS adherence, findings clearance, and ISO certifications</span>
+            {{ form.audit_compliance_score }}
+            {% if form.audit_compliance_score.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.audit_compliance_score.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group p-3 bg-slate-50 rounded-lg md:col-span-2">
+            <label for="{{ form.documentation_coa_score.id_for_label }}" class="form-label text-sm font-semibold text-slate-800">
+              Documentation & CoA Accuracy (Weight 10%)
+            </label>
+            <span class="text-xs text-slate-500 block mb-2">Certificate of Analysis presence and shipment paperwork accuracy</span>
+            {{ form.documentation_coa_score }}
+            {% if form.documentation_coa_score.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.documentation_coa_score.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Operational Counts -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="hash" class="w-4 h-4 text-purple-600"></i>
+          Operational Quantity Counts
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.total_lots_received.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Total Lots Received</label>
+            {{ form.total_lots_received }}
+            {% if form.total_lots_received.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_lots_received.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lots_rejected.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Lots Rejected</label>
+            {{ form.lots_rejected }}
+            {% if form.lots_rejected.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lots_rejected.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.total_scars_issued.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">SCARs Issued</label>
+            {{ form.total_scars_issued }}
+            {% if form.total_scars_issued.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_scars_issued.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Manual Override & Notes -->
+      <div class="space-y-4 pt-4 border-t border-slate-200">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-4 h-4 text-amber-600"></i>
+          Governance, Override & Notes
+        </h2>
+        <div class="form-group flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+          {{ form.is_manual_override }}
+          <div>
+            <label for="{{ form.is_manual_override.id_for_label }}" class="form-label text-sm font-semibold text-amber-900 block">Enable Manual Grade Override</label>
+            <span class="text-xs text-amber-700">Check only if management explicitly overrides automated composite score calculation</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="{{ form.override_justification.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Override Justification</label>
+          {{ form.override_justification }}
+          {% if form.override_justification.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.override_justification.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.evaluation_notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Evaluation Notes & Recommendations</label>
+          {{ form.evaluation_notes }}
+          {% if form.evaluation_notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.evaluation_notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="pt-6 border-t border-slate-200 flex items-center justify-end gap-3">
+        <a href="{% if scorecard %}{% url 'quality:supplier_quality_scorecard_detail' scorecard.pk %}{% else %}{% url 'quality:supplier_quality_scorecard_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if scorecard %}Save Changes{% else %}Create Scorecard{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
