@@ -120,6 +120,11 @@ def non_conformance_report_create(request):
         if form.is_valid():
             ncr = form.save(commit=False)
             ncr.tenant = request.tenant
+            if ncr.status == "closed":
+                if not ncr.closed_at:
+                    ncr.closed_at = timezone.now()
+                if not ncr.closed_by:
+                    ncr.closed_by = request.user
             ncr.save()
             form.save_m2m()
             write_audit_log(request.user, ncr, "create", tenant=request.tenant)
