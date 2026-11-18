@@ -43,6 +43,18 @@ from apps.quality.models.SupplierQuality.SupplierQualificationAudits import (
 from apps.quality.models.SupplierQuality.SupplierQualityScorecards import (
     SupplierQualityScorecard,
 )
+from apps.quality.models.InProcessQuality.FirstArticleInspections import (
+    FirstArticleInspection,
+)
+from apps.quality.models.InProcessQuality.InProcessInspections import (
+    InProcessInspection,
+)
+from apps.quality.models.InProcessQuality.LayeredProcessAudits import (
+    LayeredProcessAudit,
+)
+from apps.quality.models.InProcessQuality.ProcessParameterLogs import (
+    ProcessParameterLog,
+)
 
 __all__ = [
     "TenantOwned",
@@ -75,5 +87,9 @@ __all__ = [
     "IncomingInspectionLot",
     "CertificateOfAnalysis",
     "QualityReturnAuthorization",
+    "InProcessInspection",
+    "FirstArticleInspection",
+    "ProcessParameterLog",
+    "LayeredProcessAudit",
 ]
 
