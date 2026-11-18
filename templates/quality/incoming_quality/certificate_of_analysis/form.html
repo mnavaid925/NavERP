@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if coa %}Edit {{ coa.number }}{% else %}Intake Certificate of Analysis{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:certificate_of_analysis_list' %}" class="hover:underline">Certificates of Analysis</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if coa %}Edit {{ coa.number }}{% else %}New CoA{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="file-check-2" class="w-6 h-6 text-blue-600"></i>
+        {% if coa %}Edit {{ coa.number }} — CoA {{ coa.certificate_number }}{% else %}Intake Certificate of Analysis (CoA){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Record supplier certificate numbers, test results, laboratory accreditation, and analytical tolerance payload.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if coa %}{% url 'quality:certificate_of_analysis_detail' coa.pk %}{% else %}{% url 'quality:certificate_of_analysis_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Certificate & Vendor Identification -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="building-2" class="w-4 h-4 text-blue-600"></i>
+          Certificate & Supplier Details
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.certificate_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supplier CoA # *</label>
+            {{ form.certificate_number }}
+            {% if form.certificate_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.certificate_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.supplier.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supplier *</label>
+            {{ form.supplier }}
+            {% if form.supplier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supplier.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.manufacturer_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Manufacturer / Mill Name</label>
+            {{ form.manufacturer_name }}
+            {% if form.manufacturer_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.manufacturer_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lab_accreditation.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Lab Accreditation</label>
+            {{ form.lab_accreditation }}
+            {% if form.lab_accreditation.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lab_accreditation.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item / Part Code *</label>
+            {{ form.item_code }}
+            {% if form.item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item / Part Name *</label>
+            {{ form.item_name }}
+            {% if form.item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lot_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Lot / Heat Number *</label>
+            {{ form.lot_number }}
+            {% if form.lot_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lot_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Verification Status</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.date_of_manufacture.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Date of Manufacture (DOM)</label>
+            {{ form.date_of_manufacture }}
+            {% if form.date_of_manufacture.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.date_of_manufacture.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.expiry_or_retest_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Expiry / Retest Date</label>
+            {{ form.expiry_or_retest_date }}
+            {% if form.expiry_or_retest_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.expiry_or_retest_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Linkages & Analytical Parameters -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="microscope" class="w-4 h-4 text-blue-600"></i>
+          Inspection Links & Analytical Parameters Matrix
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.inspection_lot.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Inspection Lot</label>
+            {{ form.inspection_lot }}
+            {% if form.inspection_lot.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_lot.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_plan.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Governing Inspection Plan</label>
+            {{ form.inspection_plan }}
+            {% if form.inspection_plan.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_plan.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.supporting_document.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supporting Document / File</label>
+            {{ form.supporting_document }}
+            {% if form.supporting_document.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supporting_document.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label for="{{ form.parameters_json.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">
+              Analytical Parameters Payload (JSON Array)
+            </label>
+            {{ form.parameters_json }}
+            <p class="text-xs text-slate-400 mt-1">{{ form.parameters_json.help_text }}</p>
+            {% if form.parameters_json.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.parameters_json.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Analysis Observations & Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if coa %}{% url 'quality:certificate_of_analysis_detail' coa.pk %}{% else %}{% url 'quality:certificate_of_analysis_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if coa %}Update Certificate{% else %}Save Certificate (CoA){% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
