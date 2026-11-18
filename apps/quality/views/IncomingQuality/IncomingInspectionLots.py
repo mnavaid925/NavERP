@@ -301,7 +301,7 @@ def incoming_inspection_lot_export(request):
         "Created At",
     ])
 
-    for l in qs:
+    for l in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(l.number),
             _csv_safe(l.lot_number),
