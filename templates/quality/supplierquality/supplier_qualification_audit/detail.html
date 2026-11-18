@@ -202,6 +202,50 @@
           {% endif %}
         </div>
       </div>
+
+      <!-- Linked SCNs (Supplier Change Notifications) -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-800">Triggered Change Notifications (SCNs)</h2>
+          <span class="badge badge-slate text-xs">{{ scns|length }} Linked</span>
+        </div>
+        <div class="card-body p-4">
+          {% if scns %}
+            <div class="table-wrap overflow-x-auto">
+              <table class="table w-full text-left text-sm">
+                <thead>
+                  <tr class="border-b border-slate-200 text-slate-600 font-semibold text-xs">
+                    <th class="py-2 px-3">SCN #</th>
+                    <th class="py-2 px-3">Title</th>
+                    <th class="py-2 px-3">Category</th>
+                    <th class="py-2 px-3">Risk Level</th>
+                    <th class="py-2 px-3">Status</th>
+                    <th class="py-2 px-3">Effective Date</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-xs">
+                  {% for scn in scns %}
+                    <tr class="hover:bg-slate-50">
+                      <td class="py-2 px-3 font-mono font-medium text-blue-600">
+                        <a href="{% url 'quality:supplier_change_notification_detail' scn.pk %}" class="hover:underline">
+                          {{ scn.number }}
+                        </a>
+                      </td>
+                      <td class="py-2 px-3 text-slate-900 font-medium">{{ scn.title }}</td>
+                      <td class="py-2 px-3"><span class="badge {{ scn.category_css }}">{{ scn.get_change_category_display }}</span></td>
+                      <td class="py-2 px-3"><span class="badge {{ scn.risk_css }}">{{ scn.get_risk_level_display }}</span></td>
+                      <td class="py-2 px-3"><span class="badge {{ scn.status_css }}">{{ scn.get_status_display }}</span></td>
+                      <td class="py-2 px-3 text-slate-500">{{ scn.proposed_effective_date|date:"Y-m-d"|default:"—" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-sm text-slate-500 text-center py-4">No change notifications are linked to this qualification audit.</p>
+          {% endif %}
+        </div>
+      </div>
     </div>
 
     <!-- Right Sidebar Controls (1 col) -->
