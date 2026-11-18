@@ -3419,6 +3419,13 @@ LIVE_LINKS = {
         "Impact Assessment & Customer Notification": "quality:process_deviation_list",
         "Trending & Metrics": "quality:ncr_analytics_dashboard",
     },
+    "12.6": {
+        "Supplier Qualification & Audit": "quality:supplier_qualification_audit_list",
+        "Incoming Inspection & Receiving": "quality:avl_directory",
+        "Supplier Performance Monitoring": "quality:supplier_quality_scorecard_list",
+        "Supplier CAPA & Development": "quality:supplier_corrective_action_list",
+        "Supplier Change Notification (SCN)": "quality:supplier_change_notification_list",
+    },
 
 
 
