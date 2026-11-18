@@ -115,7 +115,9 @@
         <div class="card-body space-y-3">
             {% for item in category_breakdown %}
             <div class="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
-                <div class="text-sm font-medium text-slate-700 truncate max-w-[200px]">{{ item.category }}</div>
+                <div class="flex items-center gap-2">
+                    <span class="badge {{ item.css }}">{{ item.category }}</span>
+                </div>
                 <div class="text-base font-bold text-slate-800">{{ item.count }}</div>
             </div>
             {% endfor %}
@@ -130,7 +132,9 @@
         <div class="card-body space-y-3">
             {% for item in source_breakdown %}
             <div class="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
-                <div class="text-sm font-medium text-slate-700 truncate max-w-[200px]">{{ item.source }}</div>
+                <div class="flex items-center gap-2">
+                    <span class="badge {{ item.css }}">{{ item.source }}</span>
+                </div>
                 <div class="text-base font-bold text-slate-800">{{ item.count }}</div>
             </div>
             {% endfor %}
