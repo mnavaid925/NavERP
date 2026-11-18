@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Shop Floor Quality & SPC Dashboard — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>In-Process Quality (12.8)</span>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">SPC Dashboard</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="activity" class="w-6 h-6 text-blue-600"></i>
+        Shop Floor Quality & SPC Control Dashboard
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Real-time in-line quality telemetry: critical process parameters, FAI release gating, and layered process audit compliance.
+      </p>
+    </div>
+    <div class="page-actions flex items-center flex-wrap gap-2">
+      <a href="{% url 'quality:in_process_inspection_list' %}" class="btn btn-outline text-sm flex items-center gap-1.5">
+        <i data-lucide="clipboard-check" class="w-4 h-4"></i>
+        <span>IPQC Inspections</span>
+      </a>
+      <a href="{% url 'quality:first_article_inspection_list' %}" class="btn btn-outline text-sm flex items-center gap-1.5">
+        <i data-lucide="award" class="w-4 h-4"></i>
+        <span>FAI Protocols</span>
+      </a>
+      <a href="{% url 'quality:process_parameter_log_list' %}" class="btn btn-outline text-sm flex items-center gap-1.5">
+        <i data-lucide="sliders" class="w-4 h-4"></i>
+        <span>Parameter Logs</span>
+      </a>
+      <a href="{% url 'quality:layered_process_audit_list' %}" class="btn btn-outline text-sm flex items-center gap-1.5">
+        <i data-lucide="check-check" class="w-4 h-4"></i>
+        <span>LPAs</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="layers" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ total_inspections }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total In-Process Runs</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="clock" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ fai_pending_release_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">FAIs Pending Run Release</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon red p-3 rounded-lg bg-red-50 text-red-600">
+        <i data-lucide="alert-octagon" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ active_ooc_oos_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Active OOC / OOS Excursions</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ avg_lpa_compliance }}%</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Avg LPA Compliance Score</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2x2 Grid Monitoring Sections -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Active Parameter Excursions -->
+    <div class="card">
+      <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600"></i>
+          Recent Process Parameter Excursions (OOC / OOS)
+        </h2>
+        <a href="{% url 'quality:process_parameter_log_list' %}?excursion_status=out_of_spec" class="text-xs text-blue-600 hover:underline">
+          View All
+        </a>
+      </div>
+      <div class="card-body p-0">
+        {% if recent_excursions %}
+          <div class="divide-y divide-slate-100 text-sm">
+            {% for log in recent_excursions %}
+              <div class="p-3.5 hover:bg-slate-50 transition flex items-center justify-between gap-4">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <a href="{% url 'quality:process_parameter_log_detail' log.pk %}" class="font-bold text-blue-600 hover:underline">
+                      {{ log.number }}
+                    </a>
+                    <span class="font-semibold text-slate-900">{{ log.parameter_name }}</span>
+                    <span class="badge {{ log.excursion_css }} text-xs">{{ log.get_excursion_status_display }}</span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-1">
+                    Value: <span class="font-bold font-mono text-red-600">{{ log.recorded_value }}</span> {{ log.unit_of_measure }} · Spec: [{{ log.lower_spec_limit }}...{{ log.upper_spec_limit }}] · Cell: {{ log.work_center.code|default:log.work_center_code|default:"—" }}
+                  </div>
+                </div>
+                <div class="text-right whitespace-nowrap">
+                  <span class="badge {{ log.containment_css }} text-xs">{{ log.get_containment_action_display }}</span>
+                  <div class="text-xs text-slate-400 mt-1">{{ log.recorded_at|date:"M d, H:i" }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="p-8 text-center text-slate-400 text-sm">
+            <i data-lucide="check-circle" class="w-8 h-8 text-green-500 mx-auto mb-2"></i>
+            No active parameter excursions. All processes in control.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- FAIs Pending Release -->
+    <div class="card">
+      <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+          <i data-lucide="award" class="w-5 h-5 text-amber-600"></i>
+          First Article Inspections (Setup Verification)
+        </h2>
+        <a href="{% url 'quality:first_article_inspection_list' %}" class="text-xs text-blue-600 hover:underline">
+          View All
+        </a>
+      </div>
+      <div class="card-body p-0">
+        {% if recent_fais %}
+          <div class="divide-y divide-slate-100 text-sm">
+            {% for fai in recent_fais %}
+              <div class="p-3.5 hover:bg-slate-50 transition flex items-center justify-between gap-4">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <a href="{% url 'quality:first_article_inspection_detail' fai.pk %}" class="font-bold text-blue-600 hover:underline">
+                      {{ fai.number }}
+                    </a>
+                    <span class="font-semibold text-slate-900">{{ fai.item_code|default:fai.title }}</span>
+                    <span class="badge {{ fai.verdict_css }} text-xs">{{ fai.get_release_verdict_display }}</span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-1">
+                    Dwg: {{ fai.drawing_number|default:"—" }} {{ fai.drawing_revision }} · {{ fai.characteristics_conforming }}/{{ fai.total_characteristics_inspected }} Conforming
+                  </div>
+                </div>
+                <div class="text-right whitespace-nowrap">
+                  <span class="badge {{ fai.status_css }} text-xs">{{ fai.get_status_display }}</span>
+                  <div class="text-xs text-slate-400 mt-1">{{ fai.created_at|date:"M d, H:i" }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="p-8 text-center text-slate-400 text-sm">
+            No recent first article inspections recorded.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Recent In-Process Inspections -->
+    <div class="card">
+      <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+          <i data-lucide="clipboard-check" class="w-5 h-5 text-blue-600"></i>
+          Recent In-Line Stage-Gate Inspections
+        </h2>
+        <a href="{% url 'quality:in_process_inspection_list' %}" class="text-xs text-blue-600 hover:underline">
+          View All
+        </a>
+      </div>
+      <div class="card-body p-0">
+        {% if recent_inspections %}
+          <div class="divide-y divide-slate-100 text-sm">
+            {% for item in recent_inspections %}
+              <div class="p-3.5 hover:bg-slate-50 transition flex items-center justify-between gap-4">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <a href="{% url 'quality:in_process_inspection_detail' item.pk %}" class="font-bold text-blue-600 hover:underline">
+                      {{ item.number }}
+                    </a>
+                    <span class="font-semibold text-slate-900">{{ item.stage_gate|default:item.title }}</span>
+                    <span class="badge {{ item.disposition_css }} text-xs">{{ item.get_disposition_display }}</span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-1">
+                    Item: {{ item.item_code|default:"—" }} · Inspected: {{ item.sample_size_inspected }} · Passed: {{ item.quantity_passed }}
+                  </div>
+                </div>
+                <div class="text-right whitespace-nowrap">
+                  <span class="badge {{ item.type_css }} text-xs">{{ item.get_inspection_type_display }}</span>
+                  <div class="text-xs text-slate-400 mt-1">{{ item.created_at|date:"M d, H:i" }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="p-8 text-center text-slate-400 text-sm">
+            No recent in-process inspections logged.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Layered Process Audits -->
+    <div class="card">
+      <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+          <i data-lucide="check-check" class="w-5 h-5 text-green-600"></i>
+          Layered Process Audits (LPA Tiers 1–4)
+        </h2>
+        <a href="{% url 'quality:layered_process_audit_list' %}" class="text-xs text-blue-600 hover:underline">
+          View All
+        </a>
+      </div>
+      <div class="card-body p-0">
+        {% if recent_lpas %}
+          <div class="divide-y divide-slate-100 text-sm">
+            {% for lpa in recent_lpas %}
+              <div class="p-3.5 hover:bg-slate-50 transition flex items-center justify-between gap-4">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <a href="{% url 'quality:layered_process_audit_detail' lpa.pk %}" class="font-bold text-blue-600 hover:underline">
+                      {{ lpa.number }}
+                    </a>
+                    <span class="font-semibold text-slate-900">{{ lpa.title }}</span>
+                    <span class="badge {{ lpa.layer_css }} text-xs">{{ lpa.get_audit_layer_display }}</span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-1">
+                    Focus: {{ lpa.get_focus_area_display }} · Area: {{ lpa.work_center.code|default:lpa.work_center_code|default:"Plant-Wide" }}
+                  </div>
+                </div>
+                <div class="text-right whitespace-nowrap">
+                  <span class="font-bold font-mono text-sm {% if lpa.compliance_percentage >= 90 %}text-green-600{% else %}text-amber-600{% endif %}">
+                    {{ lpa.compliance_percentage }}%
+                  </span>
+                  <div class="text-xs text-slate-400 mt-1">{{ lpa.scheduled_date|date:"M d" }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="p-8 text-center text-slate-400 text-sm">
+            No recent layered process audits logged.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
