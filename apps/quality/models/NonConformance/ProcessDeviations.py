@@ -173,6 +173,8 @@ class ProcessDeviation(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_qdev_ten_status"),
             models.Index(fields=["tenant", "deviation_type"], name="idx_qdev_ten_dev_type"),
+            models.Index(fields=["tenant", "ncr"], name="idx_qdev_ten_ncr"),
+            models.Index(fields=["tenant", "risk_impact_level"], name="idx_qdev_ten_risk_lvl"),
             models.Index(fields=["tenant", "valid_until"], name="idx_qdev_ten_valid_until"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qdev_ten_created"),
         ]
