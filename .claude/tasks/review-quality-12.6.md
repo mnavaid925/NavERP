@@ -2,7 +2,7 @@
 
 **Target Range**: `585db911e9d93d64932a42f765dae39dbb5756a1...HEAD`  
 **Date**: November 18, 2026  
-**Status**: In Progress (Pass 4 of 6 completed)
+**Status**: In Progress (Pass 5 of 6 completed)
 
 ---
 
@@ -106,6 +106,24 @@
 2. **PRF-M2**: Over-eager `select_related` in list views (unused FKs joined on list tables).
    - Fix: Limit list views to `.select_related("supplier")`.
 3. **PRF-M3**: Missing composite index for `(tenant, dock_to_stock_eligible)` on `SupplierQualificationAudit`.
+
+---
+
+## Pass 5: `qa-smoke-tester` Findings
+
+### Critical
+*None.*
+
+### Important
+*None.*
+
+### Minor
+*None.*
+
+- 21 URL routes verified with HTTP 200/302, valid titles, entity tokens rendered, 0 comment leaks.
+- Query parameters, filtering, and out-of-range pagination resilient against errors.
+- Cross-tenant IDOR requests across detail and edit endpoints returned HTTP 404 for foreign tenant records.
+
 
 
 
