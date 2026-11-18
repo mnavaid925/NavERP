@@ -232,7 +232,7 @@
               <dd>
                 {% if inspection.controlled_document %}
                   <a href="{% url 'quality:controlled_document_detail' inspection.controlled_document.pk %}" class="text-blue-600 hover:underline font-medium">
-                    {{ inspection.controlled_document.document_number }} — {{ inspection.controlled_document.title }}
+                    {{ inspection.controlled_document.number }} — {{ inspection.controlled_document.title }}
                   </a>
                 {% else %}
                   <span class="text-slate-400">Not Linked</span>
