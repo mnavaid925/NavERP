@@ -217,7 +217,6 @@ def supplier_change_notification_export(request):
             _csv_safe("Yes" if obj.requires_requalification else "No"),
             _csv_safe("Yes" if obj.requires_regulatory_filing else "No"),
         ])
-    write_audit_log(request.user, qs.model, "export", tenant=request.tenant)
     return response
 
 
