@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Supplier Quality Scorecards — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">Supplier Quality</span>
+        <span class="mx-1">/</span>
+        <span>Quality Scorecards</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="bar-chart-3" class="w-6 h-6 text-blue-600"></i>
+        Supplier Performance Monitoring & Scorecards
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Periodic quality evaluations, lot acceptance tracking, defect PPM, SCAR responsiveness, and composite A/B/C/D letter grading.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:supplier_quality_scorecard_export' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export CSV</span>
+      </a>
+      <a href="{% url 'quality:supplier_quality_scorecard_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Scorecard</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div>
+        <label for="q" class="form-label text-xs font-semibold text-slate-600">Search</label>
+        <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Number, supplier, notes..." class="form-input text-sm w-full">
+      </div>
+      <div>
+        <label for="cadence" class="form-label text-xs font-semibold text-slate-600">Cadence</label>
+        <select name="cadence" id="cadence" class="form-select text-sm w-full">
+          <option value="">All Cadences</option>
+          {% for val, label in cadence_choices %}
+            <option value="{{ val }}" {% if current_cadence == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="grade" class="form-label text-xs font-semibold text-slate-600">Grade</label>
+        <select name="grade" id="grade" class="form-select text-sm w-full">
+          <option value="">All Grades</option>
+          {% for val, label in grade_choices %}
+            <option value="{{ val }}" {% if current_grade == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="supplier" class="form-label text-xs font-semibold text-slate-600">Supplier</label>
+        <select name="supplier" id="supplier" class="form-select text-sm w-full">
+          <option value="">All Suppliers</option>
+          {% for supp in suppliers %}
+            <option value="{{ supp.pk }}" {% if current_supplier == supp.pk|stringformat:"d" %}selected{% endif %}>{{ supp.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary text-sm w-full flex items-center justify-center gap-1">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Filter</span>
+        </button>
+        <a href="{% url 'quality:supplier_quality_scorecard_list' %}" class="btn btn-outline text-sm" title="Clear Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Records Table -->
+  <div class="card overflow-hidden">
+    {% if scorecards %}
+      <div class="table-wrap overflow-x-auto">
+        <table class="table w-full text-left text-sm">
+          <thead class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+            <tr>
+              <th class="py-3 px-4">Scorecard #</th>
+              <th class="py-3 px-4">Supplier</th>
+              <th class="py-3 px-4">Cadence</th>
+              <th class="py-3 px-4">Evaluation Period</th>
+              <th class="py-3 px-4">Status</th>
+              <th class="py-3 px-4 text-center">Composite Score</th>
+              <th class="py-3 px-4 text-center">Quality Grade</th>
+              <th class="py-3 px-4 text-center">Lots (Rec/Rej)</th>
+              <th class="py-3 px-4 text-center">SCARs</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-slate-800">
+            {% for sc in scorecards %}
+              <tr class="hover:bg-slate-50 transition-colors">
+                <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                  <a href="{% url 'quality:supplier_quality_scorecard_detail' sc.pk %}" class="hover:underline">
+                    {{ sc.number }}
+                  </a>
+                </td>
+                <td class="py-3 px-4 font-semibold text-slate-900">
+                  {{ sc.supplier.name }}
+                </td>
+                <td class="py-3 px-4">
+                  <span class="badge {{ sc.cadence_css }} text-xs">
+                    {{ sc.get_cadence_display }}
+                  </span>
+                </td>
+                <td class="py-3 px-4 text-xs text-slate-600">
+                  {{ sc.period_start|date:"Y-m-d" }} to {{ sc.period_end|date:"Y-m-d" }}
+                </td>
+                <td class="py-3 px-4">
+                  <span class="badge {{ sc.status_css }} text-xs">
+                    {{ sc.get_status_display }}
+                  </span>
+                </td>
+                <td class="py-3 px-4 text-center font-bold text-slate-900">
+                  {% if sc.overall_score is not None %}
+                    {{ sc.overall_score }}
+                  {% else %}
+                    <span class="text-slate-400">—</span>
+                  {% endif %}
+                </td>
+                <td class="py-3 px-4 text-center">
+                  {% if sc.grade %}
+                    <span class="badge {{ sc.grade_css }} text-xs">
+                      {{ sc.get_grade_display }}
+                    </span>
+                  {% else %}
+                    <span class="text-slate-400">—</span>
+                  {% endif %}
+                </td>
+                <td class="py-3 px-4 text-center text-xs">
+                  {{ sc.total_lots_received }} / <span class="{% if sc.lots_rejected > 0 %}text-red-600 font-bold{% else %}text-slate-500{% endif %}">{{ sc.lots_rejected }}</span>
+                </td>
+                <td class="py-3 px-4 text-center text-xs">
+                  <span class="{% if sc.total_scars_issued > 0 %}text-amber-600 font-bold{% else %}text-slate-500{% endif %}">
+                    {{ sc.total_scars_issued }}
+                  </span>
+                </td>
+                <td class="py-3 px-4 text-right table-actions whitespace-nowrap">
+                  <div class="flex items-center justify-end gap-1">
+                    <a href="{% url 'quality:supplier_quality_scorecard_detail' sc.pk %}" class="btn btn-icon text-slate-600 hover:text-blue-600" title="View Details">
+                      <i data-lucide="eye" class="w-4 h-4"></i>
+                    </a>
+                    <a href="{% url 'quality:supplier_quality_scorecard_edit' sc.pk %}" class="btn btn-icon text-slate-600 hover:text-amber-600" title="Edit">
+                      <i data-lucide="pencil" class="w-4 h-4"></i>
+                    </a>
+                    <form method="post" action="{% url 'quality:supplier_quality_scorecard_delete' sc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete scorecard {{ sc.number|escapejs }}?');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-icon text-slate-600 hover:text-red-600" title="Delete">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      {% if scorecards.paginator.num_pages > 1 %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm">
+          <div class="text-slate-500">
+            Showing {{ scorecards.start_index }} to {{ scorecards.end_index }} of {{ scorecards.paginator.count }} records
+          </div>
+          <div class="flex items-center gap-1">
+            {% if scorecards.has_previous %}
+              <a href="?page={{ scorecards.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_grade %}&grade={{ current_grade }}{% endif %}{% if current_cadence %}&cadence={{ current_cadence }}{% endif %}{% if current_supplier %}&supplier={{ current_supplier }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">
+                Previous
+              </a>
+            {% endif %}
+            <span class="px-2 text-slate-600 font-medium">Page {{ scorecards.number }} of {{ scorecards.paginator.num_pages }}</span>
+            {% if scorecards.has_next %}
+              <a href="?page={{ scorecards.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_grade %}&grade={{ current_grade }}{% endif %}{% if current_cadence %}&cadence={{ current_cadence }}{% endif %}{% if current_supplier %}&supplier={{ current_supplier }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">
+                Next
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="empty-state p-12 text-center">
+        <i data-lucide="bar-chart" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
+        <h3 class="text-base font-semibold text-slate-800">No Quality Scorecards Found</h3>
+        <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+          No supplier quality scorecard records match your filter criteria.
+        </p>
+        <div class="mt-4">
+          <a href="{% url 'quality:supplier_quality_scorecard_create' %}" class="btn btn-primary text-sm inline-flex items-center gap-1">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Create First Scorecard</span>
+          </a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
