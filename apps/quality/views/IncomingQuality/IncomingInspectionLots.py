@@ -173,6 +173,11 @@ def incoming_inspection_lot_delete(request, pk):
 @login_required
 def incoming_inspection_lot_record_sample(request, pk):
     lot = get_object_or_404(IncomingInspectionLot.objects.filter(tenant=request.tenant), pk=pk)
+
+    if lot.stage in ("completed", "cancelled"):
+        messages.error(request, f"Cannot record samples for lot {lot.number}: lot is already {lot.get_stage_display()}.")
+        return redirect("quality:incoming_inspection_lot_detail", pk=lot.pk)
+
     reading_val = request.POST.get("reading_value", "").strip()
     characteristic = request.POST.get("characteristic", "General CTQ").strip()
     is_pass_raw = request.POST.get("is_pass", "true").lower() == "true"
@@ -214,6 +219,11 @@ def incoming_inspection_lot_record_sample(request, pk):
 @login_required
 def incoming_inspection_lot_make_decision(request, pk):
     lot = get_object_or_404(IncomingInspectionLot.objects.filter(tenant=request.tenant), pk=pk)
+
+    if lot.stage in ("completed", "cancelled") or lot.usage_decision != "pending":
+        messages.error(request, f"Usage decision for lot {lot.number} has already been finalized.")
+        return redirect("quality:incoming_inspection_lot_detail", pk=lot.pk)
+
     decision = request.POST.get("usage_decision", "").strip()
     decision_notes = request.POST.get("decision_notes", "").strip()
 
