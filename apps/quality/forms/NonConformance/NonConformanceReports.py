@@ -82,4 +82,17 @@ class NonConformanceReportForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["department", "supplier_party", "capa_investigation", "initiator", "owner"])
+        qty_inspected = cleaned.get("quantity_inspected")
+        qty_nonconforming = cleaned.get("quantity_nonconforming")
+        est_loss = cleaned.get("estimated_financial_loss")
+
+        if qty_inspected is not None and qty_inspected < 0:
+            self.add_error("quantity_inspected", "Quantity inspected cannot be negative.")
+        if qty_nonconforming is not None and qty_nonconforming < 0:
+            self.add_error("quantity_nonconforming", "Quantity non-conforming cannot be negative.")
+        if est_loss is not None and est_loss < 0:
+            self.add_error("estimated_financial_loss", "Estimated financial loss cannot be negative.")
+        if qty_inspected is not None and qty_nonconforming is not None:
+            if qty_inspected > 0 and qty_nonconforming > qty_inspected:
+                self.add_error("quantity_nonconforming", "Quantity non-conforming cannot exceed quantity inspected.")
         return cleaned
