@@ -158,6 +158,11 @@ def quality_doc_b(db, tenant_b, admin_b, quality_department_b):
 
 
 @pytest.fixture
+def doc_b(quality_doc_b):
+    return quality_doc_b
+
+
+@pytest.fixture
 def quality_dco(db, tenant_a, admin_user, quality_doc_draft):
     return DocumentChangeOrder.objects.create(
         tenant=tenant_a,
