@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}NCR Analytics & Quality Metrics | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:non_conformance_report_list' %}">Non-Conformance Management</a>
+            <span>/</span>
+            <span>Analytics & Trends</span>
+        </div>
+        <h1 class="page-title">Non-Conformance & Deviation Analytics</h1>
+        <div class="text-sm text-slate-500 mt-1">Operational quality trends, scrap losses, quarantine loads, and defect distributions.</div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:non_conformance_report_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i> NCR List
+        </a>
+        <a href="{% url 'quality:quarantine_containment_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-alert"></i> Quarantines
+        </a>
+        <a href="{% url 'quality:mrb_disposition_list' %}" class="btn btn-outline">
+            <i data-lucide="users"></i> MRB Dispositions
+        </a>
+    </div>
+</div>
+
+<!-- Key Quality Metrics Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-list"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium">Total NCRs</div>
+            <div class="text-xl font-bold text-slate-800">{{ total_ncrs }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium">Open NCRs</div>
+            <div class="text-xl font-bold text-slate-800">{{ open_ncrs }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium">Active Holds</div>
+            <div class="text-xl font-bold text-red-600">{{ active_quarantines }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium">Pending MRBs</div>
+            <div class="text-xl font-bold text-slate-800">{{ pending_mrbs }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="trash-2"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium">Scrap Cost YTD</div>
+            <div class="text-xl font-bold text-slate-800">${{ total_scrap_cost }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="wrench"></i>
+        </div>
+        <div>
+            <div class="text-xs text-slate-500 font-medium">Rework Labor</div>
+            <div class="text-xl font-bold text-slate-800">${{ total_rework_cost }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Pareto Distributions -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Severity Breakdown -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Defect Severity Distribution</h2>
+        </div>
+        <div class="card-body space-y-3">
+            {% for item in severity_breakdown %}
+            <div class="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div class="flex items-center gap-2">
+                    <span class="badge {{ item.css }}">{{ item.severity }}</span>
+                </div>
+                <div class="text-base font-bold text-slate-800">{{ item.count }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Category Distribution -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Defect by Category (Pareto)</h2>
+        </div>
+        <div class="card-body space-y-3">
+            {% for item in category_breakdown %}
+            <div class="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div class="text-sm font-medium text-slate-700 truncate max-w-[200px]">{{ item.category }}</div>
+                <div class="text-base font-bold text-slate-800">{{ item.count }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Source Distribution -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Detection Source Breakdown</h2>
+        </div>
+        <div class="card-body space-y-3">
+            {% for item in source_breakdown %}
+            <div class="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div class="text-sm font-medium text-slate-700 truncate max-w-[200px]">{{ item.source }}</div>
+                <div class="text-base font-bold text-slate-800">{{ item.count }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Recent Non-Conformance Events -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Recent Non-Conformance Events</h2>
+        <a href="{% url 'quality:non_conformance_report_list' %}" class="btn btn-outline btn-sm">
+            View All NCRs
+        </a>
+    </div>
+    {% if recent_ncrs %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Title & Defect</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                    <th>Owner</th>
+                    <th>Date Logged</th>
+                    <th class="table-actions">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ncr in recent_ncrs %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'quality:non_conformance_report_detail' ncr.pk %}" class="text-blue-600 hover:underline">
+                            {{ ncr.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ ncr.title }}</div>
+                        {% if ncr.defect_code %}
+                        <div class="text-xs text-slate-500 font-mono">Code: {{ ncr.defect_code }}</div>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ ncr.severity_badge }}">{{ ncr.get_severity_display }}</span></td>
+                    <td><span class="badge {{ ncr.status_badge }}">{{ ncr.get_status_display }}</span></td>
+                    <td>{{ ncr.owner.get_full_name|default:ncr.owner.username }}</td>
+                    <td>{{ ncr.created_at|date:"Y-m-d H:i" }}</td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:non_conformance_report_detail' ncr.pk %}" class="btn btn-icon">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="p-6 text-center text-slate-500 text-sm">
+        No recent non-conformance reports recorded.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
