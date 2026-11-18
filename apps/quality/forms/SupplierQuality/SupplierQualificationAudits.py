@@ -81,4 +81,11 @@ class SupplierQualificationAuditForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["supplier", "lead_auditor", "quality_agreement"])
+        score = cleaned_data.get("score")
+        if score is not None and (score < 0 or score > 100):
+            self.add_error("score", "Audit compliance score must be between 0 and 100.")
+        audit_date = cleaned_data.get("audit_date")
+        next_audit_due_date = cleaned_data.get("next_audit_due_date")
+        if audit_date and next_audit_due_date and next_audit_due_date < audit_date:
+            self.add_error("next_audit_due_date", "Next audit due date cannot be earlier than audit date.")
         return cleaned_data
