@@ -155,7 +155,7 @@
                       <i data-lucide="pencil" class="w-4 h-4"></i>
                     </a>
                     {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                    <form method="post" action="{% url 'quality:incoming_inspection_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete inspection plan {{ plan.number }}?');">
+                    <form method="post" action="{% url 'quality:incoming_inspection_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete inspection plan {{ plan.number|escapejs }}?');">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete plan">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
