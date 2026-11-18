@@ -170,7 +170,7 @@
                             <td class="font-semibold">{{ q.quantity_on_hold }} {{ q.unit_of_measure }}</td>
                             <td><span class="badge {{ q.status_badge }}">{{ q.get_status_display }}</span></td>
                             <td class="table-actions">
-                                <a href="{% url 'quality:quarantine_containment_detail' q.pk %}" class="btn btn-icon">
+                                <a href="{% url 'quality:quarantine_containment_detail' q.pk %}" class="btn btn-icon" title="View quarantine hold" aria-label="View quarantine hold {{ q.number }}">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
@@ -223,7 +223,7 @@
                             <td>{{ d.mrb_chair.get_full_name|default:d.mrb_chair.username }}</td>
                             <td><span class="badge {{ d.status_badge }}">{{ d.get_status_display }}</span></td>
                             <td class="table-actions">
-                                <a href="{% url 'quality:mrb_disposition_detail' d.pk %}" class="btn btn-icon">
+                                <a href="{% url 'quality:mrb_disposition_detail' d.pk %}" class="btn btn-icon" title="View MRB disposition" aria-label="View MRB disposition {{ d.number }}">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
@@ -276,7 +276,7 @@
                             <td><span class="badge {{ dev.risk_impact_badge }}">{{ dev.get_risk_impact_level_display }}</span></td>
                             <td><span class="badge {{ dev.status_badge }}">{{ dev.get_status_display }}</span></td>
                             <td class="table-actions">
-                                <a href="{% url 'quality:process_deviation_detail' dev.pk %}" class="btn btn-icon">
+                                <a href="{% url 'quality:process_deviation_detail' dev.pk %}" class="btn btn-icon" title="View process deviation" aria-label="View process deviation {{ dev.number }}">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
