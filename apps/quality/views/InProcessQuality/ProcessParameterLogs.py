@@ -109,7 +109,7 @@ def process_parameter_log_list(request):
 def process_parameter_log_detail(request, pk):
     log = get_object_or_404(
         ProcessParameterLog.objects.filter(tenant=request.tenant).select_related(
-            "work_order", "work_center", "logged_by", "non_conformance", "process_deviation"
+            "work_order__item", "work_center", "logged_by", "non_conformance", "process_deviation"
         ),
         pk=pk,
     )
