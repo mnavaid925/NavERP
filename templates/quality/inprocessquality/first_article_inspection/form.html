@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if fai %}Edit {{ fai.number }}{% else %}New First Article Inspection{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:first_article_inspection_list' %}" class="hover:underline">First Article Inspections</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if fai %}Edit {{ fai.number }}{% else %}New Protocol{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="award" class="w-6 h-6 text-blue-600"></i>
+        {% if fai %}Edit {{ fai.number }} — {{ fai.title }}{% else %}New First Article Inspection Protocol (AS9102){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Verify initial piece manufacturing readiness, drawing balloon dimensional measurements, and setup conformance.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if fai %}{% url 'quality:first_article_inspection_detail' fai.pk %}{% else %}{% url 'quality:first_article_inspection_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Identification & Protocol Scope -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          Protocol Scope & Setup Trigger
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">FAI Title *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.fai_type.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">FAI Scope *</label>
+            {{ form.fai_type }}
+            {% if form.fai_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.fai_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.setup_reason.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Setup Trigger *</label>
+            {{ form.setup_reason }}
+            {% if form.setup_reason.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.setup_reason.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Workflow Status *</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.release_verdict.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Release Verdict *</label>
+            {{ form.release_verdict }}
+            {% if form.release_verdict.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.release_verdict.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Part, Drawing & Machine Setup Details -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="wrench" class="w-4 h-4 text-blue-600"></i>
+          Part, Drawing & Machine Details
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Part / Item Code</label>
+            {{ form.item_code }}
+            {% if form.item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Part / Item Name</label>
+            {{ form.item_name }}
+            {% if form.item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.drawing_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Engineering Drawing #</label>
+            {{ form.drawing_number }}
+            {% if form.drawing_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.drawing_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.drawing_revision.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Drawing Revision</label>
+            {{ form.drawing_revision }}
+            {% if form.drawing_revision.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.drawing_revision.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.machine_tooling_id.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Machine / Tooling ID</label>
+            {{ form.machine_tooling_id }}
+            {% if form.machine_tooling_id.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.machine_tooling_id.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.first_piece_lot_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">First-Piece Lot #</label>
+            {{ form.first_piece_lot_number }}
+            {% if form.first_piece_lot_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.first_piece_lot_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.serial_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Piece Serial #</label>
+            {{ form.serial_number }}
+            {% if form.serial_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.serial_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.production_order_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Production Order #</label>
+            {{ form.production_order_number }}
+            {% if form.production_order_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.production_order_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_center.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Center</label>
+            {{ form.work_center }}
+            {% if form.work_center.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_center.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_center_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Center Code</label>
+            {{ form.work_center_code }}
+            {% if form.work_center_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_center_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_order.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Order</label>
+            {{ form.work_order }}
+            {% if form.work_order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_order.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Dimensional Characteristics & Gages -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="crosshair" class="w-4 h-4 text-blue-600"></i>
+          Characteristic Verification & Measurement
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.total_characteristics_inspected.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Total Characteristics *</label>
+            {{ form.total_characteristics_inspected }}
+            {% if form.total_characteristics_inspected.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_characteristics_inspected.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.characteristics_conforming.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Characteristics Conforming *</label>
+            {{ form.characteristics_conforming }}
+            {% if form.characteristics_conforming.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.characteristics_conforming.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.characteristics_out_of_spec.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Characteristics Out-of-Spec</label>
+            {{ form.characteristics_out_of_spec }}
+            {% if form.characteristics_out_of_spec.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.characteristics_out_of_spec.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div class="form-group">
+            <label for="{{ form.max_deviation_found.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Max Deviation Found</label>
+            {{ form.max_deviation_found }}
+            {% if form.max_deviation_found.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.max_deviation_found.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.gage_serial_numbers.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Calibrated Gages / CMM Serials</label>
+            {{ form.gage_serial_numbers }}
+            {% if form.gage_serial_numbers.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.gage_serial_numbers.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: AS9102 Accountability Forms -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i>
+          AS9102 Rev C Accountability Checkpoints
+        </h2>
+        <div class="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <div class="flex items-start gap-3">
+            {{ form.as9102_form1_complete }}
+            <div>
+              <label for="{{ form.as9102_form1_complete.id_for_label }}" class="text-sm font-semibold text-slate-800 cursor-pointer">
+                Form 1: Part Number Accountability
+              </label>
+              <p class="text-xs text-slate-500">Confirms part number, serial/lot tracking, drawing revision, and sub-tier BOM alignment.</p>
+              {% if form.as9102_form1_complete.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.as9102_form1_complete.errors }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="flex items-start gap-3 pt-2 border-t border-slate-200">
+            {{ form.as9102_form2_complete }}
+            <div>
+              <label for="{{ form.as9102_form2_complete.id_for_label }}" class="text-sm font-semibold text-slate-800 cursor-pointer">
+                Form 2: Product Process Accountability
+              </label>
+              <p class="text-xs text-slate-500">Confirms manufacturing routing, CNC program revision, fixturing, and special processing verification.</p>
+              {% if form.as9102_form2_complete.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.as9102_form2_complete.errors }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="flex items-start gap-3 pt-2 border-t border-slate-200">
+            {{ form.as9102_form3_complete }}
+            <div>
+              <label for="{{ form.as9102_form3_complete.id_for_label }}" class="text-sm font-semibold text-slate-800 cursor-pointer">
+                Form 3: Characteristic Accountability & Verification
+              </label>
+              <p class="text-xs text-slate-500">Confirms 100% of ballooned drawing dimensions have measured values recorded and zero non-conformances.</p>
+              {% if form.as9102_form3_complete.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.as9102_form3_complete.errors }}</div>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Sign-Offs, NCR & Boundaries -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="user-check" class="w-4 h-4 text-blue-600"></i>
+          Approvals, Containment & Quality Escalation
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.inspector.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Quality Inspector</label>
+            {{ form.inspector }}
+            {% if form.inspector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspector.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.approved_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Approved By (Engineering / Quality Authority)</label>
+            {{ form.approved_by }}
+            {% if form.approved_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.approved_by.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.conditional_release_notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Conditional Pilot Release Boundaries</label>
+            {{ form.conditional_release_notes }}
+            {% if form.conditional_release_notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.conditional_release_notes.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.non_conformance.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Non-Conformance Report (NCR)</label>
+            {{ form.non_conformance }}
+            {% if form.non_conformance.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.non_conformance.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">General Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if fai %}{% url 'quality:first_article_inspection_detail' fai.pk %}{% else %}{% url 'quality:first_article_inspection_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if fai %}Save Changes{% else %}Save FAI Protocol{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
