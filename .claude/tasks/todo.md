@@ -7,6 +7,289 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 12.7: Incoming Quality Control (IQC) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.7.md` (2026-11-18)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), 12.5 (Non-Conformance), and 12.6 (Supplier Quality).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0012_supplierqualityscorecard_idx_qssc_ten_pend_created.py` (claims next available incremental migration `0013_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QIIP`** (`IncomingInspectionPlan`), **`QIIL`** (`IncomingInspectionLot`), **`QCOA`** (`CertificateOfAnalysis`), **`QRMA`** (`QualityReturnAuthorization`).
+> Plan written from `.claude/tasks/research-quality-12.7.md` (Phase 1) and `NavERP.md` (`### 12.7 Incoming Quality Control (IQC)`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/IncomingQuality/<Entity>.py` (`IncomingInspectionPlans.py`, `IncomingInspectionLots.py`, `CertificatesOfAnalysis.py`, `QualityReturnAuthorizations.py`, plus dedicated SPC module `IqcSpcDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/incoming_quality/{incoming_inspection_plan,incoming_inspection_lot,certificate_of_analysis,quality_return_authorization}/{list,detail,form}.html` + `templates/quality/incoming_quality/spc_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QIIP`** (`IncomingInspectionPlan`), **`QIIL`** (`IncomingInspectionLot`), **`QCOA`** (`CertificateOfAnalysis`), **`QRMA`** (`QualityReturnAuthorization`), all 4 model classes, and all URL stems (`incoming_inspection_plan_*`, `incoming_inspection_lot_*`, `certificate_of_analysis_*`, `quality_return_authorization_*`, `iqc_spc_dashboard*`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `core.Party` (`apps/core/models/Party.py` with `role="supplier"` or `"vendor"`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.AuditLog` (`write_audit_log`).
+  - SCM cross-module: `scm.PurchaseOrder` (`apps/scm/models/ProcurementManagement/PurchaseOrders.py`, prefix `PO`), `scm.GoodsReceiptNote` (`apps/scm/models/ProcurementManagement/GoodsReceiptNotes.py`, prefix `GRN`).
+  - Module 12 siblings (12.1, 12.5, 12.6): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`, prefix `QDOC`), `quality.NonConformanceReport` (`apps/quality/models/NonConformance/NonConformanceReports.py`, prefix `QNCR`), `quality.QuarantineContainment` (`apps/quality/models/NonConformance/QuarantineContainments.py`, prefix `QCNT`), `quality.ProcessDeviation` (`apps/quality/models/NonConformance/ProcessDeviations.py`, prefix `QDEV`), `quality.SupplierQualificationAudit` (`apps/quality/models/SupplierQuality/SupplierQualificationAudits.py`, prefix `QSQA`), `quality.SupplierCorrectiveAction` (`apps/quality/models/SupplierQuality/SupplierCorrectiveActions.py`, prefix `QSCA`), `quality.SupplierQualityScorecard` (`apps/quality/models/SupplierQuality/SupplierQualityScorecards.py`, prefix `QSSC`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`, `UOM`): Text fields `item_code`, `item_name`, `lot_number`, `uom` with clean migration path.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Regulatory Alignment (FDA 21 CFR Part 820.80 / QMSR, ISO 13485:2016 §7.4.3, ANSI/ASQ Z1.4 / ISO 2859-1)**:
+  - Formal attribute sampling plan systems (ANSI/ASQ Z1.4 code letters A-R based on lot size and inspection levels I, II, III, S1-S4).
+  - Defect classification (Critical, Major, Minor) with distinct AQL acceptance criteria ($c=0$ for critical defects).
+  - Dynamic switching rules (`normal`, `tightened`, `reduced`) and inspection frequency modes (`every_lot`, `skip_lot`, `dock_to_stock`, `first_article`).
+  - Digital Certificate of Analysis (CoA) multi-parameter spec comparison engine with automated variance detection and gating enforcement (`SupplierQualificationAudit.requires_coa = True` strictly blocks lot acceptance without a compliant CoA).
+  - Statistical Process Control (SPC) calculation engine: sample mean ($\bar{X}$), standard deviation ($s$), range ($R$), capability indices ($C_p$, $C_{pk}$), and Western Electric / 3-sigma out-of-control alerts.
+  - Closed-loop vendor RMA lifecycle with commercial disposition (credit, replacement, rework, scrap on-site), carrier tracking, and AP debit memo reconciliation.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `usage_decision_at`, `verified_at`, `shipped_date`, `vendor_received_date`), auto-numbers (`number`), and computed metrics (`sample_mean`, `sample_std_dev`, `cp_index`, `cpk_index`, `variance_count`, `is_within_spec`) MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_overdue`, `is_compliant`, `total_defects`, `defect_rate_ppm`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `IncomingInspectionPlan` (`QIIP-`)
+- [ ] **File**: `apps/quality/models/IncomingQuality/IncomingInspectionPlans.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QIIP"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255, help_text="Plan name or component inspection protocol")`
+  - `item_code`: `CharField(max_length=100, db_index=True, help_text="Target component / item part number")`
+  - `item_name`: `CharField(max_length=255, help_text="Component description")`
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_inspection_plans", help_text="Optional supplier-specific plan; null for generic part plan")`
+  - `revision`: `CharField(max_length=20, default="Rev A")`
+  - `sampling_standard`: `CharField(max_length=25, choices=SAMPLING_STANDARD_CHOICES, default="ansi_z1_4", db_index=True)` — `"ansi_z1_4"` (9), `"c_zero"` (6), `"fixed_sample"` (12), `"percent_sample"` (14), `"100_percent"` (11) (longest: 14 <= 25)
+  - `inspection_level`: `CharField(max_length=20, choices=INSPECTION_LEVEL_CHOICES, default="level_II", db_index=True)` — `"level_I"` (7), `"level_II"` (8), `"level_III"` (9), `"special_S1"` (10), `"special_S2"` (10), `"special_S3"` (10), `"special_S4"` (10) (longest: 10 <= 20)
+  - `inspection_severity`: `CharField(max_length=20, choices=INSPECTION_SEVERITY_CHOICES, default="normal", db_index=True)` — `"normal"` (6), `"tightened"` (9), `"reduced"` (7) (longest: 9 <= 20)
+  - `frequency_mode`: `CharField(max_length=25, choices=FREQUENCY_MODE_CHOICES, default="every_lot", db_index=True)` — `"every_lot"` (9), `"skip_lot"` (8), `"dock_to_stock"` (13), `"first_article"` (13) (longest: 13 <= 25)
+  - `skip_lot_interval`: `PositiveIntegerField(default=1, help_text="Inspect 1 out of every N shipments")`
+  - `aql_critical`: `DecimalField(max_digits=5, decimal_places=3, default=Decimal("0.000"), help_text="AQL for Critical defects (typically 0.0 / c=0)")`
+  - `aql_major`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("1.00"), help_text="AQL for Major functional defects (e.g. 1.00 or 1.50)")`
+  - `aql_minor`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("4.00"), help_text="AQL for Minor cosmetic defects (e.g. 4.00)")`
+  - `characteristics`: `JSONField(default=list, blank=True, help_text="List of inspection parameters: name, type, nominal, LSL, USL, uom, is_ctq, is_coa_required")`
+  - `specification_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="inspection_plans", help_text="Linked engineering drawing or inspection SOP")`
+  - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"active"` (6), `"under_revision"` (14), `"obsolete"` (8) (longest: 14 <= 25)
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="owned_inspection_plans")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qiip_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qiip_ten_status")` (19)
+  - `Index(fields=["tenant", "item_code"], name="idx_qiip_ten_item")` (17)
+  - `Index(fields=["tenant", "supplier"], name="idx_qiip_ten_supp")` (17)
+  - `Index(fields=["tenant", "sampling_standard"], name="idx_qiip_ten_std")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qiip_ten_created")` (20)
+
+### 2. `IncomingInspectionLot` (`QIIL-`)
+- [ ] **File**: `apps/quality/models/IncomingQuality/IncomingInspectionLots.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QIIL"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `inspection_plan`: `ForeignKey("quality.IncomingInspectionPlan", on_delete=models.PROTECT, related_name="inspection_lots")`
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="incoming_inspection_lots")`
+  - `purchase_order`: `ForeignKey("scm.PurchaseOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_quality_lots")`
+  - `goods_receipt`: `ForeignKey("scm.GoodsReceiptNote", on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_quality_lots")`
+  - `item_code`: `CharField(max_length=100, db_index=True)`
+  - `item_name`: `CharField(max_length=255)`
+  - `lot_number`: `CharField(max_length=100, db_index=True, help_text="Supplier batch or lot number")`
+  - `receipt_date`: `DateField(db_index=True)`
+  - `lot_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Total received quantity")`
+  - `sample_size`: `PositiveIntegerField(default=0, help_text="Computed ANSI Z1.4 sample size")`
+  - `inspected_quantity`: `PositiveIntegerField(default=0, help_text="Actual units inspected")`
+  - `accepted_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `rejected_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `quarantine_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `critical_defects`: `PositiveIntegerField(default=0)`
+  - `major_defects`: `PositiveIntegerField(default=0)`
+  - `minor_defects`: `PositiveIntegerField(default=0)`
+  - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="pending_receipt", db_index=True)` — `"pending_receipt"` (15), `"in_inspection"` (13), `"sampling_complete"` (17), `"completed"` (9), `"cancelled"` (9) (longest: 17 <= 25)
+  - `usage_decision`: `CharField(max_length=30, choices=USAGE_DECISION_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"accepted"` (8), `"accepted_with_deviation"` (23), `"quarantined"` (11), `"rejected"` (8), `"skip_lot_passed"` (15) (longest: 23 <= 30)
+  - `usage_decision_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="lot_usage_decisions")`
+  - `usage_decision_at`: `DateTimeField(null=True, blank=True)`
+  - `inspector`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="inspected_quality_lots")`
+  - `inspection_started_at`: `DateTimeField(null=True, blank=True)`
+  - `inspection_completed_at`: `DateTimeField(null=True, blank=True)`
+  - `sample_readings`: `JSONField(default=list, blank=True, help_text="Raw quantitative measurements for CTQ parameter [x1, x2, ...]")`
+  - `sample_mean`: `DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)`
+  - `sample_std_dev`: `DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)`
+  - `sample_range`: `DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)`
+  - `sample_min`: `DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)`
+  - `sample_max`: `DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)`
+  - `cp_index`: `DecimalField(max_digits=6, decimal_places=3, null=True, blank=True, help_text="Process capability index Cp")`
+  - `cpk_index`: `DecimalField(max_digits=6, decimal_places=3, null=True, blank=True, help_text="Process capability index Cpk")`
+  - `spc_alert_triggered`: `BooleanField(default=False)`
+  - `spc_alert_reason`: `CharField(max_length=255, blank=True)`
+  - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_lots")`
+  - `quarantine`: `ForeignKey("quality.QuarantineContainment", on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_lots")`
+  - `scar`: `ForeignKey("quality.SupplierCorrectiveAction", on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_lots")`
+  - `inspection_notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `usage_decision_at`, `sample_mean`, `sample_std_dev`, `sample_range`, `sample_min`, `sample_max`, `cp_index`, `cpk_index`, `spc_alert_triggered`, `spc_alert_reason`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qiil_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qiil_ten_status")` (19)
+  - `Index(fields=["tenant", "usage_decision"], name="idx_qiil_ten_decision")` (21)
+  - `Index(fields=["tenant", "supplier"], name="idx_qiil_ten_supp")` (17)
+  - `Index(fields=["tenant", "item_code"], name="idx_qiil_ten_item")` (17)
+  - `Index(fields=["tenant", "lot_number"], name="idx_qiil_ten_lot")` (16)
+  - `Index(fields=["tenant", "receipt_date"], name="idx_qiil_ten_rcpt")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qiil_ten_created")` (20)
+
+### 3. `CertificateOfAnalysis` (`QCOA-`)
+- [ ] **File**: `apps/quality/models/IncomingQuality/CertificatesOfAnalysis.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCOA"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `inspection_lot`: `ForeignKey("quality.IncomingInspectionLot", on_delete=models.SET_NULL, null=True, blank=True, related_name="certificates_of_analysis")`
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="certificates_of_analysis")`
+  - `certificate_reference`: `CharField(max_length=100, help_text="Supplier CoA certificate number")`
+  - `manufacturer_name`: `CharField(max_length=255, blank=True, help_text="Manufacturing plant or laboratory")`
+  - `item_code`: `CharField(max_length=100, db_index=True)`
+  - `item_name`: `CharField(max_length=255)`
+  - `lot_number`: `CharField(max_length=100, db_index=True)`
+  - `date_of_manufacture`: `DateField(null=True, blank=True)`
+  - `expiration_date`: `DateField(null=True, blank=True)`
+  - `accredited_lab`: `BooleanField(default=True, help_text="ISO/IEC 17025 accredited laboratory")`
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="pending_receipt", db_index=True)` — `"pending_receipt"` (15), `"received_under_review"` (21), `"compliant"` (9), `"non_compliant_rejected"` (22), `"deviation_accepted"` (18) (longest: 22 <= 30)
+  - `test_parameters`: `JSONField(default=list, blank=True, help_text="List of analytical parameters: parameter, method, LSL, target, USL, result, passed")`
+  - `is_within_spec`: `BooleanField(default=True, db_index=True)`
+  - `variance_count`: `PositiveIntegerField(default=0, help_text="Number of out-of-specification test parameters")`
+  - `exception_notes`: `TextField(blank=True)`
+  - `verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_coas")`
+  - `verified_at`: `DateTimeField(null=True, blank=True)`
+  - `attachment_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="linked_coas")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `is_within_spec`, `variance_count`, `verified_at`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcoa_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qcoa_ten_status")` (19)
+  - `Index(fields=["tenant", "supplier"], name="idx_qcoa_ten_supp")` (17)
+  - `Index(fields=["tenant", "item_code"], name="idx_qcoa_ten_item")` (17)
+  - `Index(fields=["tenant", "lot_number"], name="idx_qcoa_ten_lot")` (16)
+  - `Index(fields=["tenant", "is_within_spec"], name="idx_qcoa_ten_spec")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcoa_ten_created")` (20)
+
+### 4. `QualityReturnAuthorization` (`QRMA-`)
+- [ ] **File**: `apps/quality/models/IncomingQuality/QualityReturnAuthorizations.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRMA"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `inspection_lot`: `ForeignKey("quality.IncomingInspectionLot", on_delete=models.PROTECT, related_name="return_authorizations")`
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="quality_rmas")`
+  - `purchase_order`: `ForeignKey("scm.PurchaseOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_rmas")`
+  - `goods_receipt`: `ForeignKey("scm.GoodsReceiptNote", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_rmas")`
+  - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_rmas")`
+  - `vendor_rma_number`: `CharField(max_length=100, blank=True, help_text="Supplier-issued return authorization number")`
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"rma_requested"` (13), `"rma_approved_by_vendor"` (22), `"shipped_to_vendor"` (17), `"received_by_vendor"` (18), `"settled_closed"` (14), `"cancelled"` (9) (longest: 22 <= 30)
+  - `return_reason`: `CharField(max_length=35, choices=RETURN_REASON_CHOICES, default="dimensional_out_of_spec", db_index=True)` — `"dimensional_out_of_spec"` (24), `"functional_failure"` (18), `"coa_non_compliance"` (18), `"cosmetic_visual_defect"` (22), `"wrong_material_supplied"` (23), `"packaging_damage"` (16), `"contamination"` (13), `"expired_shelf_life"` (18) (longest: 24 <= 35)
+  - `disposition_type`: `CharField(max_length=30, choices=DISPOSITION_TYPE_CHOICES, default="return_for_credit", db_index=True)` — `"return_for_credit"` (17), `"return_for_replacement"` (22), `"return_for_rework"` (17), `"scrap_on_site"` (13) (longest: 22 <= 30)
+  - `return_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `uom`: `CharField(max_length=20, default="EA")`
+  - `rma_request_date`: `DateField(null=True, blank=True)`
+  - `rma_approved_date`: `DateField(null=True, blank=True)`
+  - `rma_expiry_date`: `DateField(null=True, blank=True)`
+  - `carrier_name`: `CharField(max_length=100, blank=True)`
+  - `tracking_number`: `CharField(max_length=100, blank=True)`
+  - `bill_of_lading`: `CharField(max_length=100, blank=True)`
+  - `shipped_date`: `DateField(null=True, blank=True)`
+  - `vendor_received_date`: `DateField(null=True, blank=True)`
+  - `debit_memo_number`: `CharField(max_length=100, blank=True, help_text="Accounts Payable debit memo reference")`
+  - `settlement_status`: `CharField(max_length=30, choices=SETTLEMENT_STATUS_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"credit_note_received"` (20), `"replacement_received"` (20), `"settled"` (7) (longest: 20 <= 30)
+  - `settlement_amount`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `settlement_date`: `DateField(null=True, blank=True)`
+  - `coordinator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="coordinated_rmas")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrma_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qrma_ten_status")` (19)
+  - `Index(fields=["tenant", "supplier"], name="idx_qrma_ten_supp")` (17)
+  - `Index(fields=["tenant", "return_reason"], name="idx_qrma_ten_reason")` (19)
+  - `Index(fields=["tenant", "disposition_type"], name="idx_qrma_ten_disp")` (17)
+  - `Index(fields=["tenant", "settlement_status"], name="idx_qrma_ten_stl")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qrma_ten_created")` (20)
+
+---
+
+## Dedicated Analytics View: IQC SPC Dashboard
+- [ ] **File**: `apps/quality/views/IncomingQuality/IqcSpcDashboard.py` & `apps/quality/urls/IncomingQuality/IqcSpcDashboard.py`
+- [ ] **Route**: `quality:iqc_spc_dashboard` (`iqc/spc-dashboard/`)
+- [ ] **Capabilities**:
+  - Key Performance Indicators: Overall lot acceptance rate (%), total inspected lots, active SPC alerts, defect PPM.
+  - Supplier Capability Matrix: Top suppliers ranked by average $C_{pk}$ with risk badges.
+  - Out-of-Control Log: Immediate drill-down into lots triggering 3-sigma or capability breaches.
+  - Defect Breakdown: Critical, Major, and Minor defect counts across components.
+
+---
+
+## Execution Steps
+
+- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.7.md`)
+- [ ] **Step 2: Build Entity by Entity**
+  - [ ] Entity 1: `IncomingInspectionPlan` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 2: `IncomingInspectionLot` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus usage decision action modal/view)
+  - [ ] Entity 3: `CertificateOfAnalysis` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus verification action)
+  - [ ] Entity 4: `QualityReturnAuthorization` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus status update action)
+  - [ ] Dedicated Analytics View: `IqcSpcDashboard.py` + `templates/quality/incoming_quality/spc_dashboard.html`
+- [ ] **Step 3: Integrate**
+  - [ ] Update `apps/quality/models/__init__.py` re-exports (`IncomingInspectionPlan`, `IncomingInspectionLot`, `CertificateOfAnalysis`, `QualityReturnAuthorization`)
+  - [ ] Update `apps/quality/forms/__init__.py` re-exports (`IncomingInspectionPlanForm`, `IncomingInspectionLotForm`, `IncomingInspectionLotDecisionForm`, `CertificateOfAnalysisForm`, `CertificateOfAnalysisVerifyForm`, `QualityReturnAuthorizationForm`, `QualityReturnAuthorizationStatusForm`)
+  - [ ] Update `apps/quality/views/__init__.py` re-exports
+  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [ ] Register 4 models in `apps/quality/admin.py`
+  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data
+  - [ ] Wire `LIVE_LINKS["12.7"]` in `apps/core/navigation.py`
+  - [ ] Run `makemigrations quality` -> incremental migration `0013_...`
+  - [ ] Run `migrate quality`
+  - [ ] Run `seed_quality` twice (verify idempotency)
+  - [ ] Run `manage.py check`
+- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all endpoints 200/302, 0 500s, 0 comment leaks, 100% IDOR 404s)
+- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.7.md`
+- [ ] **Step 6: Code Fixer** -> burn down findings
+- [ ] **Step 7: Automated Tests** -> `test_incomingquality_models.py`, `test_incomingquality_forms.py`, `test_incomingquality_views.py`, `test_incomingquality_security.py` -> 100% green
+- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.7.md`
+
+---
+
+## Wire-up Details
+
+- [ ] `apps/core/navigation.py`:
+  - `LIVE_LINKS["12.7"]`:
+    - `"Inspection Planning & Sampling"`: `"quality:incoming_inspection_plan_list"`
+    - `"Goods Receipt & Inspection Execution"`: `"quality:incoming_inspection_lot_list"`
+    - `"Certificate of Analysis (CoA) Management"`: `"quality:certificate_of_analysis_list"`
+    - `"Inspection Data Capture & SPC"`: `"quality:iqc_spc_dashboard"`
+    - `"Reject & Return Material Authorization (RMA)"`: `"quality:quality_return_authorization_list"`
+
+---
+
+## Templates Layout (`templates/quality/incoming_quality/`)
+
+- [ ] `incoming_inspection_plan/list.html`: Inspection plan register, AQL settings, sampling standard badges, filter bar, export CSV
+- [ ] `incoming_inspection_plan/detail.html`: Plan metadata, AQL parameters, characteristic specification matrix, linked drawings
+- [ ] `incoming_inspection_plan/form.html`: Crisp form with sampling standard, inspection levels, AQL decimal inputs, tenant FK selectors
+- [ ] `incoming_inspection_lot/list.html`: Inspection lots table, usage decision badge, defect count chips, status filters, export CSV
+- [ ] `incoming_inspection_lot/detail.html`: Lot profile, defect tally, CTQ readings summary, $C_p$/$C_{pk}$ indicators, usage decision actions
+- [ ] `incoming_inspection_lot/form.html`: Lot creation form, receipt linkage, sample size computation, tenant FK selectors
+- [ ] `certificate_of_analysis/list.html`: CoA register, compliance status badge, accredited lab indicator, variance count
+- [ ] `certificate_of_analysis/detail.html`: Certificate header, test parameter specification comparison table with out-of-spec highlighting, verification workflow
+- [ ] `certificate_of_analysis/form.html`: CoA intake form, supplier reference, date of manufacture/expiry, parameter JSON matrix
+- [ ] `quality_return_authorization/list.html`: RMA register, return reason, disposition type badge, carrier tracking, settlement status
+- [ ] `quality_return_authorization/detail.html`: RMA dossier, rejection documentation, outbound shipping logistics, debit memo & financial closure
+- [ ] `quality_return_authorization/form.html`: RMA generation form, defect classification, commercial disposition, carrier details
+- [ ] `spc_dashboard.html`: IQC Statistical Process Control analytics dashboard with capability trends, out-of-control alerts, and supplier quality metrics
+
+---
+
+## Later passes / deferred
+
+- [ ] Direct CMM / Metrology Equipment Serial Interface — RS-232 / USB / IoT direct ingestion of dimensional measurements from coordinate measuring machines into `sample_readings`.
+- [ ] Automated OCR / AI Intake of Vendor PDF CoAs — Computer vision extraction of analytical test parameters from unstructured supplier PDF certificates.
+- [ ] Automated Debit Memo GL Posting — Direct integration with Module 1 `accounting.JournalEntry` creating automated Accounts Payable debit memos upon RMA shipment.
+
+---
+
+## Review notes
+(filled in at the end of Sub-module 12.7 build)
+
+---
 # Sub-module 12.6: Supplier & Vendor Quality Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.6.md` (2026-11-18)
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), and 12.5 (Non-Conformance).
