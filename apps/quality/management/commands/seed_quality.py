@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -18,6 +19,10 @@ from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDo
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
+from apps.quality.models.NonConformance.MrbDispositions import MrbDisposition
+from apps.quality.models.NonConformance.NonConformanceReports import NonConformanceReport
+from apps.quality.models.NonConformance.ProcessDeviations import ProcessDeviation
+from apps.quality.models.NonConformance.QuarantineContainments import QuarantineContainment
 from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
@@ -40,6 +45,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            ProcessDeviation.objects.all().delete()
+            MrbDisposition.objects.all().delete()
+            QuarantineContainment.objects.all().delete()
+            NonConformanceReport.objects.all().delete()
             CapaEffectivenessReview.objects.all().delete()
             CapaAction.objects.all().delete()
             RootCauseAnalysis.objects.all().delete()
@@ -69,6 +78,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_2(tenant)
             self._seed_submodule_12_3(tenant)
             self._seed_submodule_12_4(tenant)
+            self._seed_submodule_12_5(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -1168,5 +1178,266 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.4 Corrective & Preventive Action (CAPA) seeded successfully."))
+
+    def _seed_submodule_12_5(self, tenant):
+        """Seed demo data for Sub-module 12.5: Non-Conformance & Deviation Management."""
+        if NonConformanceReport.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.5 Non-Conformance & Deviation records already seeded. Skipping.")
+            return
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=False).first()
+            or User.objects.filter(tenant=tenant).first()
+        )
+        if not admin_user:
+            return
+
+        dept = OrgUnit.objects.filter(tenant=tenant).first()
+        capa_ref = CapaInvestigation.objects.filter(tenant=tenant).first()
+        doc_ref = ControlledDocument.objects.filter(tenant=tenant).first()
+        today = timezone.now().date()
+
+        with transaction.atomic():
+            # 1. Critical NCR: Solder Bridging in Automated PCBA Wave Soldering
+            ncr_01 = NonConformanceReport.objects.create(
+                tenant=tenant,
+                title="Solder Bridging & Short Circuit Defect in Main Controller PCB Sub-Assembly",
+                description=(
+                    "In-process automated optical inspection (AOI) flagged intermittent electrical short circuits across "
+                    "microcontroller pins QFP-64 on board revision D2 due to excess solder paste deposition."
+                ),
+                source_type="in_process",
+                category="process",
+                severity="critical",
+                status="containment_active",
+                defect_code="SMT-BRDG-04",
+                department=dept,
+                initiator=admin_user,
+                owner=admin_user,
+                affected_item_code="PCBA-CTRL-002",
+                affected_item_name="Main Embedded System Logic Controller Board",
+                lot_serial_numbers="LOT-2026-PCBA-091",
+                quantity_inspected=Decimal("250.00"),
+                quantity_nonconforming=Decimal("38.00"),
+                unit_of_measure="EA",
+                estimated_financial_loss=Decimal("7600.00"),
+                immediate_containment_required=True,
+                capa_required=True,
+                capa_investigation=capa_ref,
+                target_resolution_date=today + datetime.timedelta(days=7),
+            )
+
+            # Quarantine hold for NCR 1
+            QuarantineContainment.objects.create(
+                tenant=tenant,
+                ncr=ncr_01,
+                title="Immediate Physical Quarantine of PCBA Lot 091",
+                hold_type="physical_quarantine",
+                quarantine_location="SMT Production Floor - Quarantine Bin Q-02",
+                red_tag_number="TAG-RED-2026-041",
+                quantity_on_hold=Decimal("38.00"),
+                unit_of_measure="EA",
+                hold_date=today - datetime.timedelta(days=2),
+                hold_applied_by=admin_user,
+                status="active",
+                release_criteria="Re-inspection via AOI and flying probe test post precision desoldering rework.",
+            )
+
+            # Digital stop-shipment hold
+            QuarantineContainment.objects.create(
+                tenant=tenant,
+                ncr=ncr_01,
+                title="Digital ERP Stop-Shipment Hold on Finished Assemblies Containing Lot 091",
+                hold_type="stop_shipment",
+                quarantine_location="Warehouse Main Staging - Digital Lockout",
+                red_tag_number="HOLD-SYS-901",
+                quantity_on_hold=Decimal("120.00"),
+                unit_of_measure="EA",
+                hold_date=today - datetime.timedelta(days=2),
+                hold_applied_by=admin_user,
+                status="active",
+                release_criteria="Full serialization trace confirming removal of affected controller sub-assemblies.",
+            )
+
+            # MRB Disposition for NCR 1
+            MrbDisposition.objects.create(
+                tenant=tenant,
+                ncr=ncr_01,
+                title="MRB Convening: Hot-Air Rework & Stencil Aperture Recalibration",
+                disposition_decision="rework",
+                technical_justification=(
+                    "Engineering analysis confirms PCB substrate and integrated circuit silicon are undamaged. "
+                    "Defect is strictly solder volume excess; manual hot-air touch-up and flux cleaning will restore full spec."
+                ),
+                rework_instructions=(
+                    "1. Apply No-Clean tacky flux to bridged QFP pins.\n"
+                    "2. Use Hakko hot-air nozzle at 320°C with copper solder wick to draw excess tin.\n"
+                    "3. Inspect under 20x stereo microscope for micro-solder balls.\n"
+                    "4. Run automated test fixture diagnostic sequence."
+                ),
+                rework_assignee=admin_user,
+                rework_completed_date=today - datetime.timedelta(days=1),
+                reinspection_required=True,
+                reinspection_criteria="Zero bridges under 20x magnification; 100% test fixture continuity pass.",
+                reinspection_passed=True,
+                reinspection_by=admin_user,
+                scrap_cost=Decimal("0.00"),
+                rework_labor_cost=Decimal("950.00"),
+                vendor_chargeback_cost=Decimal("0.00"),
+                total_cost_impact=Decimal("950.00"),
+                mrb_chair=admin_user,
+                quality_approved_by=admin_user,
+                engineering_approved_by=admin_user,
+                operations_approved_by=admin_user,
+                status="approved",
+            )
+
+            # 2. Major NCR: Incoming Stainless Steel Tubing Wall Thickness Out-of-Spec
+            ncr_02 = NonConformanceReport.objects.create(
+                tenant=tenant,
+                title="Incoming Stainless Steel 316L Hydraulic Tubing Wall Thickness Dimension Out-of-Spec",
+                description=(
+                    "Receiving quality inspection utilizing ultrasonic wall thickness gauge recorded average thickness of "
+                    "0.82mm vs drawing specification of 1.00mm +/- 0.05mm across two supply coils."
+                ),
+                source_type="incoming",
+                category="material",
+                severity="major",
+                status="mrb_review",
+                defect_code="DIM-WALL-OOS",
+                department=dept,
+                initiator=admin_user,
+                owner=admin_user,
+                affected_item_code="RAW-TUBE-SS316",
+                affected_item_name="Hydraulic Fluid Transfer Line 316L 10mm OD",
+                lot_serial_numbers="COIL-SS-2026-88A, COIL-SS-2026-88B",
+                quantity_inspected=Decimal("1000.00"),
+                quantity_nonconforming=Decimal("500.00"),
+                unit_of_measure="M",
+                estimated_financial_loss=Decimal("12500.00"),
+                immediate_containment_required=True,
+                capa_required=False,
+                target_resolution_date=today + datetime.timedelta(days=14),
+            )
+
+            # Quarantine for NCR 2
+            QuarantineContainment.objects.create(
+                tenant=tenant,
+                ncr=ncr_02,
+                title="Receiving Dock Quarantine - SS316L Coils 88A & 88B",
+                hold_type="physical_quarantine",
+                quarantine_location="Receiving Inspection Quarantine Area Bay 4",
+                red_tag_number="TAG-RED-2026-042",
+                quantity_on_hold=Decimal("500.00"),
+                unit_of_measure="M",
+                hold_date=today - datetime.timedelta(days=4),
+                hold_applied_by=admin_user,
+                status="active",
+                release_criteria="Vendor Return to Vendor RMA paperwork or concession disposition sign-off.",
+            )
+
+            # MRB Disposition for NCR 2
+            MrbDisposition.objects.create(
+                tenant=tenant,
+                ncr=ncr_02,
+                title="MRB Decision: Return to Vendor (RTV) with Supplier Debit Memo",
+                disposition_decision="return_to_vendor",
+                technical_justification=(
+                    "Reduced wall thickness compromises hydrostatic burst pressure rating below 4x safety factor. "
+                    "Unusable in production hydraulic sub-assemblies. Supplier must replace entire mill batch."
+                ),
+                scrap_cost=Decimal("0.00"),
+                rework_labor_cost=Decimal("150.00"),
+                vendor_chargeback_cost=Decimal("12500.00"),
+                total_cost_impact=Decimal("12650.00"),
+                mrb_chair=admin_user,
+                quality_approved_by=admin_user,
+                engineering_approved_by=admin_user,
+                status="under_review",
+            )
+
+            # 3. Process Deviation: Temporary Reflow Temperature Profile Adjustment
+            dev_01 = ProcessDeviation.objects.create(
+                tenant=tenant,
+                title="Temporary 5°C Reflow Peak Temperature Adjustment for Lead-Free SAC305 Solder Alloy",
+                deviation_type="planned",
+                category="process_parameter",
+                controlled_document=doc_ref,
+                department=dept,
+                requested_by=admin_user,
+                approved_by=admin_user,
+                risk_impact_level="minor",
+                quality_impact_assessment=(
+                    "Thermal profile modeling and thermocouple data loggers confirm component peak temperatures "
+                    "remain safely under 260°C maximum rating while achieving complete intermetallic compound formation."
+                ),
+                affected_lots_summary="PCBA Batches LOT-2026-092 through LOT-2026-096",
+                customer_notification_required=False,
+                customer_concession_obtained=False,
+                regulatory_reporting_required=False,
+                valid_from=today - datetime.timedelta(days=3),
+                valid_until=today + datetime.timedelta(days=14),
+                max_batches_permitted=5,
+                batches_produced_count=3,
+                status="active",
+            )
+
+            # 4. Unplanned Deviation linked to Packaging Seal Temperature Fluctuation
+            dev_02 = ProcessDeviation.objects.create(
+                tenant=tenant,
+                ncr=ncr_01,
+                title="Unplanned Heating Element Thermocouple Drift on Pouch Sealer Line 1",
+                deviation_type="unplanned",
+                category="equipment_substitution",
+                department=dept,
+                requested_by=admin_user,
+                approved_by=admin_user,
+                risk_impact_level="moderate",
+                quality_impact_assessment=(
+                    "Sealing temperature dipped 8°C below nominal for 15 minutes before backup controller engaged. "
+                    "Dye penetration seal integrity testing conducted on 100% of pouches yielded zero channel leaks."
+                ),
+                affected_lots_summary="Packaging Run LOT-PKG-2026-301 (40 units)",
+                customer_notification_required=True,
+                customer_concession_obtained=True,
+                regulatory_reporting_required=False,
+                valid_from=today - datetime.timedelta(days=5),
+                valid_until=today + datetime.timedelta(days=2),
+                max_batches_permitted=1,
+                batches_produced_count=1,
+                status="closed",
+            )
+
+            # 5. Closed NCR: Barcode Label DPI Print Blur on Secondary Packaging
+            NonConformanceReport.objects.create(
+                tenant=tenant,
+                title="Secondary Carton Barcode Label Readability Failure at 200 DPI",
+                description=(
+                    "Thermal transfer printhead abrasion caused vertical bar voids, resulting in Grade D scanner verification "
+                    "scores at warehouse packaging verification station."
+                ),
+                source_type="final_inspection",
+                category="documentation",
+                severity="minor",
+                status="closed",
+                defect_code="LBL-BAR-VOID",
+                department=dept,
+                initiator=admin_user,
+                owner=admin_user,
+                affected_item_code="PKG-BOX-MED",
+                affected_item_name="Master Shipping Carton Outer Shipper",
+                lot_serial_numbers="SHP-2026-0188",
+                quantity_inspected=Decimal("100.00"),
+                quantity_nonconforming=Decimal("15.00"),
+                unit_of_measure="EA",
+                estimated_financial_loss=Decimal("45.00"),
+                immediate_containment_required=False,
+                capa_required=False,
+                closed_at=timezone.now(),
+                closed_by=admin_user,
+                closure_notes="Replaced worn thermal transfer printhead; verified Grade A barcode scan across 100 consecutive labels.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.5 Non-Conformance & Deviation Management seeded successfully."))
 
 
