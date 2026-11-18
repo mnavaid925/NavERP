@@ -45,6 +45,18 @@ from apps.quality.forms.SupplierQuality.SupplierQualificationAudits import (
 from apps.quality.forms.SupplierQuality.SupplierQualityScorecards import (
     SupplierQualityScorecardForm,
 )
+from apps.quality.forms.InProcessQuality.FirstArticleInspections import (
+    FirstArticleInspectionForm,
+)
+from apps.quality.forms.InProcessQuality.InProcessInspections import (
+    InProcessInspectionForm,
+)
+from apps.quality.forms.InProcessQuality.LayeredProcessAudits import (
+    LayeredProcessAuditForm,
+)
+from apps.quality.forms.InProcessQuality.ProcessParameterLogs import (
+    ProcessParameterLogForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -76,5 +88,9 @@ __all__ = [
     "IncomingInspectionLotForm",
     "CertificateOfAnalysisForm",
     "QualityReturnAuthorizationForm",
+    "InProcessInspectionForm",
+    "FirstArticleInspectionForm",
+    "ProcessParameterLogForm",
+    "LayeredProcessAuditForm",
 ]
 
