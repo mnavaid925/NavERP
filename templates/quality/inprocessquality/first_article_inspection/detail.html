@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block title %}{{ fai.number }} — First Article Inspection — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:first_article_inspection_list' %}" class="hover:underline">First Article Inspections</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ fai.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="award" class="w-6 h-6 text-blue-600"></i>
+          {{ fai.number }} — {{ fai.title }}
+        </h1>
+        <span class="badge {{ fai.verdict_css }} text-sm">{{ fai.get_release_verdict_display }}</span>
+        <span class="badge {{ fai.status_css }} text-sm">{{ fai.get_status_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        {{ fai.get_fai_type_display }} · Triggered by: {{ fai.get_setup_reason_display }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:first_article_inspection_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <a href="{% url 'quality:first_article_inspection_edit' fai.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+      </a>
+      {% if not fai.is_approved and fai.characteristics_out_of_spec == 0 %}
+        <form method="post" action="{% url 'quality:first_article_inspection_release' fai.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5" onclick="return confirm('Release production run for {{ fai.number|escapejs }}?');">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Release Production Run</span>
+          </button>
+        </form>
+      {% endif %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <form method="post" action="{% url 'quality:first_article_inspection_delete' fai.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete FAI {{ fai.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="check-circle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Characteristic Conformance</div>
+        <div class="text-xl font-bold text-slate-900">
+          {{ fai.conformance_rate }}%
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="crosshair" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Conforming / Inspected</div>
+        <div class="text-xl font-bold text-slate-900">
+          {{ fai.characteristics_conforming }} / {{ fai.total_characteristics_inspected }}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon {% if fai.characteristics_out_of_spec > 0 %}red bg-red-50 text-red-600{% else %}slate bg-slate-50 text-slate-600{% endif %} p-3 rounded-lg">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Out-of-Spec Dimensions</div>
+        <div class="text-xl font-bold {% if fai.characteristics_out_of_spec > 0 %}text-red-600{% else %}text-slate-900{% endif %}">
+          {{ fai.characteristics_out_of_spec }}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="file-text" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">AS9102 Accountability</div>
+        <div class="text-lg font-bold">
+          {% if fai.as9102_completed_all %}
+            <span class="badge badge-green">Forms 1–3 Complete</span>
+          {% else %}
+            <span class="badge badge-amber">Awaiting Forms</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Left Details (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Part & Setup Card -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="wrench" class="w-5 h-5 text-slate-600"></i>
+            Part Identification & Tooling Setup
+          </h2>
+        </div>
+        <div class="card-body p-4">
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Item / Part Number</dt>
+              <dd class="font-semibold text-slate-900">{{ fai.item_code|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Item / Part Name</dt>
+              <dd>{{ fai.item_name|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Engineering Drawing #</dt>
+              <dd class="font-mono text-slate-800">{{ fai.drawing_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Drawing Revision</dt>
+              <dd class="font-mono text-slate-800">{{ fai.drawing_revision|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Machine / Tooling ID</dt>
+              <dd class="font-medium text-slate-900">{{ fai.machine_tooling_id|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>First-Off Lot #</dt>
+              <dd>{{ fai.first_piece_lot_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Serial Number</dt>
+              <dd>{{ fai.serial_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Production Order #</dt>
+              <dd>{{ fai.production_order_number|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Work Order</dt>
+              <dd>
+                {% if fai.work_order %}
+                  <span class="font-medium text-blue-600">{{ fai.work_order }}</span>
+                {% else %}
+                  <span class="text-slate-400">Not Linked</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Work Center / Cell</dt>
+              <dd>
+                {% if fai.work_center %}
+                  {{ fai.work_center.code }} - {{ fai.work_center.name }}
+                {% elif fai.work_center_code %}
+                  {{ fai.work_center_code }}
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <!-- AS9102 Forms Accountability Card -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="layers" class="w-5 h-5 text-slate-600"></i>
+            AS9102 Rev C Accountability Package
+          </h2>
+        </div>
+        <div class="card-body p-4 space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-4 rounded-lg border {% if fai.as9102_form1_complete %}bg-green-50 border-green-200{% else %}bg-slate-50 border-slate-200{% endif %}">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Form 1</span>
+                {% if fai.as9102_form1_complete %}
+                  <span class="badge badge-green text-xs">Complete</span>
+                {% else %}
+                  <span class="badge badge-slate text-xs">Pending</span>
+                {% endif %}
+              </div>
+              <div class="font-semibold text-slate-800 text-sm">Part Number Accountability</div>
+              <p class="text-xs text-slate-500 mt-1">BOM hierarchy, raw material certification, and drawing alignment.</p>
+            </div>
+
+            <div class="p-4 rounded-lg border {% if fai.as9102_form2_complete %}bg-green-50 border-green-200{% else %}bg-slate-50 border-slate-200{% endif %}">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Form 2</span>
+                {% if fai.as9102_form2_complete %}
+                  <span class="badge badge-green text-xs">Complete</span>
+                {% else %}
+                  <span class="badge badge-slate text-xs">Pending</span>
+                {% endif %}
+              </div>
+              <div class="font-semibold text-slate-800 text-sm">Product Process Accountability</div>
+              <p class="text-xs text-slate-500 mt-1">Routing sequence, special processes (heat treat, anodize), and machine specs.</p>
+            </div>
+
+            <div class="p-4 rounded-lg border {% if fai.as9102_form3_complete %}bg-green-50 border-green-200{% else %}bg-slate-50 border-slate-200{% endif %}">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Form 3</span>
+                {% if fai.as9102_form3_complete %}
+                  <span class="badge badge-green text-xs">Complete</span>
+                {% else %}
+                  <span class="badge badge-slate text-xs">Pending</span>
+                {% endif %}
+              </div>
+              <div class="font-semibold text-slate-800 text-sm">Characteristic Accountability</div>
+              <p class="text-xs text-slate-500 mt-1">Ballooned drawing dimensional measurements, tolerances, and CMM results.</p>
+            </div>
+          </div>
+
+          <dl class="detail-grid pt-2">
+            <div class="detail-item">
+              <dt>Calibrated Gages Used</dt>
+              <dd class="font-mono text-xs">{{ fai.gage_serial_numbers|default:"None Recorded" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Max Deviation Found</dt>
+              <dd class="font-mono text-xs {% if fai.characteristics_out_of_spec > 0 %}text-red-600 font-bold{% else %}text-slate-800{% endif %}">
+                {{ fai.max_deviation_found|default:"0.000 mm (Nominal)" }}
+              </dd>
+            </div>
+          </dl>
+
+          {% if fai.conditional_release_notes %}
+            <div class="mt-4 pt-4 border-t border-slate-200">
+              <h3 class="text-xs font-semibold text-amber-800 uppercase tracking-wider mb-2">Conditional Pilot Release Boundaries</h3>
+              <div class="p-3 bg-amber-50 text-amber-900 rounded text-sm border border-amber-200">
+                {{ fai.conditional_release_notes|linebreaks }}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar (1 col) -->
+    <div class="space-y-6">
+      <!-- Release Gating & Approvals Card -->
+      <div class="card p-4 space-y-3">
+        <h3 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-blue-600"></i>
+          Release Sign-Off & Approvals
+        </h3>
+        <dl class="text-xs space-y-2">
+          <div>
+            <dt class="text-slate-500">Quality Inspector:</dt>
+            <dd class="font-medium text-slate-800">
+              {% if fai.inspector %}{{ fai.inspector.get_full_name|default:fai.inspector.email }}{% else %}Unassigned{% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-slate-500">Approved By:</dt>
+            <dd class="font-medium text-slate-800">
+              {% if fai.approved_by %}{{ fai.approved_by.get_full_name|default:fai.approved_by.email }}{% else %}Pending Approval{% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-slate-500">Release Timestamp:</dt>
+            <dd class="font-medium text-slate-800">{{ fai.approved_at|date:"Y-m-d H:i"|default:"Not Released" }}</dd>
+          </div>
+        </dl>
+
+        {% if not fai.is_approved and fai.characteristics_out_of_spec == 0 %}
+          <div class="pt-2 border-t border-slate-200">
+            <form method="post" action="{% url 'quality:first_article_inspection_release' fai.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary text-xs w-full py-2 flex items-center justify-center gap-1.5" onclick="return confirm('Release production run for {{ fai.number|escapejs }}?');">
+                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                <span>Sign & Release Production Run</span>
+              </button>
+            </form>
+          </div>
+        {% elif fai.characteristics_out_of_spec > 0 %}
+          <div class="p-3 bg-red-50 rounded border border-red-200 text-xs text-red-800">
+            Cannot release production run: Machine setup or piece has {{ fai.characteristics_out_of_spec }} out-of-spec dimensions.
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Linked NCR -->
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i>
+          Linked Non-Conformance
+        </h3>
+        {% if fai.non_conformance %}
+          <a href="{% url 'quality:nonconformance_detail' fai.non_conformance.pk %}" class="text-sm font-semibold text-red-600 hover:underline flex items-center gap-1">
+            <i data-lucide="link" class="w-3.5 h-3.5"></i>
+            {{ fai.non_conformance.number }} — {{ fai.non_conformance.title }}
+          </a>
+        {% else %}
+          <p class="text-xs text-slate-500">No linked NCR. Setup is in-spec or deviation has not been escalated.</p>
+        {% endif %}
+      </div>
+
+      <!-- Record Audit Info -->
+      <div class="card p-4 text-xs text-slate-500 space-y-2">
+        <div class="font-semibold text-slate-700 text-sm mb-2">Audit Trail</div>
+        <div class="flex justify-between py-1 border-b border-slate-100">
+          <span>Created:</span>
+          <span class="font-medium text-slate-700">{{ fai.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-slate-100">
+          <span>Last Updated:</span>
+          <span class="font-medium text-slate-700">{{ fai.updated_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between py-1">
+          <span>Tenant Workspace:</span>
+          <span class="font-medium text-slate-700">{{ fai.tenant.name }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
