@@ -31,7 +31,6 @@ class ProcessParameterLogForm(TenantUniqueMixin, TenantModelForm):
             "recorded_value",
             "recorded_at",
             "excursion_status",
-            "logged_by",
             "containment_action",
             "containment_notes",
             "non_conformance",
@@ -56,7 +55,6 @@ class ProcessParameterLogForm(TenantUniqueMixin, TenantModelForm):
             "recorded_value": forms.NumberInput(attrs={"class": "form-input", "step": "0.0001"}),
             "recorded_at": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
             "excursion_status": forms.Select(attrs={"class": "form-select"}),
-            "logged_by": forms.Select(attrs={"class": "form-select"}),
             "containment_action": forms.Select(attrs={"class": "form-select"}),
             "containment_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
             "non_conformance": forms.Select(attrs={"class": "form-select"}),
@@ -66,10 +64,6 @@ class ProcessParameterLogForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["logged_by"].queryset = User.objects.filter(
-                tenant=self.tenant, is_active=True
-            ).order_by("first_name", "last_name", "email")
-
             try:
                 NonConformanceReport = apps.get_model("quality", "NonConformanceReport")
                 self.fields["non_conformance"].queryset = NonConformanceReport.objects.filter(tenant=self.tenant).order_by("-created_at")
@@ -97,7 +91,7 @@ class ProcessParameterLogForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, [
-            "logged_by", "non_conformance", "process_deviation", "work_order", "work_center"
+            "non_conformance", "process_deviation", "work_order", "work_center"
         ])
 
         target = cleaned_data.get("target_nominal_value")
