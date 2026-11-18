@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scorecard.number }} — Supplier Quality Scorecard — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:supplier_quality_scorecard_list' %}" class="hover:underline">Supplier Quality</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ scorecard.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="bar-chart-3" class="w-6 h-6 text-blue-600"></i>
+          {{ scorecard.number }} — {{ scorecard.supplier.name }}
+        </h1>
+        <span class="badge {{ scorecard.status_css }} text-sm">{{ scorecard.get_status_display }}</span>
+        <span class="badge {{ scorecard.grade_css }} text-sm font-bold">{{ scorecard.get_grade_display }}</span>
+        <span class="badge {{ scorecard.cadence_css }} text-sm">{{ scorecard.get_cadence_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Evaluation Period: {{ scorecard.period_start|date:"Y-m-d" }} to {{ scorecard.period_end|date:"Y-m-d" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:supplier_quality_scorecard_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      {% if scorecard.status != "published" %}
+        <form method="post" action="{% url 'quality:supplier_quality_scorecard_publish' scorecard.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary text-sm">
+            <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Publish Scorecard
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'quality:supplier_quality_scorecard_edit' scorecard.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+      </a>
+      <form method="post" action="{% url 'quality:supplier_quality_scorecard_delete' scorecard.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete scorecard {{ scorecard.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="target" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Overall Weighted Score</div>
+        <div class="text-2xl font-black text-slate-900">
+          {{ scorecard.overall_score|default:"0.00" }} <span class="text-xs font-normal text-slate-500">/ 100</span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="award" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Quality Classification</div>
+        <div class="text-lg font-bold">
+          <span class="badge {{ scorecard.grade_css }} text-sm font-bold">
+            {{ scorecard.get_grade_display|default:"Ungraded" }}
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="boxes" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Lots Received / Rejected</div>
+        <div class="text-xl font-bold text-slate-900">
+          {{ scorecard.total_lots_received }} <span class="text-xs font-normal text-slate-500">rec /</span> <span class="text-red-600">{{ scorecard.lots_rejected }} rej</span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="file-warning" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Total SCARs Issued</div>
+        <div class="text-xl font-bold text-slate-900">
+          {{ scorecard.total_scars_issued }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if scorecard.is_manual_override %}
+    <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm flex items-start gap-3">
+      <i data-lucide="alert-circle" class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"></i>
+      <div>
+        <span class="font-semibold">Manual Grade Override Applied:</span>
+        <p class="mt-1 text-xs text-amber-700">{{ scorecard.override_justification }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- 5-Dimension Performance Breakdown (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-6">
+          <i data-lucide="pie-chart" class="w-5 h-5 text-blue-600"></i>
+          Weighted Performance Breakdown (ISO 13485 §7.4)
+        </h2>
+
+        <div class="space-y-6">
+          <!-- Dimension 1: Lot Acceptance -->
+          <div>
+            <div class="flex justify-between items-center text-sm mb-1.5">
+              <span class="font-semibold text-slate-700">1. Lot Acceptance Rate (Weight: 30%)</span>
+              <span class="font-bold text-slate-900">{{ scorecard.lot_acceptance_rate_score }} / 100</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+              <div class="bg-blue-600 h-3 rounded-full transition-all" style="width: {{ scorecard.lot_acceptance_rate_score }}%;"></div>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">Based on percentage of incoming lots accepted without rejection.</div>
+          </div>
+
+          <!-- Dimension 2: Defect PPM -->
+          <div>
+            <div class="flex justify-between items-center text-sm mb-1.5">
+              <span class="font-semibold text-slate-700">2. Defect PPM Rate (Weight: 25%)</span>
+              <span class="font-bold text-slate-900">{{ scorecard.defect_ppm_score }} / 100</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+              <div class="bg-green-600 h-3 rounded-full transition-all" style="width: {{ scorecard.defect_ppm_score }}%;"></div>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">Parts per million defect frequency normalized to delivery volume.</div>
+          </div>
+
+          <!-- Dimension 3: SCAR Responsiveness -->
+          <div>
+            <div class="flex justify-between items-center text-sm mb-1.5">
+              <span class="font-semibold text-slate-700">3. SCAR Responsiveness & Containment (Weight: 20%)</span>
+              <span class="font-bold text-slate-900">{{ scorecard.scar_responsiveness_score }} / 100</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+              <div class="bg-amber-600 h-3 rounded-full transition-all" style="width: {{ scorecard.scar_responsiveness_score }}%;"></div>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">Compliance with 24-48h containment and root-cause submission timelines.</div>
+          </div>
+
+          <!-- Dimension 4: Audit Compliance -->
+          <div>
+            <div class="flex justify-between items-center text-sm mb-1.5">
+              <span class="font-semibold text-slate-700">4. Quality Audit Compliance (Weight: 15%)</span>
+              <span class="font-bold text-slate-900">{{ scorecard.audit_compliance_score }} / 100</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+              <div class="bg-purple-600 h-3 rounded-full transition-all" style="width: {{ scorecard.audit_compliance_score }}%;"></div>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">QMS audit score, ISO certifications, and zero critical audit findings.</div>
+          </div>
+
+          <!-- Dimension 5: Documentation & CoA -->
+          <div>
+            <div class="flex justify-between items-center text-sm mb-1.5">
+              <span class="font-semibold text-slate-700">5. Documentation & CoA Accuracy (Weight: 10%)</span>
+              <span class="font-bold text-slate-900">{{ scorecard.documentation_coa_score }} / 100</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+              <div class="bg-slate-600 h-3 rounded-full transition-all" style="width: {{ scorecard.documentation_coa_score }}%;"></div>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">Accuracy, completeness, and legibility of Certificate of Analysis on shipment.</div>
+          </div>
+        </div>
+
+        {% if scorecard.evaluation_notes %}
+          <div class="mt-6 pt-4 border-t border-slate-100">
+            <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Evaluator Notes & Qualitative Assessment</h3>
+            <p class="text-sm text-slate-800 whitespace-pre-line">{{ scorecard.evaluation_notes }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Right Sidebar Metadata (1 col) -->
+    <div class="space-y-6">
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+          Evaluation Metadata
+        </h3>
+        <dl class="space-y-2 text-xs">
+          <div class="flex justify-between border-b border-slate-100 pb-2">
+            <dt class="text-slate-500">Supplier:</dt>
+            <dd class="font-semibold text-slate-800">{{ scorecard.supplier.name }}</dd>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 pb-2">
+            <dt class="text-slate-500">Cadence:</dt>
+            <dd class="font-medium text-slate-800">{{ scorecard.get_cadence_display }}</dd>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 pb-2">
+            <dt class="text-slate-500">Evaluated By:</dt>
+            <dd class="font-medium text-slate-800">{{ scorecard.evaluated_by.get_full_name|default:scorecard.evaluated_by.email|default:"Not Assigned" }}</dd>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 pb-2">
+            <dt class="text-slate-500">Created Date:</dt>
+            <dd class="text-slate-700">{{ scorecard.created_at|date:"Y-m-d H:i" }}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-slate-500">Last Modified:</dt>
+            <dd class="text-slate-700">{{ scorecard.updated_at|date:"Y-m-d H:i" }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Grade Thresholds Guide -->
+      <div class="card p-4 text-xs">
+        <h4 class="font-semibold text-slate-700 mb-2">Grading Standard Thresholds</h4>
+        <ul class="space-y-1.5 text-slate-600">
+          <li class="flex items-center justify-between">
+            <span class="badge badge-green text-xs">Grade A (>= 90%)</span>
+            <span>Preferred Vendor</span>
+          </li>
+          <li class="flex items-center justify-between">
+            <span class="badge badge-info text-xs">Grade B (80–89.9%)</span>
+            <span>Approved Vendor</span>
+          </li>
+          <li class="flex items-center justify-between">
+            <span class="badge badge-amber text-xs">Grade C (70–79.9%)</span>
+            <span>Conditional / Review</span>
+          </li>
+          <li class="flex items-center justify-between">
+            <span class="badge badge-red text-xs">Grade D (< 70%)</span>
+            <span>Unsatisfactory / Hold</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
