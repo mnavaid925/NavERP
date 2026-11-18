@@ -112,7 +112,7 @@
   - **Locations**: List views in `SupplierQualificationAudits.py`, `SupplierQualityScorecards.py`, `SupplierCorrectiveActions.py`, `SupplierChangeNotifications.py`.
   - **Fix**: Materialize list once with `.only("id", "name")`.
 
-- [ ] **M7**: Over-eager `select_related` in list views.
+- [x] **M7**: Over-eager `select_related` in list views.
   - **Locations**: List views in all 4 view files.
   - **Fix**: Limit list views to `.select_related("supplier")`.
 
