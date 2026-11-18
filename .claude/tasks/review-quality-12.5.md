@@ -60,6 +60,18 @@
   - Delete buttons bypass `.btn-icon.danger`: [M3] Add `.danger` modifier class.
   - `ncr_analytics_dashboard.html:118, 133`: [M4] Category and Source breakdowns omit badge markup. Fix: wrap with `<span class="badge {{ item.css }}">`.
 
+### 4. Performance Reviewer
+- **Summary**: 1 Critical, 2 Important, 2 Minor.
+- **Critical**:
+  - `apps/quality/views/NonConformance/NonConformanceReports.py:91-108` and `templates/quality/nonconformance/nonconformancereport/detail.html:223`: [C1] N+1 query on `d.mrb_chair` and invalidated prefetch cache in NCR detail view. Calling `.order_by(...)` discards prefetched queries, and MRB table renders `d.mrb_chair` without `select_related`. Fix: use `Prefetch("mrb_dispositions", queryset=MrbDisposition.objects.select_related("mrb_chair"))` and call `.all()` without chained ordering since `Meta.ordering` already defines `["-created_at"]`.
+- **Important**:
+  - `apps/quality/views/NonConformance/NcrAnalytics.py:19-44`: [I1] Analytics dashboard executes 23 queries via Python loops over choices and separate counts. Fix: replace with single `aggregate()` calls and SQL `GROUP BY` `.values(...).annotate(count=Count('id'))`, reducing queries from 23 to 7.
+  - `apps/quality/models/NonConformance/ProcessDeviations.py:173-178`: [I2] Missing composite indexes on `ProcessDeviation` for `(tenant, ncr)` (`idx_qdev_ten_ncr`) and `(tenant, risk_impact_level)` (`idx_qdev_ten_risk_lvl`).
+- **Minor**:
+  - All 4 list views: [M1] Duplicate `SELECT COUNT(*)` on list views due to `qs.count()` followed by `paginator.count`. Fix: use `paginator.count`.
+  - `NonConformanceReports.py:32-34`: [M2] Unused foreign keys in `non_conformance_report_list` `select_related`. Fix: select only `owner`.
+
+
 
 
 
