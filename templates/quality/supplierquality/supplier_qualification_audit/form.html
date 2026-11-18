@@ -10,9 +10,11 @@
   <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
       <div class="breadcrumb text-sm text-slate-500 mb-1">
-        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
         <span class="mx-1">/</span>
-        <a href="{% url 'quality:supplier_qualification_audit_list' %}" class="hover:underline">Supplier Qualification & Audits</a>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:supplier_qualification_audit_list' %}" class="hover:underline">Audits</a>
         <span class="mx-1">/</span>
         <span class="text-slate-800 font-medium">{% if audit %}Edit {{ audit.number }}{% else %}New Record{% endif %}</span>
       </div>
