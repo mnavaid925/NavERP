@@ -102,7 +102,7 @@
       </div>
       <form method="post" action="{% url 'quality:quality_return_authorization_advance' rma.pk %}" class="flex items-center gap-2">
         {% csrf_token %}
-        <select name="next_status" class="form-select text-sm">
+        <select name="next_status" class="form-select text-sm" aria-label="Next RMA lifecycle status">
           {% if rma.status == "draft" %}
             <option value="rma_requested">Request RMA from Vendor</option>
             <option value="cancelled">Cancel Request</option>
