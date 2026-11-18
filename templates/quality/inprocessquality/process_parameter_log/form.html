@@ -67,11 +67,6 @@
             {% if form.unit_of_measure.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.unit_of_measure.errors }}</div>{% endif %}
           </div>
           <div class="form-group">
-            <label for="{{ form.logged_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Logged By (User)</label>
-            {{ form.logged_by }}
-            {% if form.logged_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.logged_by.errors }}</div>{% endif %}
-          </div>
-          <div class="form-group">
             <label for="{{ form.recorded_at.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Timestamp</label>
             {{ form.recorded_at }}
             {% if form.recorded_at.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.recorded_at.errors }}</div>{% endif %}
