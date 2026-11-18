@@ -65,11 +65,13 @@ def supplier_qualification_audit_list(request):
     page_number = request.GET.get("page")
     audits = paginator.get_page(page_number)
 
-    suppliers = Party.objects.filter(
-        tenant=request.tenant, roles__role__in=("supplier", "vendor")
-    ).distinct().order_by("name")
-    if not suppliers.exists():
-        suppliers = Party.objects.filter(tenant=request.tenant).order_by("name")
+    suppliers = list(
+        Party.objects.filter(
+            tenant=request.tenant, roles__role__in=("supplier", "vendor")
+        ).only("id", "name").distinct().order_by("name")
+    )
+    if not suppliers:
+        suppliers = list(Party.objects.filter(tenant=request.tenant).only("id", "name").order_by("name"))
 
     context = {
         "audits": audits,
