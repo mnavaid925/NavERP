@@ -19,6 +19,18 @@ from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
 from apps.quality.models.RiskManagement.RiskReviewRecords import RiskReviewRecord
+from apps.quality.models.SupplierQuality.SupplierChangeNotifications import (
+    SupplierChangeNotification,
+)
+from apps.quality.models.SupplierQuality.SupplierCorrectiveActions import (
+    SupplierCorrectiveAction,
+)
+from apps.quality.models.SupplierQuality.SupplierQualificationAudits import (
+    SupplierQualificationAudit,
+)
+from apps.quality.models.SupplierQuality.SupplierQualityScorecards import (
+    SupplierQualityScorecard,
+)
 
 __all__ = [
     "TenantOwned",
@@ -43,5 +55,9 @@ __all__ = [
     "QuarantineContainment",
     "MrbDisposition",
     "ProcessDeviation",
+    "SupplierQualificationAudit",
+    "SupplierQualityScorecard",
+    "SupplierCorrectiveAction",
+    "SupplierChangeNotification",
 ]
 
