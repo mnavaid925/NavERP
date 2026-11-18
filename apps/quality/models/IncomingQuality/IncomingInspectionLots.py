@@ -179,6 +179,8 @@ class IncomingInspectionLot(TenantNumbered):
             models.Index(fields=["tenant", "supplier"], name="idx_qiil_ten_supp"),
             models.Index(fields=["tenant", "item_code"], name="idx_qiil_ten_item"),
             models.Index(fields=["tenant", "lot_number"], name="idx_qiil_ten_lot"),
+            models.Index(fields=["tenant", "spc_out_of_control"], name="idx_qiil_ten_spc_alert"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_qiil_ten_created"),
         ]
 
     def __str__(self):
