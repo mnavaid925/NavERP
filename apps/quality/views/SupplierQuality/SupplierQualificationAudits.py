@@ -215,7 +215,6 @@ def supplier_qualification_audit_export(request):
             _csv_safe(obj.audit_date),
             _csv_safe(obj.next_audit_due_date),
         ])
-    write_audit_log(request.user, qs.model, "export", tenant=request.tenant)
     return response
 
 
