@@ -30,9 +30,7 @@ def _csv_safe(val):
 @login_required
 def non_conformance_report_list(request):
     qs = quality_scope(
-        NonConformanceReport.objects.select_related(
-            "department", "initiator", "owner", "supplier_party", "capa_investigation"
-        ),
+        NonConformanceReport.objects.select_related("owner"),
         request,
         owner_field="owner",
     )
