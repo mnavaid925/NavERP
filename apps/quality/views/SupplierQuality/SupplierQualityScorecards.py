@@ -213,7 +213,6 @@ def supplier_quality_scorecard_export(request):
             _csv_safe(obj.lots_rejected),
             _csv_safe(obj.evaluated_by.get_full_name() if obj.evaluated_by else ""),
         ])
-    write_audit_log(request.user, qs.model, "export", tenant=request.tenant)
     return response
 
 
