@@ -55,6 +55,10 @@ class SupplierQualityScorecardForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not (self.instance and self.instance.pk and self.instance.status == "published"):
+            self.fields["status"].choices = [
+                c for c in SupplierQualityScorecard.STATUS_CHOICES if c[0] != "published"
+            ]
         if self.tenant:
             suppliers = Party.objects.filter(
                 tenant=self.tenant, roles__role__in=("supplier", "vendor")
@@ -65,6 +69,12 @@ class SupplierQualityScorecardForm(TenantUniqueMixin, TenantModelForm):
             self.fields["evaluated_by"].queryset = User.objects.filter(
                 tenant=self.tenant
             ).order_by("first_name", "last_name", "email")
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status == "published" and not (self.instance and self.instance.pk and self.instance.status == "published"):
+            raise forms.ValidationError("Scorecards must be published via the official Publish action.")
+        return status
 
     def clean(self):
         cleaned_data = super().clean()
