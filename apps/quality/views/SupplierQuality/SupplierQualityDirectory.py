@@ -16,11 +16,17 @@ def avl_directory(request):
         "supplier", "lead_auditor", "quality_agreement"
     )
 
-    # Aggregate key AVL Governance metrics
-    active_count = base_qs.filter(qualification_status="approved").count()
-    critical_count = base_qs.filter(criticality_tier="critical").count()
-    dock_to_stock_count = base_qs.filter(dock_to_stock_eligible=True).count()
-    pending_audits_count = base_qs.filter(audit_result="pending").count()
+    # Aggregate key AVL Governance metrics in a single query
+    metrics = base_qs.aggregate(
+        active=Count("id", filter=Q(qualification_status="approved")),
+        critical=Count("id", filter=Q(criticality_tier="critical")),
+        dock_to_stock=Count("id", filter=Q(dock_to_stock_eligible=True)),
+        pending_audits=Count("id", filter=Q(audit_result="pending")),
+    )
+    active_count = metrics["active"]
+    critical_count = metrics["critical"]
+    dock_to_stock_count = metrics["dock_to_stock"]
+    pending_audits_count = metrics["pending_audits"]
 
     # Filterable table
     qs = base_qs
