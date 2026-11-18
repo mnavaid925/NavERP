@@ -628,7 +628,7 @@ class InProcessInspectionAdmin(admin.ModelAdmin):
     )
     list_filter = ("inspection_type", "disposition", "status", "defect_category", "tenant")
     search_fields = ("number", "title", "item_code", "item_name", "lot_number", "production_order_number")
-    list_select_related = ("tenant", "inspector", "operator")
+    list_select_related = ("tenant", "inspector", "supervisor")
 
 
 @admin.register(FirstArticleInspection)
