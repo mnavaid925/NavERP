@@ -118,7 +118,7 @@ def in_process_inspection_list(request):
 def in_process_inspection_detail(request, pk):
     inspection = get_object_or_404(
         InProcessInspection.objects.filter(tenant=request.tenant).select_related(
-            "work_order", "work_center", "operator", "inspector", "controlled_document", "non_conformance"
+            "work_order__item", "work_center", "operator", "inspector", "controlled_document", "non_conformance"
         ),
         pk=pk,
     )
