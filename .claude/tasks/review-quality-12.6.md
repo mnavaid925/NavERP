@@ -2,7 +2,7 @@
 
 **Target Range**: `585db911e9d93d64932a42f765dae39dbb5756a1...HEAD`  
 **Date**: November 18, 2026  
-**Status**: In Progress (Pass 3 of 6 completed)
+**Status**: In Progress (Pass 4 of 6 completed)
 
 ---
 
@@ -84,5 +84,28 @@
 
 ### Minor
 1. **FE-M1**: Unsurfaced filter options in SCAR and SCN list filter bars (corroborates CR-M2 and EXP-M2).
+
+---
+
+## Pass 4: `performance-reviewer` Findings
+
+### Critical
+*None.*
+
+### Important
+1. **PRF-I1**: Multiple isolated `.count()` queries on AVL directory stat cards instead of consolidated aggregate.
+   - `apps/quality/views/SupplierQuality/SupplierQualityDirectory.py:20-23`
+   - Fix: Consolidate into single `.aggregate(Count(..., filter=Q(...)))` query.
+2. **PRF-I2**: Missing compound index for default ordering on `SupplierQualityScorecard`.
+   - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:138`
+   - Fix: Add index `["tenant", "-period_end", "-created_at"]` in `Meta.indexes`.
+
+### Minor
+1. **PRF-M1**: Supplier filter dropdowns issue 2 queries (`exists()` + wide row fetch).
+   - Fix: Materialize with `.only("id", "name")` into a list once.
+2. **PRF-M2**: Over-eager `select_related` in list views (unused FKs joined on list tables).
+   - Fix: Limit list views to `.select_related("supplier")`.
+3. **PRF-M3**: Missing composite index for `(tenant, dock_to_stock_eligible)` on `SupplierQualificationAudit`.
+
 
 
