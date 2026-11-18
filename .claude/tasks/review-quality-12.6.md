@@ -85,7 +85,7 @@
     - `templates/quality/supplierquality/supplier_change_notification/list.html` (add `category` and `supplier` dropdowns)
   - **Fix**: Add `<select>` elements to filter forms.
 
-- [ ] **M3**: Unused `crud_*` imports in view files.
+- [x] **M3**: Unused `crud_*` imports in view files.
   - **Locations**:
     - `apps/quality/views/SupplierQuality/SupplierQualificationAudits.py:11`
     - `apps/quality/views/SupplierQuality/SupplierQualityScorecards.py:11`
