@@ -179,7 +179,7 @@
                     <td>{{ ncr.owner.get_full_name|default:ncr.owner.username }}</td>
                     <td>{{ ncr.created_at|date:"Y-m-d H:i" }}</td>
                     <td class="table-actions">
-                        <a href="{% url 'quality:non_conformance_report_detail' ncr.pk %}" class="btn btn-icon">
+                        <a href="{% url 'quality:non_conformance_report_detail' ncr.pk %}" class="btn btn-icon" title="View NCR {{ ncr.number }}" aria-label="View NCR {{ ncr.number }}">
                             <i data-lucide="eye"></i>
                         </a>
                     </td>
