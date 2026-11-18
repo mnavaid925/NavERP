@@ -200,6 +200,7 @@ def in_process_inspection_delete(request, pk):
 
 @login_required
 def in_process_inspection_export_csv(request):
+    write_audit_log(request.user, InProcessInspection(), "export", tenant=request.tenant)
     qs = InProcessInspection.objects.filter(tenant=request.tenant).order_by("-created_at")
 
     response = HttpResponse(content_type="text/csv")
