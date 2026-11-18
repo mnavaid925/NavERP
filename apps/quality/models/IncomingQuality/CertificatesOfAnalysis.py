@@ -1,3 +1,5 @@
+import math
+
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
@@ -140,10 +142,13 @@ class CertificateOfAnalysis(TenantNumbered):
             if actual is not None:
                 try:
                     act_f = float(actual)
-                    if lsl is not None and act_f < float(lsl):
+                    if not math.isfinite(act_f):
                         is_pass = False
-                    if usl is not None and act_f > float(usl):
-                        is_pass = False
+                    else:
+                        if lsl is not None and act_f < float(lsl):
+                            is_pass = False
+                        if usl is not None and act_f > float(usl):
+                            is_pass = False
                 except (ValueError, TypeError):
                     if item.get("expected") and str(actual).strip() != str(item.get("expected")).strip():
                         is_pass = False

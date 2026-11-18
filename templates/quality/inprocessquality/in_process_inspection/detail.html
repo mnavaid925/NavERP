@@ -295,7 +295,7 @@
             <div class="text-xs text-slate-500">Non-Conformance Report (NCR)</div>
             <div class="mt-1">
               {% if inspection.non_conformance %}
-                <a href="{% url 'quality:nonconformance_detail' inspection.non_conformance.pk %}" class="text-red-600 hover:underline font-semibold flex items-center gap-1">
+                <a href="{% url 'quality:non_conformance_report_detail' inspection.non_conformance.pk %}" class="text-red-600 hover:underline font-semibold flex items-center gap-1">
                   <i data-lucide="link" class="w-3.5 h-3.5"></i>
                   {{ inspection.non_conformance.number }} — {{ inspection.non_conformance.title }}
                 </a>
