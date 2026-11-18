@@ -2,128 +2,124 @@
 
 **Target Range**: `585db911e9d93d64932a42f765dae39dbb5756a1...HEAD`  
 **Date**: November 18, 2026  
-**Status**: In Progress (Pass 5 of 6 completed)
+**Status**: Deduplicated & Prioritized (Ready for Phase 5 `code-fixer`)  
+**Passes Completed**: 6 of 6 (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
 
 ---
 
-## Pass 1: `code-reviewer` Findings
+## Consolidated & Prioritized Action Items
 
-### Critical
-*None.*
+### Critical (Must Fix Immediately)
 
-### Important
-1. **CR-I1**: Unguarded nullable User Foreign Key lookups in templates (Lesson L10).
-   - `templates/quality/supplierquality/supplier_qualification_audit/detail.html:124` (`audit.lead_auditor`)
-   - `templates/quality/supplierquality/supplier_quality_scorecard/detail.html:214` (`scorecard.evaluated_by`)
-   - `templates/quality/supplierquality/supplier_corrective_action/detail.html:236` (`scar.verified_by`)
-   - `templates/quality/supplierquality/supplier_change_notification/detail.html:210` (`scn.approved_by`)
-   - `templates/quality/supplierquality/supplier_change_notification/detail.html:279` (`scn.evaluated_by`)
-   - Fix: Guard with `{% if obj.user_fk %}{{ obj.user_fk.get_full_name|default:obj.user_fk.email }}{% else %}—{% endif %}`.
-2. **CR-I2**: Disallowed `badge-purple` theme CSS class (Lesson L33 violation).
-   - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:37` (`"annual": "badge-purple"`)
-   - `apps/quality/models/SupplierQuality/SupplierCorrectiveActions.py:52` (`"effectiveness_verified": "badge-purple"`)
-   - `templates/quality/supplierquality/supplier_change_notification/detail.html:184` (`<span class="badge badge-purple text-xs">`)
-   - Fix: Change to standard theme.css badge classes (`badge-slate`, `badge-info`, or `badge-green`).
-3. **CR-I3**: Manual override disconnect in `SupplierQualityScorecard` Form & Model.
-   - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:199-204`
-   - `apps/quality/forms/SupplierQuality/SupplierQualityScorecards.py:17-35`
-   - Fix: In `save()`, calculate standard defaults if override values are blank (`if not self.is_manual_override or self.overall_score is None: ...`).
-
-### Minor
-1. **CR-M1**: Context key `scns` passed in `supplier_qualification_audit_detail` view but omitted in template.
-   - Fix: Add SCNs sub-table in `supplier_qualification_audit/detail.html`.
-2. **CR-M2**: Missing filter bar dropdowns in list templates (`result` in audit list, `status` in scorecard list, `category` in SCAR list, `category`/`supplier` in SCN list).
-   - Fix: Add corresponding `<select>` elements to list filter bars.
-3. **CR-M3**: Unused `crud_*` imports in view files (`SupplierQualificationAudits.py`, `SupplierQualityScorecards.py`, `SupplierCorrectiveActions.py`, `SupplierChangeNotifications.py`).
-   - Fix: Remove unused imports.
-4. **CR-M4**: Non-standard `text-2xs` utility class in templates (`supplier_change_notification/list.html`, `supplier_corrective_action/list.html`, `supplier_corrective_action/detail.html`).
-   - Fix: Replace with `text-xs`.
-5. **CR-M5**: Inactive user selection allowed in form dropdowns (`lead_auditor`, `evaluated_by`, `verified_by`, `approved_by`).
-   - Fix: Add `.filter(is_active=True)` to User querysets.
+- [ ] **C1**: Filter chaining logic bug in `supplier_corrective_action/detail.html:28` causes date to render blank.
+  - **Location**: `templates/quality/supplierquality/supplier_corrective_action/detail.html:28`
+  - **Problem**: `{{ scar.issued_date|date:"Y-m-d"|default:scar.created_at|date:"Y-m-d" }}` passes already-formatted string into second `|date`, returning empty string `""`.
+  - **Fix**: Use `{% if scar.issued_date %}{{ scar.issued_date|date:"Y-m-d" }}{% else %}{{ scar.created_at|date:"Y-m-d" }}{% endif %}`.
 
 ---
 
-## Pass 2: `explorer` Findings
+### Important (High Priority / Conventions & Safety)
 
-### Critical
-*None.*
+- [ ] **I1**: Unguarded nullable User Foreign Key lookups in templates (Lesson L10).
+  - **Locations**:
+    - `templates/quality/supplierquality/supplier_qualification_audit/detail.html:124` (`audit.lead_auditor`)
+    - `templates/quality/supplierquality/supplier_quality_scorecard/detail.html:214` (`scorecard.evaluated_by`)
+    - `templates/quality/supplierquality/supplier_corrective_action/detail.html:236` (`scar.verified_by`)
+    - `templates/quality/supplierquality/supplier_change_notification/detail.html:210` (`scn.approved_by`)
+    - `templates/quality/supplierquality/supplier_change_notification/detail.html:279` (`scn.evaluated_by`)
+  - **Fix**: Wrap with `{% if fk %}{{ fk.get_full_name|default:fk.email }}{% else %}Not Assigned{% endif %}`.
 
-### Important
-1. **EXP-I1**: Unguarded nullable user FK lookups in templates (corroborates CR-I1; L10 risk).
-2. **EXP-I2**: Disallowed `badge-purple` theme CSS class (corroborates CR-I2; L33 violation).
-3. **EXP-I3**: Disconnect between scorecard manual override and form exclusions (corroborates CR-I3; fallback calculation recommended in `save()`).
+- [ ] **I2**: Disallowed `badge-purple` theme CSS class (Lesson L33 violation).
+  - **Locations**:
+    - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:37` (`"annual": "badge-purple"`)
+    - `apps/quality/models/SupplierQuality/SupplierCorrectiveActions.py:52` (`"effectiveness_verified": "badge-purple"`)
+    - `templates/quality/supplierquality/supplier_change_notification/detail.html:184` (`<span class="badge badge-purple text-xs">`)
+  - **Fix**: Change to standard theme.css badge classes (`badge-slate`, `badge-info`, or `badge-green`).
 
-### Minor
-1. **EXP-M1**: Context key `scns` passed in audit detail view but omitted in template (corroborates CR-M1).
-2. **EXP-M2**: List filter bars omit choices handled in views/context (corroborates CR-M2).
-3. **EXP-M3**: Inactive user selection allowed in form foreign keys (corroborates CR-M5).
-4. **EXP-M4**: Non-standard `text-2xs` utility class in templates (corroborates CR-M4).
-5. **EXP-M5**: Unused `crud_*` imports in view files (corroborates CR-M3).
+- [ ] **I3**: Manual override disconnect in `SupplierQualityScorecard` Form & Model.
+  - **Locations**:
+    - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:199-204`
+  - **Fix**: In `save()`, if `is_manual_override=True` but `overall_score is None`, calculate default composite score as baseline fallback.
 
----
+- [ ] **I4**: SCN disposition bypass & mass assignment in `SupplierChangeNotificationForm`.
+  - **Locations**:
+    - `apps/quality/forms/SupplierQuality/SupplierChangeNotifications.py:42-45`
+    - `templates/quality/supplierquality/supplier_change_notification/form.html:132-160`
+  - **Fix**: Exclude `"disposition"`, `"approved_by"`, `"disposition_notes"` from form `Meta.fields` and form template so disposition is governed exclusively by the `@tenant_admin_required` action view.
 
-## Pass 3: `frontend-reviewer` Findings
+- [ ] **I5**: Privileged status transition bypass via CRUD edit forms.
+  - **Locations**:
+    - `apps/quality/forms/SupplierQuality/SupplierQualityScorecards.py:22` (`status`)
+    - `apps/quality/forms/SupplierQuality/SupplierCorrectiveActions.py:26` (`status`)
+  - **Fix**: Restrict selectable choices in forms so `"published"` and `"closed"` transitions are performed via dedicated workflow action views.
 
-### Critical
-1. **FE-C1**: Filter chaining logic bug in `supplier_corrective_action/detail.html:28` causes date to render blank:
-   `{{ scar.issued_date|date:"Y-m-d"|default:scar.created_at|date:"Y-m-d" }}` passes already-formatted string into second `|date`, yielding `""`.
-   - Fix: `{% if scar.issued_date %}{{ scar.issued_date|date:"Y-m-d" }}{% else %}{{ scar.created_at|date:"Y-m-d" }}{% endif %}`.
-2. **FE-C2**: None-unsafe user FK attribute lookups without `{% if %}` guard (Lesson L10).
-   - `supplier_qualification_audit/detail.html:124` (`audit.lead_auditor`)
-   - `supplier_quality_scorecard/detail.html:214` (`scorecard.evaluated_by`)
-   - `supplier_corrective_action/detail.html:236` (`scar.verified_by`)
-   - `supplier_change_notification/detail.html:210` (`scn.approved_by`)
-   - `supplier_change_notification/detail.html:279` (`scn.evaluated_by`)
-   - Fix: Wrap each with `{% if fk %}...{% else %}Not Assigned{% endif %}`.
+- [ ] **I6**: Delete endpoints lack `@tenant_admin_required`.
+  - **Locations**:
+    - `apps/quality/views/SupplierQuality/SupplierQualificationAudits.py:171`
+    - `apps/quality/views/SupplierQuality/SupplierQualityScorecards.py:163`
+    - `apps/quality/views/SupplierQuality/SupplierCorrectiveActions.py:172`
+    - `apps/quality/views/SupplierQuality/SupplierChangeNotifications.py:173`
+  - **Fix**: Add `@tenant_admin_required` decorator to all delete views.
 
-### Important
-1. **FE-I1**: Undefined badge class `badge-purple` in `supplier_change_notification/detail.html:184` (Lesson L33).
-   - Fix: Replace with `badge-info`.
-2. **FE-I2**: Non-existent CSS class `text-2xs` in `supplier_corrective_action/{list,detail}.html` and `supplier_change_notification/list.html`.
-   - Fix: Replace with `text-xs`.
+- [ ] **I7**: Multiple isolated `.count()` queries on AVL directory stat cards.
+  - **Location**: `apps/quality/views/SupplierQuality/SupplierQualityDirectory.py:20-23`
+  - **Fix**: Consolidate the 4 `.count()` queries into a single `.aggregate(Count(..., filter=Q(...)))`.
 
-### Minor
-1. **FE-M1**: Unsurfaced filter options in SCAR and SCN list filter bars (corroborates CR-M2 and EXP-M2).
-
----
-
-## Pass 4: `performance-reviewer` Findings
-
-### Critical
-*None.*
-
-### Important
-1. **PRF-I1**: Multiple isolated `.count()` queries on AVL directory stat cards instead of consolidated aggregate.
-   - `apps/quality/views/SupplierQuality/SupplierQualityDirectory.py:20-23`
-   - Fix: Consolidate into single `.aggregate(Count(..., filter=Q(...)))` query.
-2. **PRF-I2**: Missing compound index for default ordering on `SupplierQualityScorecard`.
-   - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:138`
-   - Fix: Add index `["tenant", "-period_end", "-created_at"]` in `Meta.indexes`.
-
-### Minor
-1. **PRF-M1**: Supplier filter dropdowns issue 2 queries (`exists()` + wide row fetch).
-   - Fix: Materialize with `.only("id", "name")` into a list once.
-2. **PRF-M2**: Over-eager `select_related` in list views (unused FKs joined on list tables).
-   - Fix: Limit list views to `.select_related("supplier")`.
-3. **PRF-M3**: Missing composite index for `(tenant, dock_to_stock_eligible)` on `SupplierQualificationAudit`.
+- [ ] **I8**: Missing compound index for default ordering on `SupplierQualityScorecard`.
+  - **Location**: `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:147-154`
+  - **Fix**: Add `models.Index(fields=["tenant", "-period_end", "-created_at"], name="idx_qssc_ten_pend_created")` in `Meta.indexes`.
 
 ---
 
-## Pass 5: `qa-smoke-tester` Findings
+### Minor (Polish & Hygiene)
 
-### Critical
-*None.*
+- [ ] **M1**: Context key `scns` passed in `supplier_qualification_audit_detail` view but omitted in template.
+  - **Location**: `templates/quality/supplierquality/supplier_qualification_audit/detail.html`
+  - **Fix**: Add SCNs sub-table below SCARs sub-table.
 
-### Important
-*None.*
+- [ ] **M2**: Missing filter bar dropdowns in list templates.
+  - **Locations**:
+    - `templates/quality/supplierquality/supplier_qualification_audit/list.html` (add `result` dropdown)
+    - `templates/quality/supplierquality/supplier_quality_scorecard/list.html` (add `status` dropdown)
+    - `templates/quality/supplierquality/supplier_corrective_action/list.html` (add `category` dropdown)
+    - `templates/quality/supplierquality/supplier_change_notification/list.html` (add `category` and `supplier` dropdowns)
+  - **Fix**: Add `<select>` elements to filter forms.
 
-### Minor
-*None.*
+- [ ] **M3**: Unused `crud_*` imports in view files.
+  - **Locations**:
+    - `apps/quality/views/SupplierQuality/SupplierQualificationAudits.py:11`
+    - `apps/quality/views/SupplierQuality/SupplierQualityScorecards.py:11`
+    - `apps/quality/views/SupplierQuality/SupplierCorrectiveActions.py:12`
+    - `apps/quality/views/SupplierQuality/SupplierChangeNotifications.py:12`
+  - **Fix**: Remove unused import statements.
 
-- 21 URL routes verified with HTTP 200/302, valid titles, entity tokens rendered, 0 comment leaks.
-- Query parameters, filtering, and out-of-range pagination resilient against errors.
-- Cross-tenant IDOR requests across detail and edit endpoints returned HTTP 404 for foreign tenant records.
+- [ ] **M4**: Non-standard `text-2xs` utility class in templates.
+  - **Locations**:
+    - `templates/quality/supplierquality/supplier_corrective_action/list.html:144, 153`
+    - `templates/quality/supplierquality/supplier_corrective_action/detail.html:57`
+    - `templates/quality/supplierquality/supplier_change_notification/list.html:146, 148`
+  - **Fix**: Replace with `text-xs`.
 
+- [ ] **M5**: Inactive user selection allowed in form dropdowns.
+  - **Locations**:
+    - `apps/quality/forms/SupplierQuality/SupplierQualificationAudits.py:74`
+    - `apps/quality/forms/SupplierQuality/SupplierQualityScorecards.py:65`
+    - `apps/quality/forms/SupplierQuality/SupplierCorrectiveActions.py:108`
+    - `apps/quality/forms/SupplierQuality/SupplierChangeNotifications.py:89`
+  - **Fix**: Add `.filter(is_active=True)` to User querysets.
 
+- [ ] **M6**: Optimize supplier filter dropdown population with `.only("id", "name")`.
+  - **Locations**: List views in `SupplierQualificationAudits.py`, `SupplierQualityScorecards.py`, `SupplierCorrectiveActions.py`, `SupplierChangeNotifications.py`.
+  - **Fix**: Materialize list once with `.only("id", "name")`.
 
+- [ ] **M7**: Over-eager `select_related` in list views.
+  - **Locations**: List views in all 4 view files.
+  - **Fix**: Limit list views to `.select_related("supplier")`.
 
+- [ ] **M8**: Privileged action forms rendered to non-admin users in detail templates.
+  - **Locations**: Detail templates across the 4 entities.
+  - **Fix**: Wrap administrative action cards in `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+
+- [ ] **M9**: Whitespace-stripping defense-in-depth for formula injection in `_csv_safe`.
+  - **Locations**: All 4 view files `_csv_safe` helper.
+  - **Fix**: Use `s.lstrip().startswith(("=", "+", "-", "@", "\t", "\r"))`.
