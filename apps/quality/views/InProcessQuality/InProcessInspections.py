@@ -4,7 +4,7 @@ from django.apps import apps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -66,10 +66,16 @@ def in_process_inspection_list(request):
     if current_work_center.isdigit():
         qs = qs.filter(work_center_id=int(current_work_center))
 
-    total_inspections_count = InProcessInspection.objects.filter(tenant=request.tenant).count()
-    passed_count = InProcessInspection.objects.filter(tenant=request.tenant, disposition="pass").count()
-    rework_count = InProcessInspection.objects.filter(tenant=request.tenant, disposition="rework_required").count()
-    rejected_count = InProcessInspection.objects.filter(tenant=request.tenant, disposition__in=["reject_scrap", "quarantine_hold"]).count()
+    stats = InProcessInspection.objects.filter(tenant=request.tenant).aggregate(
+        total_inspections_count=Count("id"),
+        passed_count=Count("id", filter=Q(disposition="pass")),
+        rework_count=Count("id", filter=Q(disposition="rework_required")),
+        rejected_count=Count("id", filter=Q(disposition__in=["reject_scrap", "quarantine_hold"])),
+    )
+    total_inspections_count = stats["total_inspections_count"] or 0
+    passed_count = stats["passed_count"] or 0
+    rework_count = stats["rework_count"] or 0
+    rejected_count = stats["rejected_count"] or 0
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
