@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}{{ audit.number }} — Supplier Qualification & Audit — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:supplier_qualification_audit_list' %}" class="hover:underline">Supplier Quality</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ audit.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-6 h-6 text-blue-600"></i>
+          {{ audit.number }} — {{ audit.supplier.name }}
+        </h1>
+        <span class="badge {{ audit.status_css }} text-sm">{{ audit.get_qualification_status_display }}</span>
+        <span class="badge {{ audit.tier_css }} text-sm">{{ audit.get_criticality_tier_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        {{ audit.get_assessment_type_display }} · Evaluated via {{ audit.get_audit_method_display }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:supplier_qualification_audit_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <a href="{% url 'quality:supplier_qualification_audit_edit' audit.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+      </a>
+      <form method="post" action="{% url 'quality:supplier_qualification_audit_delete' audit.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete audit {{ audit.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="percent" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Audit Compliance Score</div>
+        <div class="text-xl font-bold text-slate-900">
+          {% if audit.score is not None %}{{ audit.score }}%{% else %}N/A{% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="award" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Audit Result</div>
+        <div class="text-lg font-bold">
+          <span class="badge {{ audit.result_css }}">{{ audit.get_audit_result_display }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Audit Findings</div>
+        <div class="text-xl font-bold text-slate-900">
+          {{ audit.total_findings }}
+          <span class="text-xs font-normal text-slate-500">({{ audit.critical_findings }} crit / {{ audit.major_findings }} maj / {{ audit.minor_findings }} min)</span>
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="truck" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Dock-to-Stock Authority</div>
+        <div class="text-lg font-bold">
+          {% if audit.dock_to_stock_eligible %}
+            <span class="badge badge-green">Authorized</span>
+          {% else %}
+            <span class="badge badge-slate">Standard Inspection</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Left Details (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Overview Card -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200">
+          <h2 class="text-base font-semibold text-slate-800">Qualification & Audit Details</h2>
+        </div>
+        <div class="card-body p-4">
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Supplier / Vendor</dt>
+              <dd class="font-semibold text-slate-900">{{ audit.supplier.name }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Assessment Type</dt>
+              <dd>{{ audit.get_assessment_type_display }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Audit Method</dt>
+              <dd>{{ audit.get_audit_method_display }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Lead Auditor</dt>
+              <dd>{{ audit.lead_auditor.get_full_name|default:audit.lead_auditor.email|default:"Not Assigned" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Audit Date</dt>
+              <dd>{{ audit.audit_date|date:"Y-m-d"|default:"Not Recorded" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Qualified Date</dt>
+              <dd>{{ audit.qualified_date|date:"Y-m-d"|default:"Pending" }}</dd>
+            </div>
+            <div class="detail-item">
+              <dt>Next Re-Audit Due</dt>
+              <dd class="{% if audit.is_audit_overdue %}text-red-600 font-bold{% endif %}">
+                {{ audit.next_audit_due_date|date:"Y-m-d"|default:"Not Scheduled" }}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>ISO Certificate Expiry</dt>
+              <dd class="{% if audit.is_expired %}text-red-600 font-bold{% endif %}">
+                {{ audit.certificate_expiry_date|date:"Y-m-d"|default:"N/A" }}
+              </dd>
+            </div>
+          </dl>
+
+          {% if audit.scope_commodities %}
+            <div class="mt-4 pt-4 border-t border-slate-100">
+              <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Approved Scope & Commodities</h3>
+              <p class="text-sm text-slate-800 whitespace-pre-line">{{ audit.scope_commodities }}</p>
+            </div>
+          {% endif %}
+
+          {% if audit.notes %}
+            <div class="mt-4 pt-4 border-t border-slate-100">
+              <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Audit Observations & Notes</h3>
+              <p class="text-sm text-slate-800 whitespace-pre-line">{{ audit.notes }}</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Linked SCARs (Supplier Corrective Actions) -->
+      <div class="card">
+        <div class="card-header p-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-slate-800">Triggered SCARs (Corrective Actions)</h2>
+          <span class="badge badge-slate text-xs">{{ scars|length }} Linked</span>
+        </div>
+        <div class="card-body p-4">
+          {% if scars %}
+            <div class="table-wrap overflow-x-auto">
+              <table class="table w-full text-left text-sm">
+                <thead>
+                  <tr class="border-b border-slate-200 text-slate-600 font-semibold text-xs">
+                    <th class="py-2 px-3">SCAR #</th>
+                    <th class="py-2 px-3">Title</th>
+                    <th class="py-2 px-3">Severity</th>
+                    <th class="py-2 px-3">Status</th>
+                    <th class="py-2 px-3">Due Date</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-xs">
+                  {% for scar in scars %}
+                    <tr class="hover:bg-slate-50">
+                      <td class="py-2 px-3 font-mono font-medium text-blue-600">
+                        <a href="{% url 'quality:supplier_corrective_action_detail' scar.pk %}" class="hover:underline">
+                          {{ scar.number }}
+                        </a>
+                      </td>
+                      <td class="py-2 px-3 text-slate-900 font-medium">{{ scar.title }}</td>
+                      <td class="py-2 px-3"><span class="badge {{ scar.severity_css }}">{{ scar.get_severity_display }}</span></td>
+                      <td class="py-2 px-3"><span class="badge {{ scar.status_css }}">{{ scar.get_status_display }}</span></td>
+                      <td class="py-2 px-3 text-slate-500">{{ scar.response_due_date|date:"Y-m-d"|default:"—" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-sm text-slate-500 text-center py-4">No corrective actions have been triggered from this audit.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar Controls (1 col) -->
+    <div class="space-y-6">
+      <!-- Quick Status Update Card -->
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+          Update AVL Status
+        </h3>
+        <form method="post" action="{% url 'quality:supplier_qualification_audit_status' audit.pk %}">
+          {% csrf_token %}
+          <div class="form-group mb-3">
+            <label for="status_select" class="form-label text-xs">Qualification Status</label>
+            <select name="status" id="status_select" class="form-select text-sm w-full">
+              {% for val, label in audit.QUALIFICATION_STATUS_CHOICES %}
+                <option value="{{ val }}" {% if audit.qualification_status == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary text-sm w-full">
+            Update Status
+          </button>
+        </form>
+      </div>
+
+      <!-- Receiving & Inspection Controls Card -->
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <i data-lucide="package-check" class="w-4 h-4 text-green-600"></i>
+          Receiving Inspection Protocols
+        </h3>
+        <ul class="divide-y divide-slate-100 text-xs">
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Dock-to-Stock Bypass</span>
+            {% if audit.dock_to_stock_eligible %}
+              <span class="badge badge-green">Authorized</span>
+            {% else %}
+              <span class="badge badge-slate">Disabled</span>
+            {% endif %}
+          </li>
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Skip-Lot Inspection</span>
+            {% if audit.skip_lot_approved %}
+              <span class="badge badge-green">Approved</span>
+            {% else %}
+              <span class="badge badge-slate">Full Lot Testing</span>
+            {% endif %}
+          </li>
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Certificate of Analysis (CoA)</span>
+            {% if audit.requires_coa %}
+              <span class="badge badge-amber">Mandatory</span>
+            {% else %}
+              <span class="badge badge-slate">Optional</span>
+            {% endif %}
+          </li>
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Quality Agreement</span>
+            {% if audit.quality_agreement %}
+              <a href="{% url 'quality:controlled_document_detail' audit.quality_agreement.pk %}" class="text-blue-600 hover:underline">
+                {{ audit.quality_agreement.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None Linked</span>
+            {% endif %}
+          </li>
+        </ul>
+      </div>
+
+      <!-- Meta Information Card -->
+      <div class="card p-4 text-xs text-slate-500 space-y-2">
+        <div class="flex justify-between">
+          <span>Created:</span>
+          <span class="text-slate-700 font-medium">{{ audit.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Last Updated:</span>
+          <span class="text-slate-700 font-medium">{{ audit.updated_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
