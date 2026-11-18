@@ -133,28 +133,28 @@
         <i data-lucide="file-text" class="w-5 h-5 text-slate-600"></i>
         Return Reason & Financial Disposition
       </h2>
-      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-        <div>
+      <dl class="detail-grid">
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Return Reason</dt>
           <dd class="text-slate-800 font-medium mt-0.5">{{ rma.get_return_reason_display }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Commercial Disposition</dt>
           <dd class="text-slate-800 font-medium mt-0.5">{{ rma.get_disposition_type_display }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Vendor-Issued RMA #</dt>
           <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ rma.vendor_rma_number|default:"—" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Debit Memo (AP Reference)</dt>
           <dd class="text-slate-800 font-mono font-medium mt-0.5">{{ rma.debit_memo_number|default:"—" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Settlement Date</dt>
           <dd class="text-slate-800 mt-0.5">{{ rma.settlement_date|date:"M d, Y"|default:"Pending" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Assigned Coordinator</dt>
           <dd class="text-slate-800 mt-0.5">
             {% if rma.assigned_coordinator %}{{ rma.assigned_coordinator.get_full_name|default:rma.assigned_coordinator.username }}{% else %}—{% endif %}
@@ -169,24 +169,24 @@
         <i data-lucide="truck" class="w-5 h-5 text-slate-600"></i>
         Logistics & Escalations Traceability
       </h2>
-      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm mb-4">
-        <div>
+      <dl class="detail-grid mb-4">
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Freight Carrier</dt>
           <dd class="text-slate-800 font-medium mt-0.5">{{ rma.carrier|default:"—" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Bill of Lading (BOL)</dt>
           <dd class="text-slate-800 font-mono mt-0.5">{{ rma.bill_of_lading|default:"—" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Shipped Date</dt>
           <dd class="text-slate-800 mt-0.5">{{ rma.shipped_date|date:"M d, Y"|default:"Not shipped" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Vendor Receipt Date</dt>
           <dd class="text-slate-800 mt-0.5">{{ rma.vendor_receipt_date|date:"M d, Y"|default:"Pending arrival" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Linked Non-Conformance (NCR)</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if rma.linked_ncr %}
@@ -198,7 +198,7 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Linked Corrective Action (SCAR)</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if rma.linked_scar %}
@@ -212,10 +212,10 @@
         </div>
       </dl>
       <div>
-        <dt class="text-xs font-medium text-slate-400">Return Instructions & Remarks</dt>
-        <dd class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">
+        <div class="text-xs font-medium text-slate-400">Return Instructions & Remarks</div>
+        <div class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">
           {% if rma.notes %}{{ rma.notes }}{% else %}<span class="text-slate-400 italic">No notes recorded.</span>{% endif %}
-        </dd>
+        </div>
       </div>
     </div>
   </div>
