@@ -169,6 +169,7 @@ def supplier_corrective_action_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def supplier_corrective_action_delete(request, pk):
     scar = get_object_or_404(SupplierCorrectiveAction, pk=pk, tenant=request.tenant)
     write_audit_log(request.user, scar, "delete", tenant=request.tenant)
