@@ -2,7 +2,7 @@
 
 **Target Range**: `585db911e9d93d64932a42f765dae39dbb5756a1...HEAD`  
 **Date**: November 18, 2026  
-**Status**: In Progress (Pass 1 of 6 completed)
+**Status**: In Progress (Pass 2 of 6 completed)
 
 ---
 
@@ -27,7 +27,7 @@
 3. **CR-I3**: Manual override disconnect in `SupplierQualityScorecard` Form & Model.
    - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:199-204`
    - `apps/quality/forms/SupplierQuality/SupplierQualityScorecards.py:17-35`
-   - Fix: Include `grade` in form or calculate standard defaults in `save()` if override values are blank.
+   - Fix: In `save()`, calculate standard defaults if override values are blank (`if not self.is_manual_override or self.overall_score is None: ...`).
 
 ### Minor
 1. **CR-M1**: Context key `scns` passed in `supplier_qualification_audit_detail` view but omitted in template.
@@ -40,3 +40,23 @@
    - Fix: Replace with `text-xs`.
 5. **CR-M5**: Inactive user selection allowed in form dropdowns (`lead_auditor`, `evaluated_by`, `verified_by`, `approved_by`).
    - Fix: Add `.filter(is_active=True)` to User querysets.
+
+---
+
+## Pass 2: `explorer` Findings
+
+### Critical
+*None.*
+
+### Important
+1. **EXP-I1**: Unguarded nullable user FK lookups in templates (corroborates CR-I1; L10 risk).
+2. **EXP-I2**: Disallowed `badge-purple` theme CSS class (corroborates CR-I2; L33 violation).
+3. **EXP-I3**: Disconnect between scorecard manual override and form exclusions (corroborates CR-I3; fallback calculation recommended in `save()`).
+
+### Minor
+1. **EXP-M1**: Context key `scns` passed in audit detail view but omitted in template (corroborates CR-M1).
+2. **EXP-M2**: List filter bars omit choices handled in views/context (corroborates CR-M2).
+3. **EXP-M3**: Inactive user selection allowed in form foreign keys (corroborates CR-M5).
+4. **EXP-M4**: Non-standard `text-2xs` utility class in templates (corroborates CR-M4).
+5. **EXP-M5**: Unused `crud_*` imports in view files (corroborates CR-M3).
+
