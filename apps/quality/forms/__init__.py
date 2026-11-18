@@ -21,6 +21,18 @@ from apps.quality.forms.RiskManagement.RiskAssessments import RiskAssessmentForm
 from apps.quality.forms.RiskManagement.RiskControlMeasures import RiskControlMeasureForm
 from apps.quality.forms.RiskManagement.RiskManagementPlans import RiskManagementPlanForm
 from apps.quality.forms.RiskManagement.RiskReviewRecords import RiskReviewRecordForm
+from apps.quality.forms.IncomingQuality.CertificatesOfAnalysis import (
+    CertificateOfAnalysisForm,
+)
+from apps.quality.forms.IncomingQuality.IncomingInspectionLots import (
+    IncomingInspectionLotForm,
+)
+from apps.quality.forms.IncomingQuality.IncomingInspectionPlans import (
+    IncomingInspectionPlanForm,
+)
+from apps.quality.forms.IncomingQuality.QualityReturnAuthorizations import (
+    QualityReturnAuthorizationForm,
+)
 from apps.quality.forms.SupplierQuality.SupplierChangeNotifications import (
     SupplierChangeNotificationForm,
 )
@@ -60,5 +72,9 @@ __all__ = [
     "SupplierQualityScorecardForm",
     "SupplierCorrectiveActionForm",
     "SupplierChangeNotificationForm",
+    "IncomingInspectionPlanForm",
+    "IncomingInspectionLotForm",
+    "CertificateOfAnalysisForm",
+    "QualityReturnAuthorizationForm",
 ]
 
