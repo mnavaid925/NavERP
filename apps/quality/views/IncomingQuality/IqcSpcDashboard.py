@@ -34,7 +34,7 @@ def iqc_spc_dashboard(request):
     accepted_lots = kpis["accepted_lots"] or 0
     acceptance_rate = round((accepted_lots / total_lots * 100), 1) if total_lots > 0 else 100.0
 
-    avg_cpk = round(float(kpis["avg_cpk"]), 2) if kpis["avg_cpk"] else 1.45
+    avg_cpk = round(float(kpis["avg_cpk"]), 2) if kpis["avg_cpk"] is not None else None
     out_of_control_count = kpis["out_of_control_count"] or 0
 
     recent_alerts = list(
