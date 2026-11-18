@@ -183,11 +183,11 @@ class SupplierQualityScorecard(TenantNumbered):
         )
 
     def calculate_composite_score(self):
-        lot_score = self.lot_acceptance_rate_score or Decimal("0.00")
-        ppm_score = self.defect_ppm_score or Decimal("0.00")
-        scar_score = self.scar_responsiveness_score or Decimal("0.00")
-        audit_score = self.audit_compliance_score or Decimal("0.00")
-        doc_score = self.documentation_coa_score or Decimal("0.00")
+        lot_score = Decimal(str(self.lot_acceptance_rate_score or "0.00"))
+        ppm_score = Decimal(str(self.defect_ppm_score or "0.00"))
+        scar_score = Decimal(str(self.scar_responsiveness_score or "0.00"))
+        audit_score = Decimal(str(self.audit_compliance_score or "0.00"))
+        doc_score = Decimal(str(self.documentation_coa_score or "0.00"))
 
         composite = (
             lot_score * Decimal("0.30")
