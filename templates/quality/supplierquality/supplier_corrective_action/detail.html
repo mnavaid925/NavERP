@@ -25,7 +25,7 @@
         <span class="badge {{ scar.status_css }} text-sm">{{ scar.get_status_display }}</span>
       </div>
       <p class="text-sm text-slate-500 mt-1">
-        Issued to <strong class="text-slate-800">{{ scar.supplier.name }}</strong> on {{ scar.issued_date|date:"Y-m-d"|default:scar.created_at|date:"Y-m-d" }}
+        Issued to <strong class="text-slate-800">{{ scar.supplier.name }}</strong> on {% if scar.issued_date %}{{ scar.issued_date|date:"Y-m-d" }}{% else %}{{ scar.created_at|date:"Y-m-d" }}{% endif %}
       </p>
     </div>
     <div class="page-actions flex items-center gap-2">
