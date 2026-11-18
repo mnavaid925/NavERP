@@ -32,9 +32,7 @@ def _csv_safe(val):
 
 @login_required
 def supplier_quality_scorecard_list(request):
-    qs = SupplierQualityScorecard.objects.filter(tenant=request.tenant).select_related(
-        "supplier", "evaluated_by"
-    )
+    qs = SupplierQualityScorecard.objects.filter(tenant=request.tenant).select_related("supplier")
 
     search_query = request.GET.get("q", "").strip()
     if search_query:
