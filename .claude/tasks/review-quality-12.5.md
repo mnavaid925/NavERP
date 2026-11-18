@@ -71,6 +71,18 @@
   - All 4 list views: [M1] Duplicate `SELECT COUNT(*)` on list views due to `qs.count()` followed by `paginator.count`. Fix: use `paginator.count`.
   - `NonConformanceReports.py:32-34`: [M2] Unused foreign keys in `non_conformance_report_list` `select_related`. Fix: select only `owner`.
 
+### 5. QA Smoke Tester (Runtime Verification)
+- **Summary**: 41 checks executed (39 PASS, 2 FAIL).
+- **IDOR**: 100% PASS across all 4 entities (NCR, Quarantine, MRB, Process Deviation) detail and edit views returning 404 for cross-tenant access.
+- **Critical**:
+  - `templates/quality/nonconformance/processdeviation/detail.html:84`: [C1] 500 crash (`VariableDoesNotExist`) when viewing process deviation with `approved_by=None`.
+  - `templates/quality/nonconformance/nonconformancereport/detail.html:126`: [C2] 500 crash (`VariableDoesNotExist`) when viewing closed NCR with `closed_by=None` and `closure_notes` populated.
+  - `apps/quality/views/NonConformance/MrbDispositions.py:103`: [C3] `AuditLog.action` length overflow (`"disposition"` is 11 chars, column capacity is 10 chars).
+- **Important**:
+  - `templates/quality/nonconformance/nonconformancereport/list.html:35-75`: [I1] Missing Category `<select>` dropdown.
+  - `templates/quality/nonconformance/processdeviation/list.html:32-64, 153, 165`: [I2] Missing Risk Level `<select>` dropdown and dropped query param in pagination.
+
+
 
 
 
