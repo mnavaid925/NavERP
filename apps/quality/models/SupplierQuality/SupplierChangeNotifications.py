@@ -227,3 +227,7 @@ class SupplierChangeNotification(TenantNumbered):
             or self.requires_requalification
             or self.requires_regulatory_filing
         )
+
+    @property
+    def is_high_risk(self):
+        return self.risk_level == "level_3_major" or self.has_critical_impact
