@@ -30,6 +30,19 @@
   - `apps/quality/views/NonConformance/NonConformanceReports.py:116-120`: In `non_conformance_report_create`, creating with `status="closed"` does not populate `closed_at`/`closed_by`. Fix: auto-populate on creation.
   - `apps/quality/models/NonConformance/MrbDispositions.py:186-187`: `MrbDisposition.save()` only auto-sums when `total_cost_impact` is 0. Fix: recalculate in `save()`.
   - `templates/quality/nonconformance/nonconformancereport/detail.html:38-43`: Hide Delete NCR button when closed/voided (`{% if not non_conformance_report.is_closed %}`).
-- **Done Well**: Solid multi-tenancy (`TenantNumbered`, `quality_scope`, `reject_foreign`), clean spine reuse (`core.Party`, `core.OrgUnit`, `quality.CapaInvestigation`), strict `theme.css` badges.
+### 2. Explorer (Contract & Spec)
+- **Contract Adherence**: All 4 models, 4 forms, 17 URLs, and sidebar entries in `LIVE_LINKS["12.5"]` match `.claude/tasks/contract-quality-12.5.md` and `NavERP.md`.
+- **Critical**:
+  - `apps/quality/views/NonConformance/MrbDispositions.py:103`: AuditLog action `"disposition"` is 11 chars, exceeding DB `max_length=10`. Fix: change to `"create"`. Note: `.claude/tasks/contract-quality-12.5.md` Section 0 contained a self-contradiction listing `"disposition"` as <= 10 chars.
+- **Important**:
+  - `templates/quality/nonconformance/nonconformancereport/list.html:35-75`: Category filter `<select>` missing in list filter bar.
+  - `templates/quality/nonconformance/processdeviation/list.html:32-64, 153, 165`: Risk Level filter `<select>` missing and pagination drops `selected_risk_level`.
+  - `templates/quality/nonconformance/processdeviation/detail.html:84`: Nullable `approved_by` filter argument traversal without guard.
+  - `templates/quality/nonconformance/nonconformancereport/detail.html:126`: Nullable `closed_by` traversal without guard.
+  - `apps/quality/views/NonConformance/QuarantineContainments.py:140`, `apps/quality/views/NonConformance/MrbDispositions.py:146`: Delete redirects unconditionally to NCR detail instead of honoring list/next.
+- **Minor**:
+  - `apps/quality/views/NonConformance/NonConformanceReports.py:116-120`: Auto-populate `closed_at`/`closed_by` on create if status is closed.
+  - `apps/quality/models/NonConformance/MrbDispositions.py:186-187`: Auto recalculate total cost in `save()`.
+
 
 
