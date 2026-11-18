@@ -121,7 +121,7 @@
             </div>
             <div class="detail-item">
               <dt>Lead Auditor</dt>
-              <dd>{{ audit.lead_auditor.get_full_name|default:audit.lead_auditor.email|default:"Not Assigned" }}</dd>
+              <dd>{% if audit.lead_auditor %}{{ audit.lead_auditor.get_full_name|default:audit.lead_auditor.email }}{% else %}Not Assigned{% endif %}</dd>
             </div>
             <div class="detail-item">
               <dt>Audit Date</dt>
