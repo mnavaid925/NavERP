@@ -170,6 +170,7 @@ def supplier_change_notification_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def supplier_change_notification_delete(request, pk):
     scn = get_object_or_404(SupplierChangeNotification, pk=pk, tenant=request.tenant)
     write_audit_log(request.user, scn, "delete", tenant=request.tenant)
