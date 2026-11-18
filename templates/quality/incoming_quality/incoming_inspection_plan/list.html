@@ -148,16 +148,16 @@
                 </td>
                 <td class="px-6 py-4 text-right whitespace-nowrap">
                   <div class="table-actions inline-flex items-center gap-1">
-                    <a href="{% url 'quality:incoming_inspection_plan_detail' plan.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View details">
+                    <a href="{% url 'quality:incoming_inspection_plan_detail' plan.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600" title="View details" aria-label="View inspection plan {{ plan.number }}">
                       <i data-lucide="eye" class="w-4 h-4"></i>
                     </a>
-                    <a href="{% url 'quality:incoming_inspection_plan_edit' plan.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit plan">
+                    <a href="{% url 'quality:incoming_inspection_plan_edit' plan.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit plan" aria-label="Edit inspection plan {{ plan.number }}">
                       <i data-lucide="pencil" class="w-4 h-4"></i>
                     </a>
                     {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'quality:incoming_inspection_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete inspection plan {{ plan.number|escapejs }}?');">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete plan">
+                      <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete plan" aria-label="Delete inspection plan {{ plan.number }}">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                       </button>
                     </form>
