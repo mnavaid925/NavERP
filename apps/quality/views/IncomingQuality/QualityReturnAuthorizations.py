@@ -22,6 +22,16 @@ from apps.quality.models.IncomingQuality.QualityReturnAuthorizations import (
 
 PAGE_SIZE = 15
 
+ALLOWED_TRANSITIONS = {
+    "draft": {"rma_requested", "cancelled"},
+    "rma_requested": {"rma_approved", "cancelled"},
+    "rma_approved": {"shipped_to_vendor", "cancelled"},
+    "shipped_to_vendor": {"received_by_vendor", "cancelled"},
+    "received_by_vendor": {"settled_closed", "cancelled"},
+    "settled_closed": set(),
+    "cancelled": set(),
+}
+
 
 def _csv_safe(val):
     if val is None:
@@ -165,7 +175,8 @@ def quality_return_authorization_advance(request, pk):
     next_status = request.POST.get("next_status", "").strip()
 
     valid_statuses = dict(QualityReturnAuthorization.STATUS_CHOICES)
-    if next_status in valid_statuses:
+    allowed = ALLOWED_TRANSITIONS.get(rma.status, set())
+    if next_status in valid_statuses and next_status in allowed:
         rma.status = next_status
         if next_status == "shipped_to_vendor" and not rma.shipped_date:
             rma.shipped_date = timezone.now().date()
@@ -180,7 +191,7 @@ def quality_return_authorization_advance(request, pk):
         write_audit_log(request.user, rma, "advance", tenant=request.tenant)
         messages.success(request, f"RMA {rma.number} advanced to '{valid_statuses[next_status]}'.")
     else:
-        messages.error(request, "Invalid status transition.")
+        messages.error(request, f"Transition from '{rma.get_status_display()}' to '{valid_statuses.get(next_status, next_status)}' is not allowed.")
 
     return redirect("quality:quality_return_authorization_detail", pk=rma.pk)
 
