@@ -11,7 +11,7 @@
 
 ### Critical (Must Fix Immediately)
 
-- [ ] **C1**: Filter chaining logic bug in `supplier_corrective_action/detail.html:28` causes date to render blank.
+- [x] **C1**: Filter chaining logic bug in `supplier_corrective_action/detail.html:28` causes date to render blank.
   - **Location**: `templates/quality/supplierquality/supplier_corrective_action/detail.html:28`
   - **Problem**: `{{ scar.issued_date|date:"Y-m-d"|default:scar.created_at|date:"Y-m-d" }}` passes already-formatted string into second `|date`, returning empty string `""`.
   - **Fix**: Use `{% if scar.issued_date %}{{ scar.issued_date|date:"Y-m-d" }}{% else %}{{ scar.created_at|date:"Y-m-d" }}{% endif %}`.
