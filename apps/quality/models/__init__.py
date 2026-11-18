@@ -19,6 +19,18 @@ from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
 from apps.quality.models.RiskManagement.RiskReviewRecords import RiskReviewRecord
+from apps.quality.models.IncomingQuality.CertificatesOfAnalysis import (
+    CertificateOfAnalysis,
+)
+from apps.quality.models.IncomingQuality.IncomingInspectionLots import (
+    IncomingInspectionLot,
+)
+from apps.quality.models.IncomingQuality.IncomingInspectionPlans import (
+    IncomingInspectionPlan,
+)
+from apps.quality.models.IncomingQuality.QualityReturnAuthorizations import (
+    QualityReturnAuthorization,
+)
 from apps.quality.models.SupplierQuality.SupplierChangeNotifications import (
     SupplierChangeNotification,
 )
@@ -59,5 +71,9 @@ __all__ = [
     "SupplierQualityScorecard",
     "SupplierCorrectiveAction",
     "SupplierChangeNotification",
+    "IncomingInspectionPlan",
+    "IncomingInspectionLot",
+    "CertificateOfAnalysis",
+    "QualityReturnAuthorization",
 ]
 
