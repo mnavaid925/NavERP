@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Hold {{ quarantine_containment.number }}{% else %}New Quarantine Hold{% endif %} | Quality Management
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:quarantine_containment_list' %}">Quarantine Holds</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ quarantine_containment.number }}{% else %}New Hold{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Quarantine Hold: {{ quarantine_containment.number }}{% else %}Establish Quarantine & Containment Hold{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:quarantine_containment_detail' quarantine_containment.pk %}{% else %}{% url 'quality:quarantine_containment_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200 p-4">
+        <div class="text-sm text-red-700 font-medium">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Quarantine & Hold Parameters -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">1. Hold Parameters & Location</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.ncr.id_for_label }}">Associated Non-Conformance Report (NCR) *</label>
+                {{ form.ncr }}
+                {% if form.ncr.errors %}<div class="form-error">{{ form.ncr.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Hold Action Title *</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.hold_type.id_for_label }}">Hold Type *</label>
+                {{ form.hold_type }}
+                {% if form.hold_type.errors %}<div class="form-error">{{ form.hold_type.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Hold Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.quarantine_location.id_for_label }}">Quarantine Storage Location *</label>
+                {{ form.quarantine_location }}
+                {% if form.quarantine_location.errors %}<div class="form-error">{{ form.quarantine_location.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.red_tag_number.id_for_label }}">Physical Red Tag Identifier</label>
+                {{ form.red_tag_number }}
+                {% if form.red_tag_number.errors %}<div class="form-error">{{ form.red_tag_number.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Quantity & Execution -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">2. Quantity Locked & Authorization</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.quantity_on_hold.id_for_label }}">Quantity Locked on Hold *</label>
+                {{ form.quantity_on_hold }}
+                {% if form.quantity_on_hold.errors %}<div class="form-error">{{ form.quantity_on_hold.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.unit_of_measure.id_for_label }}">Unit of Measure</label>
+                {{ form.unit_of_measure }}
+                {% if form.unit_of_measure.errors %}<div class="form-error">{{ form.unit_of_measure.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.hold_date.id_for_label }}">Date Hold Applied *</label>
+                {{ form.hold_date }}
+                {% if form.hold_date.errors %}<div class="form-error">{{ form.hold_date.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-3">
+                <label class="form-label" for="{{ form.hold_applied_by.id_for_label }}">Hold Applied By *</label>
+                {{ form.hold_applied_by }}
+                {% if form.hold_applied_by.errors %}<div class="form-error">{{ form.hold_applied_by.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Release & Disposition -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">3. Controlled Release & Reconciliation</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.release_criteria.id_for_label }}">Release Criteria & Pre-Conditions</label>
+                {{ form.release_criteria }}
+                {% if form.release_criteria.errors %}<div class="form-error">{{ form.release_criteria.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.released_quantity.id_for_label }}">Quantity Released to Date</label>
+                {{ form.released_quantity }}
+                {% if form.released_quantity.errors %}<div class="form-error">{{ form.released_quantity.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.release_date.id_for_label }}">Release Date</label>
+                {{ form.release_date }}
+                {% if form.release_date.errors %}<div class="form-error">{{ form.release_date.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.released_by.id_for_label }}">Released By (Authorizer)</label>
+                {{ form.released_by }}
+                {% if form.released_by.errors %}<div class="form-error">{{ form.released_by.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.disposition_notes.id_for_label }}">Disposition Notes / Hold Reconciliation</label>
+                {{ form.disposition_notes }}
+                {% if form.disposition_notes.errors %}<div class="form-error">{{ form.disposition_notes.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'quality:quarantine_containment_detail' quarantine_containment.pk %}{% else %}{% url 'quality:quarantine_containment_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            {% if is_edit %}Save Changes{% else %}Apply Quarantine Hold{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
