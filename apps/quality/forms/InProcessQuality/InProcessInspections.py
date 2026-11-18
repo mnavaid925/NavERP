@@ -96,7 +96,7 @@ class InProcessInspectionForm(TenantUniqueMixin, TenantModelForm):
 
             try:
                 WorkOrder = apps.get_model("scm", "WorkOrder")
-                self.fields["work_order"].queryset = WorkOrder.objects.filter(tenant=self.tenant).order_by("-created_at")
+                self.fields["work_order"].queryset = WorkOrder.objects.filter(tenant=self.tenant).select_related("item").order_by("-created_at")
             except LookupError:
                 pass
 
