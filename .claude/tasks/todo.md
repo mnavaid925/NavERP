@@ -7,6 +7,273 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 12.6: Supplier & Vendor Quality Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.6.md` (2026-11-18)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), and 12.5 (Non-Conformance).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0008_capaaction_idx_qact_ten_dept_and_more.py` (claims next available incremental migration `0009_...` or `0010_...` if 12.5 migrates first) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QSQA`** (`SupplierQualificationAudit`), **`QSSC`** (`SupplierQualityScorecard`), **`QSCA`** (`SupplierCorrectiveAction`), **`QSCN`** (`SupplierChangeNotification`).
+> Plan written from `.claude/tasks/research-quality-12.6.md` (Phase 1) and `NavERP.md` (`### 12.6 Supplier & Vendor Quality Management`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/SupplierQuality/<Entity>.py` (`SupplierQualificationAudits.py`, `SupplierQualityScorecards.py`, `SupplierCorrectiveActions.py`, `SupplierChangeNotifications.py`, plus dedicated governance module `SupplierQualityDirectory.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/supplierquality/{supplier_qualification_audit,supplier_quality_scorecard,supplier_corrective_action,supplier_change_notification}/{list,detail,form}.html` + `templates/quality/supplierquality/avl_directory.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QSQA`** (`SupplierQualificationAudit`), **`QSSC`** (`SupplierQualityScorecard`), **`QSCA`** (`SupplierCorrectiveAction`), **`QSCN`** (`SupplierChangeNotification`), all 4 model classes, and all URL stems (`supplier_qualification_audit_*`, `supplier_quality_scorecard_*`, `supplier_corrective_action_*`, `supplier_change_notification_*`, `avl_directory*`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `core.Party` (`apps/core/models/Party.py` with `role="supplier"` or `"vendor"`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - Module 12 siblings (12.1, 12.2, 12.4): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.DesignProject` (`apps/quality/models/DesignControls/DesignProjects.py`), `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`).
+  - SCM cross-module: `scm.PurchaseOrder` (`apps/scm/models/ProcurementManagement/PurchaseOrders.py`), `scm.NonConformance` (`apps/scm/models/QualityManagement/NonConformances.py`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`): Text fields `affected_item_code`, `affected_item_name`, `affected_lots` with future migration path.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`core.Party`, `accounts.User`, `quality.ControlledDocument`, `quality.DesignProject`, `quality.CapaInvestigation`, `scm.PurchaseOrder`, `scm.NonConformance`, `SupplierQualificationAudit`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Regulatory Alignment (ISO 13485:2016 §7.4, 21 CFR 820.50 Purchasing Controls / QMSR, ISO 9001:2015 §8.4)**:
+  - Formal Approved Vendor List (AVL) lifecycle with risk tiering (Critical, Major, Minor, Indirect) and explicit qualification statuses.
+  - Dock-to-Stock Certification & Skip-Lot Inspection gating to eliminate incoming inspection bottlenecks for mature zero-defect vendors.
+  - Mandatory Certificate of Analysis (CoA) verification policy flag for incoming shipments.
+  - Multi-dimensional Supplier Quality Scorecard (Lot Acceptance 30%, Defect PPM 25%, SCAR Responsiveness 20%, Audit Compliance 15%, Documentation 10%) with automated letter grading (Grade A/B/C/D) and manual override governance.
+  - Closed-loop Customer-to-Vendor Supplier Corrective Action Requests (SCAR) mandating emergency containment within 24-48 hours, vendor 5 Whys / Fishbone RCA, preventive action commitments, and time-delayed effectiveness verification before closure.
+  - Supplier Change Notification (SCN) intake with Level 1-3 risk triage, Form-Fit-Function (FFF) evaluation, re-qualification triggers, and design change linking.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `closed_at`, `qualified_date`, `disposition_date`, `containment_verified_at`, `implemented_at`), auto-numbers (`number`), and computed metrics MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_overdue`, `days_open`, `is_expired`, `audit_findings_total`, `is_dock_to_stock_authorized`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `SupplierQualificationAudit` (`QSQA-`)
+- [ ] **File**: `apps/quality/models/SupplierQuality/SupplierQualificationAudits.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QSQA"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="quality_qualifications", help_text="Supplier or vendor party")`
+  - `assessment_type`: `CharField(max_length=35, choices=ASSESSMENT_TYPE_CHOICES, default="initial_qualification", db_index=True)` — `"initial_qualification"` (21), `"periodic_reaudit"` (16), `"for_cause"` (9), `"certification_review"` (20), `"quality_agreement_review"` (24) (longest: 24 <= 35)
+  - `criticality_tier`: `CharField(max_length=20, choices=CRITICALITY_TIER_CHOICES, default="major", db_index=True)` — `"critical"` (8), `"major"` (5), `"minor"` (5), `"indirect"` (8) (longest: 8 <= 20)
+  - `audit_method`: `CharField(max_length=25, choices=AUDIT_METHOD_CHOICES, default="on_site", db_index=True)` — `"on_site"` (7), `"desktop_survey"` (14), `"third_party_iso"` (15), `"virtual"` (7) (longest: 15 <= 25)
+  - `qualification_status`: `CharField(max_length=25, choices=QUALIFICATION_STATUS_CHOICES, default="under_evaluation", db_index=True)` — `"under_evaluation"` (16), `"approved"` (8), `"conditional"` (11), `"suspended"` (9), `"disqualified"` (12) (longest: 16 <= 25)
+  - `scope_commodities`: `TextField(blank=True, help_text="Approved materials, services, or part categories")`
+  - `score`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Audit compliance score 0-100%")`
+  - `audit_result`: `CharField(max_length=25, choices=AUDIT_RESULT_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"passed"` (6), `"passed_with_capa"` (16), `"failed"` (6), `"exempt"` (6) (longest: 16 <= 25)
+  - `critical_findings`: `PositiveIntegerField(default=0)`
+  - `major_findings`: `PositiveIntegerField(default=0)`
+  - `minor_findings`: `PositiveIntegerField(default=0)`
+  - `lead_auditor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="led_supplier_audits")`
+  - `audit_date`: `DateField(null=True, blank=True)`
+  - `qualified_date`: `DateField(null=True, blank=True)`
+  - `next_audit_due_date`: `DateField(null=True, blank=True)`
+  - `certificate_expiry_date`: `DateField(null=True, blank=True)`
+  - `dock_to_stock_eligible`: `BooleanField(default=False, help_text="Certified supplier authorized to bypass receiving inspection")`
+  - `skip_lot_approved`: `BooleanField(default=False, help_text="Approved for reduced inspection frequency")`
+  - `requires_coa`: `BooleanField(default=True, help_text="Certificate of Analysis mandatory on every shipment")`
+  - `quality_agreement`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_qualifications")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qsqa_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "qualification_status"], name="idx_qsqa_ten_status")` (19)
+  - `Index(fields=["tenant", "supplier"], name="idx_qsqa_ten_supp")` (17)
+  - `Index(fields=["tenant", "criticality_tier"], name="idx_qsqa_ten_crit")` (17)
+  - `Index(fields=["tenant", "audit_result"], name="idx_qsqa_ten_res")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qsqa_ten_created")` (20)
+
+### 2. `SupplierQualityScorecard` (`QSSC-`)
+- [ ] **File**: `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QSSC"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="quality_scorecards")`
+  - `cadence`: `CharField(max_length=20, choices=CADENCE_CHOICES, default="quarterly", db_index=True)` — `"monthly"` (7), `"quarterly"` (9), `"semi_annual"` (11), `"annual"` (6) (longest: 11 <= 20)
+  - `period_start`: `DateField()`
+  - `period_end`: `DateField()`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"under_review"` (12), `"published"` (9), `"disputed"` (8) (longest: 12 <= 20)
+  - `lot_acceptance_rate_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), help_text="Weight 30%")`
+  - `defect_ppm_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), help_text="Weight 25%")`
+  - `scar_responsiveness_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), help_text="Weight 20%")`
+  - `audit_compliance_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), help_text="Weight 15%")`
+  - `documentation_coa_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), help_text="Weight 10%")`
+  - `overall_score`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Computed weighted composite score 0-100")`
+  - `grade`: `CharField(max_length=15, choices=GRADE_CHOICES, blank=True, default="", db_index=True)` — `"grade_a"` (7), `"grade_b"` (7), `"grade_c"` (7), `"grade_d"` (7) (longest: 7 <= 15)
+  - `total_lots_received`: `PositiveIntegerField(default=0)`
+  - `lots_rejected`: `PositiveIntegerField(default=0)`
+  - `total_scars_issued`: `PositiveIntegerField(default=0)`
+  - `evaluated_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="evaluated_scorecards")`
+  - `is_manual_override`: `BooleanField(default=False)`
+  - `override_justification`: `TextField(blank=True)`
+  - `evaluation_notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `overall_score`, `grade`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qssc_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qssc_ten_status")` (19)
+  - `Index(fields=["tenant", "supplier"], name="idx_qssc_ten_supp")` (17)
+  - `Index(fields=["tenant", "grade"], name="idx_qssc_ten_grade")` (18)
+  - `Index(fields=["tenant", "cadence"], name="idx_qssc_ten_cadence")` (20)
+  - `Index(fields=["tenant", "period_start", "period_end"], name="idx_qssc_ten_period")` (19)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qssc_ten_created")` (20)
+
+### 3. `SupplierCorrectiveAction` (SCAR) (`QSCA-`)
+- [ ] **File**: `apps/quality/models/SupplierQuality/SupplierCorrectiveActions.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QSCA"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="quality_scars")`
+  - `title`: `CharField(max_length=255)`
+  - `severity`: `CharField(max_length=15, choices=SEVERITY_CHOICES, default="major", db_index=True)` — `"minor"` (5), `"major"` (5), `"critical"` (8) (longest: 8 <= 15)
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"issued"` (6), `"containment_submitted"` (21), `"rca_submitted"` (13), `"action_plan_approved"` (20), `"implemented"` (11), `"effectiveness_verified"` (22), `"closed"` (6), `"cancelled"` (9) (longest: 22 <= 30)
+  - `defect_summary`: `TextField(help_text="Detailed description of defect or non-conformance")`
+  - `affected_item_code`: `CharField(max_length=100, blank=True)`
+  - `affected_item_name`: `CharField(max_length=255, blank=True)`
+  - `affected_lots`: `CharField(max_length=255, blank=True)`
+  - `purchase_order`: `ForeignKey("scm.PurchaseOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_scars")`
+  - `non_conformance`: `ForeignKey("scm.NonConformance", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_scars")`
+  - `qualification_audit`: `ForeignKey("quality.SupplierQualificationAudit", on_delete=models.SET_NULL, null=True, blank=True, related_name="triggered_scars")`
+  - `internal_capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_scars")`
+  - `issued_date`: `DateField(null=True, blank=True)`
+  - `response_due_date`: `DateField(null=True, blank=True)`
+  - `issued_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="issued_scars")`
+  - `containment_action`: `TextField(blank=True, help_text="Emergency containment actions taken within 24-48 hours")`
+  - `containment_due_date`: `DateField(null=True, blank=True)`
+  - `containment_verified_at`: `DateField(null=True, blank=True)`
+  - `root_cause_summary`: `TextField(blank=True)`
+  - `root_cause_category`: `CharField(max_length=30, choices=ROOT_CAUSE_CATEGORY_CHOICES, blank=True, default="", db_index=True)` — `"raw_material"` (12), `"process_parameter"` (17), `"tooling_equipment"` (17), `"operator_training"` (17), `"packaging_handling"` (18), `"sub_tier_supplier"` (17), `"other"` (5) (longest: 18 <= 30)
+  - `vendor_investigation_details`: `TextField(blank=True, help_text="Vendor 5 Whys or Fishbone investigation details")`
+  - `corrective_action_plan`: `TextField(blank=True)`
+  - `preventive_action_plan`: `TextField(blank=True)`
+  - `implementation_due_date`: `DateField(null=True, blank=True)`
+  - `implemented_at`: `DateField(null=True, blank=True)`
+  - `effectiveness_due_date`: `DateField(null=True, blank=True)`
+  - `effectiveness_method`: `CharField(max_length=255, blank=True)`
+  - `effectiveness_results`: `TextField(blank=True)`
+  - `is_effective`: `BooleanField(null=True, blank=True)`
+  - `verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_scars")`
+  - `closed_at`: `DateField(null=True, blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `closed_at`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qsca_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qsca_ten_status")` (19)
+  - `Index(fields=["tenant", "supplier"], name="idx_qsca_ten_supp")` (17)
+  - `Index(fields=["tenant", "severity"], name="idx_qsca_ten_sev")` (16)
+  - `Index(fields=["tenant", "root_cause_category"], name="idx_qsca_ten_cat")` (16)
+  - `Index(fields=["tenant", "response_due_date"], name="idx_qsca_ten_due")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qsca_ten_created")` (20)
+
+### 4. `SupplierChangeNotification` (SCN) (`QSCN-`)
+- [ ] **File**: `apps/quality/models/SupplierQuality/SupplierChangeNotifications.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QSCN"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.CASCADE, related_name="quality_scns")`
+  - `title`: `CharField(max_length=255)`
+  - `supplier_scn_number`: `CharField(max_length=100, blank=True, help_text="Supplier internal change request number")`
+  - `change_category`: `CharField(max_length=30, choices=CHANGE_CATEGORY_CHOICES, default="raw_material", db_index=True)` — `"raw_material"` (12), `"manufacturing_process"` (21), `"facility_location"` (17), `"tooling_equipment"` (17), `"packaging_labeling"` (18), `"specification_testing"` (21), `"sub_tier_supplier"` (17), `"other"` (5) (longest: 21 <= 30)
+  - `risk_level`: `CharField(max_length=25, choices=RISK_LEVEL_CHOICES, default="level_2_moderate", db_index=True)` — `"level_1_minor"` (13), `"level_2_moderate"` (16), `"level_3_major"` (13) (longest: 16 <= 25)
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="received", db_index=True)` — `"received"` (8), `"under_assessment"` (16), `"technical_evaluation"` (20), `"samples_pending"` (15), `"approved"` (8), `"conditional_approval"` (20), `"rejected"` (8), `"implemented"` (11) (longest: 20 <= 30)
+  - `description`: `TextField(help_text="Detailed description of proposed process or material change")`
+  - `proposed_effective_date`: `DateField(null=True, blank=True)`
+  - `first_affected_lot`: `CharField(max_length=100, blank=True)`
+  - `affected_item_code`: `CharField(max_length=100, blank=True)`
+  - `affected_item_name`: `CharField(max_length=255, blank=True)`
+  - `affects_form_fit_function`: `BooleanField(default=False)`
+  - `requires_requalification`: `BooleanField(default=False)`
+  - `requires_design_change`: `BooleanField(default=False)`
+  - `requires_regulatory_filing`: `BooleanField(default=False)`
+  - `requires_customer_notification`: `BooleanField(default=False)`
+  - `samples_required`: `BooleanField(default=False)`
+  - `impact_assessment_notes`: `TextField(blank=True)`
+  - `design_project`: `ForeignKey("quality.DesignProject", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_scns")`
+  - `requalification_audit`: `ForeignKey("quality.SupplierQualificationAudit", on_delete=models.SET_NULL, null=True, blank=True, related_name="change_notifications")`
+  - `disposition`: `CharField(max_length=30, choices=DISPOSITION_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"approved"` (8), `"conditional_approval"` (20), `"rejected"` (8) (longest: 20 <= 30)
+  - `disposition_notes`: `TextField(blank=True)`
+  - `disposition_date`: `DateField(null=True, blank=True)`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_scns")`
+  - `evaluated_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="evaluated_scns")`
+- [ ] **Form Exclusions**: `tenant`, `number`, `disposition_date`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qscn_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qscn_ten_status")` (19)
+  - `Index(fields=["tenant", "supplier"], name="idx_qscn_ten_supp")` (17)
+  - `Index(fields=["tenant", "risk_level"], name="idx_qscn_ten_risk")` (17)
+  - `Index(fields=["tenant", "change_category"], name="idx_qscn_ten_cat")` (16)
+  - `Index(fields=["tenant", "disposition"], name="idx_qscn_ten_disp")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qscn_ten_created")` (20)
+
+---
+
+## Execution Steps
+
+- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.6.md`)
+- [ ] **Step 2: Build Entity by Entity**
+  - [ ] Entity 1: `SupplierQualificationAudit` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 2: `SupplierQualityScorecard` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 3: `SupplierCorrectiveAction` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 4: `SupplierChangeNotification` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Governance & Directory View: `SupplierQualityDirectory.py` + `templates/quality/supplierquality/avl_directory.html`
+- [ ] **Step 3: Integrate**
+  - [ ] Update `apps/quality/models/__init__.py` re-exports (`SupplierQualificationAudit`, `SupplierQualityScorecard`, `SupplierCorrectiveAction`, `SupplierChangeNotification`)
+  - [ ] Update `apps/quality/forms/__init__.py` re-exports (`SupplierQualificationAuditForm`, `SupplierQualityScorecardForm`, `SupplierCorrectiveActionForm`, `SupplierChangeNotificationForm`)
+  - [ ] Update `apps/quality/views/__init__.py` re-exports
+  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [ ] Register 4 models in `apps/quality/admin.py`
+  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data
+  - [ ] Wire `LIVE_LINKS["12.6"]` in `apps/core/navigation.py`
+  - [ ] Run `makemigrations quality` -> incremental migration
+  - [ ] Run `migrate quality`
+  - [ ] Run `seed_quality` twice (verify idempotency)
+  - [ ] Run `manage.py check`
+- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification)
+- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.6.md`
+- [ ] **Step 6: Code Fixer** -> burn down findings
+- [ ] **Step 7: Automated Tests** -> `test_supplierquality_models.py`, `test_supplierquality_forms.py`, `test_supplierquality_views.py`, `test_supplierquality_security.py` -> 100% green
+- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [ ] **Step 9: Close-out & Gaps Declarations**
+
+---
+
+## Wire-up Details
+
+- [ ] `apps/core/navigation.py`:
+  - `LIVE_LINKS["12.6"]`:
+    - `"Supplier Qualification & Audit"`: `"quality:supplier_qualification_audit_list"`
+    - `"Incoming Inspection & Receiving"`: `"quality:avl_directory"`
+    - `"Supplier Performance Monitoring"`: `"quality:supplier_quality_scorecard_list"`
+    - `"Supplier CAPA & Development"`: `"quality:supplier_corrective_action_list"`
+    - `"Supplier Change Notification (SCN)"`: `"quality:supplier_change_notification_list"`
+
+---
+
+## Templates Layout (`templates/quality/supplierquality/`)
+
+- [ ] `supplier_qualification_audit/list.html`: AVL status, tier, audit result badges, filter bar, export CSV
+- [ ] `supplier_qualification_audit/detail.html`: Vendor profile, audit scorecard, findings breakdown, dock-to-stock & CoA indicators
+- [ ] `supplier_qualification_audit/form.html`: Crisp form with date pickers, tenant-scoped FKs
+- [ ] `supplier_quality_scorecard/list.html`: Supplier, cadence, composite score, letter grade badge (A/B/C/D), status
+- [ ] `supplier_quality_scorecard/detail.html`: 5-dimension weighted radar/progress metrics, override audit trail
+- [ ] `supplier_quality_scorecard/form.html`: Dimension score inputs (0-100), override justification
+- [ ] `supplier_corrective_action/list.html`: SCARs table, severity badges, containment/response deadlines, status
+- [ ] `supplier_corrective_action/detail.html`: 8D-style timeline, containment actions, vendor 5 Whys RCA, effectiveness proof
+- [ ] `supplier_corrective_action/form.html`: Defect summary, item stand-in, FK selectors, action commitments
+- [ ] `supplier_change_notification/list.html`: SCN register, category, risk level (Level 1-3), disposition badge
+- [ ] `supplier_change_notification/detail.html`: FFF impact assessment checklist, linked design project/requalification audit
+- [ ] `supplier_change_notification/form.html`: Change description, impact booleans, disposition notes
+- [ ] `avl_directory.html`: Unified Approved Vendor List (AVL) governance dashboard with dock-to-stock overview, audit calendar, and quick CSV export
+
+---
+
+## Later passes / deferred
+
+- [ ] External Supplier Portal Web Access — Direct supplier portal login for containment/8D uploads without consuming internal user seats.
+- [ ] EDI 856 / ASN & eCoA Automated Ingestion — Automated processing of supplier electronic advance shipment notices and digital Certificate of Analysis payloads.
+- [ ] Automated PO Block Enforcement — Middleware / signal in SCM 4.1 & Procurement preventing purchase order issuance to suspended/disqualified vendors.
+
+---
+
+## Review notes
+(filled in at the end of Sub-module 12.6 build)
+
+---
 # Sub-module 12.5: Non-Conformance & Deviation Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.5.md` (2026-11-18)
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), and 12.4 (CAPA).
