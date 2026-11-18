@@ -7,6 +7,282 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 12.8: In-Process Quality & SPC / Process Control (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.8.md` (2026-11-18)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), 12.5 (Non-Conformance), and 12.6 (Supplier Quality).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0012_supplierqualityscorecard_idx_qssc_ten_pend_created.py` (claims next available incremental migration `0013_...` or `0014_...` if 12.7 migrates first) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QIPQ`** (`InProcessInspection`), **`QFAI`** (`FirstArticleInspection`), **`QPAR`** (`ProcessParameterLog`), **`QLPA`** (`LayeredProcessAudit`).
+> Plan written from `.claude/tasks/research-quality-12.8.md` (Phase 1) and `NavERP.md` (`### 12.8 In-Process Quality Control (IPQC)`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/InProcessQuality/<Entity>.py` (`InProcessInspections.py`, `FirstArticleInspections.py`, `ProcessParameterLogs.py`, `LayeredProcessAudits.py`, plus dedicated real-time floor monitoring module `SpcDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/inprocessquality/{in_process_inspection,first_article_inspection,process_parameter_log,layered_process_audit}/{list,detail,form}.html` + `templates/quality/inprocessquality/spc_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QIPQ`** (`InProcessInspection`), **`QFAI`** (`FirstArticleInspection`), **`QPAR`** (`ProcessParameterLog`), **`QLPA`** (`LayeredProcessAudit`), all 4 model classes, and all URL stems (`in_process_inspection_*`, `first_article_inspection_*`, `process_parameter_log_*`, `layered_process_audit_*`, `spc_dashboard*`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.Party` (`apps/core/models/Party.py`).
+  - Module 12 siblings (12.1, 12.4, 12.5): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.NonConformanceReport` (`apps/quality/models/NonConformance/NonConformanceReports.py`), `quality.ProcessDeviation` (`apps/quality/models/NonConformance/ProcessDeviations.py`), `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`).
+  - SCM cross-module: `scm.WorkOrder` (`apps/scm/models/Manufacturing/WorkOrders.py`), `scm.WorkCenter` (`apps/scm/models/Manufacturing/WorkCenters.py`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`): Text fields `item_code`, `item_name`, `lot_number`, `serial_number`, `production_order_number`, `work_center_code`, `machine_tooling_id` with future migration path.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `quality.ControlledDocument`, `quality.NonConformanceReport`, `quality.ProcessDeviation`, `scm.WorkOrder`, `scm.WorkCenter`, `core.OrgUnit`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Regulatory Alignment (AS9102 Rev C, ISO 13485:2016 §7.5.1/§7.5.6, 21 CFR 820.70 / 820.75, CQI-8 / IATF 16949)**:
+  - AS9102 Rev C Forms 1–3 accountability tracking with first-piece production run release gating before manufacturing lot advancement.
+  - Statistical Process Control (SPC) dual-limit demarcation: engineering tolerances (USL/LSL) vs statistical limits (UCL/LCL at $\pm 3\sigma$) with excursion classification (`normal`, `warning_pre_control`, `out_of_control`, `out_of_spec`).
+  - Digital work instruction adherence with mandatory operator step verification and sign-off interlocks.
+  - CQI-8 Layered Process Audits (LPA) across 4 management tiers (Team Lead, Supervisor, Quality Manager, Plant Executive) with short-checklist scoring and on-the-spot mitigation documentation.
+  - Closed-loop escalation to `quality.NonConformanceReport` [QNCR-] on failed inspections or uncontained excursions, and `quality.ProcessDeviation` [QDEV-] on parameter waivers.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `approved_at`, `conducted_at`), auto-numbers (`number`), and computed metrics MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`compliance_percentage_display`, `is_out_of_spec`, `is_out_of_control`, `fai_complete_status`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `InProcessInspection` (`QIPQ-`)
+- [ ] **File**: `apps/quality/models/InProcessQuality/InProcessInspections.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QIPQ"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `inspection_type`: `CharField(max_length=30, choices=INSPECTION_TYPE_CHOICES, default="visual_surface", db_index=True)` — `"visual_surface"` (14), `"dimensional_gauging"` (19), `"functional_test"` (15), `"automated_vision"` (16), `"in_line_stage_gate"` (18) (longest: 19 <= 30)
+  - `stage_gate`: `CharField(max_length=100, blank=True, help_text="Manufacturing stage-gate (e.g. Primary Machining, Sub-Assembly, Final In-Line)")`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"in_progress"` (11), `"completed"` (9), `"cancelled"` (9) (longest: 11 <= 20)
+  - `disposition`: `CharField(max_length=25, choices=DISPOSITION_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"pass"` (4), `"conditional_pass"` (16), `"rework_required"` (15), `"reject_scrap"` (12), `"quarantine_hold"` (15) (longest: 16 <= 25)
+  - `production_order_number`: `CharField(max_length=64, blank=True)`
+  - `work_order`: `ForeignKey("scm.WorkOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_in_process_inspections")`
+  - `work_center_code`: `CharField(max_length=64, blank=True)`
+  - `work_center`: `ForeignKey("scm.WorkCenter", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_in_process_inspections")`
+  - `operation_step`: `CharField(max_length=64, blank=True, help_text="e.g. Op 020 - Turning")`
+  - `item_code`: `CharField(max_length=100, blank=True)`
+  - `item_name`: `CharField(max_length=255, blank=True)`
+  - `lot_number`: `CharField(max_length=100, blank=True)`
+  - `serial_number`: `CharField(max_length=100, blank=True)`
+  - `batch_quantity`: `PositiveIntegerField(default=1)`
+  - `sample_size_inspected`: `PositiveIntegerField(default=1)`
+  - `quantity_passed`: `PositiveIntegerField(default=0)`
+  - `quantity_rejected`: `PositiveIntegerField(default=0)`
+  - `quantity_reworked`: `PositiveIntegerField(default=0)`
+  - `defect_category`: `CharField(max_length=30, choices=DEFECT_CATEGORY_CHOICES, blank=True, default="", db_index=True)` — `""` (0), `"dimensional"` (11), `"surface_cosmetic"` (16), `"functional_electrical"` (21), `"material_flaw"` (13), `"assembly_error"` (14), `"contamination"` (13), `"other"` (5) (longest: 21 <= 30)
+  - `defect_description`: `TextField(blank=True)`
+  - `controlled_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="in_process_inspections", help_text="Linked SOP or Digital Work Instruction")`
+  - `work_instruction_step`: `CharField(max_length=100, blank=True)`
+  - `operator_sign_off`: `BooleanField(default=False)`
+  - `operator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="operator_in_process_inspections")`
+  - `inspector`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="conducted_in_process_inspections")`
+  - `inspection_date`: `DateField(null=True, blank=True)`
+  - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="in_process_inspections", help_text="Escalated NCR on inspection failure")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qipq_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qipq_ten_status")` (19)
+  - `Index(fields=["tenant", "disposition"], name="idx_qipq_ten_disp")` (17)
+  - `Index(fields=["tenant", "inspection_type"], name="idx_qipq_ten_type")` (17)
+  - `Index(fields=["tenant", "work_center"], name="idx_qipq_ten_wc")` (15)
+  - `Index(fields=["tenant", "work_order"], name="idx_qipq_ten_wo")` (15)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qipq_ten_created")` (20)
+
+### 2. `FirstArticleInspection` (FAI) (`QFAI-`)
+- [ ] **File**: `apps/quality/models/InProcessQuality/FirstArticleInspections.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFAI"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `fai_type`: `CharField(max_length=25, choices=FAI_TYPE_CHOICES, default="full_fai", db_index=True)` — `"full_fai"` (8), `"delta_partial_fai"` (17) (longest: 17 <= 25)
+  - `setup_reason`: `CharField(max_length=35, choices=SETUP_REASON_CHOICES, default="machine_setup_change", db_index=True)` — `"new_product_intro"` (17), `"machine_setup_change"` (20), `"tooling_die_change"` (18), `"process_revision"` (16), `"material_lot_change"` (19), `"drawing_revision"` (16), `"periodic_recertification"` (24) (longest: 24 <= 35)
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"in_inspection"` (13), `"approved_run_released"` (21), `"conditional_approval"` (20), `"rejected_setup_hold"` (19), `"cancelled"` (9) (longest: 21 <= 30)
+  - `production_order_number`: `CharField(max_length=64, blank=True)`
+  - `work_order`: `ForeignKey("scm.WorkOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_fais")`
+  - `work_center_code`: `CharField(max_length=64, blank=True)`
+  - `work_center`: `ForeignKey("scm.WorkCenter", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_fais")`
+  - `machine_tooling_id`: `CharField(max_length=100, blank=True)`
+  - `item_code`: `CharField(max_length=100, blank=True)`
+  - `item_name`: `CharField(max_length=255, blank=True)`
+  - `drawing_number`: `CharField(max_length=100, blank=True)`
+  - `drawing_revision`: `CharField(max_length=32, blank=True)`
+  - `first_piece_lot_number`: `CharField(max_length=100, blank=True)`
+  - `serial_number`: `CharField(max_length=100, blank=True)`
+  - `total_characteristics_inspected`: `PositiveIntegerField(default=0)`
+  - `characteristics_conforming`: `PositiveIntegerField(default=0)`
+  - `characteristics_out_of_spec`: `PositiveIntegerField(default=0)`
+  - `max_deviation_found`: `CharField(max_length=100, blank=True, help_text="e.g. +0.003 mm on Bore Dia")`
+  - `as9102_form1_complete`: `BooleanField(default=False, help_text="Part Number Accountability")`
+  - `as9102_form2_complete`: `BooleanField(default=False, help_text="Product Process Accountability")`
+  - `as9102_form3_complete`: `BooleanField(default=False, help_text="Characteristic Accountability & Verification")`
+  - `gage_serial_numbers`: `CharField(max_length=255, blank=True, help_text="Calibrated instruments used (micrometer, CMM, height gauge)")`
+  - `release_verdict`: `CharField(max_length=30, choices=RELEASE_VERDICT_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"released"` (8), `"conditional_pilot_release"` (25), `"rejected_retool"` (15) (longest: 25 <= 30)
+  - `conditional_release_notes`: `TextField(blank=True)`
+  - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="fais")`
+  - `inspector`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="inspected_fais")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_fais")`
+  - `approved_at`: `DateTimeField(null=True, blank=True)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `approved_at`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qfai_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qfai_ten_status")` (19)
+  - `Index(fields=["tenant", "release_verdict"], name="idx_qfai_ten_verd")` (17)
+  - `Index(fields=["tenant", "fai_type"], name="idx_qfai_ten_type")` (17)
+  - `Index(fields=["tenant", "setup_reason"], name="idx_qfai_ten_reason")` (19)
+  - `Index(fields=["tenant", "work_center"], name="idx_qfai_ten_wc")` (15)
+  - `Index(fields=["tenant", "work_order"], name="idx_qfai_ten_wo")` (15)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qfai_ten_created")` (20)
+
+### 3. `ProcessParameterLog` (`QPAR-`)
+- [ ] **File**: `apps/quality/models/InProcessQuality/ProcessParameterLogs.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QPAR"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `parameter_name`: `CharField(max_length=150)`
+  - `parameter_category`: `CharField(max_length=30, choices=PARAMETER_CATEGORY_CHOICES, default="temperature", db_index=True)` — `"temperature"` (11), `"pressure"` (8), `"speed_feed"` (10), `"torque"` (6), `"ph_chemical"` (11), `"humidity"` (8), `"dimensional_thickness"` (21), `"voltage_current"` (15), `"cycle_time"` (10), `"other"` (5) (longest: 21 <= 30)
+  - `unit_of_measure`: `CharField(max_length=32, help_text="e.g. °C, bar, RPM, Nm, mm, V, sec")`
+  - `work_center_code`: `CharField(max_length=64, blank=True)`
+  - `work_center`: `ForeignKey("scm.WorkCenter", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_parameter_logs")`
+  - `production_order_number`: `CharField(max_length=64, blank=True)`
+  - `work_order`: `ForeignKey("scm.WorkOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_parameter_logs")`
+  - `operation_step`: `CharField(max_length=64, blank=True)`
+  - `item_code`: `CharField(max_length=100, blank=True)`
+  - `lot_number`: `CharField(max_length=100, blank=True)`
+  - `target_nominal_value`: `DecimalField(max_digits=12, decimal_places=4)`
+  - `upper_spec_limit`: `DecimalField(max_digits=12, decimal_places=4, help_text="USL - Engineering upper tolerance")`
+  - `lower_spec_limit`: `DecimalField(max_digits=12, decimal_places=4, help_text="LSL - Engineering lower tolerance")`
+  - `upper_control_limit`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="UCL - Statistical upper limit (μ + 3σ)")`
+  - `lower_control_limit`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="LCL - Statistical lower limit (μ - 3σ)")`
+  - `recorded_value`: `DecimalField(max_digits=12, decimal_places=4)`
+  - `recorded_at`: `DateTimeField(default=timezone.now)`
+  - `excursion_status`: `CharField(max_length=25, choices=EXCURSION_STATUS_CHOICES, default="normal", db_index=True)` — `"normal"` (6), `"warning_pre_control"` (19), `"out_of_control"` (14), `"out_of_spec"` (11) (longest: 19 <= 25)
+  - `logged_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="logged_parameters")`
+  - `containment_action`: `CharField(max_length=35, choices=CONTAINMENT_ACTION_CHOICES, default="none", db_index=True)` — `"none"` (4), `"machine_parameter_adjusted"` (26), `"machine_paused"` (14), `"wip_quarantined"` (15), `"supervisor_escalated"` (20), `"ncr_initiated"` (13) (longest: 26 <= 35)
+  - `containment_notes`: `TextField(blank=True)`
+  - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="parameter_logs")`
+  - `process_deviation`: `ForeignKey("quality.ProcessDeviation", on_delete=models.SET_NULL, null=True, blank=True, related_name="parameter_logs", help_text="Authorized temporary waiver/concession")`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qpar_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "excursion_status"], name="idx_qpar_ten_excurs")` (19)
+  - `Index(fields=["tenant", "parameter_category"], name="idx_qpar_ten_cat")` (16)
+  - `Index(fields=["tenant", "work_center"], name="idx_qpar_ten_wc")` (15)
+  - `Index(fields=["tenant", "work_order"], name="idx_qpar_ten_wo")` (15)
+  - `Index(fields=["tenant", "recorded_at"], name="idx_qpar_ten_rec_at")` (19)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qpar_ten_created")` (20)
+
+### 4. `LayeredProcessAudit` (LPA) (`QLPA-`)
+- [ ] **File**: `apps/quality/models/InProcessQuality/LayeredProcessAudits.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QLPA"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `audit_layer`: `CharField(max_length=30, choices=AUDIT_LAYER_CHOICES, default="tier_1_operator_lead", db_index=True)` — `"tier_1_operator_lead"` (20), `"tier_2_supervisor"` (17), `"tier_3_quality_manager"` (22), `"tier_4_plant_executive"` (22) (longest: 22 <= 30)
+  - `focus_area`: `CharField(max_length=30, choices=FOCUS_AREA_CHOICES, default="standard_work_wi", db_index=True)` — `"standard_work_wi"` (16), `"tooling_machine_setup"` (21), `"material_handling_fifo"` (22), `"gauging_calibration"` (19), `"environmental_5s"` (16), `"safety_poka_yoke"` (16) (longest: 22 <= 30)
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="scheduled", db_index=True)` — `"scheduled"` (9), `"in_progress"` (11), `"completed"` (9), `"cancelled"` (9) (longest: 11 <= 20)
+  - `work_center_code`: `CharField(max_length=64, blank=True)`
+  - `work_center`: `ForeignKey("scm.WorkCenter", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_lpas")`
+  - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_lpas")`
+  - `shift`: `CharField(max_length=32, blank=True, help_text="e.g. Shift 1 (Morning), Shift 2, Night")`
+  - `total_questions_audited`: `PositiveIntegerField(default=10)`
+  - `questions_conforming`: `PositiveIntegerField(default=10)`
+  - `questions_non_conforming`: `PositiveIntegerField(default=0)`
+  - `compliance_percentage`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("100.00"), help_text="Calculated compliance score 0-100%")`
+  - `findings_summary`: `TextField(blank=True)`
+  - `controlled_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="lpa_audits", help_text="LPA Checklist or standard work instruction")`
+  - `on_the_spot_mitigation`: `BooleanField(default=False, help_text="Identified non-conformances contained immediately during audit")`
+  - `mitigation_details`: `TextField(blank=True)`
+  - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="lpas")`
+  - `auditor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="conducted_lpas")`
+  - `scheduled_date`: `DateField()`
+  - `conducted_at`: `DateTimeField(null=True, blank=True)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `compliance_percentage`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qlpa_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qlpa_ten_status")` (19)
+  - `Index(fields=["tenant", "audit_layer"], name="idx_qlpa_ten_layer")` (18)
+  - `Index(fields=["tenant", "focus_area"], name="idx_qlpa_ten_focus")` (18)
+  - `Index(fields=["tenant", "work_center"], name="idx_qlpa_ten_wc")` (15)
+  - `Index(fields=["tenant", "scheduled_date"], name="idx_qlpa_ten_sched")` (18)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qlpa_ten_created")` (20)
+
+---
+
+## Execution Steps
+
+- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.8.md`)
+- [ ] **Step 2: Build Entity by Entity**
+  - [ ] Entity 1: `InProcessInspection` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 2: `FirstArticleInspection` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 3: `ProcessParameterLog` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Entity 4: `LayeredProcessAudit` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [ ] Floor & SPC Monitoring Dashboard: `SpcDashboard.py` + `templates/quality/inprocessquality/spc_dashboard.html`
+- [ ] **Step 3: Integrate**
+  - [ ] Update `apps/quality/models/__init__.py` re-exports (`InProcessInspection`, `FirstArticleInspection`, `ProcessParameterLog`, `LayeredProcessAudit`)
+  - [ ] Update `apps/quality/forms/__init__.py` re-exports (`InProcessInspectionForm`, `FirstArticleInspectionForm`, `ProcessParameterLogForm`, `LayeredProcessAuditForm`)
+  - [ ] Update `apps/quality/views/__init__.py` re-exports
+  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [ ] Register 4 models in `apps/quality/admin.py`
+  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_8`)
+  - [ ] Wire `LIVE_LINKS["12.8"]` in `apps/core/navigation.py`
+  - [ ] Run `makemigrations quality` -> incremental migration `0013_...`
+  - [ ] Run `migrate quality`
+  - [ ] Run `seed_quality` twice (verify idempotency)
+  - [ ] Run `manage.py check` (0 issues)
+- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.8.md`
+- [ ] **Step 6: Code Fixer** -> burn down findings
+- [ ] **Step 7: Automated Tests** -> `test_inprocessquality_models.py`, `test_inprocessquality_forms.py`, `test_inprocessquality_views.py`, `test_inprocessquality_security.py` -> 100% green
+- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.8.md`
+
+---
+
+## Wire-up Details
+
+- [ ] `apps/core/navigation.py`:
+  - `LIVE_LINKS["12.8"]`:
+    - `"Process Parameter Monitoring"`: `"quality:process_parameter_log_list"`
+    - `"First Article Inspection (FAI)"`: `"quality:first_article_inspection_list"`
+    - `"In-Line Inspection & Testing"`: `"quality:in_process_inspection_list"`
+    - `"Work Instruction Adherence"`: `"quality:spc_dashboard"`
+    - `"Process Audit & Layered Process Audits (LPA)"`: `"quality:layered_process_audit_list"`
+
+---
+
+## Templates Layout (`templates/quality/inprocessquality/`)
+
+- [ ] `in_process_inspection/list.html`: Inspection runs, stage-gate, status, disposition badge, filter bar, CSV export
+- [ ] `in_process_inspection/detail.html`: Manufacturing context, sample quantities, defect tally, work instruction sign-off, linked NCR
+- [ ] `in_process_inspection/form.html`: Form with work order/center selectors, disposition dropdown, defect categories
+- [ ] `first_article_inspection/list.html`: FAI register, FAI type, setup reason, release verdict badge, approval state
+- [ ] `first_article_inspection/detail.html`: AS9102 Forms 1-3 completion status, characteristic conformance metrics, gage serials, release sign-off
+- [ ] `first_article_inspection/form.html`: Comprehensive FAI form with setup reasons, drawing numbers, AS9102 checklist toggles
+- [ ] `process_parameter_log/list.html`: CTQ parameter log, category, target vs recorded value, excursion status badge (normal/OOC/OOS)
+- [ ] `process_parameter_log/detail.html`: Parameter tolerances (USL/LSL) vs statistical limits (UCL/LCL), excursion classification, containment actions
+- [ ] `process_parameter_log/form.html`: Fast parameter data-entry form with auto-evaluating limits and containment triggers
+- [ ] `layered_process_audit/list.html`: LPA audit register, management tier (Tier 1-4), focus area, compliance %, status
+- [ ] `layered_process_audit/detail.html`: Audit scorecard, conformance breakdown, on-the-spot mitigation notes, linked document/NCR
+- [ ] `layered_process_audit/form.html`: LPA execution form with question counts, on-the-spot mitigation details, auditor selector
+- [ ] `spc_dashboard.html`: Real-time shop-floor quality & SPC control monitor displaying active stage-gates, parameter excursions (OOC/OOS), FAI release holds, and LPA compliance metrics
+
+---
+
+## Later passes / deferred
+
+- [~] Automated IoT Machine Telemetry Streaming (OPC-UA / MQTT) — Direct machine sensor parameter ingestion into `ProcessParameterLog`. (`GAP-quality-12.8-01`)
+- [~] Direct Edge Gauging USB / Bluetooth HID Interlock — Native browser WebHID/WebSerial listener capturing caliper/micrometer readings directly into form fields. (`GAP-quality-12.8-02`)
+- [~] Automated Machine Stop-Line PLC Interlock — Hardware relay triggering physical machine interlock if an FAI is rejected or critical parameter excursion occurs. (`GAP-quality-12.8-03`)
+- [~] Dynamic LPA Question Randomizer — Algorithmic question rotation per workstation from a master question pool. (`GAP-quality-12.8-04`)
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
 # Sub-module 12.7: Incoming Quality Control (IQC) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.7.md` (2026-11-18)
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), 12.5 (Non-Conformance), and 12.6 (Supplier Quality).
