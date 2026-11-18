@@ -136,4 +136,18 @@ class SupplierCorrectiveActionForm(TenantUniqueMixin, TenantModelForm):
                 "verified_by",
             ],
         )
+        issued_date = cleaned_data.get("issued_date")
+        response_due_date = cleaned_data.get("response_due_date")
+        if issued_date and response_due_date and response_due_date < issued_date:
+            self.add_error("response_due_date", "Response due date cannot be earlier than issued date.")
+        containment_due_date = cleaned_data.get("containment_due_date")
+        if issued_date and containment_due_date and containment_due_date < issued_date:
+            self.add_error("containment_due_date", "Containment due date cannot be earlier than issued date.")
+        implementation_due_date = cleaned_data.get("implementation_due_date")
+        if issued_date and implementation_due_date and implementation_due_date < issued_date:
+            self.add_error("implementation_due_date", "Implementation due date cannot be earlier than issued date.")
+        status = cleaned_data.get("status")
+        containment_action = cleaned_data.get("containment_action", "").strip()
+        if status in ("containment_submitted", "containment_acknowledged") and not containment_action:
+            self.add_error("containment_action", "Containment action details are mandatory when in containment status.")
         return cleaned_data
