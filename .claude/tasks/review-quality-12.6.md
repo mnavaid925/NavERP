@@ -20,7 +20,7 @@
 
 ### Important (High Priority / Conventions & Safety)
 
-- [ ] **I1**: Unguarded nullable User Foreign Key lookups in templates (Lesson L10).
+- [x] **I1**: Unguarded nullable User Foreign Key lookups in templates (Lesson L10).
   - **Locations**:
     - `templates/quality/supplierquality/supplier_qualification_audit/detail.html:124` (`audit.lead_auditor`)
     - `templates/quality/supplierquality/supplier_quality_scorecard/detail.html:214` (`scorecard.evaluated_by`)
