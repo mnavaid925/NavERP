@@ -160,6 +160,7 @@ def supplier_quality_scorecard_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def supplier_quality_scorecard_delete(request, pk):
     scorecard = get_object_or_404(SupplierQualityScorecard, pk=pk, tenant=request.tenant)
     write_audit_log(request.user, scorecard, "delete", tenant=request.tenant)
