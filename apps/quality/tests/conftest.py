@@ -870,11 +870,11 @@ def scorecard_a(db, tenant_a, supplier_party_a, admin_user):
         period_start=timezone.now().date() - timedelta(days=90),
         period_end=timezone.now().date(),
         status="published",
-        lot_acceptance_rate_score=96.00,
-        defect_ppm_score=92.00,
-        scar_responsiveness_score=90.00,
-        audit_compliance_score=95.00,
-        documentation_coa_score=98.00,
+        lot_acceptance_rate_score=Decimal("96.00"),
+        defect_ppm_score=Decimal("92.00"),
+        scar_responsiveness_score=Decimal("90.00"),
+        audit_compliance_score=Decimal("95.00"),
+        documentation_coa_score=Decimal("98.00"),
         total_lots_received=120,
         lots_rejected=2,
         total_scars_issued=1,
@@ -892,17 +892,17 @@ def scorecard_b(db, tenant_b, supplier_party_b, admin_b):
         period_start=timezone.now().date() - timedelta(days=30),
         period_end=timezone.now().date(),
         status="draft",
-        lot_acceptance_rate_score=75.00,
-        defect_ppm_score=68.00,
-        scar_responsiveness_score=80.00,
-        audit_compliance_score=70.00,
-        documentation_coa_score=85.00,
+        lot_acceptance_rate_score=Decimal("75.00"),
+        defect_ppm_score=Decimal("68.00"),
+        scar_responsiveness_score=Decimal("80.00"),
+        audit_compliance_score=Decimal("70.00"),
+        documentation_coa_score=Decimal("85.00"),
         evaluated_by=admin_b,
     )
 
 
 @pytest.fixture
-def scar_a(db, tenant_a, supplier_party_a, admin_user, audit_a, ncr_a):
+def scar_a(db, tenant_a, supplier_party_a, admin_user, audit_a):
     return SupplierCorrectiveAction.objects.create(
         tenant=tenant_a,
         supplier=supplier_party_a,
@@ -915,13 +915,12 @@ def scar_a(db, tenant_a, supplier_party_a, admin_user, audit_a, ncr_a):
         response_due_date=timezone.now().date() + timedelta(days=14),
         issued_by=admin_user,
         qualification_audit=audit_a,
-        non_conformance=ncr_a,
         affected_item_code="CAN-TIP-004",
     )
 
 
 @pytest.fixture
-def scar_b(db, tenant_b, supplier_party_b, admin_b, audit_b, ncr_b):
+def scar_b(db, tenant_b, supplier_party_b, admin_b, audit_b):
     return SupplierCorrectiveAction.objects.create(
         tenant=tenant_b,
         supplier=supplier_party_b,
@@ -932,7 +931,6 @@ def scar_b(db, tenant_b, supplier_party_b, admin_b, audit_b, ncr_b):
         issued_date=timezone.now().date(),
         issued_by=admin_b,
         qualification_audit=audit_b,
-        non_conformance=ncr_b,
     )
 
 
