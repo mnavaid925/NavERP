@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 from decimal import Decimal
 
 from django.contrib import messages
@@ -179,6 +180,8 @@ def incoming_inspection_lot_record_sample(request, pk):
     if reading_val:
         try:
             val_float = float(reading_val)
+            if not math.isfinite(val_float):
+                raise ValueError("Non-finite measurement value.")
             measurements = list(lot.measurements_data or [])
             sample_no = len(measurements) + 1
             measurements.append({
