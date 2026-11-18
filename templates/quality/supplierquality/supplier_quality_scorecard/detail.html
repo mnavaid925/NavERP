@@ -211,7 +211,7 @@
           </div>
           <div class="flex justify-between border-b border-slate-100 pb-2">
             <dt class="text-slate-500">Evaluated By:</dt>
-            <dd class="font-medium text-slate-800">{{ scorecard.evaluated_by.get_full_name|default:scorecard.evaluated_by.email|default:"Not Assigned" }}</dd>
+            <dd class="font-medium text-slate-800">{% if scorecard.evaluated_by %}{{ scorecard.evaluated_by.get_full_name|default:scorecard.evaluated_by.email }}{% else %}Not Assigned{% endif %}</dd>
           </div>
           <div class="flex justify-between border-b border-slate-100 pb-2">
             <dt class="text-slate-500">Created Date:</dt>
