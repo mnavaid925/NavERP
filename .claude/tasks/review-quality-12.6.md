@@ -73,7 +73,7 @@
 
 ### Minor (Polish & Hygiene)
 
-- [ ] **M1**: Context key `scns` passed in `supplier_qualification_audit_detail` view but omitted in template.
+- [x] **M1**: Context key `scns` passed in `supplier_qualification_audit_detail` view but omitted in template.
   - **Location**: `templates/quality/supplierquality/supplier_qualification_audit/detail.html`
   - **Fix**: Add SCNs sub-table below SCARs sub-table.
 
