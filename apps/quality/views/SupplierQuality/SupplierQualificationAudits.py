@@ -168,6 +168,7 @@ def supplier_qualification_audit_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def supplier_qualification_audit_delete(request, pk):
     audit = get_object_or_404(SupplierQualificationAudit, pk=pk, tenant=request.tenant)
     write_audit_log(request.user, audit, "delete", tenant=request.tenant)
