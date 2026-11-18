@@ -81,7 +81,7 @@ class QualityReturnAuthorizationForm(TenantUniqueMixin, TenantModelForm):
                 roles__role__in=("supplier", "vendor"),
             ).order_by("name")
             self.fields["assigned_coordinator"].queryset = User.objects.filter(
-                is_active=True
+                tenant=self.tenant, is_active=True
             ).order_by("username")
             self.fields["linked_ncr"].queryset = NonConformanceReport.objects.filter(
                 tenant=self.tenant
@@ -95,7 +95,7 @@ class QualityReturnAuthorizationForm(TenantUniqueMixin, TenantModelForm):
         reject_foreign(
             self,
             cleaned,
-            ["inspection_lot", "supplier", "linked_ncr", "linked_scar"],
+            ["inspection_lot", "supplier", "assigned_coordinator", "linked_ncr", "linked_scar"],
         )
 
         ret_qty = cleaned.get("return_quantity")
