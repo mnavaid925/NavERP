@@ -213,12 +213,14 @@
                         </button>
                       </form>
                     {% endif %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'quality:first_article_inspection_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete FAI {{ item.number|escapejs }}?');">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-icon text-slate-600 hover:text-red-600" title="Delete">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                       </button>
                     </form>
+                    {% endif %}
                   </div>
                 </td>
               </tr>
