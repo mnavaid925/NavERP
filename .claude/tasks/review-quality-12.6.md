@@ -29,7 +29,7 @@
     - `templates/quality/supplierquality/supplier_change_notification/detail.html:279` (`scn.evaluated_by`)
   - **Fix**: Wrap with `{% if fk %}{{ fk.get_full_name|default:fk.email }}{% else %}Not Assigned{% endif %}`.
 
-- [ ] **I2**: Disallowed `badge-purple` theme CSS class (Lesson L33 violation).
+- [x] **I2**: Disallowed `badge-purple` theme CSS class (Lesson L33 violation).
   - **Locations**:
     - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:37` (`"annual": "badge-purple"`)
     - `apps/quality/models/SupplierQuality/SupplierCorrectiveActions.py:52` (`"effectiveness_verified": "badge-purple"`)
