@@ -3412,6 +3412,13 @@ LIVE_LINKS = {
         "CAPA Tracking & Escalation": "quality:capa_tracking_board",
         "Effectiveness Verification & Closure": "quality:capa_effectiveness_review_list",
     },
+    "12.5": {
+        "NCR Initiation & Classification": "quality:non_conformance_report_list",
+        "Containment & Segregation": "quality:quarantine_containment_list",
+        "Disposition & Material Review": "quality:mrb_disposition_list",
+        "Impact Assessment & Customer Notification": "quality:process_deviation_list",
+        "Trending & Metrics": "quality:ncr_analytics_dashboard",
+    },
 
 
 
