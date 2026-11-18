@@ -82,6 +82,21 @@ from apps.quality.urls.SupplierQuality.SupplierQualificationAudits import (
 from apps.quality.urls.SupplierQuality.SupplierQualityDirectory import (
     urlpatterns as supplier_quality_directory_urls,
 )
+from apps.quality.urls.IncomingQuality.CertificatesOfAnalysis import (
+    urlpatterns as certificates_of_analysis_urls,
+)
+from apps.quality.urls.IncomingQuality.IncomingInspectionLots import (
+    urlpatterns as incoming_inspection_lots_urls,
+)
+from apps.quality.urls.IncomingQuality.IncomingInspectionPlans import (
+    urlpatterns as incoming_inspection_plans_urls,
+)
+from apps.quality.urls.IncomingQuality.IqcSpcDashboard import (
+    urlpatterns as iqc_spc_dashboard_urls,
+)
+from apps.quality.urls.IncomingQuality.QualityReturnAuthorizations import (
+    urlpatterns as quality_return_authorizations_urls,
+)
 from apps.quality.urls.SupplierQuality.SupplierQualityScorecards import (
     urlpatterns as supplier_quality_scorecards_urls,
 )
@@ -118,5 +133,10 @@ urlpatterns = (
     + supplier_corrective_actions_urls
     + supplier_change_notifications_urls
     + supplier_quality_directory_urls
+    + incoming_inspection_plans_urls
+    + incoming_inspection_lots_urls
+    + certificates_of_analysis_urls
+    + quality_return_authorizations_urls
+    + iqc_spc_dashboard_urls
 )
 
