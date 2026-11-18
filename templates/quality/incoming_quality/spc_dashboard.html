@@ -68,7 +68,7 @@
       </div>
       <div>
         <div class="text-xs font-medium text-slate-500">Average Process Capability (Cpk)</div>
-        <div class="text-2xl font-bold text-slate-900 font-mono">{{ avg_cpk }}</div>
+        <div class="text-2xl font-bold text-slate-900 font-mono">{{ avg_cpk|default:"—" }}</div>
         <div class="text-xs text-slate-500">Industry benchmark: &ge; 1.33</div>
       </div>
     </div>
