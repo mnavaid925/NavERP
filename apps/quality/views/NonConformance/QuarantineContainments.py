@@ -134,7 +134,19 @@ def quarantine_containment_delete(request, pk):
     obj = quality_object(request, QuarantineContainment, pk=pk)
     number = obj.number
     ncr_pk = obj.ncr_id
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if obj.status == "active":
+        messages.error(request, f"Cannot delete active Quarantine Hold {obj.number}. Release or scrap the inventory first.")
+        if next_url:
+            return redirect(next_url)
+        if ncr_pk:
+            return redirect("quality:non_conformance_report_detail", pk=ncr_pk)
+        return redirect("quality:quarantine_containment_list")
     write_audit_log(request.user, obj, "delete", tenant=request.tenant)
     obj.delete()
     messages.success(request, f"Quarantine Hold {number} deleted successfully.")
-    return redirect("quality:non_conformance_report_detail", pk=ncr_pk)
+    if next_url:
+        return redirect(next_url)
+    if ncr_pk:
+        return redirect("quality:non_conformance_report_detail", pk=ncr_pk)
+    return redirect("quality:quarantine_containment_list")
