@@ -208,7 +208,9 @@ class IncomingInspectionLot(TenantNumbered):
             val = m.get("value")
             if val is not None:
                 try:
-                    values.append(float(val))
+                    fval = float(val)
+                    if math.isfinite(fval):
+                        values.append(fval)
                 except (ValueError, TypeError):
                     continue
 
@@ -219,6 +221,9 @@ class IncomingInspectionLot(TenantNumbered):
         mean_val = sum(values) / n
         variance = sum((x - mean_val) ** 2 for x in values) / (n - 1)
         std_val = math.sqrt(variance)
+
+        if not math.isfinite(mean_val) or not math.isfinite(std_val):
+            return
 
         self.spc_mean = Decimal(f"{mean_val:.4f}")
         self.spc_std_dev = Decimal(f"{std_val:.4f}")
