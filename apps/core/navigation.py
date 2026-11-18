@@ -3433,6 +3433,13 @@ LIVE_LINKS = {
         "Inspection Data Capture & SPC": "quality:iqc_spc_dashboard",
         "Reject & Return Material Authorization (RMA)": "quality:quality_return_authorization_list",
     },
+    "12.8": {
+        "Process Parameter Monitoring": "quality:process_parameter_log_list",
+        "First Article Inspection (FAI)": "quality:first_article_inspection_list",
+        "In-Line Inspection & Testing": "quality:in_process_inspection_list",
+        "Work Instruction Adherence": "quality:ipqc_spc_dashboard",
+        "Process Audit & Layered Process Audits (LPA)": "quality:layered_process_audit_list",
+    },
 
 
 
