@@ -41,10 +41,10 @@ def quarantine_containment_list(request):
     if selected_hold_type:
         qs = qs.filter(hold_type=selected_hold_type)
 
-    total_count = qs.count()
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
+    total_count = paginator.count
 
     context = {
         "quarantine_containments": page_obj.object_list,
