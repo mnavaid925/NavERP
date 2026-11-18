@@ -41,7 +41,7 @@
     - `apps/quality/models/SupplierQuality/SupplierQualityScorecards.py:199-204`
   - **Fix**: In `save()`, if `is_manual_override=True` but `overall_score is None`, calculate default composite score as baseline fallback.
 
-- [ ] **I4**: SCN disposition bypass & mass assignment in `SupplierChangeNotificationForm`.
+- [x] **I4**: SCN disposition bypass & mass assignment in `SupplierChangeNotificationForm`.
   - **Locations**:
     - `apps/quality/forms/SupplierQuality/SupplierChangeNotifications.py:42-45`
     - `templates/quality/supplierquality/supplier_change_notification/form.html:132-160`
