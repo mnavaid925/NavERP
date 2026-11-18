@@ -67,7 +67,7 @@ class SupplierQualityScorecardForm(TenantUniqueMixin, TenantModelForm):
                 suppliers = Party.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["supplier"].queryset = suppliers
             self.fields["evaluated_by"].queryset = User.objects.filter(
-                tenant=self.tenant
+                tenant=self.tenant, is_active=True
             ).order_by("first_name", "last_name", "email")
 
     def clean_status(self):
