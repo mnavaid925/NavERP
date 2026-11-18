@@ -160,9 +160,10 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label" for="{{ form.total_cost_impact.id_for_label }}">Total Cost Impact ($)</label>
-                {{ form.total_cost_impact }}
-                {% if form.total_cost_impact.errors %}<div class="form-error">{{ form.total_cost_impact.errors.0 }}</div>{% endif %}
+                <label class="form-label">Total Cost Impact ($)</label>
+                <div class="form-input bg-slate-50 text-slate-600 font-mono flex items-center">
+                    {% if mrb_disposition %}${{ mrb_disposition.total_cost_impact }}{% else %}Calculated automatically on save{% endif %}
+                </div>
             </div>
 
             <div class="form-group md:col-span-2">
