@@ -78,6 +78,9 @@ class InProcessInspection(TenantNumbered):
         "other": "badge-slate",
     }
 
+    INSPECTION_TYPE_CSS = TYPE_CSS
+    DEFECT_CATEGORY_CSS = DEFECT_CSS
+
     title = models.CharField(max_length=255)
     inspection_type = models.CharField(
         max_length=30,
