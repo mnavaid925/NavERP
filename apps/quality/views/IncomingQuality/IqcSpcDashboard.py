@@ -41,7 +41,7 @@ def iqc_spc_dashboard(request):
         lots_qs.filter(
             Q(spc_out_of_control=True) | Q(spc_cpk__lt=1.33, spc_cpk__isnull=False)
         )
-        .select_related("supplier", "inspection_plan")
+        .select_related("supplier")
         .order_by("-created_at")[:10]
     )
 
