@@ -226,6 +226,45 @@ from apps.quality.views.SupplierQuality.SupplierQualificationAudits import (
 from apps.quality.views.SupplierQuality.SupplierQualityDirectory import (
     avl_directory,
 )
+from apps.quality.views.IncomingQuality.CertificatesOfAnalysis import (
+    certificate_of_analysis_create,
+    certificate_of_analysis_delete,
+    certificate_of_analysis_detail,
+    certificate_of_analysis_edit,
+    certificate_of_analysis_export,
+    certificate_of_analysis_list,
+    certificate_of_analysis_verify,
+)
+from apps.quality.views.IncomingQuality.IncomingInspectionLots import (
+    incoming_inspection_lot_create,
+    incoming_inspection_lot_delete,
+    incoming_inspection_lot_detail,
+    incoming_inspection_lot_edit,
+    incoming_inspection_lot_export,
+    incoming_inspection_lot_list,
+    incoming_inspection_lot_make_decision,
+    incoming_inspection_lot_record_sample,
+)
+from apps.quality.views.IncomingQuality.IncomingInspectionPlans import (
+    incoming_inspection_plan_create,
+    incoming_inspection_plan_delete,
+    incoming_inspection_plan_detail,
+    incoming_inspection_plan_edit,
+    incoming_inspection_plan_export,
+    incoming_inspection_plan_list,
+)
+from apps.quality.views.IncomingQuality.IqcSpcDashboard import (
+    iqc_spc_dashboard,
+)
+from apps.quality.views.IncomingQuality.QualityReturnAuthorizations import (
+    quality_return_authorization_advance,
+    quality_return_authorization_create,
+    quality_return_authorization_delete,
+    quality_return_authorization_detail,
+    quality_return_authorization_edit,
+    quality_return_authorization_export,
+    quality_return_authorization_list,
+)
 from apps.quality.views.SupplierQuality.SupplierQualityScorecards import (
     supplier_quality_scorecard_create,
     supplier_quality_scorecard_delete,
@@ -417,5 +456,34 @@ __all__ = [
     "supplier_change_notification_export",
     "supplier_change_notification_disposition",
     "avl_directory",
+    "incoming_inspection_plan_list",
+    "incoming_inspection_plan_detail",
+    "incoming_inspection_plan_create",
+    "incoming_inspection_plan_edit",
+    "incoming_inspection_plan_delete",
+    "incoming_inspection_plan_export",
+    "incoming_inspection_lot_list",
+    "incoming_inspection_lot_detail",
+    "incoming_inspection_lot_create",
+    "incoming_inspection_lot_edit",
+    "incoming_inspection_lot_delete",
+    "incoming_inspection_lot_export",
+    "incoming_inspection_lot_record_sample",
+    "incoming_inspection_lot_make_decision",
+    "certificate_of_analysis_list",
+    "certificate_of_analysis_detail",
+    "certificate_of_analysis_create",
+    "certificate_of_analysis_edit",
+    "certificate_of_analysis_delete",
+    "certificate_of_analysis_export",
+    "certificate_of_analysis_verify",
+    "quality_return_authorization_list",
+    "quality_return_authorization_detail",
+    "quality_return_authorization_create",
+    "quality_return_authorization_edit",
+    "quality_return_authorization_delete",
+    "quality_return_authorization_export",
+    "quality_return_authorization_advance",
+    "iqc_spc_dashboard",
 ]
 
