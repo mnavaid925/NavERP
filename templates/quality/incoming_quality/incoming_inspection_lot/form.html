@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if lot %}Edit {{ lot.number }}{% else %}Record Incoming Inspection Lot{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:incoming_inspection_lot_list' %}" class="hover:underline">Inspection Lots</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if lot %}Edit {{ lot.number }}{% else %}New Inspection Lot{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="boxes" class="w-6 h-6 text-blue-600"></i>
+        {% if lot %}Edit {{ lot.number }} — Lot {{ lot.lot_number }}{% else %}Record Incoming Inspection Lot{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Link dock receipt, purchase orders, sampling quantity, defect counters, and usage decision.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if lot %}{% url 'quality:incoming_inspection_lot_detail' lot.pk %}{% else %}{% url 'quality:incoming_inspection_lot_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Inbound Identification -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="package-search" class="w-4 h-4 text-blue-600"></i>
+          Lot Identification & Governing Plan
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.inspection_plan.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Governing Inspection Plan</label>
+            {{ form.inspection_plan }}
+            {% if form.inspection_plan.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_plan.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.supplier.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supplier *</label>
+            {{ form.supplier }}
+            {% if form.supplier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supplier.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item / Part Code *</label>
+            {{ form.item_code }}
+            {% if form.item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Item / Part Name *</label>
+            {{ form.item_name }}
+            {% if form.item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lot_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Vendor Lot Number *</label>
+            {{ form.lot_number }}
+            {% if form.lot_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lot_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.heat_or_batch.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Heat / Mill Batch #</label>
+            {{ form.heat_or_batch }}
+            {% if form.heat_or_batch.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.heat_or_batch.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.purchase_order.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Purchase Order</label>
+            {{ form.purchase_order }}
+            {% if form.purchase_order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.purchase_order.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.goods_receipt_note.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Goods Receipt Note (GRN)</label>
+            {{ form.goods_receipt_note }}
+            {% if form.goods_receipt_note.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.goods_receipt_note.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.receipt_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Receipt Date</label>
+            {{ form.receipt_date }}
+            {% if form.receipt_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.receipt_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Date</label>
+            {{ form.inspection_date }}
+            {% if form.inspection_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Quantities, Defect Tallies & Disposition -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="scale" class="w-4 h-4 text-blue-600"></i>
+          Quantities, Sampling & Defect Tally
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.lot_quantity.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Total Lot Quantity *</label>
+            {{ form.lot_quantity }}
+            {% if form.lot_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lot_quantity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.sample_size.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Sample Size (n)</label>
+            {{ form.sample_size }}
+            {% if form.sample_size.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sample_size.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspected_quantity.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspected Qty</label>
+            {{ form.inspected_quantity }}
+            {% if form.inspected_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspected_quantity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.accepted_quantity.id_for_label }}" class="form-label text-sm font-semibold text-green-700">Accepted Qty</label>
+            {{ form.accepted_quantity }}
+            {% if form.accepted_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.accepted_quantity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.rejected_quantity.id_for_label }}" class="form-label text-sm font-semibold text-red-700">Rejected Qty</label>
+            {{ form.rejected_quantity }}
+            {% if form.rejected_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.rejected_quantity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.quarantine_quantity.id_for_label }}" class="form-label text-sm font-semibold text-amber-700">Quarantine Qty</label>
+            {{ form.quarantine_quantity }}
+            {% if form.quarantine_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.quarantine_quantity.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+          <div class="form-group">
+            <label for="{{ form.critical_defects.id_for_label }}" class="form-label text-sm font-semibold text-red-700">Critical Defects</label>
+            {{ form.critical_defects }}
+            {% if form.critical_defects.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.critical_defects.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.major_defects.id_for_label }}" class="form-label text-sm font-semibold text-amber-700">Major Defects</label>
+            {{ form.major_defects }}
+            {% if form.major_defects.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.major_defects.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.minor_defects.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Minor Defects</label>
+            {{ form.minor_defects }}
+            {% if form.minor_defects.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.minor_defects.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.stage.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Stage</label>
+            {{ form.stage }}
+            {% if form.stage.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.stage.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.usage_decision.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Usage Decision</label>
+            {{ form.usage_decision }}
+            {% if form.usage_decision.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.usage_decision.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.usage_decision_notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Usage Decision Justification</label>
+            {{ form.usage_decision_notes }}
+            {% if form.usage_decision_notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.usage_decision_notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Measurements JSON, Inspector & Escalations -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="activity" class="w-4 h-4 text-blue-600"></i>
+          Measurements Data, Ownership & Escalations
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.inspector.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Lead Inspector</label>
+            {{ form.inspector }}
+            {% if form.inspector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspector.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.decided_by.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Decision Authority</label>
+            {{ form.decided_by }}
+            {% if form.decided_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.decided_by.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.measurements_json.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">
+              CTQ Measurements Data (JSON Array)
+            </label>
+            {{ form.measurements_json }}
+            <p class="text-xs text-slate-400 mt-1">{{ form.measurements_json.help_text }}</p>
+            {% if form.measurements_json.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.measurements_json.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.linked_ncr.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Non-Conformance (NCR)</label>
+            {{ form.linked_ncr }}
+            {% if form.linked_ncr.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_ncr.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.linked_deviation.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Process Deviation</label>
+            {{ form.linked_deviation }}
+            {% if form.linked_deviation.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_deviation.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.linked_containment.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Quarantine Containment</label>
+            {{ form.linked_containment }}
+            {% if form.linked_containment.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_containment.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.linked_scar.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Supplier Corrective Action (SCAR)</label>
+            {{ form.linked_scar }}
+            {% if form.linked_scar.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_scar.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Receiving Notes & Observations</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if lot %}{% url 'quality:incoming_inspection_lot_detail' lot.pk %}{% else %}{% url 'quality:incoming_inspection_lot_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if lot %}Update Lot{% else %}Save Inspection Lot{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
