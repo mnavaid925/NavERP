@@ -74,7 +74,7 @@ class IncomingInspectionPlanForm(TenantUniqueMixin, TenantModelForm):
             ).order_by("name")
             self.fields["sop_document"].queryset = ControlledDocument.objects.filter(
                 tenant=self.tenant,
-            ).order_by("document_number")
+            ).order_by("number")
             self.fields["assigned_team"].queryset = OrgUnit.objects.filter(
                 tenant=self.tenant,
             ).order_by("name")
