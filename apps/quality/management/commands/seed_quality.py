@@ -19,6 +19,18 @@ from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDo
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
+from apps.quality.models.IncomingQuality.CertificatesOfAnalysis import (
+    CertificateOfAnalysis,
+)
+from apps.quality.models.IncomingQuality.IncomingInspectionLots import (
+    IncomingInspectionLot,
+)
+from apps.quality.models.IncomingQuality.IncomingInspectionPlans import (
+    IncomingInspectionPlan,
+)
+from apps.quality.models.IncomingQuality.QualityReturnAuthorizations import (
+    QualityReturnAuthorization,
+)
 from apps.quality.models.NonConformance.MrbDispositions import MrbDisposition
 from apps.quality.models.NonConformance.NonConformanceReports import NonConformanceReport
 from apps.quality.models.NonConformance.ProcessDeviations import ProcessDeviation
@@ -57,6 +69,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            QualityReturnAuthorization.objects.all().delete()
+            CertificateOfAnalysis.objects.all().delete()
+            IncomingInspectionLot.objects.all().delete()
+            IncomingInspectionPlan.objects.all().delete()
             SupplierChangeNotification.objects.all().delete()
             SupplierCorrectiveAction.objects.all().delete()
             SupplierQualityScorecard.objects.all().delete()
@@ -96,6 +112,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_4(tenant)
             self._seed_submodule_12_5(tenant)
             self._seed_submodule_12_6(tenant)
+            self._seed_submodule_12_7(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -1846,5 +1863,498 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.6 Supplier & Vendor Quality Management seeded successfully."))
+
+    def _seed_submodule_12_7(self, tenant):
+        """Seed demo data for Sub-module 12.7: Incoming Quality Control (IQC)."""
+        if IncomingInspectionPlan.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.7 Incoming Quality Control data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.7 Incoming Quality Control (IQC)...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).first()
+            or User.objects.filter(is_superuser=True).first()
+        )
+
+        suppliers = list(
+            Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor")).order_by("pk")
+        )
+
+        cascade = next((s for s in suppliers if "Cascade" in s.name or "Component" in s.name), None)
+        northwind = next((s for s in suppliers if "Northwind" in s.name or "Supply" in s.name), None)
+        umbrella = next((s for s in suppliers if "Umbrella" in s.name or "Chemical" in s.name), None)
+
+        if not cascade and suppliers:
+            cascade = suppliers[0]
+        if not northwind and len(suppliers) > 1:
+            northwind = suppliers[1]
+        elif not northwind:
+            northwind = cascade
+        if not umbrella and len(suppliers) > 2:
+            umbrella = suppliers[2]
+        elif not umbrella:
+            umbrella = northwind
+
+        if not cascade:
+            self.stdout.write(f"[{tenant.name}] No supplier parties available to seed 12.7, skipping.")
+            return
+
+        today = timezone.now().date()
+        sop_doc = ControlledDocument.objects.filter(tenant=tenant).first()
+        ncr = NonConformanceReport.objects.filter(tenant=tenant).first()
+        scar = SupplierCorrectiveAction.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
+            # 1. Incoming Inspection Plans (QIIP)
+            plan_shaft = IncomingInspectionPlan.objects.create(
+                tenant=tenant,
+                title="Precision CNC Machined Shaft IQC Protocol",
+                item_code="PRT-10024",
+                item_name="Drive Shaft 25mm Stainless",
+                revision="B",
+                supplier=cascade,
+                sampling_standard="ansi_asq_z14",
+                inspection_level="level_2",
+                inspection_severity="normal",
+                inspection_frequency="every_lot",
+                skip_lot_interval=5,
+                aql_critical=Decimal("0.00"),
+                aql_major=Decimal("1.00"),
+                aql_minor=Decimal("4.00"),
+                requires_coa=True,
+                requires_coc=False,
+                status="active",
+                characteristics_matrix=[
+                    {
+                        "name": "Shaft Outer Diameter",
+                        "type": "variable",
+                        "lsl": 24.98,
+                        "usl": 25.02,
+                        "target": 25.00,
+                        "unit": "mm",
+                        "test_method": "Digital Micrometer",
+                    },
+                    {
+                        "name": "Total Length",
+                        "type": "variable",
+                        "lsl": 199.5,
+                        "usl": 200.5,
+                        "target": 200.0,
+                        "unit": "mm",
+                        "test_method": "Vernier Caliper",
+                    },
+                    {
+                        "name": "Surface Roughness",
+                        "type": "attribute",
+                        "expected": "Ra <= 0.8um",
+                        "test_method": "Profilometer",
+                    },
+                ],
+                sop_document=sop_doc,
+                notes="Critical rotating shaft. High precision bearing fit required.",
+            )
+
+            plan_pcb = IncomingInspectionPlan.objects.create(
+                tenant=tenant,
+                title="Telemetry Core PCB Controller IQC",
+                item_code="PCB-A440",
+                item_name="Telemetry Core PCB Controller Assembly",
+                revision="C",
+                supplier=northwind,
+                sampling_standard="iso_2859_1",
+                inspection_level="level_2",
+                inspection_severity="normal",
+                inspection_frequency="skip_lot",
+                skip_lot_interval=5,
+                aql_critical=Decimal("0.00"),
+                aql_major=Decimal("0.65"),
+                aql_minor=Decimal("2.50"),
+                requires_coa=True,
+                requires_coc=True,
+                status="active",
+                characteristics_matrix=[
+                    {
+                        "name": "Supply Voltage Regulation",
+                        "type": "variable",
+                        "lsl": 3.25,
+                        "usl": 3.35,
+                        "target": 3.30,
+                        "unit": "V",
+                        "test_method": "Digital Multimeter",
+                    },
+                    {
+                        "name": "Idle Operating Current",
+                        "type": "variable",
+                        "lsl": 15.0,
+                        "usl": 25.0,
+                        "target": 20.0,
+                        "unit": "mA",
+                        "test_method": "Current Shunt Meter",
+                    },
+                ],
+                sop_document=sop_doc,
+                notes="Approved mature supplier under skip-lot testing protocol (1:5 lots).",
+            )
+
+            plan_enclosure = IncomingInspectionPlan.objects.create(
+                tenant=tenant,
+                title="Diagnostic Device Base Housing Enclosure IQC",
+                item_code="POL-HOU-01",
+                item_name="Diagnostic Device Base Enclosure Shell",
+                revision="A",
+                supplier=umbrella,
+                sampling_standard="c_zero_squeglia",
+                inspection_level="level_1",
+                inspection_severity="normal",
+                inspection_frequency="every_lot",
+                aql_critical=Decimal("0.00"),
+                aql_major=Decimal("0.65"),
+                aql_minor=Decimal("1.50"),
+                requires_coa=True,
+                requires_coc=True,
+                status="active",
+                characteristics_matrix=[
+                    {
+                        "name": "Wall Thickness",
+                        "type": "variable",
+                        "lsl": 2.4,
+                        "usl": 2.8,
+                        "target": 2.6,
+                        "unit": "mm",
+                        "test_method": "Ultrasonic Gauge",
+                    }
+                ],
+                notes="Medical device external shell. Zero critical defects tolerated.",
+            )
+
+            plan_fastener = IncomingInspectionPlan.objects.create(
+                tenant=tenant,
+                title="Fluorosilicone O-Ring Seal Dock-to-Stock Protocol",
+                item_code="SL-RING-08",
+                item_name="High-Purity Fluorosilicone O-Ring Seal",
+                revision="A",
+                supplier=northwind,
+                sampling_standard="fixed_percentage",
+                inspection_frequency="dock_to_stock",
+                aql_critical=Decimal("0.00"),
+                aql_major=Decimal("2.50"),
+                aql_minor=Decimal("6.50"),
+                requires_coa=False,
+                status="active",
+                notes="Authorized dock-to-stock direct inventory release.",
+            )
+
+            # 2. Incoming Inspection Lots (QIIL)
+            # Lot 1: Conforming Lot for Shaft (Accepted, high capability)
+            lot_shaft_good = IncomingInspectionLot.objects.create(
+                tenant=tenant,
+                inspection_plan=plan_shaft,
+                item_code="PRT-10024",
+                item_name="Drive Shaft 25mm Stainless",
+                supplier=cascade,
+                lot_number="LOT-2026-A101",
+                heat_or_batch="HEAT-SS316-901",
+                receipt_date=today - datetime.timedelta(days=7),
+                inspection_date=today - datetime.timedelta(days=6),
+                lot_quantity=Decimal("500.000"),
+                sample_size=50,
+                inspected_quantity=50,
+                accepted_quantity=Decimal("500.000"),
+                rejected_quantity=Decimal("0.000"),
+                quarantine_quantity=Decimal("0.000"),
+                critical_defects=0,
+                major_defects=0,
+                minor_defects=0,
+                stage="completed",
+                usage_decision="accepted",
+                usage_decision_notes="Lot conforming to all dimensional and metallurgical criteria. Released to inventory.",
+                decided_by=admin_user,
+                decided_at=timezone.now() - datetime.timedelta(days=6),
+                inspector=admin_user,
+                measurements_data=[
+                    {"sample_no": 1, "characteristic": "Shaft Outer Diameter", "value": 25.002, "is_pass": True},
+                    {"sample_no": 2, "characteristic": "Shaft Outer Diameter", "value": 25.004, "is_pass": True},
+                    {"sample_no": 3, "characteristic": "Shaft Outer Diameter", "value": 24.998, "is_pass": True},
+                    {"sample_no": 4, "characteristic": "Shaft Outer Diameter", "value": 25.001, "is_pass": True},
+                    {"sample_no": 5, "characteristic": "Shaft Outer Diameter", "value": 25.003, "is_pass": True},
+                ],
+                spc_mean=Decimal("25.0016"),
+                spc_std_dev=Decimal("0.0023"),
+                spc_cp=Decimal("2.90"),
+                spc_cpk=Decimal("2.67"),
+                spc_out_of_control=False,
+                notes="High precision lot from Cascade Components.",
+            )
+
+            # Lot 2: Non-Conforming Rejected Lot for Shaft (Out-of-Control SPC, NCR & SCAR linked)
+            lot_shaft_bad = IncomingInspectionLot.objects.create(
+                tenant=tenant,
+                inspection_plan=plan_shaft,
+                item_code="PRT-10024",
+                item_name="Drive Shaft 25mm Stainless",
+                supplier=cascade,
+                lot_number="LOT-2026-A102",
+                heat_or_batch="HEAT-SS316-902",
+                receipt_date=today - datetime.timedelta(days=3),
+                inspection_date=today - datetime.timedelta(days=2),
+                lot_quantity=Decimal("1000.000"),
+                sample_size=80,
+                inspected_quantity=80,
+                accepted_quantity=Decimal("0.000"),
+                rejected_quantity=Decimal("1000.000"),
+                quarantine_quantity=Decimal("0.000"),
+                critical_defects=2,
+                major_defects=5,
+                minor_defects=1,
+                stage="completed",
+                usage_decision="rejected",
+                usage_decision_notes="Lot rejected: Critical outer diameter excursions beyond 25.02mm USL. Return for credit requested.",
+                decided_by=admin_user,
+                decided_at=timezone.now() - datetime.timedelta(days=2),
+                inspector=admin_user,
+                measurements_data=[
+                    {"sample_no": 1, "characteristic": "Shaft Outer Diameter", "value": 24.960, "is_pass": False},
+                    {"sample_no": 2, "characteristic": "Shaft Outer Diameter", "value": 24.970, "is_pass": False},
+                    {"sample_no": 3, "characteristic": "Shaft Outer Diameter", "value": 25.035, "is_pass": False},
+                    {"sample_no": 4, "characteristic": "Shaft Outer Diameter", "value": 25.010, "is_pass": True},
+                ],
+                spc_mean=Decimal("24.9938"),
+                spc_std_dev=Decimal("0.0335"),
+                spc_cp=Decimal("0.79"),
+                spc_cpk=Decimal("0.73"),
+                spc_out_of_control=True,
+                linked_ncr=ncr,
+                linked_scar=scar,
+                notes="Tool wear during supplier lathe machining run identified as root cause.",
+            )
+
+            # Lot 3: Quarantined Lot for Medical Housing
+            lot_enclosure = IncomingInspectionLot.objects.create(
+                tenant=tenant,
+                inspection_plan=plan_enclosure,
+                item_code="POL-HOU-01",
+                item_name="Diagnostic Device Base Enclosure Shell",
+                supplier=umbrella,
+                lot_number="LOT-2026-M404",
+                heat_or_batch="BATCH-UB-77",
+                receipt_date=today - datetime.timedelta(days=1),
+                inspection_date=today,
+                lot_quantity=Decimal("200.000"),
+                sample_size=32,
+                inspected_quantity=32,
+                accepted_quantity=Decimal("0.000"),
+                rejected_quantity=Decimal("0.000"),
+                quarantine_quantity=Decimal("200.000"),
+                critical_defects=0,
+                major_defects=3,
+                minor_defects=2,
+                stage="under_mrb",
+                usage_decision="quarantined",
+                usage_decision_notes="Quarantined in QA Holding Bay A3 pending secondary biocompatibility testing.",
+                decided_by=admin_user,
+                decided_at=timezone.now(),
+                inspector=admin_user,
+                notes="Wall thickness variation observed in injection port area.",
+            )
+
+            # Lot 4: Skip-Lot Passed for PCB Controller
+            lot_pcb = IncomingInspectionLot.objects.create(
+                tenant=tenant,
+                inspection_plan=plan_pcb,
+                item_code="PCB-A440",
+                item_name="Telemetry Core PCB Controller Assembly",
+                supplier=northwind,
+                lot_number="LOT-2026-E505",
+                heat_or_batch="LOT-NW-PC-01",
+                receipt_date=today - datetime.timedelta(days=4),
+                inspection_date=today - datetime.timedelta(days=4),
+                lot_quantity=Decimal("2500.000"),
+                sample_size=0,
+                inspected_quantity=0,
+                accepted_quantity=Decimal("2500.000"),
+                rejected_quantity=Decimal("0.000"),
+                quarantine_quantity=Decimal("0.000"),
+                critical_defects=0,
+                major_defects=0,
+                minor_defects=0,
+                stage="completed",
+                usage_decision="skip_lot_passed",
+                usage_decision_notes="Auto-released under approved skip-lot 1:5 inspection policy.",
+                decided_by=admin_user,
+                decided_at=timezone.now() - datetime.timedelta(days=4),
+                inspector=admin_user,
+                notes="Skip-lot authorization verified against active AVL record.",
+            )
+
+            # 3. Certificates of Analysis (QCOA)
+            # CoA 1: Compliant CoA for Shaft Lot A101
+            coa_good = CertificateOfAnalysis.objects.create(
+                tenant=tenant,
+                certificate_number="COA-CAS-2026-081",
+                supplier=cascade,
+                item_code="PRT-10024",
+                item_name="Drive Shaft 25mm Stainless",
+                lot_number="LOT-2026-A101",
+                inspection_lot=lot_shaft_good,
+                inspection_plan=plan_shaft,
+                manufacturer_name="Cascade Metallurgical Works",
+                date_of_manufacture=today - datetime.timedelta(days=20),
+                expiry_or_retest_date=today + datetime.timedelta(days=710),
+                lab_accreditation="ISO/IEC 17025 Accredited Metrology Lab #441",
+                parameters_payload=[
+                    {
+                        "parameter": "Tensile Strength",
+                        "method": "ASTM E8",
+                        "lsl": 550,
+                        "usl": 750,
+                        "actual_value": 625,
+                        "unit": "MPa",
+                        "is_pass": True,
+                    },
+                    {
+                        "parameter": "Yield Strength",
+                        "method": "ASTM E8",
+                        "lsl": 240,
+                        "usl": 400,
+                        "actual_value": 315,
+                        "unit": "MPa",
+                        "is_pass": True,
+                    },
+                    {
+                        "parameter": "Hardness HRC",
+                        "method": "ASTM E18",
+                        "lsl": 25,
+                        "usl": 32,
+                        "actual_value": 29,
+                        "unit": "HRC",
+                        "is_pass": True,
+                    },
+                ],
+                variance_count=0,
+                is_within_spec=True,
+                status="verified_compliant",
+                verified_by=admin_user,
+                verified_at=timezone.now() - datetime.timedelta(days=6),
+                supporting_document=sop_doc,
+                notes="Certified test report verified against drawing rev B metallurgical requirements.",
+            )
+
+            # CoA 2: Exception CoA for Shaft Lot A102
+            coa_bad = CertificateOfAnalysis.objects.create(
+                tenant=tenant,
+                certificate_number="COA-CAS-2026-082",
+                supplier=cascade,
+                item_code="PRT-10024",
+                item_name="Drive Shaft 25mm Stainless",
+                lot_number="LOT-2026-A102",
+                inspection_lot=lot_shaft_bad,
+                inspection_plan=plan_shaft,
+                manufacturer_name="Cascade Metallurgical Works",
+                date_of_manufacture=today - datetime.timedelta(days=15),
+                expiry_or_retest_date=today + datetime.timedelta(days=715),
+                lab_accreditation="Supplier Factory Lab",
+                parameters_payload=[
+                    {
+                        "parameter": "Tensile Strength",
+                        "method": "ASTM E8",
+                        "lsl": 550,
+                        "usl": 750,
+                        "actual_value": 520,
+                        "unit": "MPa",
+                        "is_pass": False,
+                    },
+                    {
+                        "parameter": "Hardness HRC",
+                        "method": "ASTM E18",
+                        "lsl": 25,
+                        "usl": 32,
+                        "actual_value": 28,
+                        "unit": "HRC",
+                        "is_pass": True,
+                    },
+                ],
+                variance_count=1,
+                is_within_spec=False,
+                status="exception_detected",
+                verified_by=admin_user,
+                verified_at=timezone.now() - datetime.timedelta(days=2),
+                notes="Tensile strength 520 MPa is below 550 MPa minimum specification limit.",
+            )
+
+            # CoA 3: Received CoA for PCB Controller
+            CertificateOfAnalysis.objects.create(
+                tenant=tenant,
+                certificate_number="COA-NW-2026-191",
+                supplier=northwind,
+                item_code="PCB-A440",
+                item_name="Telemetry Core PCB Controller Assembly",
+                lot_number="LOT-2026-E505",
+                inspection_lot=lot_pcb,
+                inspection_plan=plan_pcb,
+                manufacturer_name="Northwind Advanced Circuit Solutions",
+                date_of_manufacture=today - datetime.timedelta(days=10),
+                expiry_or_retest_date=today + datetime.timedelta(days=355),
+                lab_accreditation="TUV Rheinland Certified QA Lab",
+                parameters_payload=[
+                    {
+                        "parameter": "Firmware CRC Checksum",
+                        "method": "Automated Test Bench",
+                        "expected": "0xFA9941",
+                        "actual_value": "0xFA9941",
+                        "unit": "HEX",
+                        "is_pass": True,
+                    }
+                ],
+                variance_count=0,
+                is_within_spec=True,
+                status="received",
+                notes="Awaiting formal QC engineer sign-off.",
+            )
+
+            # 4. Quality Return Authorizations (QRMA)
+            # RMA 1: Rejected lot return to Cascade Components
+            QualityReturnAuthorization.objects.create(
+                tenant=tenant,
+                inspection_lot=lot_shaft_bad,
+                supplier=cascade,
+                vendor_rma_number="VRMA-CAS-2026-881",
+                return_reason="dimensional_oos",
+                disposition_type="return_for_credit",
+                return_quantity=Decimal("1000.000"),
+                unit_of_measure="EA",
+                estimated_credit_value=Decimal("4500.00"),
+                status="shipped_to_vendor",
+                carrier="FedEx Freight",
+                tracking_number="7849 2011 8841",
+                bill_of_lading="BOL-CAS-9941",
+                shipped_date=today - datetime.timedelta(days=1),
+                debit_memo_number="DM-2026-092",
+                settled_amount=Decimal("0.00"),
+                assigned_coordinator=admin_user,
+                linked_ncr=ncr,
+                linked_scar=scar,
+                notes="All 1,000 shafts securely packed on 2 pallets and dispatched to Cascade Components machine shop.",
+            )
+
+            # RMA 2: Replacement RMA for Umbrella Chemical Enclosure
+            QualityReturnAuthorization.objects.create(
+                tenant=tenant,
+                inspection_lot=lot_enclosure,
+                supplier=umbrella,
+                vendor_rma_number="VRMA-UMB-2026-404",
+                return_reason="contamination",
+                disposition_type="return_for_replacement",
+                return_quantity=Decimal("200.000"),
+                unit_of_measure="EA",
+                estimated_credit_value=Decimal("1200.00"),
+                status="rma_approved",
+                assigned_coordinator=admin_user,
+                notes="Supplier accepted return; replacement production run scheduled for next week.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.7 Incoming Quality Control (IQC) seeded successfully."))
+
 
 
