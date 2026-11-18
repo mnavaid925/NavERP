@@ -18,17 +18,17 @@
 
 ## Critical Findings
 
-- [ ] `[C1]` **Multi-Tenant User Isolation Leakage in Forms**:
+- [x] `[C1]` **Multi-Tenant User Isolation Leakage in Forms**:
   - **Location**: `apps/quality/forms/IncomingQuality/IncomingInspectionLots.py:122-123`, `156-170` & `apps/quality/forms/IncomingQuality/QualityReturnAuthorizations.py:83-85`, `95-99`
   - **Description**: In `IncomingInspectionLotForm`, `decided_by` and `inspector` querysets use `User.objects.filter(is_active=True)` without `tenant=self.tenant`, and are omitted from `reject_foreign(...)` in `clean()`. In `QualityReturnAuthorizationForm`, `assigned_coordinator` is similarly not tenant-scoped and omitted from `reject_foreign(...)`. This allows active users from all tenants to leak into dropdowns and cross-tenant assignment.
   - **Remediation**: Filter User querysets by `User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")` and include `"decided_by"`, `"inspector"`, and `"assigned_coordinator"` in `reject_foreign(...)`.
 
-- [ ] `[C2]` **Unhandled `NaN` / `Infinity` in Sample Value Hand-Parsing (DoS / DB Crash Risk)**:
+- [x] `[C2]` **Unhandled `NaN` / `Infinity` in Sample Value Hand-Parsing (DoS / DB Crash Risk)**:
   - **Location**: `apps/quality/views/IncomingQuality/IncomingInspectionLots.py:180-206` & `apps/quality/models/IncomingQuality/IncomingInspectionLots.py:210-225`
   - **Description**: In `incoming_inspection_lot_record_sample`, `float(reading_val)` accepts `"nan"` and `"inf"` without raising `ValueError`. When `"nan"` is stored, `recalculate_spc()` computes `Decimal('nan')`, which crashes with database errors (`decimal.InvalidOperation`) upon save.
   - **Remediation**: Check `math.isfinite(val_float)` immediately after parsing in the view and ignore non-finite numbers in `recalculate_spc()`.
 
-- [ ] `[C3]` **Missing Admin Permission Check on List Template Delete Forms**:
+- [x] `[C3]` **Missing Admin Permission Check on List Template Delete Forms**:
   - **Location**: `templates/quality/incoming_quality/certificate_of_analysis/list.html:148-154`, `incoming_inspection_plan/list.html:157-163`, `incoming_inspection_lot/list.html:162-168`, `quality_return_authorization/list.html:143-149`
   - **Description**: Detail templates guard delete forms with `{% if request.user.is_superuser or request.user.is_tenant_admin %}` matching the `@tenant_admin_required` view decorator. List templates expose the destructive delete form in the table actions to all authenticated users.
   - **Remediation**: Wrap each table action delete `<form>` in list templates with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
