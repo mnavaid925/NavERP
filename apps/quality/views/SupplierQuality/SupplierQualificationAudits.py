@@ -32,9 +32,7 @@ def _csv_safe(val):
 
 @login_required
 def supplier_qualification_audit_list(request):
-    qs = SupplierQualificationAudit.objects.filter(tenant=request.tenant).select_related(
-        "supplier", "lead_auditor", "quality_agreement"
-    )
+    qs = SupplierQualificationAudit.objects.filter(tenant=request.tenant).select_related("supplier")
 
     search_query = request.GET.get("q", "").strip()
     if search_query:
