@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if rma %}Edit {{ rma.number }}{% else %}Initiate Quality Return Authorization{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:quality_return_authorization_list' %}" class="hover:underline">Return Authorizations</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if rma %}Edit {{ rma.number }}{% else %}New Return Authorization{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="rotate-ccw" class="w-6 h-6 text-blue-600"></i>
+        {% if rma %}Edit {{ rma.number }} — {{ rma.supplier.name }}{% else %}Initiate Quality Return Authorization (QRMA){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Create return documentation for non-conforming receiving lots, track vendor RMA numbers, and log debit memos.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if rma %}{% url 'quality:quality_return_authorization_detail' rma.pk %}{% else %}{% url 'quality:quality_return_authorization_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Inbound Lot & Supplier -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="boxes" class="w-4 h-4 text-blue-600"></i>
+          Inspection Lot & Vendor References
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.inspection_lot.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Originating Inspection Lot *</label>
+            {{ form.inspection_lot }}
+            {% if form.inspection_lot.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_lot.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.supplier.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Supplier *</label>
+            {{ form.supplier }}
+            {% if form.supplier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supplier.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.vendor_rma_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Vendor-Issued RMA #</label>
+            {{ form.vendor_rma_number }}
+            {% if form.vendor_rma_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.vendor_rma_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Workflow Status</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.return_reason.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Reason for Return *</label>
+            {{ form.return_reason }}
+            {% if form.return_reason.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.return_reason.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.disposition_type.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Commercial Disposition *</label>
+            {{ form.disposition_type }}
+            {% if form.disposition_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.disposition_type.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Quantities, Accounting & Logistics -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="dollar-sign" class="w-4 h-4 text-blue-600"></i>
+          Quantities & Accounting Reconciliation
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.return_quantity.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Return Quantity *</label>
+            {{ form.return_quantity }}
+            {% if form.return_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.return_quantity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.unit_of_measure.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Unit of Measure (UOM)</label>
+            {{ form.unit_of_measure }}
+            {% if form.unit_of_measure.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.unit_of_measure.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.estimated_credit_value.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Estimated Credit ($)</label>
+            {{ form.estimated_credit_value }}
+            {% if form.estimated_credit_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.estimated_credit_value.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.settled_amount.id_for_label }}" class="form-label text-sm font-semibold text-green-700">Settled Credit ($)</label>
+            {{ form.settled_amount }}
+            {% if form.settled_amount.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.settled_amount.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.debit_memo_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Debit Memo # (AP)</label>
+            {{ form.debit_memo_number }}
+            {% if form.debit_memo_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.debit_memo_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.settlement_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Settlement Date</label>
+            {{ form.settlement_date }}
+            {% if form.settlement_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.settlement_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.assigned_coordinator.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Return Coordinator</label>
+            {{ form.assigned_coordinator }}
+            {% if form.assigned_coordinator.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.assigned_coordinator.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <h3 class="text-sm font-semibold text-slate-800 pt-2 border-t border-slate-100 flex items-center gap-2">
+          <i data-lucide="truck" class="w-4 h-4 text-blue-600"></i>
+          Shipping & Freight Logistics
+        </h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.carrier.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Carrier</label>
+            {{ form.carrier }}
+            {% if form.carrier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.carrier.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.tracking_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Tracking Number</label>
+            {{ form.tracking_number }}
+            {% if form.tracking_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.tracking_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.bill_of_lading.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Bill of Lading (BOL)</label>
+            {{ form.bill_of_lading }}
+            {% if form.bill_of_lading.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.bill_of_lading.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.shipped_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Shipped Date</label>
+            {{ form.shipped_date }}
+            {% if form.shipped_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.shipped_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.vendor_receipt_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Vendor Receipt Date</label>
+            {{ form.vendor_receipt_date }}
+            {% if form.vendor_receipt_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.vendor_receipt_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Escalation Links & Notes -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="link-2" class="w-4 h-4 text-blue-600"></i>
+          Quality Records & Comments
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.linked_ncr.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Non-Conformance (NCR)</label>
+            {{ form.linked_ncr }}
+            {% if form.linked_ncr.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_ncr.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.linked_scar.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Corrective Action (SCAR)</label>
+            {{ form.linked_scar }}
+            {% if form.linked_scar.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_scar.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Return Instructions & Remarks</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if rma %}{% url 'quality:quality_return_authorization_detail' rma.pk %}{% else %}{% url 'quality:quality_return_authorization_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if rma %}Update Return Authorization{% else %}Save Return Authorization{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
