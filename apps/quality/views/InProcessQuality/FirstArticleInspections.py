@@ -4,7 +4,7 @@ from django.apps import apps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -65,10 +65,16 @@ def first_article_inspection_list(request):
     if current_work_center.isdigit():
         qs = qs.filter(work_center_id=int(current_work_center))
 
-    total_fais_count = FirstArticleInspection.objects.filter(tenant=request.tenant).count()
-    approved_count = FirstArticleInspection.objects.filter(tenant=request.tenant, status="approved_run_released").count()
-    conditional_count = FirstArticleInspection.objects.filter(tenant=request.tenant, status="conditional_approval").count()
-    rejected_count = FirstArticleInspection.objects.filter(tenant=request.tenant, status="rejected_setup_hold").count()
+    stats = FirstArticleInspection.objects.filter(tenant=request.tenant).aggregate(
+        total_fais_count=Count("id"),
+        approved_count=Count("id", filter=Q(status="approved_run_released")),
+        conditional_count=Count("id", filter=Q(status="conditional_approval")),
+        rejected_count=Count("id", filter=Q(status="rejected_setup_hold")),
+    )
+    total_fais_count = stats["total_fais_count"] or 0
+    approved_count = stats["approved_count"] or 0
+    conditional_count = stats["conditional_count"] or 0
+    rejected_count = stats["rejected_count"] or 0
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
