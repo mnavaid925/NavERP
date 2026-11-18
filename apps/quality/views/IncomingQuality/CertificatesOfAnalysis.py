@@ -214,7 +214,7 @@ def certificate_of_analysis_export(request):
         "Created At",
     ])
 
-    for c in qs:
+    for c in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(c.number),
             _csv_safe(c.certificate_number),
