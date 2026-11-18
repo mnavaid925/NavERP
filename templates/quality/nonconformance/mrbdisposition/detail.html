@@ -62,7 +62,7 @@
                     </div>
                     <div class="detail-item">
                         <dt>Rework Assignee</dt>
-                        <dd>{{ mrb_disposition.rework_assignee.get_full_name|default:mrb_disposition.rework_assignee.username|default:"Unassigned" }}</dd>
+                        <dd>{% if mrb_disposition.rework_assignee %}{{ mrb_disposition.rework_assignee.get_full_name|default:mrb_disposition.rework_assignee.username }}{% else %}Unassigned{% endif %}</dd>
                     </div>
                     <div class="detail-item">
                         <dt>Rework Completion Date</dt>
@@ -136,21 +136,21 @@
                 <div class="p-4 rounded-lg border {% if mrb_disposition.quality_approved_by %}border-green-300 bg-green-50{% else %}border-slate-200 bg-slate-50{% endif %}">
                     <div class="text-xs font-semibold uppercase {% if mrb_disposition.quality_approved_by %}text-green-800{% else %}text-slate-500{% endif %}">Quality Assurance</div>
                     <div class="text-sm font-bold text-slate-800 mt-1">
-                        {{ mrb_disposition.quality_approved_by.get_full_name|default:mrb_disposition.quality_approved_by.username|default:"Pending Approval" }}
+                        {% if mrb_disposition.quality_approved_by %}{{ mrb_disposition.quality_approved_by.get_full_name|default:mrb_disposition.quality_approved_by.username }}{% else %}Pending Approval{% endif %}
                     </div>
                 </div>
 
                 <div class="p-4 rounded-lg border {% if mrb_disposition.engineering_approved_by %}border-green-300 bg-green-50{% else %}border-slate-200 bg-slate-50{% endif %}">
                     <div class="text-xs font-semibold uppercase {% if mrb_disposition.engineering_approved_by %}text-green-800{% else %}text-slate-500{% endif %}">Engineering</div>
                     <div class="text-sm font-bold text-slate-800 mt-1">
-                        {{ mrb_disposition.engineering_approved_by.get_full_name|default:mrb_disposition.engineering_approved_by.username|default:"Pending Approval" }}
+                        {% if mrb_disposition.engineering_approved_by %}{{ mrb_disposition.engineering_approved_by.get_full_name|default:mrb_disposition.engineering_approved_by.username }}{% else %}Pending Approval{% endif %}
                     </div>
                 </div>
 
                 <div class="p-4 rounded-lg border {% if mrb_disposition.operations_approved_by %}border-green-300 bg-green-50{% else %}border-slate-200 bg-slate-50{% endif %}">
                     <div class="text-xs font-semibold uppercase {% if mrb_disposition.operations_approved_by %}text-green-800{% else %}text-slate-500{% endif %}">Operations</div>
                     <div class="text-sm font-bold text-slate-800 mt-1">
-                        {{ mrb_disposition.operations_approved_by.get_full_name|default:mrb_disposition.operations_approved_by.username|default:"Pending Approval" }}
+                        {% if mrb_disposition.operations_approved_by %}{{ mrb_disposition.operations_approved_by.get_full_name|default:mrb_disposition.operations_approved_by.username }}{% else %}Pending Approval{% endif %}
                     </div>
                 </div>
             </div>
