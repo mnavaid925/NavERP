@@ -2,7 +2,7 @@
 
 **Target Range**: `585db911e9d93d64932a42f765dae39dbb5756a1...HEAD`  
 **Date**: November 18, 2026  
-**Status**: In Progress (Pass 2 of 6 completed)
+**Status**: In Progress (Pass 3 of 6 completed)
 
 ---
 
@@ -59,4 +59,30 @@
 3. **EXP-M3**: Inactive user selection allowed in form foreign keys (corroborates CR-M5).
 4. **EXP-M4**: Non-standard `text-2xs` utility class in templates (corroborates CR-M4).
 5. **EXP-M5**: Unused `crud_*` imports in view files (corroborates CR-M3).
+
+---
+
+## Pass 3: `frontend-reviewer` Findings
+
+### Critical
+1. **FE-C1**: Filter chaining logic bug in `supplier_corrective_action/detail.html:28` causes date to render blank:
+   `{{ scar.issued_date|date:"Y-m-d"|default:scar.created_at|date:"Y-m-d" }}` passes already-formatted string into second `|date`, yielding `""`.
+   - Fix: `{% if scar.issued_date %}{{ scar.issued_date|date:"Y-m-d" }}{% else %}{{ scar.created_at|date:"Y-m-d" }}{% endif %}`.
+2. **FE-C2**: None-unsafe user FK attribute lookups without `{% if %}` guard (Lesson L10).
+   - `supplier_qualification_audit/detail.html:124` (`audit.lead_auditor`)
+   - `supplier_quality_scorecard/detail.html:214` (`scorecard.evaluated_by`)
+   - `supplier_corrective_action/detail.html:236` (`scar.verified_by`)
+   - `supplier_change_notification/detail.html:210` (`scn.approved_by`)
+   - `supplier_change_notification/detail.html:279` (`scn.evaluated_by`)
+   - Fix: Wrap each with `{% if fk %}...{% else %}Not Assigned{% endif %}`.
+
+### Important
+1. **FE-I1**: Undefined badge class `badge-purple` in `supplier_change_notification/detail.html:184` (Lesson L33).
+   - Fix: Replace with `badge-info`.
+2. **FE-I2**: Non-existent CSS class `text-2xs` in `supplier_corrective_action/{list,detail}.html` and `supplier_change_notification/list.html`.
+   - Fix: Replace with `text-xs`.
+
+### Minor
+1. **FE-M1**: Unsurfaced filter options in SCAR and SCN list filter bars (corroborates CR-M2 and EXP-M2).
+
 
