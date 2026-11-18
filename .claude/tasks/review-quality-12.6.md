@@ -93,7 +93,7 @@
     - `apps/quality/views/SupplierQuality/SupplierChangeNotifications.py:12`
   - **Fix**: Remove unused import statements.
 
-- [ ] **M4**: Non-standard `text-2xs` utility class in templates.
+- [x] **M4**: Non-standard `text-2xs` utility class in templates.
   - **Locations**:
     - `templates/quality/supplierquality/supplier_corrective_action/list.html:144, 153`
     - `templates/quality/supplierquality/supplier_corrective_action/detail.html:57`
