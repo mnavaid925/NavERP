@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plan.number }} — Incoming Inspection Plan — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:incoming_inspection_plan_list' %}" class="hover:underline">Incoming Quality Control</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ plan.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="clipboard-list" class="w-6 h-6 text-blue-600"></i>
+          {{ plan.number }} — {{ plan.title }}
+        </h1>
+        <span class="badge {{ plan.status_css }} text-sm">{{ plan.get_status_display }}</span>
+        <span class="badge {{ plan.frequency_css }} text-sm">{{ plan.get_inspection_frequency_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Part: <span class="font-mono font-medium text-slate-700">{{ plan.item_code }}</span> ({{ plan.item_name }}) · Rev {{ plan.revision }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:incoming_inspection_plan_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <a href="{% url 'quality:incoming_inspection_plan_edit' plan.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Plan
+      </a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <form method="post" action="{% url 'quality:incoming_inspection_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete inspection plan {{ plan.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="shield-alert" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Critical Defect AQL</div>
+        <div class="text-xl font-bold text-red-600 font-mono">{{ plan.aql_critical }}%</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Major Defect AQL</div>
+        <div class="text-xl font-bold text-amber-600 font-mono">{{ plan.aql_major }}%</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon slate p-3 rounded-lg bg-slate-50 text-slate-600">
+        <i data-lucide="info" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Minor Defect AQL</div>
+        <div class="text-xl font-bold text-slate-800 font-mono">{{ plan.aql_minor }}%</div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="file-check-2" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Certificate Requirements</div>
+        <div class="text-sm font-bold text-slate-800">
+          CoA: {% if plan.requires_coa %}<span class="text-green-600 font-semibold">Mandatory</span>{% else %}<span class="text-slate-400">Optional</span>{% endif %}
+          · CoC: {% if plan.requires_coc %}<span class="text-green-600 font-semibold">Yes</span>{% else %}<span class="text-slate-400">No</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plan Specifications & Configuration -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <i data-lucide="sliders" class="w-5 h-5 text-slate-600"></i>
+        Sampling & Inspection Settings
+      </h2>
+      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Sampling Standard</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">{{ plan.get_sampling_standard_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Inspection Level</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">{{ plan.get_inspection_level_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Inspection Severity</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">{{ plan.get_inspection_severity_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Inspection Frequency</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {{ plan.get_inspection_frequency_display }}
+            {% if plan.inspection_frequency == "skip_lot" %}
+              <span class="text-xs text-slate-500">(Every {{ plan.skip_lot_interval }} lots)</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Target Supplier</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if plan.supplier %}{{ plan.supplier.name }}{% else %}<span class="text-slate-400 italic">Universal Plan (All Suppliers)</span>{% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Assigned Inspection Team</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if plan.assigned_team %}{{ plan.assigned_team.name }}{% else %}<span class="text-slate-400">—</span>{% endif %}
+          </dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs font-medium text-slate-400">Governing SOP / Drawing Document</dt>
+          <dd class="text-slate-800 font-medium mt-0.5">
+            {% if plan.sop_document %}
+              <a href="{% url 'quality:controlled_document_detail' plan.sop_document.pk %}" class="text-blue-600 hover:underline flex items-center gap-1">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+                {{ plan.sop_document.document_number }} — {{ plan.sop_document.title }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">—</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Metadata & Notes -->
+    <div class="card p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <i data-lucide="info" class="w-5 h-5 text-slate-600"></i>
+        Plan Metadata & Instructions
+      </h2>
+      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm mb-4">
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Created At</dt>
+          <dd class="text-slate-800 mt-0.5">{{ plan.created_at|date:"M d, Y H:i" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium text-slate-400">Last Revised</dt>
+          <dd class="text-slate-800 mt-0.5">{{ plan.updated_at|date:"M d, Y H:i" }}</dd>
+        </div>
+      </dl>
+      <div>
+        <dt class="text-xs font-medium text-slate-400">Inspection Instructions & Notes</dt>
+        <dd class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 min-h-[5rem] whitespace-pre-wrap">
+          {% if plan.notes %}{{ plan.notes }}{% else %}<span class="text-slate-400 italic">No special instructions recorded.</span>{% endif %}
+        </dd>
+      </div>
+    </div>
+  </div>
+
+  <!-- Critical-to-Quality (CTQ) Characteristics Matrix -->
+  <div class="card">
+    <div class="card-header px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div>
+        <h2 class="font-semibold text-slate-900 text-base flex items-center gap-2">
+          <i data-lucide="ruler" class="w-5 h-5 text-blue-600"></i>
+          Critical-to-Quality (CTQ) Characteristics Matrix
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">Parameters verified during receiving inspection for statistical process control.</p>
+      </div>
+    </div>
+    {% if plan.characteristics_matrix %}
+      <div class="table-wrap overflow-x-auto">
+        <table class="table w-full text-left text-sm text-slate-600">
+          <thead class="bg-slate-50 text-slate-700 text-xs uppercase font-semibold border-b border-slate-200">
+            <tr>
+              <th class="px-6 py-3">#</th>
+              <th class="px-6 py-3">Characteristic Name</th>
+              <th class="px-6 py-3">Type</th>
+              <th class="px-6 py-3">Target Spec</th>
+              <th class="px-6 py-3">Tolerance Limits (LSL - USL)</th>
+              <th class="px-6 py-3">Unit</th>
+              <th class="px-6 py-3">Test Method / Instrument</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            {% for item in plan.characteristics_matrix %}
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-3 font-mono text-xs text-slate-400">{{ forloop.counter }}</td>
+                <td class="px-6 py-3 font-semibold text-slate-900">{{ item.name|default:"—" }}</td>
+                <td class="px-6 py-3 whitespace-nowrap">
+                  {% if item.type == "variable" %}
+                    <span class="badge badge-info text-xs">Variable (SPC)</span>
+                  {% else %}
+                    <span class="badge badge-slate text-xs">Attribute (Pass/Fail)</span>
+                  {% endif %}
+                </td>
+                <td class="px-6 py-3 font-mono text-sm text-slate-800">{{ item.target|default:"—" }}</td>
+                <td class="px-6 py-3 font-mono text-sm text-slate-800">
+                  {% if item.lsl is not None or item.usl is not None %}
+                    {{ item.lsl|default:"-∞" }} to {{ item.usl|default:"+∞" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td class="px-6 py-3 text-slate-600">{{ item.unit|default:"—" }}</td>
+                <td class="px-6 py-3 text-slate-600">{{ item.test_method|default:"Calipers / Gauge" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-slate-400">
+        <i data-lucide="list-x" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
+        <p class="text-sm">No individual CTQ parameters mapped in the matrix. General visual and dimensional inspection protocols apply.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
