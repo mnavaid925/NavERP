@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Process Deviation {{ process_deviation.number }} | Quality Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>Quality Management</span>
+            <span>/</span>
+            <a href="{% url 'quality:process_deviation_list' %}">Deviations</a>
+            <span>/</span>
+            <span>{{ process_deviation.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ process_deviation.number }}</h1>
+            <span class="badge {{ process_deviation.status_badge }}">{{ process_deviation.get_status_display }}</span>
+            <span class="badge {{ process_deviation.deviation_type_badge }}">{{ process_deviation.get_deviation_type_display }}</span>
+            <span class="badge {{ process_deviation.risk_impact_badge }}">{{ process_deviation.get_risk_impact_level_display }}</span>
+        </div>
+        <div class="text-sm text-slate-500 mt-1">{{ process_deviation.title }}</div>
+    </div>
+    <div class="page-actions">
+        {% if process_deviation.ncr %}
+        <a href="{% url 'quality:non_conformance_report_detail' process_deviation.ncr.pk %}" class="btn btn-outline">
+            <i data-lucide="file-text"></i> View Linked NCR
+        </a>
+        {% endif %}
+        <a href="{% url 'quality:process_deviation_edit' process_deviation.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Deviation
+        </a>
+        <form method="post" action="{% url 'quality:process_deviation_delete' process_deviation.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this Process Deviation?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Deviation Scope & Impact Assessment -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Deviation Protocol & Impact Evaluation</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Deviation ID</dt>
+                        <dd class="font-mono font-medium text-slate-800">{{ process_deviation.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Deviation Type</dt>
+                        <dd>
+                            <span class="badge {{ process_deviation.deviation_type_badge }}">{{ process_deviation.get_deviation_type_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Category</dt>
+                        <dd>
+                            <span class="badge {{ process_deviation.category_badge }}">{{ process_deviation.get_category_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Risk Impact Level</dt>
+                        <dd>
+                            <span class="badge {{ process_deviation.risk_impact_badge }}">{{ process_deviation.get_risk_impact_level_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Department</dt>
+                        <dd>{{ process_deviation.department.name|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Requested By</dt>
+                        <dd>{{ process_deviation.requested_by.get_full_name|default:process_deviation.requested_by.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Approved By</dt>
+                        <dd>{{ process_deviation.approved_by.get_full_name|default:process_deviation.approved_by.username|default:"Pending Approval" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Associated Document</dt>
+                        <dd>{{ process_deviation.controlled_document.title|default:"None" }}</dd>
+                    </div>
+                </dl>
+
+                <div class="mt-6 border-t border-slate-100 pt-4">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-2">Quality & Product Safety Impact Assessment</h3>
+                    <div class="text-sm text-slate-600 whitespace-pre-line bg-slate-50 p-4 rounded-md border border-slate-200">
+                        {{ process_deviation.quality_impact_assessment }}
+                    </div>
+                </div>
+
+                {% if process_deviation.affected_lots_summary %}
+                <div class="mt-4 border-t border-slate-100 pt-4">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-2">Impacted Batches & Production Runs</h3>
+                    <div class="text-sm text-slate-600 whitespace-pre-line bg-slate-50 p-4 rounded-md border border-slate-200">
+                        {{ process_deviation.affected_lots_summary }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Compliance & Customer/Regulatory Notifications -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Stakeholder & Regulatory Notification Flags</h2>
+            </div>
+            <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                    <div class="text-xs font-semibold uppercase text-slate-500">Customer Concession</div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-sm text-slate-700">Notification Required:</span>
+                        {% if process_deviation.customer_notification_required %}
+                        <span class="badge badge-amber">Required</span>
+                        {% else %}
+                        <span class="badge badge-slate">No</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-200">
+                        <span class="text-sm text-slate-700">Concession Obtained:</span>
+                        {% if process_deviation.customer_concession_obtained %}
+                        <span class="badge badge-green">Obtained</span>
+                        {% else %}
+                        <span class="badge badge-slate">Pending / None</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                    <div class="text-xs font-semibold uppercase text-slate-500">Regulatory Reporting</div>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-sm text-slate-700">Reporting Required:</span>
+                        {% if process_deviation.regulatory_reporting_required %}
+                        <span class="badge badge-red">Required</span>
+                        {% else %}
+                        <span class="badge badge-slate">No</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-200">
+                        <span class="text-sm text-slate-700">Authority Notified:</span>
+                        {% if process_deviation.regulatory_authority_notified %}
+                        <span class="badge badge-green">Notified</span>
+                        {% else %}
+                        <span class="badge badge-slate">Pending / None</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Side: Validity & Limits -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Validity & Batch Quotas</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-500 font-medium uppercase">Batches Produced Under Deviation</div>
+                    <div class="text-3xl font-bold text-slate-900 mt-1">
+                        {{ process_deviation.batches_produced_count }} <span class="text-base font-normal text-slate-500">/ {{ process_deviation.max_batches_permitted }} limit</span>
+                    </div>
+                </div>
+
+                <div class="space-y-2 border-t border-slate-100 pt-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Effective Date:</span>
+                        <span class="font-medium text-slate-800">{{ process_deviation.valid_from|default:"Immediate" }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-500">Expiration Date:</span>
+                        <div class="text-right">
+                            <span class="font-medium text-slate-800">{{ process_deviation.valid_until|default:"Indefinite" }}</span>
+                            {% if process_deviation.is_expired %}
+                            <span class="badge badge-red ml-1">Expired</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if process_deviation.ncr %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Associated Non-Conformance</h2>
+            </div>
+            <div class="card-body space-y-2">
+                <div class="text-xs text-slate-500 font-medium uppercase">NCR Record</div>
+                <a href="{% url 'quality:non_conformance_report_detail' process_deviation.ncr.pk %}" class="text-base font-bold text-blue-600 hover:underline block">
+                    {{ process_deviation.ncr.number }}
+                </a>
+                <div class="text-sm font-medium text-slate-800">{{ process_deviation.ncr.title }}</div>
+                <div class="flex items-center gap-2 mt-2">
+                    <span class="badge {{ process_deviation.ncr.severity_badge }}">{{ process_deviation.ncr.get_severity_display }}</span>
+                    <span class="badge {{ process_deviation.ncr.status_badge }}">{{ process_deviation.ncr.get_status_display }}</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
