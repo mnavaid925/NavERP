@@ -35,12 +35,14 @@
         <a href="{% url 'quality:non_conformance_report_edit' non_conformance_report.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i> Edit
         </a>
+        {% if not non_conformance_report.is_closed %}
         <form method="post" action="{% url 'quality:non_conformance_report_delete' non_conformance_report.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this Non-Conformance Report?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
                 <i data-lucide="trash-2"></i> Delete
             </button>
         </form>
+        {% endif %}
     </div>
 </div>
 
