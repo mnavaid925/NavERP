@@ -839,8 +839,8 @@ def audit_a(db, tenant_a, supplier_party_a, admin_user, doc_a):
         requires_coa=True,
         lead_auditor=admin_user,
         quality_agreement=doc_a,
-        scope_of_authorization="Surgical cannulas, medical catheter components",
-        findings_summary="Compliant facility. ISO 13485 cleanroom certified.",
+        scope_commodities="Surgical cannulas, medical catheter components",
+        notes="Compliant facility. ISO 13485 cleanroom certified.",
     )
 
 
@@ -857,7 +857,7 @@ def audit_b(db, tenant_b, supplier_party_b, admin_b):
         score=78.00,
         dock_to_stock_eligible=False,
         lead_auditor=admin_b,
-        scope_of_authorization="Industrial seals",
+        scope_commodities="Industrial seals",
     )
 
 
@@ -876,12 +876,10 @@ def scorecard_a(db, tenant_a, supplier_party_a, admin_user):
         audit_compliance_score=95.00,
         documentation_coa_score=98.00,
         total_lots_received=120,
-        lots_accepted=118,
         lots_rejected=2,
-        total_units_received=50000,
-        defective_units_count=12,
+        total_scars_issued=1,
         evaluated_by=admin_user,
-        executive_summary="Solid Q3 quality performance.",
+        evaluation_notes="Solid Q3 quality performance.",
     )
 
 
@@ -909,11 +907,10 @@ def scar_a(db, tenant_a, supplier_party_a, admin_user, audit_a, ncr_a):
         tenant=tenant_a,
         supplier=supplier_party_a,
         title="Excess Micro-Burrs on Delivery Lot CAN-TIP-004",
-        problem_description="Tip burrs exceeding 0.05mm limit discovered during optical comparator check.",
+        defect_summary="Tip burrs exceeding 0.05mm limit discovered during optical comparator check.",
         severity="major",
         status="containment_acknowledged",
-        containment_required=True,
-        containment_actions="Immediate quarantine of remaining 925 units in warehouse.",
+        containment_action="Immediate quarantine of remaining 925 units in warehouse.",
         issued_date=timezone.now().date(),
         response_due_date=timezone.now().date() + timedelta(days=14),
         issued_by=admin_user,
@@ -929,7 +926,7 @@ def scar_b(db, tenant_b, supplier_party_b, admin_b, audit_b, ncr_b):
         tenant=tenant_b,
         supplier=supplier_party_b,
         title="Globex Seal Defect SCAR",
-        problem_description="Cracked seals delivered.",
+        defect_summary="Cracked seals delivered.",
         severity="critical",
         status="issued",
         issued_date=timezone.now().date(),
@@ -945,7 +942,7 @@ def scn_a(db, tenant_a, supplier_party_a, admin_user, audit_a):
         tenant=tenant_a,
         supplier=supplier_party_a,
         title="Ultrasonic Bath Frequency Upgrade from 40kHz to 68kHz",
-        change_category="process",
+        change_category="manufacturing_process",
         risk_level="level_2_moderate",
         status="technical_evaluation",
         description="Supplier is changing ultrasonic cleaning frequency to improve surface finish.",
@@ -963,7 +960,7 @@ def scn_b(db, tenant_b, supplier_party_b, admin_b, audit_b):
         tenant=tenant_b,
         supplier=supplier_party_b,
         title="Globex Vendor Tooling Relocation",
-        change_category="tooling",
+        change_category="tooling_equipment",
         risk_level="level_3_major",
         status="submitted",
         description="Vendor moving molding tool to new plant.",
