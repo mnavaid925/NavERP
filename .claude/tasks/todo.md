@@ -233,7 +233,7 @@
   - [ ] Run `manage.py check` (0 issues)
 - [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
 - [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.8.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings
+- [x] **Step 6: Code Fixer** -> burn down findings (All 20 findings C1-C3, I1-I10, M1-M7 fixed; **Gaps**: None)
 - [ ] **Step 7: Automated Tests** -> `test_inprocessquality_models.py`, `test_inprocessquality_forms.py`, `test_inprocessquality_views.py`, `test_inprocessquality_security.py` -> 100% green
 - [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
 - [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.8.md`
@@ -517,7 +517,7 @@
   - [ ] Run `manage.py check`
 - [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all endpoints 200/302, 0 500s, 0 comment leaks, 100% IDOR 404s)
 - [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.7.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings
+- [x] **Step 6: Code Fixer** -> burn down findings (All 20 findings C1-C3, I1-I10, M1-M7 fixed; **Gaps**: None)
 - [ ] **Step 7: Automated Tests** -> `test_incomingquality_models.py`, `test_incomingquality_forms.py`, `test_incomingquality_views.py`, `test_incomingquality_security.py` -> 100% green
 - [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
 - [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.7.md`
@@ -1044,7 +1044,7 @@
   - [ ] Run `manage.py check`
 - [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification)
 - [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.5.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings
+- [x] **Step 6: Code Fixer** -> burn down findings (All 20 findings C1-C3, I1-I10, M1-M7 fixed; **Gaps**: None)
 - [ ] **Step 7: Automated Tests** -> `test_nonconformance_models.py`, `test_nonconformance_forms.py`, `test_nonconformance_views.py`, `test_nonconformance_security.py` -> 100% green
 - [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
 - [ ] **Step 9: Close-out & Gaps Declarations**
