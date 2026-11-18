@@ -142,6 +142,12 @@ def non_conformance_report_create(request):
 def non_conformance_report_edit(request, pk):
     ncr = quality_object(request, NonConformanceReport, pk=pk)
 
+    if ncr.is_closed:
+        user = request.user
+        if not (user.is_superuser or getattr(user, "is_tenant_admin", False)):
+            messages.error(request, "Only tenant administrators can modify closed or voided Non-Conformance Reports.")
+            return redirect("quality:non_conformance_report_detail", pk=ncr.pk)
+
     if request.method == "POST":
         form = NonConformanceReportForm(request.POST, instance=ncr, tenant=request.tenant)
         if form.is_valid():
