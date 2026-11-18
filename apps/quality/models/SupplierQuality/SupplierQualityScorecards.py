@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.quality.models._base import TenantNumbered
 
@@ -168,6 +169,18 @@ class SupplierQualityScorecard(TenantNumbered):
     @property
     def grade_css(self):
         return self.GRADE_CSS.get(self.grade, "badge-slate")
+
+    @property
+    def is_expired(self):
+        if self.period_end:
+            return self.period_end < timezone.now().date()
+        return False
+
+    @property
+    def is_action_required(self):
+        return self.grade in ("grade_c", "grade_d") or (
+            self.overall_score is not None and self.overall_score < Decimal("80.00")
+        )
 
     def calculate_composite_score(self):
         lot_score = self.lot_acceptance_rate_score or Decimal("0.00")
