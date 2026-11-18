@@ -12,6 +12,10 @@ from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDo
 from apps.quality.models.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgment
 from apps.quality.models.DocumentControl.DocumentChangeOrders import DocumentChangeOrder
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
+from apps.quality.models.NonConformance.MrbDispositions import MrbDisposition
+from apps.quality.models.NonConformance.NonConformanceReports import NonConformanceReport
+from apps.quality.models.NonConformance.ProcessDeviations import ProcessDeviation
+from apps.quality.models.NonConformance.QuarantineContainments import QuarantineContainment
 from apps.quality.models.RiskManagement.RiskAssessments import RiskAssessment
 from apps.quality.models.RiskManagement.RiskControlMeasures import RiskControlMeasure
 from apps.quality.models.RiskManagement.RiskManagementPlans import RiskManagementPlan
@@ -310,5 +314,81 @@ class CapaEffectivenessReviewAdmin(admin.ModelAdmin):
     list_filter = ("verification_method", "recurrence_observed", "outcome", "status", "tenant")
     search_fields = ("number", "review_criteria", "review_notes", "capa__number", "evaluator__username")
     list_select_related = ("tenant", "capa", "evaluator", "formal_signature")
+
+
+@admin.register(NonConformanceReport)
+class NonConformanceReportAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "source_type",
+        "category",
+        "severity",
+        "status",
+        "defect_code",
+        "affected_item_code",
+        "owner",
+        "tenant",
+    )
+    list_filter = ("source_type", "category", "severity", "status", "tenant")
+    search_fields = ("number", "title", "defect_code", "affected_item_code", "affected_item_name", "lot_serial_numbers", "owner__username")
+    list_select_related = ("tenant", "department", "initiator", "owner", "supplier_party", "capa_investigation")
+
+
+@admin.register(QuarantineContainment)
+class QuarantineContainmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "ncr",
+        "title",
+        "hold_type",
+        "quarantine_location",
+        "red_tag_number",
+        "quantity_on_hold",
+        "status",
+        "tenant",
+    )
+    list_filter = ("hold_type", "status", "tenant")
+    search_fields = ("number", "title", "red_tag_number", "quarantine_location", "ncr__number")
+    list_select_related = ("tenant", "ncr", "hold_applied_by", "released_by")
+
+
+@admin.register(MrbDisposition)
+class MrbDispositionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "ncr",
+        "title",
+        "disposition_decision",
+        "total_cost_impact",
+        "mrb_chair",
+        "reinspection_required",
+        "reinspection_passed",
+        "status",
+        "tenant",
+    )
+    list_filter = ("disposition_decision", "status", "reinspection_required", "reinspection_passed", "tenant")
+    search_fields = ("number", "title", "technical_justification", "ncr__number", "mrb_chair__username")
+    list_select_related = ("tenant", "ncr", "mrb_chair", "rework_assignee", "quality_approved_by")
+
+
+@admin.register(ProcessDeviation)
+class ProcessDeviationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "deviation_type",
+        "category",
+        "risk_impact_level",
+        "valid_until",
+        "max_batches_permitted",
+        "batches_produced_count",
+        "status",
+        "tenant",
+    )
+    list_filter = ("deviation_type", "category", "risk_impact_level", "status", "tenant")
+    search_fields = ("number", "title", "quality_impact_assessment", "affected_lots_summary", "requested_by__username")
+    list_select_related = ("tenant", "ncr", "controlled_document", "department", "requested_by", "approved_by")
+
 
 
