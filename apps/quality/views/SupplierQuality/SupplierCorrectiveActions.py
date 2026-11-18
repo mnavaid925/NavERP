@@ -216,7 +216,6 @@ def supplier_corrective_action_export(request):
             _csv_safe("Yes" if obj.is_effective else ("No" if obj.is_effective is False else "")),
             _csv_safe(obj.closed_at),
         ])
-    write_audit_log(request.user, qs.model, "export", tenant=request.tenant)
     return response
 
 
