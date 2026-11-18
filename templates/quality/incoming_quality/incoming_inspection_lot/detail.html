@@ -199,7 +199,9 @@
           <dt class="text-xs font-medium text-slate-400">Purchase Order</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.purchase_order %}
-              {{ lot.purchase_order.number }}
+              <a href="{% url 'scm:purchaseorder_detail' lot.purchase_order.pk %}" class="text-blue-600 hover:underline">
+                {{ lot.purchase_order.number }}
+              </a>
             {% else %}
               <span class="text-slate-400">—</span>
             {% endif %}
@@ -209,7 +211,9 @@
           <dt class="text-xs font-medium text-slate-400">Goods Receipt Note (GRN)</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if lot.goods_receipt_note %}
-              {{ lot.goods_receipt_note.number }}
+              <a href="{% url 'scm:goodsreceipt_detail' lot.goods_receipt_note.pk %}" class="text-blue-600 hover:underline">
+                {{ lot.goods_receipt_note.number }}
+              </a>
             {% else %}
               <span class="text-slate-400">—</span>
             {% endif %}
