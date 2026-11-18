@@ -5,7 +5,7 @@ from django.apps import apps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Avg, Q
+from django.db.models import Avg, Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -58,12 +58,16 @@ def layered_process_audit_list(request):
     if current_work_center.isdigit():
         qs = qs.filter(work_center_id=int(current_work_center))
 
-    total_audits_count = LayeredProcessAudit.objects.filter(tenant=request.tenant).count()
-    completed_count = LayeredProcessAudit.objects.filter(tenant=request.tenant, status="completed").count()
-    scheduled_count = LayeredProcessAudit.objects.filter(tenant=request.tenant, status="scheduled").count()
-    avg_compliance = LayeredProcessAudit.objects.filter(tenant=request.tenant, status="completed").aggregate(
-        avg=Avg("compliance_percentage")
-    )["avg"] or Decimal("0.00")
+    stats = LayeredProcessAudit.objects.filter(tenant=request.tenant).aggregate(
+        total_audits_count=Count("id"),
+        completed_count=Count("id", filter=Q(status="completed")),
+        scheduled_count=Count("id", filter=Q(status="scheduled")),
+        avg_compliance=Avg("compliance_percentage", filter=Q(status="completed")),
+    )
+    total_audits_count = stats["total_audits_count"] or 0
+    completed_count = stats["completed_count"] or 0
+    scheduled_count = stats["scheduled_count"] or 0
+    avg_compliance = stats["avg_compliance"] or Decimal("0.00")
     avg_compliance_rate = round(avg_compliance, 1)
 
     paginator = Paginator(qs, PAGE_SIZE)
