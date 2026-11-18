@@ -496,37 +496,37 @@
 
 ## Execution Steps
 
-- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.7.md`)
-- [ ] **Step 2: Build Entity by Entity**
-  - [ ] Entity 1: `IncomingInspectionPlan` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 2: `IncomingInspectionLot` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus usage decision action modal/view)
-  - [ ] Entity 3: `CertificateOfAnalysis` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus verification action)
-  - [ ] Entity 4: `QualityReturnAuthorization` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus status update action)
-  - [ ] Dedicated Analytics View: `IqcSpcDashboard.py` + `templates/quality/incoming_quality/spc_dashboard.html`
-- [ ] **Step 3: Integrate**
-  - [ ] Update `apps/quality/models/__init__.py` re-exports (`IncomingInspectionPlan`, `IncomingInspectionLot`, `CertificateOfAnalysis`, `QualityReturnAuthorization`)
-  - [ ] Update `apps/quality/forms/__init__.py` re-exports (`IncomingInspectionPlanForm`, `IncomingInspectionLotForm`, `IncomingInspectionLotDecisionForm`, `CertificateOfAnalysisForm`, `CertificateOfAnalysisVerifyForm`, `QualityReturnAuthorizationForm`, `QualityReturnAuthorizationStatusForm`)
-  - [ ] Update `apps/quality/views/__init__.py` re-exports
-  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
-  - [ ] Register 4 models in `apps/quality/admin.py`
-  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data
-  - [ ] Wire `LIVE_LINKS["12.7"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration `0013_...`
-  - [ ] Run `migrate quality`
-  - [ ] Run `seed_quality` twice (verify idempotency)
-  - [ ] Run `manage.py check`
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all endpoints 200/302, 0 500s, 0 comment leaks, 100% IDOR 404s)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.7.md`
+- [x] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.7.md`)
+- [x] **Step 2: Build Entity by Entity**
+  - [x] Entity 1: `IncomingInspectionPlan` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 2: `IncomingInspectionLot` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus usage decision action modal/view)
+  - [x] Entity 3: `CertificateOfAnalysis` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus verification action)
+  - [x] Entity 4: `QualityReturnAuthorization` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`, plus status update action)
+  - [x] Dedicated Analytics View: `IqcSpcDashboard.py` + `templates/quality/incoming_quality/spc_dashboard.html`
+- [x] **Step 3: Integrate**
+  - [x] Update `apps/quality/models/__init__.py` re-exports (`IncomingInspectionPlan`, `IncomingInspectionLot`, `CertificateOfAnalysis`, `QualityReturnAuthorization`)
+  - [x] Update `apps/quality/forms/__init__.py` re-exports (`IncomingInspectionPlanForm`, `IncomingInspectionLotForm`, `IncomingInspectionLotDecisionForm`, `CertificateOfAnalysisForm`, `CertificateOfAnalysisVerifyForm`, `QualityReturnAuthorizationForm`, `QualityReturnAuthorizationStatusForm`)
+  - [x] Update `apps/quality/views/__init__.py` re-exports
+  - [x] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [x] Register 4 models in `apps/quality/admin.py`
+  - [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data
+  - [x] Wire `LIVE_LINKS["12.7"]` in `apps/core/navigation.py`
+  - [x] Run `makemigrations quality` -> incremental migration `0013_...`
+  - [x] Run `migrate quality`
+  - [x] Run `seed_quality` twice (verify idempotency)
+  - [x] Run `manage.py check`
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all endpoints 200/302, 0 500s, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.7.md`
 - [x] **Step 6: Code Fixer** -> burn down findings (All 20 findings C1-C3, I1-I10, M1-M7 fixed; **Gaps**: None)
-- [ ] **Step 7: Automated Tests** -> `test_incomingquality_models.py`, `test_incomingquality_forms.py`, `test_incomingquality_views.py`, `test_incomingquality_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.7.md`
+- [x] **Step 7: Automated Tests** -> `test_incomingquality_models.py`, `test_incomingquality_forms.py`, `test_incomingquality_views.py`, `test_incomingquality_security.py` -> 100% green (186/186 new tests, 1,462/1,462 full suite)
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.7.md`
 
 ---
 
 ## Wire-up Details
 
-- [ ] `apps/core/navigation.py`:
+- [x] `apps/core/navigation.py`:
   - `LIVE_LINKS["12.7"]`:
     - `"Inspection Planning & Sampling"`: `"quality:incoming_inspection_plan_list"`
     - `"Goods Receipt & Inspection Execution"`: `"quality:incoming_inspection_lot_list"`
@@ -538,19 +538,19 @@
 
 ## Templates Layout (`templates/quality/incoming_quality/`)
 
-- [ ] `incoming_inspection_plan/list.html`: Inspection plan register, AQL settings, sampling standard badges, filter bar, export CSV
-- [ ] `incoming_inspection_plan/detail.html`: Plan metadata, AQL parameters, characteristic specification matrix, linked drawings
-- [ ] `incoming_inspection_plan/form.html`: Crisp form with sampling standard, inspection levels, AQL decimal inputs, tenant FK selectors
-- [ ] `incoming_inspection_lot/list.html`: Inspection lots table, usage decision badge, defect count chips, status filters, export CSV
-- [ ] `incoming_inspection_lot/detail.html`: Lot profile, defect tally, CTQ readings summary, $C_p$/$C_{pk}$ indicators, usage decision actions
-- [ ] `incoming_inspection_lot/form.html`: Lot creation form, receipt linkage, sample size computation, tenant FK selectors
-- [ ] `certificate_of_analysis/list.html`: CoA register, compliance status badge, accredited lab indicator, variance count
-- [ ] `certificate_of_analysis/detail.html`: Certificate header, test parameter specification comparison table with out-of-spec highlighting, verification workflow
-- [ ] `certificate_of_analysis/form.html`: CoA intake form, supplier reference, date of manufacture/expiry, parameter JSON matrix
-- [ ] `quality_return_authorization/list.html`: RMA register, return reason, disposition type badge, carrier tracking, settlement status
-- [ ] `quality_return_authorization/detail.html`: RMA dossier, rejection documentation, outbound shipping logistics, debit memo & financial closure
-- [ ] `quality_return_authorization/form.html`: RMA generation form, defect classification, commercial disposition, carrier details
-- [ ] `spc_dashboard.html`: IQC Statistical Process Control analytics dashboard with capability trends, out-of-control alerts, and supplier quality metrics
+- [x] `incoming_inspection_plan/list.html`: Inspection plan register, AQL settings, sampling standard badges, filter bar, export CSV
+- [x] `incoming_inspection_plan/detail.html`: Plan metadata, AQL parameters, characteristic specification matrix, linked drawings
+- [x] `incoming_inspection_plan/form.html`: Crisp form with sampling standard, inspection levels, AQL decimal inputs, tenant FK selectors
+- [x] `incoming_inspection_lot/list.html`: Inspection lots table, usage decision badge, defect count chips, status filters, export CSV
+- [x] `incoming_inspection_lot/detail.html`: Lot profile, defect tally, CTQ readings summary, $C_p$/$C_{pk}$ indicators, usage decision actions
+- [x] `incoming_inspection_lot/form.html`: Lot creation form, receipt linkage, sample size computation, tenant FK selectors
+- [x] `certificate_of_analysis/list.html`: CoA register, compliance status badge, accredited lab indicator, variance count
+- [x] `certificate_of_analysis/detail.html`: Certificate header, test parameter specification comparison table with out-of-spec highlighting, verification workflow
+- [x] `certificate_of_analysis/form.html`: CoA intake form, supplier reference, date of manufacture/expiry, parameter JSON matrix
+- [x] `quality_return_authorization/list.html`: RMA register, return reason, disposition type badge, carrier tracking, settlement status
+- [x] `quality_return_authorization/detail.html`: RMA dossier, rejection documentation, outbound shipping logistics, debit memo & financial closure
+- [x] `quality_return_authorization/form.html`: RMA generation form, defect classification, commercial disposition, carrier details
+- [x] `spc_dashboard.html`: IQC Statistical Process Control analytics dashboard with capability trends, out-of-control alerts, and supplier quality metrics
 
 ---
 
@@ -562,8 +562,17 @@
 
 ---
 
-## Review notes
-(filled in at the end of Sub-module 12.7 build)
+## Review notes — Sub-module 12.7 Close-out (2026-11-18)
+- **Delivered**: Sub-module 12.7 Incoming Quality Control (IQC) completely built, integrated, reviewed, and tested.
+- **Entities**: 4 models built: `IncomingInspectionPlan` (`QIIP-`), `IncomingInspectionLot` (`QIIL-`), `CertificateOfAnalysis` (`QCOA-`), `QualityReturnAuthorization` (`QRMA-`).
+- **Dedicated View**: `iqc_spc_dashboard` (`templates/quality/incoming_quality/spc_dashboard.html`) for Statistical Process Control monitoring.
+- **Wire-ups**: `apps/core/navigation.py` `LIVE_LINKS["12.7"]`, `apps/quality/admin.py`, package `__init__.py` files, and `seed_quality.py`.
+- **Migrations**: `0013_incominginspectionplan_certificateofanalysis_and_more.py` and `0014_...`.
+- **Review passes**: 6 reviewers executed serially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`). All 20 findings (C1-C3, I1-I10, M1-M7) fixed in `.claude/tasks/review-quality-12.7.md`.
+- **Test suite**: 186 dedicated tests (35 models, 57 forms, 75 views, 19 security) across `apps/quality/tests/` 100% green; full unfiltered suite passes (1,462 passed, 0 failed in 238s).
+- **Skill & Documentation**: `.claude/skills/quality/SKILL.md` and `README.md` updated and committed.
+- **Gap Register**: Dedicated register committed at `.agents/tasks/gaps-quality-12.7.md`.
+- **Gaps**: None (all features, findings, and criteria fully satisfied).
 
 ---
 # Sub-module 12.6: Supplier & Vendor Quality Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.6.md` (2026-11-18)
