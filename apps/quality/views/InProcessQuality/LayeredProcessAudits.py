@@ -193,6 +193,7 @@ def layered_process_audit_delete(request, pk):
 
 @login_required
 def layered_process_audit_export_csv(request):
+    write_audit_log(request.user, LayeredProcessAudit(), "export", tenant=request.tenant)
     qs = LayeredProcessAudit.objects.filter(tenant=request.tenant).select_related("work_center").order_by("-scheduled_date")
 
     response = HttpResponse(content_type="text/csv")
