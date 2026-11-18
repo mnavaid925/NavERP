@@ -31,14 +31,14 @@
 </div>
 
 <!-- Key Quality Metrics Cards -->
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+<div class="stat-grid mb-6">
     <div class="stat-card">
         <div class="stat-icon blue">
             <i data-lucide="clipboard-list"></i>
         </div>
         <div>
-            <div class="text-xs text-slate-500 font-medium">Total NCRs</div>
-            <div class="text-xl font-bold text-slate-800">{{ total_ncrs }}</div>
+            <div class="stat-value">{{ total_ncrs }}</div>
+            <div class="stat-label">Total NCRs</div>
         </div>
     </div>
     <div class="stat-card">
@@ -46,8 +46,8 @@
             <i data-lucide="alert-circle"></i>
         </div>
         <div>
-            <div class="text-xs text-slate-500 font-medium">Open NCRs</div>
-            <div class="text-xl font-bold text-slate-800">{{ open_ncrs }}</div>
+            <div class="stat-value">{{ open_ncrs }}</div>
+            <div class="stat-label">Open NCRs</div>
         </div>
     </div>
     <div class="stat-card">
@@ -55,8 +55,8 @@
             <i data-lucide="shield-alert"></i>
         </div>
         <div>
-            <div class="text-xs text-slate-500 font-medium">Active Holds</div>
-            <div class="text-xl font-bold text-red-600">{{ active_quarantines }}</div>
+            <div class="stat-value text-red-600">{{ active_quarantines }}</div>
+            <div class="stat-label">Active Holds</div>
         </div>
     </div>
     <div class="stat-card">
@@ -64,8 +64,8 @@
             <i data-lucide="users"></i>
         </div>
         <div>
-            <div class="text-xs text-slate-500 font-medium">Pending MRBs</div>
-            <div class="text-xl font-bold text-slate-800">{{ pending_mrbs }}</div>
+            <div class="stat-value">{{ pending_mrbs }}</div>
+            <div class="stat-label">Pending MRBs</div>
         </div>
     </div>
     <div class="stat-card">
@@ -73,8 +73,8 @@
             <i data-lucide="trash-2"></i>
         </div>
         <div>
-            <div class="text-xs text-slate-500 font-medium">Scrap Cost YTD</div>
-            <div class="text-xl font-bold text-slate-800">${{ total_scrap_cost }}</div>
+            <div class="stat-value">${{ total_scrap_cost }}</div>
+            <div class="stat-label">Scrap Cost YTD</div>
         </div>
     </div>
     <div class="stat-card">
@@ -82,8 +82,8 @@
             <i data-lucide="wrench"></i>
         </div>
         <div>
-            <div class="text-xs text-slate-500 font-medium">Rework Labor</div>
-            <div class="text-xl font-bold text-slate-800">${{ total_rework_cost }}</div>
+            <div class="stat-value">${{ total_rework_cost }}</div>
+            <div class="stat-label">Rework Labor</div>
         </div>
     </div>
 </div>
