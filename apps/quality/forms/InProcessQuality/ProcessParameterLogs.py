@@ -107,6 +107,18 @@ class ProcessParameterLogForm(TenantUniqueMixin, TenantModelForm):
         if lcl is not None and ucl is not None and lcl > ucl:
             self.add_error("upper_control_limit", "Upper control limit (UCL) cannot be less than lower control limit (LCL).")
 
+        if target is not None:
+            if lsl is not None and target < lsl:
+                self.add_error("target_nominal_value", "Target nominal value cannot be less than lower specification limit (LSL).")
+            if usl is not None and target > usl:
+                self.add_error("target_nominal_value", "Target nominal value cannot be greater than upper specification limit (USL).")
+
+        if lsl is not None and lcl is not None and lcl < lsl:
+            self.add_error("lower_control_limit", "Lower control limit (LCL) cannot be less than lower specification limit (LSL).")
+
+        if usl is not None and ucl is not None and ucl > usl:
+            self.add_error("upper_control_limit", "Upper control limit (UCL) cannot exceed upper specification limit (USL).")
+
         # Auto-detect excursion state if limits exist
         if recorded is not None:
             if (usl is not None and recorded > usl) or (lsl is not None and recorded < lsl):
