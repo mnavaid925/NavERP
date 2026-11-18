@@ -13,6 +13,10 @@ from apps.quality.forms.DocumentControl.ControlledDocuments import (
 from apps.quality.forms.DocumentControl.DocumentAcknowledgments import DocumentAcknowledgmentForm
 from apps.quality.forms.DocumentControl.DocumentChangeOrders import DocumentChangeOrderForm
 from apps.quality.forms.DocumentControl.ElectronicSignatures import ElectronicSignatureForm
+from apps.quality.forms.NonConformance.MrbDispositions import MrbDispositionForm
+from apps.quality.forms.NonConformance.NonConformanceReports import NonConformanceReportForm
+from apps.quality.forms.NonConformance.ProcessDeviations import ProcessDeviationForm
+from apps.quality.forms.NonConformance.QuarantineContainments import QuarantineContainmentForm
 from apps.quality.forms.RiskManagement.RiskAssessments import RiskAssessmentForm
 from apps.quality.forms.RiskManagement.RiskControlMeasures import RiskControlMeasureForm
 from apps.quality.forms.RiskManagement.RiskManagementPlans import RiskManagementPlanForm
@@ -36,5 +40,9 @@ __all__ = [
     "RootCauseAnalysisForm",
     "CapaActionForm",
     "CapaEffectivenessReviewForm",
+    "NonConformanceReportForm",
+    "QuarantineContainmentForm",
+    "MrbDispositionForm",
+    "ProcessDeviationForm",
 ]
 
