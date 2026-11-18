@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scar.number }} — Supplier Corrective Action (SCAR) — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'quality:quality_overview' %}" class="hover:underline">Quality</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:supplier_corrective_action_list' %}" class="hover:underline">Supplier Quality</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{{ scar.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600"></i>
+          {{ scar.number }} — {{ scar.title }}
+        </h1>
+        <span class="badge {{ scar.severity_css }} text-sm">{{ scar.get_severity_display }}</span>
+        <span class="badge {{ scar.status_css }} text-sm">{{ scar.get_status_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Issued to <strong class="text-slate-800">{{ scar.supplier.name }}</strong> on {{ scar.issued_date|date:"Y-m-d"|default:scar.created_at|date:"Y-m-d" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:supplier_corrective_action_list' %}" class="btn btn-outline text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+      </a>
+      <a href="{% url 'quality:supplier_corrective_action_edit' scar.pk %}" class="btn btn-outline text-sm">
+        <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+      </a>
+      <form method="post" action="{% url 'quality:supplier_corrective_action_delete' scar.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete SCAR {{ scar.number|escapejs }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon red p-3 rounded-lg bg-red-50 text-red-600">
+        <i data-lucide="clock" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Response Due Date</div>
+        <div class="text-lg font-bold {% if scar.is_overdue %}text-red-600{% else %}text-slate-900{% endif %}">
+          {{ scar.response_due_date|date:"Y-m-d"|default:"Not Set" }}
+          {% if scar.is_overdue %}<span class="badge badge-red text-2xs ml-1">Overdue</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="shield-alert" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Containment Action</div>
+        <div class="text-lg font-bold">
+          {% if scar.containment_verified_at %}
+            <span class="badge badge-green">Verified</span>
+          {% elif scar.containment_action %}
+            <span class="badge badge-amber">Submitted</span>
+          {% else %}
+            <span class="badge badge-red">Pending</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="search" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Root Cause Taxonomy</div>
+        <div class="text-base font-bold text-slate-900">
+          {% if scar.root_cause_category %}
+            <span class="badge {{ scar.category_css }}">{{ scar.get_root_cause_category_display }}</span>
+          {% else %}
+            <span class="text-slate-400">Under Investigation</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="check-circle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500">Effectiveness Status</div>
+        <div class="text-lg font-bold">
+          {% if scar.is_effective is True %}
+            <span class="badge badge-green">Effective</span>
+          {% elif scar.is_effective is False %}
+            <span class="badge badge-red">Failed</span>
+          {% else %}
+            <span class="badge badge-slate">Pending Verification</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main 8D Workflow Content (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- 8D Stage 1 & 2: Defect & Containment -->
+      <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-4">
+          <i data-lucide="file-text" class="w-5 h-5 text-red-600"></i>
+          1. Problem Description & Non-Conformance Summary
+        </h2>
+        <div class="text-sm text-slate-800 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+          {{ scar.defect_summary }}
+        </div>
+
+        <dl class="detail-grid">
+          <div class="detail-item">
+            <dt>Affected Item SKU / Code</dt>
+            <dd class="font-mono font-medium text-slate-900">{{ scar.affected_item_code|default:"Not Specified" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Item Description</dt>
+            <dd>{{ scar.affected_item_name|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Impacted Lots / Batches</dt>
+            <dd class="font-mono">{{ scar.affected_lots|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Originating Non-Conformance</dt>
+            <dd>
+              {% if scar.non_conformance %}
+                <span class="text-blue-600 font-mono">{{ scar.non_conformance.number }}</span>
+              {% else %}
+                <span class="text-slate-400">Direct Entry</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- 8D Stage 3: Containment -->
+      <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-4">
+          <i data-lucide="shield-check" class="w-5 h-5 text-amber-600"></i>
+          2. Immediate Containment Action (24–48 Hours)
+        </h2>
+        {% if scar.containment_action %}
+          <div class="text-sm text-slate-800 whitespace-pre-line bg-amber-50/50 p-4 rounded-lg border border-amber-200 mb-4">
+            {{ scar.containment_action }}
+          </div>
+          <div class="flex items-center gap-6 text-xs text-slate-600">
+            <div><strong>Due Date:</strong> {{ scar.containment_due_date|date:"Y-m-d"|default:"—" }}</div>
+            <div><strong>Verified At:</strong> {{ scar.containment_verified_at|date:"Y-m-d"|default:"Unverified" }}</div>
+          </div>
+        {% else %}
+          <p class="text-sm text-slate-500 py-3 text-center">No containment action has been submitted by vendor yet.</p>
+        {% endif %}
+      </div>
+
+      <!-- 8D Stage 4: Root Cause Analysis -->
+      <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-4">
+          <i data-lucide="git-branch" class="w-5 h-5 text-blue-600"></i>
+          3. Root Cause Analysis (5 Whys / Ishikawa)
+        </h2>
+        {% if scar.root_cause_summary or scar.vendor_investigation_details %}
+          <div class="mb-4">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Root Cause Category</span>
+            <span class="badge {{ scar.category_css }} text-xs">{{ scar.get_root_cause_category_display }}</span>
+          </div>
+          <div class="text-sm text-slate-800 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+            {{ scar.root_cause_summary }}
+          </div>
+          {% if scar.vendor_investigation_details %}
+            <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Investigation Evidence & Why-Chain</h3>
+            <p class="text-sm text-slate-700 whitespace-pre-line bg-white p-3 rounded border border-slate-200">{{ scar.vendor_investigation_details }}</p>
+          {% endif %}
+        {% else %}
+          <p class="text-sm text-slate-500 py-3 text-center">Root cause analysis has not been submitted by vendor.</p>
+        {% endif %}
+      </div>
+
+      <!-- 8D Stage 5 & 6: CAPA Action Plan -->
+      <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-4">
+          <i data-lucide="check-square" class="w-5 h-5 text-green-600"></i>
+          4. Corrective & Preventive Action Commitments
+        </h2>
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Corrective Action Plan (Eliminate Cause)</h3>
+            <div class="text-sm text-slate-800 whitespace-pre-line bg-slate-50 p-3 rounded border border-slate-200">
+              {{ scar.corrective_action_plan|default:"Pending action plan proposal." }}
+            </div>
+          </div>
+          <div>
+            <h3 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Preventive Action Plan (Systemic Prevention)</h3>
+            <div class="text-sm text-slate-800 whitespace-pre-line bg-slate-50 p-3 rounded border border-slate-200">
+              {{ scar.preventive_action_plan|default:"Pending systemic prevention proposal." }}
+            </div>
+          </div>
+          <div class="flex items-center gap-6 text-xs text-slate-600 pt-2 border-t border-slate-100">
+            <div><strong>Target Implementation:</strong> {{ scar.implementation_due_date|date:"Y-m-d"|default:"—" }}</div>
+            <div><strong>Implemented On:</strong> {{ scar.implemented_at|date:"Y-m-d"|default:"In Progress" }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8D Stage 7 & 8: Verification & Closure -->
+      <div class="card p-6">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2 mb-4">
+          <i data-lucide="award" class="w-5 h-5 text-purple-600"></i>
+          5. Effectiveness Verification & Formal Closure
+        </h2>
+        <dl class="detail-grid mb-4">
+          <div class="detail-item">
+            <dt>Verification Due Date</dt>
+            <dd>{{ scar.effectiveness_due_date|date:"Y-m-d"|default:"Not Scheduled" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Verification Method</dt>
+            <dd>{{ scar.effectiveness_method|default:"Standard sampling" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Verified By</dt>
+            <dd>{{ scar.verified_by.get_full_name|default:scar.verified_by.email|default:"Not Verified" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Closure Date</dt>
+            <dd>{{ scar.closed_at|date:"Y-m-d"|default:"Open" }}</dd>
+          </div>
+        </dl>
+        {% if scar.effectiveness_results %}
+          <div class="text-sm text-slate-800 whitespace-pre-line bg-purple-50/50 p-3 rounded border border-purple-200">
+            {{ scar.effectiveness_results }}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Right Sidebar Controls (1 col) -->
+    <div class="space-y-6">
+      <!-- Status Advance Form -->
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+          Advance SCAR Lifecycle
+        </h3>
+        <form method="post" action="{% url 'quality:supplier_corrective_action_status' scar.pk %}">
+          {% csrf_token %}
+          <div class="form-group mb-3">
+            <label for="scar_status_select" class="form-label text-xs">Lifecycle Status</label>
+            <select name="status" id="scar_status_select" class="form-select text-sm w-full">
+              {% for val, label in scar.STATUS_CHOICES %}
+                <option value="{{ val }}" {% if scar.status == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary text-sm w-full">
+            Update SCAR Status
+          </button>
+        </form>
+      </div>
+
+      <!-- Cross-Module Traceability Links -->
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <i data-lucide="link" class="w-4 h-4 text-purple-600"></i>
+          Traceability & Associated Records
+        </h3>
+        <ul class="divide-y divide-slate-100 text-xs">
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Purchase Order</span>
+            {% if scar.purchase_order %}
+              <span class="font-mono text-blue-600">{{ scar.purchase_order.number }}</span>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </li>
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Non-Conformance</span>
+            {% if scar.non_conformance %}
+              <span class="font-mono text-blue-600">{{ scar.non_conformance.number }}</span>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </li>
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Triggering Audit</span>
+            {% if scar.qualification_audit %}
+              <a href="{% url 'quality:supplier_qualification_audit_detail' scar.qualification_audit.pk %}" class="text-blue-600 hover:underline">
+                {{ scar.qualification_audit.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </li>
+          <li class="py-2 flex items-center justify-between">
+            <span class="text-slate-600">Internal CAPA</span>
+            {% if scar.internal_capa %}
+              <a href="{% url 'quality:capa_investigation_detail' scar.internal_capa.pk %}" class="text-blue-600 hover:underline">
+                {{ scar.internal_capa.number }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">None</span>
+            {% endif %}
+          </li>
+        </ul>
+      </div>
+
+      <!-- Metadata Card -->
+      <div class="card p-4 text-xs text-slate-500 space-y-2">
+        <div class="flex justify-between">
+          <span>Created:</span>
+          <span class="text-slate-700 font-medium">{{ scar.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Last Updated:</span>
+          <span class="text-slate-700 font-medium">{{ scar.updated_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
