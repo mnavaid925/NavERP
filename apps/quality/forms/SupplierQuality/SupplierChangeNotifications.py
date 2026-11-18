@@ -80,7 +80,9 @@ class SupplierChangeNotificationForm(TenantUniqueMixin, TenantModelForm):
             self.fields["requalification_audit"].queryset = SupplierQualificationAudit.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
-            users = User.objects.filter(tenant=self.tenant).order_by("first_name", "last_name", "email")
+            users = User.objects.filter(
+                tenant=self.tenant, is_active=True
+            ).order_by("first_name", "last_name", "email")
             self.fields["evaluated_by"].queryset = users
 
     def clean(self):
