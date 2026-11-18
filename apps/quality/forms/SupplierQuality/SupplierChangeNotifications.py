@@ -92,4 +92,11 @@ class SupplierChangeNotificationForm(TenantUniqueMixin, TenantModelForm):
             cleaned_data,
             ["supplier", "design_project", "requalification_audit", "evaluated_by"],
         )
+        affects_fff = cleaned_data.get("affects_form_fit_function")
+        notes = (cleaned_data.get("impact_assessment_notes") or "").strip()
+        if affects_fff and not notes:
+            self.add_error(
+                "impact_assessment_notes",
+                "Impact assessment notes are mandatory when change affects form, fit, or function.",
+            )
         return cleaned_data
