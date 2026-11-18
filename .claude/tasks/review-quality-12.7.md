@@ -91,30 +91,30 @@
 
 ## Minor Findings
 
-- [ ] `[M1]` **Missing `|escapejs` on `obj.number` in List View Delete Confirmation Dialogs**:
+- [x] `[M1]` **Missing `|escapejs` on `obj.number` in List View Delete Confirmation Dialogs**:
   - **Location**: List templates across all four entities (`list.html`).
   - **Remediation**: Interpolate `{{ obj.number|escapejs }}` in inline `confirm(...)` dialogs.
 
-- [ ] `[M2]` **Missing `aria-label` on Icon-Only Table Action Buttons & Next Status Dropdown**:
+- [x] `[M2]` **Missing `aria-label` on Icon-Only Table Action Buttons & Next Status Dropdown**:
   - **Location**: Table action buttons in list templates and `quality_return_authorization/detail.html:105`.
   - **Remediation**: Add `aria-label` attributes for accessibility.
 
-- [ ] `[M3]` **Hardcoded Fallback `avg_cpk = 1.45` on Empty SPC Dashboard**:
+- [x] `[M3]` **Hardcoded Fallback `avg_cpk = 1.45` on Empty SPC Dashboard**:
   - **Location**: `apps/quality/views/IncomingQuality/IqcSpcDashboard.py:27`
   - **Remediation**: Fallback to `None` and render `|default:"—"`.
 
-- [ ] `[M4]` **Missing Cross-Module Hyperlink to SCM PO and GRN**:
+- [x] `[M4]` **Missing Cross-Module Hyperlink to SCM PO and GRN**:
   - **Location**: `templates/quality/incoming_quality/incoming_inspection_lot/detail.html:202, 212`
   - **Remediation**: Link to `scm:purchaseorder_detail` and `scm:goodsreceipt_detail` when present.
 
-- [ ] `[M5]` **CSV Exports Iterate Queryset Without `.iterator()`**:
+- [x] `[M5]` **CSV Exports Iterate Queryset Without `.iterator()`**:
   - **Location**: `export_csv` views across all four entities.
   - **Remediation**: Use `qs.iterator(chunk_size=1000)` to stream records efficiently.
 
-- [ ] `[M6]` **Unnecessary Join in `iqc_spc_dashboard` Recent Alerts**:
+- [x] `[M6]` **Unnecessary Join in `iqc_spc_dashboard` Recent Alerts**:
   - **Location**: `apps/quality/views/IncomingQuality/IqcSpcDashboard.py:37`
   - **Remediation**: Remove unused `inspection_plan` from `select_related`.
 
-- [ ] `[M7]` **Missing Composite Indexes for SPC Alerts and Ordering**:
+- [x] `[M7]` **Missing Composite Indexes for SPC Alerts and Ordering**:
   - **Location**: `IncomingInspectionLot` models.
   - **Remediation**: Add `models.Index(fields=["tenant", "spc_out_of_control"], name="idx_qiil_ten_spc_alert")` and `models.Index(fields=["tenant", "-created_at"], name="idx_<prefix>_ten_created")`.
