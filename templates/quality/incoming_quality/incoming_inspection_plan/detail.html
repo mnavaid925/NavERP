@@ -96,20 +96,20 @@
         <i data-lucide="sliders" class="w-5 h-5 text-slate-600"></i>
         Sampling & Inspection Settings
       </h2>
-      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-        <div>
+      <dl class="detail-grid">
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Sampling Standard</dt>
           <dd class="text-slate-800 font-medium mt-0.5">{{ plan.get_sampling_standard_display }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Inspection Level</dt>
           <dd class="text-slate-800 font-medium mt-0.5">{{ plan.get_inspection_level_display }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Inspection Severity</dt>
           <dd class="text-slate-800 font-medium mt-0.5">{{ plan.get_inspection_severity_display }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Inspection Frequency</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {{ plan.get_inspection_frequency_display }}
@@ -118,19 +118,19 @@
             {% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Target Supplier</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if plan.supplier %}{{ plan.supplier.name }}{% else %}<span class="text-slate-400 italic">Universal Plan (All Suppliers)</span>{% endif %}
           </dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Assigned Inspection Team</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if plan.assigned_team %}{{ plan.assigned_team.name }}{% else %}<span class="text-slate-400">—</span>{% endif %}
           </dd>
         </div>
-        <div class="col-span-2">
+        <div class="detail-item col-span-2">
           <dt class="text-xs font-medium text-slate-400">Governing SOP / Drawing Document</dt>
           <dd class="text-slate-800 font-medium mt-0.5">
             {% if plan.sop_document %}
@@ -152,21 +152,21 @@
         <i data-lucide="info" class="w-5 h-5 text-slate-600"></i>
         Plan Metadata & Instructions
       </h2>
-      <dl class="grid grid-cols-2 gap-y-4 gap-x-6 text-sm mb-4">
-        <div>
+      <dl class="detail-grid mb-4">
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Created At</dt>
           <dd class="text-slate-800 mt-0.5">{{ plan.created_at|date:"M d, Y H:i" }}</dd>
         </div>
-        <div>
+        <div class="detail-item">
           <dt class="text-xs font-medium text-slate-400">Last Revised</dt>
           <dd class="text-slate-800 mt-0.5">{{ plan.updated_at|date:"M d, Y H:i" }}</dd>
         </div>
       </dl>
       <div>
-        <dt class="text-xs font-medium text-slate-400">Inspection Instructions & Notes</dt>
-        <dd class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 min-h-[5rem] whitespace-pre-wrap">
+        <div class="text-xs font-medium text-slate-400">Inspection Instructions & Notes</div>
+        <div class="text-slate-700 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-200 min-h-[5rem] whitespace-pre-wrap">
           {% if plan.notes %}{{ plan.notes }}{% else %}<span class="text-slate-400 italic">No special instructions recorded.</span>{% endif %}
-        </dd>
+        </div>
       </div>
     </div>
   </div>
