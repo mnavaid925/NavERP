@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if inspection %}Edit {{ inspection.number }}{% else %}New In-Process Inspection{% endif %} — NavERP
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:in_process_inspection_list' %}" class="hover:underline">In-Process Inspections</a>
+        <span class="mx-1">/</span>
+        <span class="text-slate-800 font-medium">{% if inspection %}Edit {{ inspection.number }}{% else %}New Inspection{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="clipboard-check" class="w-6 h-6 text-blue-600"></i>
+        {% if inspection %}Edit {{ inspection.number }} — {{ inspection.title }}{% else %}Log In-Process Quality Inspection{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Record in-line inspection sampling, defect categories, operator verification, and routing context.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% if inspection %}{% url 'quality:in_process_inspection_detail' inspection.pk %}{% else %}{% url 'quality:in_process_inspection_list' %}{% endif %}" class="btn btn-outline text-sm">
+        <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Inspection Identification & Status -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          Inspection Identification & Disposition
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Title *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_type.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Type *</label>
+            {{ form.inspection_type }}
+            {% if form.inspection_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.stage_gate.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Manufacturing Stage-Gate</label>
+            {{ form.stage_gate }}
+            {% if form.stage_gate.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.stage_gate.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.disposition.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Disposition Verdict *</label>
+            {{ form.disposition }}
+            {% if form.disposition.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.disposition.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Workflow Status *</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Production Context & Part Identification -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="factory" class="w-4 h-4 text-blue-600"></i>
+          Production Routing & Item Details
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Part / Item Code</label>
+            {{ form.item_code }}
+            {% if form.item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Part / Item Name</label>
+            {{ form.item_name }}
+            {% if form.item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lot_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Lot / Heat #</label>
+            {{ form.lot_number }}
+            {% if form.lot_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lot_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.serial_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Serial Number</label>
+            {{ form.serial_number }}
+            {% if form.serial_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.serial_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.production_order_number.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Production Order #</label>
+            {{ form.production_order_number }}
+            {% if form.production_order_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.production_order_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_center.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Center</label>
+            {{ form.work_center }}
+            {% if form.work_center.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_center.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_center_code.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Work Center Code</label>
+            {{ form.work_center_code }}
+            {% if form.work_center_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_center_code.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.operation_step.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Operation Step</label>
+            {{ form.operation_step }}
+            {% if form.operation_step.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.operation_step.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Sampling, Defect Tally & Findings -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="check-square" class="w-4 h-4 text-blue-600"></i>
+          Inspection Sampling Quantities & Defects
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+          <div class="form-group">
+            <label for="{{ form.batch_quantity.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Batch Qty *</label>
+            {{ form.batch_quantity }}
+            {% if form.batch_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.batch_quantity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.sample_size_inspected.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Sample Size *</label>
+            {{ form.sample_size_inspected }}
+            {% if form.sample_size_inspected.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sample_size_inspected.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.quantity_passed.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Qty Passed</label>
+            {{ form.quantity_passed }}
+            {% if form.quantity_passed.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.quantity_passed.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.quantity_rejected.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Qty Rejected</label>
+            {{ form.quantity_rejected }}
+            {% if form.quantity_rejected.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.quantity_rejected.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.quantity_reworked.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Qty Reworked</label>
+            {{ form.quantity_reworked }}
+            {% if form.quantity_reworked.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.quantity_reworked.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div class="form-group">
+            <label for="{{ form.defect_category.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Defect Classification</label>
+            {{ form.defect_category }}
+            {% if form.defect_category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.defect_category.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.defect_description.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Defect Analysis & Notes</label>
+            {{ form.defect_description }}
+            {% if form.defect_description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.defect_description.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Work Instructions & Sign-Off -->
+      <div class="space-y-4">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
+          <i data-lucide="file-check" class="w-4 h-4 text-blue-600"></i>
+          Work Instruction Adherence & Quality Escalation
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.controlled_document.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Digital Work Instruction / SOP</label>
+            {{ form.controlled_document }}
+            {% if form.controlled_document.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.controlled_document.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_instruction_step.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Instruction Step</label>
+            {{ form.work_instruction_step }}
+            {% if form.work_instruction_step.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_instruction_step.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.operator.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Machine Operator</label>
+            {{ form.operator }}
+            {% if form.operator.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.operator.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspector.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Quality Inspector</label>
+            {{ form.inspector }}
+            {% if form.inspector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspector.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_date.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Inspection Date</label>
+            {{ form.inspection_date }}
+            {% if form.inspection_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.non_conformance.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">Linked Non-Conformance (NCR)</label>
+            {{ form.non_conformance }}
+            {% if form.non_conformance.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.non_conformance.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2 flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+            {{ form.operator_sign_off }}
+            <label for="{{ form.operator_sign_off.id_for_label }}" class="text-sm font-medium text-slate-700 cursor-pointer">
+              Operator Sign-off Completed: Operator confirms standard work instruction was followed and initial piece verified.
+            </label>
+            {% if form.operator_sign_off.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.operator_sign_off.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-sm font-semibold text-slate-700">General Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if inspection %}{% url 'quality:in_process_inspection_detail' inspection.pk %}{% else %}{% url 'quality:in_process_inspection_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>{% if inspection %}Save Changes{% else %}Log Inspection Run{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
