@@ -226,13 +226,13 @@
           </div>
           <div class="flex items-center gap-1">
             {% if page_obj.has_previous %}
-              <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_disposition %}&disposition={{ current_disposition }}{% endif %}{% if current_type %}&inspection_type={{ current_type }}{% endif %}{% if current_work_center %}&work_center={{ current_work_center }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">
+              <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_disposition %}&disposition={{ current_disposition }}{% endif %}{% if current_type %}&inspection_type={{ current_type }}{% endif %}{% if current_defect %}&defect_category={{ current_defect }}{% endif %}{% if current_work_center %}&work_center={{ current_work_center }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">
                 Previous
               </a>
             {% endif %}
             <span class="px-2 text-slate-600 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-              <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_disposition %}&disposition={{ current_disposition }}{% endif %}{% if current_type %}&inspection_type={{ current_type }}{% endif %}{% if current_work_center %}&work_center={{ current_work_center }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">
+              <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_disposition %}&disposition={{ current_disposition }}{% endif %}{% if current_type %}&inspection_type={{ current_type }}{% endif %}{% if current_defect %}&defect_category={{ current_defect }}{% endif %}{% if current_work_center %}&work_center={{ current_work_center }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">
                 Next
               </a>
             {% endif %}
