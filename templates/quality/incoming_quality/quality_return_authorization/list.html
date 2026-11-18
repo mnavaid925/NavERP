@@ -140,12 +140,14 @@
                     <a href="{% url 'quality:quality_return_authorization_edit' rma.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600" title="Edit RMA">
                       <i data-lucide="pencil" class="w-4 h-4"></i>
                     </a>
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'quality:quality_return_authorization_delete' rma.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete return authorization {{ rma.number }}?');">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600" title="Delete RMA">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                       </button>
                     </form>
+                    {% endif %}
                   </div>
                 </td>
               </tr>
