@@ -64,7 +64,7 @@
   <!-- Key Metrics Row -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
     <div class="card p-4 flex items-center gap-4">
-      <div class="stat-icon {% if coa.is_within_spec %}green{% else %}red{% endif %} p-3 rounded-lg {% if coa.is_within_spec %}bg-green-50 text-green-600{% else %}bg-red-50 text-red-600{% endif %}">
+      <div class="stat-icon {% if coa.is_within_spec %}green{% else %}orange{% endif %} p-3 rounded-lg {% if coa.is_within_spec %}bg-green-50 text-green-600{% else %}bg-amber-50 text-amber-600{% endif %}">
         <i data-lucide="{% if coa.is_within_spec %}check-circle{% else %}alert-octagon{% endif %}" class="w-6 h-6"></i>
       </div>
       <div>
