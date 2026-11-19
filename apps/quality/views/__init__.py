@@ -383,6 +383,53 @@ from apps.quality.views.FinalQuality.QualityReleaseAuthorizations import (
 from apps.quality.views.FinalQuality.OqcHoldBoard import (
     oqc_hold_board,
 )
+from apps.quality.views.AuditManagement.AuditPrograms import (
+    audit_program_approve,
+    audit_program_create,
+    audit_program_delete,
+    audit_program_detail,
+    audit_program_edit,
+    audit_program_export_csv,
+    audit_program_list,
+)
+from apps.quality.views.AuditManagement.QualityAudits import (
+    quality_audit_close,
+    quality_audit_create,
+    quality_audit_delete,
+    quality_audit_detail,
+    quality_audit_edit,
+    quality_audit_export_csv,
+    quality_audit_list,
+    quality_audit_publish_report,
+)
+from apps.quality.views.AuditManagement.AuditFindings import (
+    audit_finding_create,
+    audit_finding_create_capa,
+    audit_finding_delete,
+    audit_finding_detail,
+    audit_finding_edit,
+    audit_finding_export_csv,
+    audit_finding_list,
+    audit_finding_submit_response,
+    audit_finding_verify_close,
+)
+from apps.quality.views.AuditManagement.RegulatoryInspectionHosts import (
+    regulatory_inspection_host_close,
+    regulatory_inspection_host_create,
+    regulatory_inspection_host_delete,
+    regulatory_inspection_host_detail,
+    regulatory_inspection_host_edit,
+    regulatory_inspection_host_export_csv,
+    regulatory_inspection_host_fulfill_request,
+    regulatory_inspection_host_list,
+    regulatory_inspection_host_log_request,
+)
+from apps.quality.views.AuditManagement.AuditActionTracker import (
+    audit_action_tracker,
+)
+from apps.quality.views.AuditManagement.AuditWarRoom import (
+    audit_war_room,
+)
 
 
 __all__ = [
@@ -673,5 +720,40 @@ __all__ = [
     "quality_release_authorization_toggle_hold",
     "quality_release_authorization_export",
     "oqc_hold_board",
+    "audit_program_list",
+    "audit_program_detail",
+    "audit_program_create",
+    "audit_program_edit",
+    "audit_program_delete",
+    "audit_program_approve",
+    "audit_program_export_csv",
+    "quality_audit_list",
+    "quality_audit_detail",
+    "quality_audit_create",
+    "quality_audit_edit",
+    "quality_audit_delete",
+    "quality_audit_publish_report",
+    "quality_audit_close",
+    "quality_audit_export_csv",
+    "audit_finding_list",
+    "audit_finding_detail",
+    "audit_finding_create",
+    "audit_finding_edit",
+    "audit_finding_delete",
+    "audit_finding_submit_response",
+    "audit_finding_verify_close",
+    "audit_finding_create_capa",
+    "audit_finding_export_csv",
+    "regulatory_inspection_host_list",
+    "regulatory_inspection_host_detail",
+    "regulatory_inspection_host_create",
+    "regulatory_inspection_host_edit",
+    "regulatory_inspection_host_delete",
+    "regulatory_inspection_host_close",
+    "regulatory_inspection_host_log_request",
+    "regulatory_inspection_host_fulfill_request",
+    "regulatory_inspection_host_export_csv",
+    "audit_action_tracker",
+    "audit_war_room",
 ]
 
