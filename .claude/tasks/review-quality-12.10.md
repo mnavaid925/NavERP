@@ -70,10 +70,10 @@
   - **Issue**: Model-level constraint missing on ManyToManyField for standards used.
   - **Fix**: Add `limit_choices_to={"is_reference_standard": True}` to `standards_used`. (fixed — a599eddd, a322ade4)
 
-- [ ] **[I11] Raw Unparsed LaTeX Math Delimiters in UI Markup**:
+- [x] **[I11] Raw Unparsed LaTeX Math Delimiters in UI Markup**:
   - **Location**: `templates/quality/calibrationanalysis/measurement_system_analysis/detail.html:100, 140, 240` and `templates/quality/calibrationanalysis/calibration_record/detail.html:101, 113`
   - **Issue**: Unparsed LaTeX math delimiters (`$\sigma$`, `$6\sigma$`, `$TV^2 = GRR^2 + PV^2$`, `$R^2$`, `$U$`) render raw in templates.
-  - **Fix**: Replace with semantic HTML entities (`&sigma;`, `6&sigma;`, `TV&sup2; = GRR&sup2; + PV&sup2;`, `R&sup2;`, `(U, k=2)`).
+  - **Fix**: Replace with semantic HTML entities (`&sigma;`, `6&sigma;`, `TV&sup2; = GRR&sup2; + PV&sup2;`, `R&sup2;`, `(U, k=2)`). (fixed — a061a22a, 187825cb)
 
 ---
 
