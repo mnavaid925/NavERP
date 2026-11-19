@@ -51,9 +51,9 @@
 ## Models (from research — 4)
 
 ### 1. `FinalInspectionLot` (`QFQC-`)
-- [ ] **File**: `apps/quality/models/FinalQuality/FinalInspectionLots.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFQC"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/FinalQuality/FinalInspectionLots.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFQC"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Inspection lot description or batch title")`
   - `inspection_type`: `CharField(max_length=30, choices=INSPECTION_TYPE_CHOICES, default="comprehensive_fqc", db_index=True)` — `"visual_surface"` (14), `"dimensional_metrology"` (21), `"functional_testing"` (18), `"packaging_integrity"` (19), `"comprehensive_fqc"` (17) (longest: 21 <= 30)
   - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"in_inspection"` (13), `"sampling_complete"` (17), `"under_review"` (12), `"completed"` (9), `"cancelled"` (9) (longest: 17 <= 25)
@@ -89,11 +89,11 @@
   - `decision_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="decided_final_inspections", help_text="Quality manager making final lot disposition")`
   - `decision_at`: `DateTimeField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Properties**:
+- [x] **Properties**:
   - `@property total_defects`: `defects_critical + defects_major + defects_minor`
   - `@property all_checklists_passed`: `visual_inspection_passed and dimensional_inspection_passed and functional_testing_passed and packaging_inspection_passed`
-- [ ] **Form Exclusions**: `tenant`, `number`, `decision_at`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `decision_at`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qfqc_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qfqc_ten_status")` (19)
   - `Index(fields=["tenant", "usage_decision"], name="idx_qfqc_ten_decision")` (21)
@@ -104,9 +104,9 @@
   - `Index(fields=["tenant", "-created_at"], name="idx_qfqc_ten_created")` (20)
 
 ### 2. `CertificateOfConformance` (`QCOC-`)
-- [ ] **File**: `apps/quality/models/FinalQuality/CertificatesOfConformance.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCOC"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/FinalQuality/CertificatesOfConformance.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCOC"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `certificate_title`: `CharField(max_length=255, help_text="Certificate title or declaration header")`
   - `certificate_type`: `CharField(max_length=30, choices=CERTIFICATE_TYPE_CHOICES, default="standard_commercial", db_index=True)` — `"standard_commercial"` (19), `"aerospace_as9102"` (16), `"medical_iso13485"` (17), `"automotive_iatf"` (15), `"customer_custom"` (15) (longest: 19 <= 30)
   - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"under_review"` (12), `"certified_issued"` (16), `"revoked_cancelled"` (17) (longest: 17 <= 25)
@@ -133,10 +133,10 @@
   - `signed_at`: `DateTimeField(null=True, blank=True)`
   - `qr_verification_code`: `CharField(max_length=64, blank=True, help_text="Tamper-evident verification token / sha256 hash for customer audit")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Properties**:
+- [x] **Properties**:
   - `@property is_active`: `status == "certified_issued"`
-- [ ] **Form Exclusions**: `tenant`, `number`, `signed_at`, `qr_verification_code`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `signed_at`, `qr_verification_code`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcoc_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qcoc_ten_status")` (19)
   - `Index(fields=["tenant", "certificate_type"], name="idx_qcoc_ten_type")` (17)
@@ -147,9 +147,9 @@
   - `Index(fields=["tenant", "-created_at"], name="idx_qcoc_ten_created")` (20)
 
 ### 3. `PackagingLabelVerification` (`QPKG-`)
-- [ ] **File**: `apps/quality/models/FinalQuality/PackagingLabelVerifications.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QPKG"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/FinalQuality/PackagingLabelVerifications.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QPKG"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Packaging run verification title")`
   - `packaging_type`: `CharField(max_length=30, choices=PACKAGING_TYPE_CHOICES, default="shipping_carton", db_index=True)` — `"individual_unit_box"` (19), `"shipping_carton"` (15), `"pallet_overpack"` (15), `"custom_crate"` (12), `"bulk_container"` (14) (longest: 19 <= 30)
   - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"in_progress"` (11), `"verified_passed"` (15), `"failed_quarantine"` (17), `"waived_deviation"` (16) (longest: 17 <= 25)
@@ -175,10 +175,10 @@
   - `verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_packagings", help_text="Packaging quality technician")`
   - `verified_at`: `DateTimeField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Properties**:
+- [x] **Properties**:
   - `@property all_checks_passed`: `label_data_accuracy_verified and regulatory_markings_verified and serialization_verified and carton_condition_passed and tamper_evident_seal_intact and cushioning_desiccant_verified and (barcode_grade in ("grade_a", "grade_b"))`
-- [ ] **Form Exclusions**: `tenant`, `number`, `verified_at`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `verified_at`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qpkg_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qpkg_ten_status")` (19)
   - `Index(fields=["tenant", "packaging_type"], name="idx_qpkg_ten_type")` (17)
@@ -188,9 +188,9 @@
   - `Index(fields=["tenant", "-created_at"], name="idx_qpkg_ten_created")` (20)
 
 ### 4. `QualityReleaseAuthorization` (`QREL-`)
-- [ ] **File**: `apps/quality/models/FinalQuality/QualityReleaseAuthorizations.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QREL"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/FinalQuality/QualityReleaseAuthorizations.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QREL"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Release authorization title or dispatch order")`
   - `release_category`: `CharField(max_length=35, choices=RELEASE_CATEGORY_CHOICES, default="outbound_shipment_release", db_index=True)` — `"finished_goods_inventory_release"` (32), `"outbound_shipment_release"` (25), `"customer_sample_release"` (23), `"transfer_release"` (16) (longest: 32 <= 35)
   - `release_verdict`: `CharField(max_length=30, choices=RELEASE_VERDICT_CHOICES, default="under_review", db_index=True)` — `"on_hold_quarantine"` (18), `"under_review"` (12), `"conditionally_released"` (22), `"fully_authorized_released"` (25), `"rejected_blocked"` (16) (longest: 25 <= 30)
@@ -216,11 +216,11 @@
   - `conditional_release_justification`: `TextField(blank=True, help_text="Justification required if conditionally released")`
   - `non_conformance`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_releases", help_text="Linked NCR if blocked or rejected")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Properties**:
+- [x] **Properties**:
   - `@property can_release`: `final_inspection_passed and no_open_ncrs and packaging_verified and coc_issued and (not is_on_hold)`
   - `@property is_released`: `release_verdict in ("fully_authorized_released", "conditionally_released") and not is_on_hold`
-- [ ] **Form Exclusions**: `tenant`, `number`, `authorized_at`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `authorized_at`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrel_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "release_verdict"], name="idx_qrel_ten_verdict")` (20)
   - `Index(fields=["tenant", "release_category"], name="idx_qrel_ten_cat")` (17)
@@ -235,37 +235,37 @@
 
 ## Execution Steps
 
-- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.9.md`)
-- [ ] **Step 2: Build Entity by Entity**
-  - [ ] Entity 1: `FinalInspectionLot` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 2: `CertificateOfConformance` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 3: `PackagingLabelVerification` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 4: `QualityReleaseAuthorization` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Command Center & Hold Board: `OqcHoldBoard.py` + `templates/quality/finalquality/oqc_hold_board.html`
-- [ ] **Step 3: Integrate**
-  - [ ] Update `apps/quality/models/__init__.py` re-exports (`FinalInspectionLot`, `CertificateOfConformance`, `PackagingLabelVerification`, `QualityReleaseAuthorization`)
-  - [ ] Update `apps/quality/forms/__init__.py` re-exports (`FinalInspectionLotForm`, `CertificateOfConformanceForm`, `PackagingLabelVerificationForm`, `QualityReleaseAuthorizationForm`)
-  - [ ] Update `apps/quality/views/__init__.py` re-exports
-  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
-  - [ ] Register 4 models in `apps/quality/admin.py`
-  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_9`)
-  - [ ] Wire `LIVE_LINKS["12.9"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration `0016_...`
-  - [ ] Run `migrate quality`
-  - [ ] Run `seed_quality` twice (verify idempotency)
-  - [ ] Run `manage.py check` (0 issues)
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.9.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
-- [ ] **Step 7: Automated Tests** -> `test_finalquality_models.py`, `test_finalquality_forms.py`, `test_finalquality_views.py`, `test_finalquality_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.9.md`
+- [x] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.9.md`)
+- [x] **Step 2: Build Entity by Entity**
+  - [x] Entity 1: `FinalInspectionLot` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 2: `CertificateOfConformance` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 3: `PackagingLabelVerification` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 4: `QualityReleaseAuthorization` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Command Center & Hold Board: `OqcHoldBoard.py` + `templates/quality/finalquality/oqc_hold_board.html`
+- [x] **Step 3: Integrate**
+  - [x] Update `apps/quality/models/__init__.py` re-exports (`FinalInspectionLot`, `CertificateOfConformance`, `PackagingLabelVerification`, `QualityReleaseAuthorization`)
+  - [x] Update `apps/quality/forms/__init__.py` re-exports (`FinalInspectionLotForm`, `CertificateOfConformanceForm`, `PackagingLabelVerificationForm`, `QualityReleaseAuthorizationForm`)
+  - [x] Update `apps/quality/views/__init__.py` re-exports
+  - [x] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [x] Register 4 models in `apps/quality/admin.py`
+  - [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_9`)
+  - [x] Wire `LIVE_LINKS["12.9"]` in `apps/core/navigation.py`
+  - [x] Run `makemigrations quality` -> incremental migration `0016_...`
+  - [x] Run `migrate quality`
+  - [x] Run `seed_quality` twice (verify idempotency)
+  - [x] Run `manage.py check` (0 issues)
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.9.md`
+- [x] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
+- [x] **Step 7: Automated Tests** -> `test_finalquality_models.py`, `test_finalquality_forms.py`, `test_finalquality_views.py`, `test_finalquality_security.py` -> 100% green
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.9.md`
 
 ---
 
 ## Wire-up Details
 
-- [ ] `apps/core/navigation.py`:
+- [x] `apps/core/navigation.py`:
   - `LIVE_LINKS["12.9"]`:
     - `"Final Inspection Protocols"`: `"quality:final_inspection_lot_list"`
     - `"Lot Sampling & Acceptance Testing"`: `"quality:oqc_hold_board"`
@@ -277,19 +277,19 @@
 
 ## Templates Layout (`templates/quality/finalquality/`)
 
-- [ ] `final_inspection_lot/list.html`: Final inspection lots register, inspection type, AQL sample size, defects tally, usage decision badge, status, filter bar, CSV export
-- [ ] `final_inspection_lot/detail.html`: Manufacturing genealogy, work order/lot linkage, checklist verification breakdown (visual, dimensional, functional, packaging), ANSI Z1.4 sampling metrics, usage decision banner, linked NCR/deviation
-- [ ] `final_inspection_lot/form.html`: Lot creation/edit form with work order & customer selectors, AQL inspection levels, defect inputs, checklist toggles, inspector sign-off
-- [ ] `certificate_of_conformance/list.html`: Issued CoC register, certificate type, customer, item & lot, issue date, status badge, filter bar, CSV export
-- [ ] `certificate_of_conformance/detail.html`: Formal legal Certificate of Conformance declaration, drawing/standard references, test results summary, authorized digital signature block, QR verification hash
-- [ ] `certificate_of_conformance/form.html`: CoC authoring form with customer & sales order selectors, industry format choices, certified quantity, test results summary, conformance statement editor
-- [ ] `packaging_label_verification/list.html`: Packaging & labeling verification runs, packaging type, barcode symbology, ISO/IEC grade badge, status, filter bar, CSV export
-- [ ] `packaging_label_verification/detail.html`: Packaging inspection details, master artwork revision match, barcode scan content & grade, serialization audit sample, physical container integrity checks, linked NCR
-- [ ] `packaging_label_verification/form.html`: Packaging verification entry form with barcode scanner inputs, grade dropdown, serialization notes, container condition checklists, technician sign-off
-- [ ] `quality_release_authorization/list.html`: Quality release authorizations register, release category, verdict badge, hold status pill, shipment reference, customer, filter bar, CSV export
-- [ ] `quality_release_authorization/detail.html`: Quality gatekeeper release dashboard, prerequisite checklist status cards (final inspection, NCRs, packaging, CoC), electronic hold toggle button, export compliance verification, tamper seal numbers, release officer sign-off
-- [ ] `quality_release_authorization/form.html`: Release authorization form with shipment & customer selectors, prerequisite check toggles, hold reason input, export compliance checkboxes, release officer assignment
-- [ ] `oqc_hold_board.html`: Outgoing Quality Control Command Center & Hold Board displaying real-time active quality holds, pending final inspection lots, unissued CoCs awaiting signature, and ready-to-ship authorized releases
+- [x] `final_inspection_lot/list.html`: Final inspection lots register, inspection type, AQL sample size, defects tally, usage decision badge, status, filter bar, CSV export
+- [x] `final_inspection_lot/detail.html`: Manufacturing genealogy, work order/lot linkage, checklist verification breakdown (visual, dimensional, functional, packaging), ANSI Z1.4 sampling metrics, usage decision banner, linked NCR/deviation
+- [x] `final_inspection_lot/form.html`: Lot creation/edit form with work order & customer selectors, AQL inspection levels, defect inputs, checklist toggles, inspector sign-off
+- [x] `certificate_of_conformance/list.html`: Issued CoC register, certificate type, customer, item & lot, issue date, status badge, filter bar, CSV export
+- [x] `certificate_of_conformance/detail.html`: Formal legal Certificate of Conformance declaration, drawing/standard references, test results summary, authorized digital signature block, QR verification hash
+- [x] `certificate_of_conformance/form.html`: CoC authoring form with customer & sales order selectors, industry format choices, certified quantity, test results summary, conformance statement editor
+- [x] `packaging_label_verification/list.html`: Packaging & labeling verification runs, packaging type, barcode symbology, ISO/IEC grade badge, status, filter bar, CSV export
+- [x] `packaging_label_verification/detail.html`: Packaging inspection details, master artwork revision match, barcode scan content & grade, serialization audit sample, physical container integrity checks, linked NCR
+- [x] `packaging_label_verification/form.html`: Packaging verification entry form with barcode scanner inputs, grade dropdown, serialization notes, container condition checklists, technician sign-off
+- [x] `quality_release_authorization/list.html`: Quality release authorizations register, release category, verdict badge, hold status pill, shipment reference, customer, filter bar, CSV export
+- [x] `quality_release_authorization/detail.html`: Quality gatekeeper release dashboard, prerequisite checklist status cards (final inspection, NCRs, packaging, CoC), electronic hold toggle button, export compliance verification, tamper seal numbers, release officer sign-off
+- [x] `quality_release_authorization/form.html`: Release authorization form with shipment & customer selectors, prerequisite check toggles, hold reason input, export compliance checkboxes, release officer assignment
+- [x] `oqc_hold_board.html`: Outgoing Quality Control Command Center & Hold Board displaying real-time active quality holds, pending final inspection lots, unissued CoCs awaiting signature, and ready-to-ship authorized releases
 
 ---
 
@@ -302,8 +302,25 @@
 
 ---
 
-## Review notes
-(to be filled in at close-out)
+## Review notes — Sub-module 12.9 Close-out (2026-11-19)
+- **Delivered**: Sub-module 12.9 Final Quality Control (FQC) & Outgoing Quality Control (OQC) completely built, integrated, reviewed, and tested.
+- **Models**: 4 tenant-scoped models subclasses of `TenantNumbered`:
+  - `FinalInspectionLot` [`QFQC-`]: ANSI/ASQ Z1.4 attribute sampling & ISO 2859-1 compliant finished goods release inspections across general I/II/III and special S1–S4 inspection levels, critical/major/minor AQL thresholds, usage decisions accepted/accepted_with_deviation/rework/scrap/quarantine, and automated QNCR-/QHLD- escalation.
+  - `CertificateOfConformance` [`QCOC-`]: Formal legal shipment conformance declarations with standard commercial, aerospace (AS9100/AS9102), medical device (ISO 13485/FDA 21 CFR 820), automotive (IATF 16949), and custom formats, specification compliance attestation, test results summary, authorized digital signature block, and SHA-256 tamper-evident verification digest.
+  - `PackagingLabelVerification` [`QPKG-`]: Outgoing packaging, palletization, serialization, barcode readability, and customer labeling compliance verification across secondary/bulk/pallet packaging levels, 100% vs. AQL sampling, tamper seal inspection, container cleanliness, and ISO/IEC 15415/15416 barcode grading.
+  - `QualityReleaseAuthorization` [`QREL-`]: Formal multi-department release authorization gate across standard/conditional/concession/emergency release categories, ERP SalesOrder/PickList/OutboundShipment linkage, multi-gate release criteria checklists, 21 CFR Part 11 compliant dual-password electronic signature integration, and status lifecycle.
+- **Dedicated Command Center**: `oqc_hold_board` (`templates/quality/finalquality/oqc_hold_board.html`) and bounded CSV export (`oqc_hold_board_export`) for real-time Outgoing Quality Control inspection lot status, hold reason tracking, pending release authorizations, and dispatch clearance status.
+- **Forms**: 4 ModelForms (`FinalInspectionLotForm`, `CertificateOfConformanceForm`, `PackagingLabelVerificationForm`, `QualityReleaseAuthorizationForm`) with strict tenant scoping, system field exclusions, and cross-tenant `reject_foreign` guards.
+- **Views & Routes**: 28 FBV views across 4 entities + OQC Hold Board.
+- **Templates**: 13 responsive Tailwind templates under `templates/quality/finalquality/` with color-named badges, accessible `<dl class="detail-grid">` layouts, and CSRF protection.
+- **Wire-ups**: `apps/core/navigation.py` `LIVE_LINKS["12.9"]` (all 5 `NavERP.md` feature bullets live), `apps/quality/admin.py` model registrations, package `__init__.py` files, and `seed_quality.py` demo command.
+- **Migrations**: `0016_finalinspectionlot_certificateofconformance_and_more.py` and `0017_certificateofconformance_idx_qcoc_ten_shipment_and_more.py`.
+- **Seeder**: `apps/quality/management/commands/seed_quality.py` extended with `_seed_submodule_12_9`; tested twice and verified 100% idempotent.
+- **Review passes**: 6 sequential reviewer passes completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`). All 23 findings (3 Critical, 10 Important, 10 Minor) resolved and committed in `.claude/tasks/review-quality-12.9.md`. 0 open, 0 skipped.
+- **Test suite**: 168 dedicated tests (39 models, 49 forms, 48 views, 32 security) across `apps/quality/tests/` 100% green; full unfiltered suite passes with 1,747 passing tests in 338.59s.
+- **Skill & Documentation**: `.claude/skills/quality/SKILL.md` updated, `README.md` updated, and dedicated gap registers committed at `.agents/tasks/gaps-quality-12.9.md` and `.claude/tasks/gaps-quality-12.9.md`.
+- **Gap Register**: `.agents/tasks/gaps-quality-12.9.md` and `.claude/tasks/gaps-quality-12.9.md`.
+- **Gaps**: None. All 23 review findings, contract requirements, and test suites fully closed with 0 open and 0 deferred items.
 
 ---
 
