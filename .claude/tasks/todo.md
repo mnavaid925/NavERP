@@ -35258,3 +35258,321 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - Root roadmap marked complete: `README.md`
   - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
 
+
+
+---
+
+# Sub-module 12.11: Audit Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.11.md` (2026-11-19)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), 12.5 (Non-Conformance), 12.6 (Supplier Quality), 12.7 (Incoming Quality Control), 12.8 (In-Process Quality & SPC), 12.9 (Final Product Quality & Release), and 12.10 (Calibration & MSA).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0018_alter_calibrationrecord_standards_used.py` (claims next incremental migration `0019_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QPRG`** (`AuditProgram`), **`QAUD`** (`QualityAudit`), **`QFND`** (`AuditFinding`), **`QHST`** (`RegulatoryInspectionHost`).
+> Plan written from `.claude/tasks/research-quality-12.11.md` (Phase 1) and `NavERP.md` (`### 12.11 Audit Management`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/AuditManagement/<Entity>.py` (`AuditPrograms.py`, `QualityAudits.py`, `AuditFindings.py`, `RegulatoryInspectionHosts.py`, plus dedicated `AuditActionTracker.py` and `AuditWarRoom.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/auditmanagement/{audit_program,quality_audit,audit_finding,regulatory_inspection_host}/{list,detail,form}.html` + `templates/quality/auditmanagement/audit_action_tracker.html` + `templates/quality/auditmanagement/audit_war_room.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QPRG`** (`AuditProgram`), **`QAUD`** (`QualityAudit`), **`QFND`** (`AuditFinding`), **`QHST`** (`RegulatoryInspectionHost`), all 4 model classes, and all URL stems (`audit_program_*`, `quality_audit_*`, `audit_finding_*`, `regulatory_inspection_host_*`, `audit_action_tracker`, `audit_war_room`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`, audited business units, plants, or functional departments), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.Party` (`apps/core/models/Party.py`, role="vendor" or role="institution" for external suppliers, registrar notified bodies, and regulatory agencies).
+  - Module 12 siblings (12.1, 12.4, 12.5): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`, prefix `QDOC`), `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`, prefix `QCAP`), `quality.NonConformanceReport` (`apps/quality/models/NonConformance/NonConformanceReports.py`, prefix `QNCR`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`, `UOM`): Free-text fields `product_scope`, `lot_number_sampled` with clean loose-coupling (no foreign keys to unbuilt tables).
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `quality.AuditProgram`, `quality.QualityAudit`, `quality.ControlledDocument`, `quality.CapaInvestigation`, `quality.NonConformanceReport`, `core.OrgUnit`, `core.Party`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **QMS and Regulatory Audit Standards Conformance (ISO 19011:2018, ISO 9001:2015 §9.2, ISO 13485:2016 §8.2.4, FDA 21 CFR 820.22 / QMSR, FDA 21 CFR Part 11, EU MDR 2017/745, cGMP 21 CFR 211, IATF 16949 §9.2.2)**:
+  - Full audit lifecycle support: multi-year/annual audit programs, risk-based frequency allocation, auditor independence validation, standardized observation grading, executive debriefing, closed-loop CAPA launching, and Front Room / Back Room regulatory inspection war room management.
+  - Objective evidence recording, standard clause mapping, auditee response SLAs, containment capture, and lead auditor closure verification.
+  - Inspection host command center: inspector credentials, war room staging, document request tracking (logged vs fulfilled), daily summary notes, Form 483 issuance logging, and agency outcome determinations (NAI / VAI / OAI).
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `approval_date`, `report_published_date`, `response_received_date`, `closed_date`), auto-numbers (`number`), and computed metrics (`total_findings_count`, `critical_findings_count`, `major_findings_count`, `minor_findings_count`, `ofi_findings_count`, `requests_logged_count`, `requests_fulfilled_count`, `observations_count`) MUST be excluded from `Meta.fields` in ModelForms.
+  - Computed helper properties (`is_overdue`, `days_open`, `progress_percentage`, `fulfillment_rate`, `is_active`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `AuditProgram` (`QPRG-`)
+- [ ] **File**: `apps/quality/models/AuditManagement/AuditPrograms.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QPRG"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255, help_text="e.g. FY2026 Enterprise Quality & Regulatory Audit Program")`
+  - `program_year`: `PositiveIntegerField(help_text="Operating fiscal year e.g. 2026")`
+  - `program_type`: `CharField(max_length=32, choices=PROGRAM_TYPE_CHOICES, default="internal_qms", db_index=True)` — `"internal_qms"` (12), `"supplier_external"` (17), `"regulatory_certification"` (24), `"integrated_enterprise"` (21) (longest: 24 <= 32)
+  - `risk_basis`: `CharField(max_length=32, choices=RISK_BASIS_CHOICES, default="low_risk_annual", db_index=True)` — `"low_risk_annual"` (15), `"medium_risk_biennial"` (20), `"high_risk_semi_annual"` (21), `"for_cause_triggered"` (18) (longest: 21 <= 32)
+  - `scope_description`: `TextField(help_text="Scope boundaries, audit universe coverage, and strategic objectives")`
+  - `start_date`: `DateField(help_text="Program validity start date")`
+  - `end_date`: `DateField(help_text="Program validity end date")`
+  - `allocated_budget_hours`: `PositiveIntegerField(default=0, help_text="Budgeted auditor person-hours")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"submitted"` (9), `"approved"` (8), `"active"` (6), `"completed"` (9), `"cancelled"` (9) (longest: 9 <= 24)
+  - `program_manager`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="managed_audit_programs")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_audit_programs")`
+  - `approval_date`: `DateField(null=True, blank=True)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Badge CSS Dicts**:
+  - `PROGRAM_TYPE_CSS`: `internal_qms`: `badge-info`, `supplier_external`: `badge-slate`, `regulatory_certification`: `badge-amber`, `integrated_enterprise`: `badge-green`
+  - `RISK_BASIS_CSS`: `low_risk_annual`: `badge-muted`, `medium_risk_biennial`: `badge-info`, `high_risk_semi_annual`: `badge-red`, `for_cause_triggered`: `badge-amber`
+  - `STATUS_CSS`: `draft`: `badge-slate`, `submitted`: `badge-info`, `approved`: `badge-green`, `active`: `badge-green`, `completed`: `badge-muted`, `cancelled`: `badge-red`
+- [ ] **Form Exclusions**: `tenant`, `number`, `approval_date`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qprg_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qprg_ten_status")` (19)
+  - `Index(fields=["tenant", "program_year"], name="idx_qprg_ten_year")` (17)
+  - `Index(fields=["tenant", "program_type"], name="idx_qprg_ten_type")` (17)
+  - `Index(fields=["tenant", "risk_basis"], name="idx_qprg_ten_risk")` (17)
+  - `Index(fields=["tenant", "program_manager"], name="idx_qprg_ten_mgr")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qprg_ten_created")` (20)
+- [ ] **Helper Properties**: `progress_percentage`, `total_audits_count`, `completed_audits_count`, `open_audits_count`
+
+### 2. `QualityAudit` (`QAUD-`)
+- [ ] **File**: `apps/quality/models/AuditManagement/QualityAudits.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QAUD"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `program`: `ForeignKey("quality.AuditProgram", on_delete=models.SET_NULL, null=True, blank=True, related_name="audits", help_text="Parent audit program (nullable for ad-hoc / unannounced audits)")`
+  - `title`: `CharField(max_length=255, help_text="Audit title e.g. ISO 13485 Internal Audit - Design & Document Control")`
+  - `audit_type`: `CharField(max_length=40, choices=AUDIT_TYPE_CHOICES, default="internal_system", db_index=True)` — `"internal_system"` (15), `"internal_process"` (16), `"internal_product"` (16), `"supplier_qualification"` (22), `"regulatory_fda"` (14), `"certification_notified_body"` (27), `"customer_audit"` (14), `"special_for_cause"` (17) (longest: 27 <= 40)
+  - `audit_method`: `CharField(max_length=24, choices=AUDIT_METHOD_CHOICES, default="on_site", db_index=True)` — `"on_site"` (7), `"remote_virtual"` (14), `"hybrid"` (6), `"desk_audit"` (10) (longest: 14 <= 24)
+  - `standard_framework`: `CharField(max_length=32, choices=STANDARD_FRAMEWORK_CHOICES, default="iso_13485_2016", db_index=True)` — `"iso_9001_2015"` (13), `"iso_13485_2016"` (14), `"iatf_16949"` (10), `"fda_21cfr820_qmsr"` (17), `"eu_mdr_2017_745"` (15), `"gmp_21cfr211"` (13), `"as9100d"` (7), `"multiple_frameworks"` (19), `"internal_sop"` (12) (longest: 19 <= 32)
+  - `target_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="audited_org_units", help_text="Audited internal plant, department, or business unit")`
+  - `external_entity`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="external_quality_audits", help_text="External supplier, registrar, or regulatory agency audited/auditing")`
+  - `lead_auditor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="led_quality_audits")`
+  - `auditee_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="received_quality_audits")`
+  - `audit_checklist_sop`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="referenced_in_audits", help_text="Governing audit protocol, SOP, or checklist document")`
+  - `planned_start_date`: `DateField(db_index=True)`
+  - `planned_end_date`: `DateField()`
+  - `actual_start_date`: `DateField(null=True, blank=True)`
+  - `actual_end_date`: `DateField(null=True, blank=True)`
+  - `scope_objectives`: `TextField(help_text="Detailed scope, processes evaluated, and criteria")`
+  - `product_scope`: `CharField(max_length=255, blank=True, help_text="Product family or device name evaluated (Module 5 unbuilt item stand-in)")`
+  - `lot_number_sampled`: `CharField(max_length=100, blank=True, help_text="Sampled production lot / batch number (Module 5 unbuilt lot stand-in)")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="scheduled", db_index=True)` — `"scheduled"` (9), `"in_preparation"` (14), `"in_progress"` (11), `"reporting"` (9), `"capa_pending"` (12), `"closed"` (6), `"cancelled"` (9) (longest: 14 <= 24)
+  - `outcome`: `CharField(max_length=36, choices=OUTCOME_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"conforming"` (10), `"minor_findings"` (14), `"major_findings"` (14), `"critical_non_conformance"` (24), `"passed"` (6), `"conditional_pass"` (16), `"failed"` (6) (longest: 24 <= 36)
+  - `executive_summary`: `TextField(blank=True, help_text="Summary of observations, strengths, and leadership conclusion")`
+  - `report_published_date`: `DateField(null=True, blank=True)`
+  - `total_findings_count`: `PositiveIntegerField(default=0)`
+  - `critical_findings_count`: `PositiveIntegerField(default=0)`
+  - `major_findings_count`: `PositiveIntegerField(default=0)`
+  - `minor_findings_count`: `PositiveIntegerField(default=0)`
+  - `ofi_findings_count`: `PositiveIntegerField(default=0)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Badge CSS Dicts**:
+  - `AUDIT_TYPE_CSS`: `internal_system`: `badge-info`, `internal_process`: `badge-info`, `internal_product`: `badge-info`, `supplier_qualification`: `badge-slate`, `regulatory_fda`: `badge-red`, `certification_notified_body`: `badge-amber`, `customer_audit`: `badge-slate`, `special_for_cause`: `badge-red`
+  - `AUDIT_METHOD_CSS`: `on_site`: `badge-info`, `remote_virtual`: `badge-slate`, `hybrid`: `badge-amber`, `desk_audit`: `badge-muted`
+  - `STATUS_CSS`: `scheduled`: `badge-slate`, `in_preparation`: `badge-info`, `in_progress`: `badge-amber`, `reporting`: `badge-info`, `capa_pending`: `badge-amber`, `closed`: `badge-green`, `cancelled`: `badge-red`
+  - `OUTCOME_CSS`: `pending`: `badge-muted`, `conforming`: `badge-green`, `minor_findings`: `badge-amber`, `major_findings`: `badge-red`, `critical_non_conformance`: `badge-red`, `passed`: `badge-green`, `conditional_pass`: `badge-amber`, `failed`: `badge-red`
+- [ ] **Form Exclusions**: `tenant`, `number`, `report_published_date`, `total_findings_count`, `critical_findings_count`, `major_findings_count`, `minor_findings_count`, `ofi_findings_count`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qaud_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qaud_ten_status")` (19)
+  - `Index(fields=["tenant", "audit_type"], name="idx_qaud_ten_type")` (17)
+  - `Index(fields=["tenant", "outcome"], name="idx_qaud_ten_outcome")` (20)
+  - `Index(fields=["tenant", "planned_start_date"], name="idx_qaud_ten_pstart")` (19)
+  - `Index(fields=["tenant", "program"], name="idx_qaud_ten_prog")` (17)
+  - `Index(fields=["tenant", "target_org_unit"], name="idx_qaud_ten_unit")` (17)
+  - `Index(fields=["tenant", "lead_auditor"], name="idx_qaud_ten_auditor")` (20)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qaud_ten_created")` (20)
+- [ ] **Helper Properties**: `is_overdue`, `days_open`, `open_findings_count`
+
+### 3. `AuditFinding` (`QFND-`)
+- [ ] **File**: `apps/quality/models/AuditManagement/AuditFindings.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFND"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `audit`: `ForeignKey("quality.QualityAudit", on_delete=models.CASCADE, related_name="findings")`
+  - `finding_number_in_audit`: `PositiveSmallIntegerField(default=1, help_text="Sequential number within this audit e.g. 1, 2, 3")`
+  - `title`: `CharField(max_length=255, help_text="Finding headline / observation summary")`
+  - `severity`: `CharField(max_length=24, choices=SEVERITY_CHOICES, default="minor", db_index=True)` — `"critical"` (8), `"major"` (5), `"minor"` (5), `"observation_ofi"` (15), `"commendation"` (12) (longest: 15 <= 24)
+  - `standard_clause`: `CharField(max_length=128, help_text="Standard & clause cited e.g. ISO 13485:2016 §8.2.4, 21 CFR 820.22")`
+  - `requirement_statement`: `TextField(help_text="Specified requirement, procedure, or regulation text")`
+  - `condition_evidence`: `TextField(help_text="Objective evidence observed proving non-conformance")`
+  - `audited_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="unit_audit_findings")`
+  - `assignee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="assigned_audit_findings", help_text="Auditee owner responsible for remediation")`
+  - `response_due_date`: `DateField(db_index=True, help_text="Enforced turnaround SLA for auditee response")`
+  - `response_received_date`: `DateField(null=True, blank=True)`
+  - `containment_action`: `TextField(blank=True, help_text="Immediate correction taken to contain non-conformance")`
+  - `root_cause_summary`: `TextField(blank=True, help_text="Root cause analysis submitted by auditee")`
+  - `corrective_action_plan`: `TextField(blank=True, help_text="Proposed corrective action plan")`
+  - `linked_capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="source_audit_findings", help_text="Closed-loop CAPA investigation")`
+  - `linked_ncr`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="source_audit_findings", help_text="Immediate Non-Conformance Report")`
+  - `status`: `CharField(max_length=32, choices=STATUS_CHOICES, default="issued", db_index=True)` — `"draft"` (5), `"issued"` (6), `"response_submitted"` (18), `"response_accepted"` (17), `"capa_in_progress"` (16), `"verification_pending"` (20), `"closed"` (6), `"escalated"` (9) (longest: 20 <= 32)
+  - `closure_verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_audit_findings")`
+  - `closed_date`: `DateField(null=True, blank=True)`
+  - `closure_notes`: `TextField(blank=True, help_text="Lead auditor verification rationale and objective evidence of closure")`
+- [ ] **Badge CSS Dicts**:
+  - `SEVERITY_CSS`: `critical`: `badge-red`, `major`: `badge-red`, `minor`: `badge-amber`, `observation_ofi`: `badge-info`, `commendation`: `badge-green`
+  - `STATUS_CSS`: `draft`: `badge-slate`, `issued`: `badge-amber`, `response_submitted`: `badge-info`, `response_accepted`: `badge-info`, `capa_in_progress`: `badge-amber`, `verification_pending`: `badge-amber`, `closed`: `badge-green`, `escalated`: `badge-red`
+- [ ] **Form Exclusions**: `tenant`, `number`, `response_received_date`, `closed_date`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qfnd_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qfnd_ten_status")` (19)
+  - `Index(fields=["tenant", "severity"], name="idx_qfnd_ten_sev")` (16)
+  - `Index(fields=["tenant", "audit"], name="idx_qfnd_ten_audit")` (18)
+  - `Index(fields=["tenant", "assignee"], name="idx_qfnd_ten_assignee")` (21)
+  - `Index(fields=["tenant", "response_due_date"], name="idx_qfnd_ten_due")` (16)
+  - `Index(fields=["tenant", "linked_capa"], name="idx_qfnd_ten_capa")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qfnd_ten_created")` (20)
+- [ ] **Helper Properties**: `is_overdue`, `requires_capa`
+
+### 4. `RegulatoryInspectionHost` (`QHST-`)
+- [ ] **File**: `apps/quality/models/AuditManagement/RegulatoryInspectionHosts.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QHST"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `audit`: `ForeignKey("quality.QualityAudit", on_delete=models.SET_NULL, null=True, blank=True, related_name="regulatory_hosts", help_text="Linked QualityAudit record")`
+  - `inspection_title`: `CharField(max_length=255, help_text="e.g. FDA cGMP / QSIT Inspection - Medical Device Facility")`
+  - `agency_or_body`: `CharField(max_length=32, choices=AGENCY_CHOICES, default="fda_cdrh", db_index=True)` — `"fda_cdrh"` (8), `"fda_cder"` (8), `"iso_notified_body"` (17), `"ema_eu"` (6), `"health_canada"` (13), `"pmda_japan"` (10), `"customer_corporate"` (18), `"iso_registrar"` (13), `"other_authority"` (15) (longest: 18 <= 32)
+  - `agency_name`: `CharField(max_length=128, help_text="Official body name e.g. US FDA - District Office, TÜV SÜD Product Service")`
+  - `lead_inspector_name`: `CharField(max_length=128, help_text="Lead inspector / investigator name")`
+  - `inspector_credentials`: `CharField(max_length=128, blank=True, help_text="Badge number, division, or contact identifier")`
+  - `inspection_purpose`: `CharField(max_length=32, choices=PURPOSE_CHOICES, default="routine_surveillance", db_index=True)` — `"routine_surveillance"` (20), `"pre_approval_pma_nda"` (19), `"for_cause_directed"` (18), `"unannounced_inspection"` (22), `"mdsap_audit"` (11), `"recertification_audit"` (21) (longest: 22 <= 32)
+  - `announcement_status`: `CharField(max_length=24, choices=ANNOUNCEMENT_CHOICES, default="announced", db_index=True)` — `"announced"` (9), `"unannounced"` (11), `"short_notice"` (12) (longest: 12 <= 24)
+  - `scheduled_start_date`: `DateField(db_index=True)`
+  - `scheduled_end_date`: `DateField()`
+  - `actual_start_date`: `DateField(null=True, blank=True)`
+  - `actual_end_date`: `DateField(null=True, blank=True)`
+  - `front_room_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="hosted_front_rooms", help_text="Primary company spokesperson / Front Room facilitator")`
+  - `back_room_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="managed_back_rooms", help_text="Back Room document staging & SME coordinator")`
+  - `scribe_user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="scribed_inspections", help_text="Official inspection scribe and request logger")`
+  - `war_room_location`: `CharField(max_length=255, help_text="Staging conference room or secure virtual bridge URL")`
+  - `status`: `CharField(max_length=32, choices=STATUS_CHOICES, default="preparation", db_index=True)` — `"preparation"` (11), `"active_inspection"` (17), `"daily_wrapup"` (12), `"inspection_closed"` (17), `"post_inspection_followup"` (24) (longest: 24 <= 32)
+  - `requests_logged_count`: `PositiveIntegerField(default=0, help_text="Count of records/documents requested by inspectors")`
+  - `requests_fulfilled_count`: `PositiveIntegerField(default=0, help_text="Count of requests successfully fulfilled")`
+  - `form_483_issued`: `BooleanField(default=False, help_text="Whether FDA Form 483 / Inspectional Observations was issued")`
+  - `observations_count`: `PositiveIntegerField(default=0, help_text="Number of formal inspection observations / Form 483 citations")`
+  - `formal_outcome`: `CharField(max_length=36, choices=OUTCOME_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"nai_no_action_indicated"` (23), `"vai_voluntary_action_indicated"` (29), `"oai_official_action_indicated"` (28), `"certified_unconditional"` (23), `"conditional_clearance"` (21), `"refusal_warning_letter"` (22) (longest: 29 <= 36)
+  - `daily_summary_notes`: `TextField(blank=True, help_text="Daily debrief log, inspector questions, and SME interview notes")`
+  - `closeout_memo`: `TextField(blank=True, help_text="Exit conference debrief, commitments, and executive response plan")`
+- [ ] **Badge CSS Dicts**:
+  - `AGENCY_CSS`: `fda_cdrh`: `badge-red`, `fda_cder`: `badge-red`, `iso_notified_body`: `badge-amber`, `ema_eu`: `badge-info`, `health_canada`: `badge-info`, `pmda_japan`: `badge-info`, `customer_corporate`: `badge-slate`, `iso_registrar`: `badge-amber`, `other_authority`: `badge-muted`
+  - `STATUS_CSS`: `preparation`: `badge-slate`, `active_inspection`: `badge-amber`, `daily_wrapup`: `badge-info`, `inspection_closed`: `badge-green`, `post_inspection_followup`: `badge-muted`
+  - `OUTCOME_CSS`: `pending`: `badge-muted`, `nai_no_action_indicated`: `badge-green`, `vai_voluntary_action_indicated`: `badge-amber`, `oai_official_action_indicated`: `badge-red`, `certified_unconditional`: `badge-green`, `conditional_clearance`: `badge-amber`, `refusal_warning_letter`: `badge-red`
+- [ ] **Form Exclusions**: `tenant`, `number`, `requests_logged_count`, `requests_fulfilled_count`, `observations_count`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qhst_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qhst_ten_status")` (19)
+  - `Index(fields=["tenant", "agency_or_body"], name="idx_qhst_ten_agency")` (19)
+  - `Index(fields=["tenant", "formal_outcome"], name="idx_qhst_ten_out")` (16)
+  - `Index(fields=["tenant", "audit"], name="idx_qhst_ten_audit")` (18)
+  - `Index(fields=["tenant", "scheduled_start_date"], name="idx_qhst_ten_sched")` (18)
+  - `Index(fields=["tenant", "front_room_lead"], name="idx_qhst_ten_flead")` (18)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qhst_ten_created")` (20)
+- [ ] **Helper Properties**: `fulfillment_rate`, `is_active`, `pending_requests_count`
+
+---
+
+## Backend (`apps/quality/{models,forms,views,urls}/AuditManagement/`)
+
+- [ ] **Shared Helpers**:
+  - `apps/quality/views/AuditManagement/_helpers.py`: Helper functions for safe query param parsing (`.isdigit()`), tenant scoping, audit trail logging, and CSV formula-injection neutralization
+- [ ] **Entity 1: AuditProgram (`QPRG-`)**:
+  - `apps/quality/models/AuditManagement/AuditPrograms.py`
+  - `apps/quality/forms/AuditManagement/AuditPrograms.py` (`AuditProgramForm`)
+  - `apps/quality/views/AuditManagement/AuditPrograms.py` (`audit_program_list`, `audit_program_detail`, `audit_program_create`, `audit_program_edit`, `audit_program_delete`, `audit_program_export_csv`, `audit_program_approve`)
+  - `apps/quality/urls/AuditManagement/AuditPrograms.py` (literal routes before `<int:pk>/`)
+- [ ] **Entity 2: QualityAudit (`QAUD-`)**:
+  - `apps/quality/models/AuditManagement/QualityAudits.py`
+  - `apps/quality/forms/AuditManagement/QualityAudits.py` (`QualityAuditForm`)
+  - `apps/quality/views/AuditManagement/QualityAudits.py` (`quality_audit_list`, `quality_audit_detail`, `quality_audit_create`, `quality_audit_edit`, `quality_audit_delete`, `quality_audit_export_csv`, `quality_audit_publish_report`, `quality_audit_close`)
+  - `apps/quality/urls/AuditManagement/QualityAudits.py` (literal routes before `<int:pk>/`)
+- [ ] **Entity 3: AuditFinding (`QFND-`)**:
+  - `apps/quality/models/AuditManagement/AuditFindings.py`
+  - `apps/quality/forms/AuditManagement/AuditFindings.py` (`AuditFindingForm`, `AuditFindingResponseForm`)
+  - `apps/quality/views/AuditManagement/AuditFindings.py` (`audit_finding_list`, `audit_finding_detail`, `audit_finding_create`, `audit_finding_edit`, `audit_finding_delete`, `audit_finding_export_csv`, `audit_finding_submit_response`, `audit_finding_verify_close`, `audit_finding_create_capa`)
+  - `apps/quality/urls/AuditManagement/AuditFindings.py` (literal routes before `<int:pk>/`)
+- [ ] **Entity 4: RegulatoryInspectionHost (`QHST-`)**:
+  - `apps/quality/models/AuditManagement/RegulatoryInspectionHosts.py`
+  - `apps/quality/forms/AuditManagement/RegulatoryInspectionHosts.py` (`RegulatoryInspectionHostForm`, `InspectionLogRequestForm`)
+  - `apps/quality/views/AuditManagement/RegulatoryInspectionHosts.py` (`regulatory_inspection_host_list`, `regulatory_inspection_host_detail`, `regulatory_inspection_host_create`, `regulatory_inspection_host_edit`, `regulatory_inspection_host_delete`, `regulatory_inspection_host_export_csv`, `regulatory_inspection_host_log_request`, `regulatory_inspection_host_fulfill_request`, `regulatory_inspection_host_close`)
+  - `apps/quality/urls/AuditManagement/RegulatoryInspectionHosts.py` (literal routes before `<int:pk>/`)
+- [ ] **Dedicated Command Center Views & URLs**:
+  - `apps/quality/views/AuditManagement/AuditActionTracker.py` (`audit_action_tracker`)
+  - `apps/quality/urls/AuditManagement/AuditActionTracker.py` (`action-tracker/` -> `quality:audit_action_tracker`)
+  - `apps/quality/views/AuditManagement/AuditWarRoom.py` (`audit_war_room`)
+  - `apps/quality/urls/AuditManagement/AuditWarRoom.py` (`war-room/` -> `quality:audit_war_room`)
+- [ ] **Package Re-exports**:
+  - `apps/quality/models/AuditManagement/__init__.py` & `apps/quality/models/__init__.py` re-exports
+  - `apps/quality/forms/AuditManagement/__init__.py` & `apps/quality/forms/__init__.py` re-exports
+  - `apps/quality/views/AuditManagement/__init__.py` & `apps/quality/views/__init__.py` re-exports
+  - `apps/quality/urls/AuditManagement/__init__.py` & `apps/quality/urls/__init__.py` url patterns concatenation
+- [ ] **Admin & Seeder Integration**:
+  - Register `AuditProgram`, `QualityAudit`, `AuditFinding`, `RegulatoryInspectionHost` in `apps/quality/admin.py`
+  - Extend `apps/quality/management/commands/seed_quality.py` with idempotent `_seed_submodule_12_11` creating realistic test data (Acme annual audit programs, ISO 13485 & FDA internal audits, graded findings linked to CAPA & NCR, and active FDA QSIT / TÜV SÜD regulatory inspection host with Front/Back room war room tracking)
+
+---
+
+## Wire-up
+
+- [ ] Add `LIVE_LINKS["12.11"]` in `apps/core/navigation.py` mapping the exact 5 `NavERP.md` feature bullets:
+  ```python
+  "12.11": {
+      "Audit Program Planning": "quality:audit_program_list",
+      "Audit Execution & Checklists": "quality:quality_audit_list",
+      "Audit Findings & Reporting": "quality:audit_finding_list",
+      "Corrective Action Tracking": "quality:audit_action_tracker",
+      "Regulatory & Certification Audits": "quality:regulatory_inspection_host_list",
+  },
+  ```
+
+---
+
+## Templates (`templates/quality/auditmanagement/`)
+
+- [ ] **Audit Program** (`templates/quality/auditmanagement/audit_program/`):
+  - `list.html`: Program year, title, program type badge, risk basis badge, status badge, audit count metrics, filter bar, CSV export
+  - `detail.html`: Annual schedule overview, scope description, budgeted vs actual auditor hours, audit universe coverage tab, linked QualityAudit records list, approval actions
+  - `form.html`: Create/edit form with year, program type, risk basis, scope description, budget hours, and manager selector
+- [ ] **Quality Audit** (`templates/quality/auditmanagement/quality_audit/`):
+  - `list.html`: Audit register, audit type badge, standard framework badge, target org unit / external party, status badge, outcome badge, planned dates, filter bar, CSV export
+  - `detail.html`: Executive summary, audit criteria, lead auditor / auditee lead, findings summary breakdown (Critical / Major / Minor / OFI), linked findings table, publish report and close audit actions
+  - `form.html`: Audit planning & scheduling form with program linkage, audit type, framework, org unit / supplier selector, checklist SOP link, and planned dates
+- [ ] **Audit Finding** (`templates/quality/auditmanagement/audit_finding/`):
+  - `list.html`: Findings register, severity badge, standard clause, audit link, assignee, response due date, SLA status, status badge, filter bar, CSV export
+  - `detail.html`: Requirement statement, objective condition evidence, auditee response section (containment, root cause, corrective action plan), linked CAPA / NCR badges, lead auditor verification sign-off section
+  - `form.html`: Finding documentation form with audit selector, severity dropdown, standard clause input, requirement statement, objective evidence, assignee, and SLA deadline
+- [ ] **Regulatory Inspection Host** (`templates/quality/auditmanagement/regulatory_inspection_host/`):
+  - `list.html`: Inspection hosting register, agency badge, inspection purpose badge, lead inspector, scheduled dates, war room location, requests fulfillment rate, status badge, outcome badge, filter bar, CSV export
+  - `detail.html`: Front Room / Back Room roster, daily summary debrief notes, inspector request fulfillment progress bar, Form 483 / observations count, exit conference memo, link to live War Room
+  - `form.html`: Inspection host setup form with agency selector, inspector credentials, purpose, dates, Front Room lead, Back Room lead, scribe, and war room location
+- [ ] **Audit Action Tracker** (`templates/quality/auditmanagement/audit_action_tracker.html`):
+  - Dedicated closed-loop finding remediation dashboard: summary KPI cards (Open Findings, Overdue Responses, Pending Verifications, Escalated CAPAs), aging analysis table by SLA response due date, and quick action links
+- [ ] **Audit War Room** (`templates/quality/auditmanagement/audit_war_room.html`):
+  - Dedicated live Front Room & Back Room command center for active regulatory and certification inspections: inspector profile, active inspection timeline, real-time request fulfillment board (pending, in-retrieval, reviewed, presented), daily wrap-up log, and quick request entry modal
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations quality` (creates incremental migration `0019_...`)
+- [ ] `python manage.py migrate quality`
+- [ ] `python manage.py seed_quality` **x2** (strictly idempotent, zero duplicate records or errors)
+- [ ] `python manage.py check` (0 issues reported)
+- [ ] Phase 3.5 Smoke (`qa-smoke-tester`): `temp/smoke_12_11.py` as `admin_acme` / `password` + throwaway Beta tenant asserting 200/302 across all views + literal seeded strings/numbers in HTML (L8, L57) + zero `{#` / `{% comment` leaks + filter operations with `|stringformat:"d"` + junk parameter resilience (L11) + page 2 pagination (L9) + workflow POSTs (approvals, response submission, verification, request logging) + cross-tenant IDOR 404 isolation; verify sidebar shows `12.11` Live across all 5 bullets; delete `temp/smoke_12_11.py`
+
+---
+
+## Close-out
+
+- [ ] Phase 4: Run 6 serial review passes (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` report-only -> `security-reviewer`) scoped to `BASE...HEAD` -> consolidate/dedupe sorted `C#`/`I#`/`M#` into `.claude/tasks/review-quality-12.11.md`
+- [ ] Phase 5: Run `code-fixer` agent against `.claude/tasks/review-quality-12.11.md` (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
+- [ ] Phase 6: Pin test contract & append `12.11` fixtures (`audit_*`) in `apps/quality/tests/conftest.py` (L59), then write 4 test modules serially: `test_auditmanagement_models.py`, `test_auditmanagement_forms.py`, `test_auditmanagement_views.py`, `test_auditmanagement_security.py` (using `test_auditmanagement_*` names), followed by one **unfiltered** `venv\Scripts\python.exe -m pytest -q -W ignore apps/quality/tests/` green pass (L47)
+- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` with Sub-module 12.11 models/routes/templates/seeder, mark 12.11 complete in `README.md`, record any gaps in `.agents/tasks/gaps-quality-12.11.md` (or declare None), and populate `## Review notes` below
+
+---
+
+## Later passes / deferred
+
+1. **Offline Mobile Field Audit Execution & Local SQLite Sync** — Dedicated offline tablet PWA caching with background bi-directional sync for remote auditors in cleanrooms or signal-blocked factory floors.
+2. **Automated AI Evidence Extraction & Voice Scribing** — Computer vision OCR of physical calibration certificates, batch labels, and real-time voice-to-text dictation for auditors during walk-throughs.
+3. **Direct FDA ESG / EUDAMED Regulatory Portal Gateway** — Automated machine-to-machine transmission of Form 483 response submissions and inspection packets to FDA Electronic Submissions Gateway (ESG).
+4. **Live Real-Time WebSocket Channel for War Room Request Push** — Sub-second push notification bridge between Front Room and Back Room during high-intensity regulatory inspections.
+
+---
+
+## Review notes — Sub-module 12.11 Close-out (Pending)
+*(Filled in at Phase 7)*
