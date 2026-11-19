@@ -20,7 +20,7 @@ def _csv_safe(val):
     if val is None:
         return ""
     s = str(val)
-    if s.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")):
+    if s.startswith(("=", "+", "-", "@", "\t", "\r")) or s.lstrip().startswith(("=", "+", "-", "@")):
         return "'" + s
     return s
 
