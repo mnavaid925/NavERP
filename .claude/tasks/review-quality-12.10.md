@@ -123,6 +123,6 @@
   - **Location**: `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py:15-18`
   - **Fix**: Add `"test_points_data"` to `Meta.exclude`. (fixed — d05ab016)
 
-- [ ] **[M12] Detail List Grid Responsiveness on Small Screens**:
+- [x] **[M12] Detail List Grid Responsiveness on Small Screens**:
   - **Location**: `templates/quality/calibrationanalysis/{calibration_gage,calibration_record,out_of_tolerance_investigation,measurement_system_analysis}/detail.html`
-  - **Fix**: Change `<dl class="grid grid-cols-2 ...">` to `<dl class="grid grid-cols-1 sm:grid-cols-2 ...">`.
+  - **Fix**: Change `<dl class="grid grid-cols-2 ...">` to `<dl class="grid grid-cols-1 sm:grid-cols-2 ...">`. (fixed — 4a677c08, 5b7ca2ab, 40f3d97b, 0e9ff4f4)
