@@ -63,6 +63,10 @@ from apps.quality.models.InProcessQuality.LayeredProcessAudits import (
 from apps.quality.models.InProcessQuality.ProcessParameterLogs import (
     ProcessParameterLog,
 )
+from apps.quality.models.CalibrationAnalysis.CalibrationGages import CalibrationGage
+from apps.quality.models.CalibrationAnalysis.CalibrationRecords import CalibrationRecord
+from apps.quality.models.CalibrationAnalysis.OutOfToleranceInvestigations import OutOfToleranceInvestigation
+from apps.quality.models.CalibrationAnalysis.MeasurementSystemAnalyses import MeasurementSystemAnalysis
 
 
 User = get_user_model()
@@ -130,6 +134,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_6(tenant)
             self._seed_submodule_12_7(tenant)
             self._seed_submodule_12_8(tenant)
+            self._seed_submodule_12_10(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -2645,6 +2650,446 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.8 In-Process Quality Control (IPQC) seeded successfully."))
+
+    def _seed_submodule_12_10(self, tenant):
+        if CalibrationGage.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.10 Calibration & Measurement System Analysis data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.10 Calibration & Measurement System Analysis (MSA)...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        inspector_user = (
+            User.objects.filter(tenant=tenant, username__icontains="inspector").order_by("pk").first()
+            or admin_user
+        )
+        verifier_user = (
+            User.objects.filter(tenant=tenant, username__icontains="quality").order_by("pk").first()
+            or admin_user
+        )
+        vendor_party = (
+            Party.objects.filter(tenant=tenant, roles__role="vendor").first()
+            or Party.objects.filter(tenant=tenant).first()
+        )
+        dept = OrgUnit.objects.filter(tenant=tenant).first()
+        sop_doc = ControlledDocument.objects.filter(tenant=tenant).first()
+        now = timezone.now()
+        today = now.date()
+
+        with transaction.atomic():
+            # 1. Master Reference Standard
+            std_gage = CalibrationGage.objects.create(
+                tenant=tenant,
+                gage_id="GAG-STD-001",
+                name="Grade 0 Ceramic Master Gauge Block Set (81 Pcs)",
+                gage_type="gauge_block_pin",
+                criticality="critical",
+                status="active_in_service",
+                manufacturer="Mitutoyo",
+                model_number="516-902-26",
+                serial_number="MIT-STD-8841",
+                measurement_range="0.5 to 100 mm",
+                resolution="0.0001 mm",
+                accuracy_spec="±0.0002 mm (ISO 3650 Grade 0)",
+                max_permissible_error=Decimal("0.0002"),
+                engineering_unit="mm",
+                is_reference_standard=True,
+                nist_traceability_number="NIST-TEST-2026-8841-B",
+                storage_location="Metrology Cleanroom Vault STD-1",
+                custodian=verifier_user,
+                department=dept,
+                calibration_interval_days=730,
+                last_calibration_date=today - datetime.timedelta(days=120),
+                next_calibration_due=today + datetime.timedelta(days=610),
+                last_calibration_result="Pass (Fully Conforming)",
+                sop_document=sop_doc,
+                notes="Primary lab reference standard. Must be handled with cotton gloves at 20.0 °C.",
+            )
+
+            # 2. Digital Caliper (Working Gage)
+            caliper_gage = CalibrationGage.objects.create(
+                tenant=tenant,
+                gage_id="GAG-DIG-002",
+                name="0-150mm IP67 Digital Caliper",
+                gage_type="caliper_micrometer",
+                criticality="critical",
+                status="active_in_service",
+                manufacturer="Mitutoyo",
+                model_number="500-196-30",
+                serial_number="MIT-500-8819",
+                measurement_range="0 to 150 mm",
+                resolution="0.01 mm",
+                accuracy_spec="±0.02 mm",
+                max_permissible_error=Decimal("0.0200"),
+                engineering_unit="mm",
+                is_reference_standard=False,
+                reference_standard_parent=std_gage,
+                storage_location="Quality Inspection Bench 1",
+                custodian=inspector_user,
+                department=dept,
+                calibration_interval_days=365,
+                last_calibration_date=today - datetime.timedelta(days=60),
+                next_calibration_due=today + datetime.timedelta(days=305),
+                last_calibration_result="Pass (Fully Conforming)",
+                sop_document=sop_doc,
+                notes="In-line inspection caliper for outer diameters.",
+            )
+
+            # 3. Precision External Micrometer
+            mic_gage = CalibrationGage.objects.create(
+                tenant=tenant,
+                gage_id="GAG-MIC-003",
+                name="0-25mm Precision Digital External Micrometer",
+                gage_type="caliper_micrometer",
+                criticality="critical",
+                status="active_in_service",
+                manufacturer="Starrett",
+                model_number="733XFL-1",
+                serial_number="STR-2026-0912",
+                measurement_range="0 to 25 mm",
+                resolution="0.001 mm",
+                accuracy_spec="±0.002 mm",
+                max_permissible_error=Decimal("0.0020"),
+                engineering_unit="mm",
+                is_reference_standard=False,
+                reference_standard_parent=std_gage,
+                storage_location="Machining Cell 2 Cabinet",
+                custodian=inspector_user,
+                department=dept,
+                calibration_interval_days=180,
+                last_calibration_date=today - datetime.timedelta(days=30),
+                next_calibration_due=today + datetime.timedelta(days=150),
+                last_calibration_result="Pass (Fully Conforming)",
+                sop_document=sop_doc,
+                notes="Used for ground pin and shaft OD verifications.",
+            )
+
+            # 4. Hydraulic Pressure Gauge (Past Due)
+            prs_gage = CalibrationGage.objects.create(
+                tenant=tenant,
+                gage_id="GAG-PRS-004",
+                name="0-100 PSI Test Pressure Gauge",
+                gage_type="pressure_vacuum",
+                criticality="major",
+                status="past_due",
+                manufacturer="WIKA",
+                model_number="232.50",
+                serial_number="WIK-99214-P",
+                measurement_range="0 to 100 psi",
+                resolution="0.5 psi",
+                accuracy_spec="±1.0% FS",
+                max_permissible_error=Decimal("1.0000"),
+                engineering_unit="psi",
+                is_reference_standard=False,
+                storage_location="Hydraulics Test Stand 3",
+                custodian=admin_user,
+                department=dept,
+                calibration_interval_days=365,
+                last_calibration_date=today - datetime.timedelta(days=400),
+                next_calibration_due=today - datetime.timedelta(days=35),
+                last_calibration_result="Pass (Fully Conforming)",
+                sop_document=sop_doc,
+                notes="Scheduled for calibration crib pickup.",
+            )
+
+            # 5. Benchtop Multimeter (In Calibration)
+            mm_gage = CalibrationGage.objects.create(
+                tenant=tenant,
+                gage_id="GAG-ELC-005",
+                name="6.5 Digit Precision Benchtop Multimeter",
+                gage_type="electrical_multimeter",
+                criticality="major",
+                status="in_calibration",
+                manufacturer="Fluke",
+                model_number="8846A",
+                serial_number="FLK-8846A-882",
+                measurement_range="0 to 1000 V / 0 to 10 A",
+                resolution="6.5 Digits",
+                accuracy_spec="0.0024% DC",
+                max_permissible_error=Decimal("0.0050"),
+                engineering_unit="v",
+                is_reference_standard=False,
+                storage_location="Calibration Service Lab",
+                custodian=admin_user,
+                department=dept,
+                calibration_interval_days=365,
+                last_calibration_date=today - datetime.timedelta(days=360),
+                next_calibration_due=today + datetime.timedelta(days=5),
+                last_calibration_result="In Progress",
+                sop_document=sop_doc,
+                notes="Shipped to Fluke certified calibration center.",
+            )
+
+            # 6. Torque Wrench (Quarantined Out-of-Tolerance)
+            trq_gage = CalibrationGage.objects.create(
+                tenant=tenant,
+                gage_id="GAG-TRQ-006",
+                name="10-100 Nm Electronic Torque Wrench",
+                gage_type="torque_force",
+                criticality="critical",
+                status="quarantined_oot",
+                manufacturer="Snap-on",
+                model_number="ATECH2FR100",
+                serial_number="SNAP-2026-TRQ",
+                measurement_range="10 to 100 Nm",
+                resolution="0.1 Nm",
+                accuracy_spec="±2% CW",
+                max_permissible_error=Decimal("2.0000"),
+                engineering_unit="nm",
+                is_reference_standard=False,
+                storage_location="Quarantine Locker Q-01",
+                custodian=verifier_user,
+                department=dept,
+                calibration_interval_days=180,
+                last_calibration_date=today - datetime.timedelta(days=10),
+                next_calibration_due=today + datetime.timedelta(days=170),
+                last_calibration_result="Fail (Out-of-Tolerance)",
+                sop_document=sop_doc,
+                notes="Failed As-Found calibration test on 100 Nm setting. Quarantined immediately.",
+            )
+
+            # Calibration Records
+            # Event 1: Std Gage Passed
+            cal_rec_1 = CalibrationRecord.objects.create(
+                tenant=tenant,
+                gage=std_gage,
+                calibration_date=today - datetime.timedelta(days=120),
+                calibration_type="external_accredited",
+                status="completed",
+                service_vendor=vendor_party,
+                certificate_number="CERT-ISO17025-2026-001",
+                as_found_condition="in_tolerance",
+                as_left_condition="in_tolerance",
+                overall_result="pass",
+                ambient_temperature_c=Decimal("20.00"),
+                ambient_relative_humidity=Decimal("45.00"),
+                expanded_uncertainty=Decimal("0.0001"),
+                test_uncertainty_ratio=Decimal("4.00"),
+                max_observed_error=Decimal("0.0001"),
+                guardband_applied=True,
+                technician_name="Dr. Marcus Vance, Metrologist",
+                calibrated_by_user=verifier_user,
+                approved_by=admin_user,
+                approved_at=now,
+                notes="ISO/IEC 17025 accredited calibration performed under controlled environmental conditions.",
+            )
+
+            # Event 2: Caliper Passed Internal
+            cal_rec_2 = CalibrationRecord.objects.create(
+                tenant=tenant,
+                gage=caliper_gage,
+                calibration_date=today - datetime.timedelta(days=60),
+                calibration_type="internal_metrology",
+                status="completed",
+                certificate_number="INT-CAL-2026-042",
+                as_found_condition="in_tolerance",
+                as_left_condition="in_tolerance",
+                overall_result="pass",
+                ambient_temperature_c=Decimal("20.20"),
+                ambient_relative_humidity=Decimal("46.50"),
+                expanded_uncertainty=Decimal("0.0050"),
+                test_uncertainty_ratio=Decimal("4.00"),
+                max_observed_error=Decimal("0.0080"),
+                guardband_applied=True,
+                standard_traceability_notes="Verified against Master Gauge Block Set GAG-STD-001.",
+                technician_name="Sarah Jenkins",
+                calibrated_by_user=inspector_user,
+                approved_by=verifier_user,
+                approved_at=now,
+                notes="Internal verification complete. All test points conforming.",
+            )
+            cal_rec_2.standards_used.add(std_gage)
+
+            # Event 3: Micrometer Passed External
+            cal_rec_3 = CalibrationRecord.objects.create(
+                tenant=tenant,
+                gage=mic_gage,
+                calibration_date=today - datetime.timedelta(days=30),
+                calibration_type="external_accredited",
+                status="completed",
+                service_vendor=vendor_party,
+                certificate_number="CERT-ISO17025-2026-109",
+                as_found_condition="in_tolerance",
+                as_left_condition="in_tolerance",
+                overall_result="pass",
+                ambient_temperature_c=Decimal("20.00"),
+                ambient_relative_humidity=Decimal("44.00"),
+                expanded_uncertainty=Decimal("0.0005"),
+                test_uncertainty_ratio=Decimal("4.00"),
+                max_observed_error=Decimal("0.0008"),
+                guardband_applied=True,
+                technician_name="Robert Lang, CCT",
+                calibrated_by_user=verifier_user,
+                approved_by=admin_user,
+                approved_at=now,
+                notes="Anvil and spindle flatness and parallelism verified within 0.001mm.",
+            )
+
+            # Event 4: Torque Wrench Failed OOT
+            cal_rec_4 = CalibrationRecord.objects.create(
+                tenant=tenant,
+                gage=trq_gage,
+                calibration_date=today - datetime.timedelta(days=10),
+                calibration_type="internal_metrology",
+                status="completed",
+                certificate_number="INT-CAL-2026-OOT-01",
+                as_found_condition="out_of_tolerance",
+                as_left_condition="out_of_tolerance",
+                overall_result="fail_out_of_tolerance",
+                ambient_temperature_c=Decimal("20.50"),
+                ambient_relative_humidity=Decimal("48.00"),
+                expanded_uncertainty=Decimal("0.5000"),
+                test_uncertainty_ratio=Decimal("3.50"),
+                max_observed_error=Decimal("4.8000"),
+                guardband_applied=True,
+                technician_name="Sarah Jenkins",
+                calibrated_by_user=inspector_user,
+                approved_by=verifier_user,
+                approved_at=now,
+                notes="100 Nm test point drifted to 104.8 Nm (error +4.8 Nm exceeds ±2.0 Nm tolerance).",
+            )
+
+            # 3. Out-of-Tolerance Investigation
+            OutOfToleranceInvestigation.objects.create(
+                tenant=tenant,
+                calibration_record=cal_rec_4,
+                gage=trq_gage,
+                discovery_date=today - datetime.timedelta(days=10),
+                status="investigating",
+                risk_level="critical",
+                title="Electronic Torque Wrench High-End Drift at 100 Nm Setting",
+                as_found_error_description=(
+                    "During routine recalibration, GAG-TRQ-006 exhibited excessive positive error at the 100 Nm point: "
+                    "Recorded 104.8 Nm (+4.8 Nm error vs max permissible tolerance of ±2.0 Nm). "
+                    "Lower test points (20 Nm and 50 Nm) were within tolerance."
+                ),
+                suspect_window_start=today - datetime.timedelta(days=180),
+                suspect_window_end=today - datetime.timedelta(days=10),
+                suspect_production_orders="WO-2026-ASM-041, WO-2026-ASM-048, Batch #8812-B",
+                suspect_lots_count=8,
+                products_affected="Gearbox Assembly P/N GBX-900, Flange Bolts",
+                consumer_risk_rating=4,
+                producer_risk_rating=3,
+                containment_actions_taken=(
+                    "1. Physical quarantine of GAG-TRQ-006 in metrology locker Q-01 with red lockout tag. "
+                    "2. Hold placed on 42 finished gearboxes in warehouse pending breakaway torque audit."
+                ),
+                product_disposition="re_inspect_inventory",
+                customer_notification_required=False,
+                product_recall_required=False,
+                investigator=verifier_user,
+                quality_approver=admin_user,
+                conclusion_summary=(
+                    "Preliminary audit of warehouse units shows actual fastener torque maintained adequate clamp load. "
+                    "100% verification continuing on remaining lots."
+                ),
+            )
+
+            # 4. Measurement System Analysis (MSA / Gage R&R) Studies
+            # Study 1: Caliper Crossed ANOVA (Acceptable)
+            MeasurementSystemAnalysis.objects.create(
+                tenant=tenant,
+                study_title="0-150mm Digital Caliper Gage R&R for Pin Outer Diameter",
+                gage=caliper_gage,
+                study_type="gage_rr_crossed",
+                analysis_method="anova",
+                status="approved",
+                characteristic_name="Pin Outer Diameter (OD)",
+                study_date=today - datetime.timedelta(days=45),
+                number_of_operators=3,
+                number_of_parts=10,
+                number_of_trials=3,
+                specification_tolerance=Decimal("0.1000"),
+                reference_master_value=Decimal("12.5000"),
+                repeatability_ev=Decimal("0.0018"),
+                reproducibility_av=Decimal("0.0011"),
+                gage_rr_grr=Decimal("0.0021"),
+                part_variation_pv=Decimal("0.0280"),
+                total_variation_tv=Decimal("0.0281"),
+                percent_gage_rr_study_variation=Decimal("7.42"),
+                percent_tolerance_pt_ratio=Decimal("12.60"),
+                number_of_distinct_categories_ndc=Decimal("18.80"),
+                study_result="acceptable",
+                study_protocol_doc=sop_doc,
+                study_lead=inspector_user,
+                approved_by=verifier_user,
+                approved_at=now,
+                conclusion="Measurement system is fully acceptable for production quality verification per AIAG standards (%GRR < 10%).",
+                notes="ANOVA method confirms negligible operator-by-part interaction.",
+            )
+
+            # Study 2: Micrometer Crossed (Marginal)
+            MeasurementSystemAnalysis.objects.create(
+                tenant=tenant,
+                study_title="Micrometer Gage R&R for Tight-Tolerance Hydraulic Spool Diameter",
+                gage=mic_gage,
+                study_type="gage_rr_crossed",
+                analysis_method="average_and_range_xbar_r",
+                status="approved",
+                characteristic_name="Spool Valve OD",
+                study_date=today - datetime.timedelta(days=20),
+                number_of_operators=3,
+                number_of_parts=10,
+                number_of_trials=3,
+                specification_tolerance=Decimal("0.0150"),
+                reference_master_value=Decimal("8.0000"),
+                repeatability_ev=Decimal("0.0008"),
+                reproducibility_av=Decimal("0.0006"),
+                gage_rr_grr=Decimal("0.0010"),
+                part_variation_pv=Decimal("0.0065"),
+                total_variation_tv=Decimal("0.0066"),
+                percent_gage_rr_study_variation=Decimal("15.15"),
+                percent_tolerance_pt_ratio=Decimal("20.00"),
+                number_of_distinct_categories_ndc=Decimal("9.20"),
+                study_result="marginal_conditional",
+                study_protocol_doc=sop_doc,
+                study_lead=inspector_user,
+                approved_by=verifier_user,
+                approved_at=now,
+                conclusion="Measurement system is conditionally acceptable (10-30% range). Operator training on ratchet thimble stop recommended.",
+                notes="X-bar and R chart shows operator B has slight upward bias.",
+            )
+
+            # Study 3: Standard Gauge Block Linearity & Bias
+            MeasurementSystemAnalysis.objects.create(
+                tenant=tenant,
+                study_title="Master Gauge Block Set Linearity and Bias Calibration Evaluation",
+                gage=std_gage,
+                study_type="linearity_and_bias",
+                analysis_method="anova",
+                status="approved",
+                characteristic_name="Block Length Deviation",
+                study_date=today - datetime.timedelta(days=100),
+                number_of_operators=1,
+                number_of_parts=5,
+                number_of_trials=12,
+                specification_tolerance=Decimal("0.0010"),
+                reference_master_value=Decimal("50.0000"),
+                repeatability_ev=Decimal("0.0001"),
+                reproducibility_av=Decimal("0.0000"),
+                gage_rr_grr=Decimal("0.0001"),
+                part_variation_pv=Decimal("0.0009"),
+                total_variation_tv=Decimal("0.0009"),
+                percent_gage_rr_study_variation=Decimal("1.10"),
+                percent_tolerance_pt_ratio=Decimal("2.40"),
+                number_of_distinct_categories_ndc=Decimal("45.00"),
+                bias_value=Decimal("0.0000"),
+                bias_percentage=Decimal("0.05"),
+                linearity_slope=Decimal("0.0001"),
+                linearity_r_squared=Decimal("0.9998"),
+                study_result="acceptable",
+                study_protocol_doc=sop_doc,
+                study_lead=verifier_user,
+                approved_by=admin_user,
+                approved_at=now,
+                conclusion="Exceptional linearity and zero detectable bias across entire 100mm span.",
+                notes="Evaluated with Tesa laser micrometer in cleanroom.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.10 Calibration & Measurement System Analysis (MSA) seeded successfully."))
 
 
 
