@@ -251,7 +251,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs text-slate-500">Verified By</dt>
-            <dd class="text-slate-800 font-medium">{{ verification.verifier.get_full_name|default:verification.verifier.username|default:"Unassigned" }}</dd>
+            <dd class="text-slate-800 font-medium">{% if verification.verifier %}{{ verification.verifier.get_full_name|default:verification.verifier.username }}{% else %}Unassigned{% endif %}</dd>
           </div>
           <div>
             <dt class="text-xs text-slate-500">Verified Date</dt>
