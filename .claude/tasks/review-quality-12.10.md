@@ -52,3 +52,18 @@
 - **[FR-M2] Minor**: `templates/quality/calibrationanalysis/calibration_vendor_directory.html:103` Vendor card action button `?q={{ v.name|urlencode }}` relies on backend `CalibrationRecord` search including `service_vendor__name`.
 
 ---
+
+## 4. Performance Reviewer Pass
+- **Reviewer**: `performance-reviewer`
+- **Status**: Completed
+
+### Findings
+- **[PR-I1] Important**: `apps/quality/forms/CalibrationAnalysis/OutOfToleranceInvestigations.py:50-52` and `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py:153-154` Chained N+1 query via `CalibrationRecord.__str__` accessing `self.gage.gage_id` during form choice rendering. Fix: add `.select_related("gage")` to form queryset and defensive check in `__str__`.
+- **[PR-I2] Important**: `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py:77-84` Prefetch cache bypass via `.filter(tenant=request.tenant).first()` in `calibration_record_detail`. Fix: iterate over prefetched cache `next(iter(record.oot_investigations.all()), None)`.
+- **[PR-M1] Minor**: `apps/quality/views/CalibrationAnalysis/CalibrationGages.py:23-25` Missing `select_related("asset_link")` on `calibration_gage_list`.
+- **[PR-M2] Minor**: `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py:95-103` Extra query in `out_of_tolerance_investigation_create` initial lookup. Fix: add `select_related("gage")`.
+- **[PR-M3] Minor**: `apps/quality/views/CalibrationAnalysis/{CalibrationGages,CalibrationRecords,OutOfToleranceInvestigations,MeasurementSystemAnalyses,CalibrationVendors}.py` Duplicate `COUNT(*)` queries on list views. Fix: evaluate `page_obj.paginator.count`.
+- **[PR-M4] Minor**: `apps/quality/views/CalibrationAnalysis/{CalibrationGages,OutOfToleranceInvestigations}.py` Separate KPI count queries in list views. Fix: combine into single aggregate query.
+- **[PR-M5] Minor**: `apps/quality/views/CalibrationAnalysis/CalibrationVendors.py:18-23` Role filter simplification (`role__in=["vendor", "supplier"]`) and explicit tenant filter on count annotation.
+
+---
