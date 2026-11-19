@@ -35,10 +35,10 @@
   - **Issue**: Form accepts `calibration_record` and `gage` independently without verifying `calibration_record.gage_id == gage.pk`. Also misses validating `suspect_window_start <= suspect_window_end`.
   - **Fix**: In `clean()`, validate that `cal_rec.gage_id == gage.pk`, and validate `suspect_window_start <= suspect_window_end`. (fixed — bc8eb10d)
 
-- [ ] **[I4] Future Date Validation Omission in CalibrationRecordForm**:
+- [x] **[I4] Future Date Validation Omission in CalibrationRecordForm**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py:52-58`
   - **Issue**: `clean()` does not validate that `calibration_date` cannot be in the future, violating contract Section 2.2.
-  - **Fix**: In `clean()`, add `if cal_date and cal_date > timezone.now().date(): self.add_error("calibration_date", "Calibration date cannot be in the future.")`.
+  - **Fix**: In `clean()`, add `if cal_date and cal_date > timezone.now().date(): self.add_error("calibration_date", "Calibration date cannot be in the future.")`. (fixed — 01e9ca78)
 
 - [ ] **[I5] Metrological Circular Dependency (Instrument Self-Parenting & Self-Calibration)**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/CalibrationGages.py:50-53, 60-69` and `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py:46-48, 52-58`
