@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}{{ regulatory_inspection_host.number }} — Regulatory Inspection Host — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:regulatory_inspection_host_list' %}">Regulatory Inspections</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ regulatory_inspection_host.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ regulatory_inspection_host.inspection_title }}</h1>
+            <span class="badge badge-red">{{ regulatory_inspection_host.get_agency_or_body_display }}</span>
+
+            {% if regulatory_inspection_host.status == 'active_inspection' or regulatory_inspection_host.status == 'daily_wrapup' %}
+            <span class="badge badge-amber">{{ regulatory_inspection_host.get_status_display }}</span>
+            {% elif regulatory_inspection_host.status == 'inspection_closed' %}
+            <span class="badge badge-green">{{ regulatory_inspection_host.get_status_display }}</span>
+            {% else %}
+            <span class="badge badge-slate">{{ regulatory_inspection_host.get_status_display }}</span>
+            {% endif %}
+
+            {% if regulatory_inspection_host.formal_outcome == 'nai_no_action_indicated' or regulatory_inspection_host.formal_outcome == 'certified_unconditional' %}
+            <span class="badge badge-green">{{ regulatory_inspection_host.get_formal_outcome_display }}</span>
+            {% elif regulatory_inspection_host.formal_outcome == 'vai_voluntary_action_indicated' or regulatory_inspection_host.formal_outcome == 'conditional_clearance' %}
+            <span class="badge badge-amber">{{ regulatory_inspection_host.get_formal_outcome_display }}</span>
+            {% elif regulatory_inspection_host.formal_outcome == 'oai_official_action_indicated' or regulatory_inspection_host.formal_outcome == 'refusal_warning_letter' %}
+            <span class="badge badge-red">{{ regulatory_inspection_host.get_formal_outcome_display }}</span>
+            {% else %}
+            <span class="badge badge-muted">{{ regulatory_inspection_host.get_formal_outcome_display }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if regulatory_inspection_host.status != 'inspection_closed' %}
+        <form method="post" action="{% url 'quality:regulatory_inspection_host_close' regulatory_inspection_host.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700">
+                <i data-lucide="check-circle-2"></i> Close Inspection
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'quality:regulatory_inspection_host_edit' regulatory_inspection_host.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form method="post" action="{% url 'quality:regulatory_inspection_host_delete' regulatory_inspection_host.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Inspection Host Record {{ regulatory_inspection_host.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Inspection Particulars & Agency Information</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Host Record Number</dt>
+                        <dd class="font-mono font-semibold">{{ regulatory_inspection_host.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Regulatory Body / Agency</dt>
+                        <dd>
+                            <span class="badge badge-red">{{ regulatory_inspection_host.get_agency_or_body_display }}</span>
+                            <div class="text-xs font-medium text-slate-800 mt-1">{{ regulatory_inspection_host.agency_name }}</div>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Lead Inspector / Investigator</dt>
+                        <dd>
+                            <span class="font-medium">{{ regulatory_inspection_host.lead_inspector_name }}</span>
+                            {% if regulatory_inspection_host.inspector_credentials %}
+                            <div class="text-xs text-muted">{{ regulatory_inspection_host.inspector_credentials }}</div>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Inspection Purpose & Type</dt>
+                        <dd>{{ regulatory_inspection_host.get_inspection_purpose_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Announcement Notice</dt>
+                        <dd><span class="badge badge-slate">{{ regulatory_inspection_host.get_announcement_status_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>War Room / Staging Location</dt>
+                        <dd class="font-medium text-slate-800">{{ regulatory_inspection_host.war_room_location }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Scheduled Window</dt>
+                        <dd>{{ regulatory_inspection_host.scheduled_start_date }} to {{ regulatory_inspection_host.scheduled_end_date }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Actual Inspection Period</dt>
+                        <dd>
+                            {% if regulatory_inspection_host.actual_start_date %}
+                            {{ regulatory_inspection_host.actual_start_date }} to {{ regulatory_inspection_host.actual_end_date|default:"In Progress" }}
+                            {% else %}
+                            <span class="text-muted">Not yet commenced</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% if regulatory_inspection_host.audit %}
+                    <div class="detail-item">
+                        <dt>Linked Quality Audit</dt>
+                        <dd>
+                            <a href="{% url 'quality:quality_audit_detail' regulatory_inspection_host.audit.pk %}" class="text-primary hover:underline font-medium">
+                                {{ regulatory_inspection_host.audit.number }} - {{ regulatory_inspection_host.audit.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Front Room & Back Room Command Team</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Front Room Facilitator / Host</dt>
+                        <dd>
+                            {% if regulatory_inspection_host.front_room_lead %}
+                            {{ regulatory_inspection_host.front_room_lead.get_full_name|default:regulatory_inspection_host.front_room_lead.username }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Back Room Staging Manager</dt>
+                        <dd>
+                            {% if regulatory_inspection_host.back_room_lead %}
+                            {{ regulatory_inspection_host.back_room_lead.get_full_name|default:regulatory_inspection_host.back_room_lead.username }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Official Inspection Scribe</dt>
+                        <dd>
+                            {% if regulatory_inspection_host.scribe_user %}
+                            {{ regulatory_inspection_host.scribe_user.get_full_name|default:regulatory_inspection_host.scribe_user.username }}
+                            {% else %}
+                            <span class="text-muted">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Inspector Request & Daily Debrief Log</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Live Debrief & Document Retrieval Notes</h4>
+                    <div class="bg-slate-50 p-4 rounded-md text-sm font-mono text-slate-800 whitespace-pre-wrap leading-relaxed border border-slate-200 max-h-96 overflow-y-auto">
+                        {{ regulatory_inspection_host.daily_summary_notes|default:"No inspector requests or daily debrief notes recorded yet." }}
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="font-semibold text-slate-800 text-sm mb-3">Log New Document / Evidence Request from Inspector</h4>
+                    <form method="post" action="{% url 'quality:regulatory_inspection_host_log_request' regulatory_inspection_host.pk %}" class="space-y-3">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            {{ request_form.request_description }}
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="form-group">
+                                <label class="form-label text-xs">Assign SME / Retriever</label>
+                                {{ request_form.assigned_sme }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label text-xs">Priority SLA</label>
+                                {{ request_form.priority }}
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i data-lucide="plus"></i> Log Request in War Room
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {% if regulatory_inspection_host.closeout_memo %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Exit Conference Debrief & Executive Action Plan</h3>
+            </div>
+            <div class="card-body">
+                <div class="bg-slate-50 p-4 rounded-md text-sm text-slate-800 whitespace-pre-wrap leading-relaxed border border-slate-200">
+                    {{ regulatory_inspection_host.closeout_memo }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Request Fulfillment Board</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium">Fulfillment Rate</span>
+                        <span class="text-sm font-bold text-primary">{{ fulfillment_rate }}%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2.5">
+                        <div class="bg-primary h-2.5 rounded-full transition-all" style="width: {{ fulfillment_rate }}%"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-2xl font-bold text-slate-800">{{ regulatory_inspection_host.requests_logged_count }}</div>
+                        <div class="text-xs text-muted">Total Requested</div>
+                    </div>
+                    <div class="p-3 bg-green-50 rounded border border-green-200 text-center">
+                        <div class="text-2xl font-bold text-green-700">{{ regulatory_inspection_host.requests_fulfilled_count }}</div>
+                        <div class="text-xs text-green-700">Fulfilled</div>
+                    </div>
+                </div>
+
+                {% if pending_requests_count > 0 %}
+                <div class="p-3 bg-amber-50 rounded border border-amber-200 text-center">
+                    <div class="text-xl font-bold text-amber-700">{{ pending_requests_count }}</div>
+                    <div class="text-xs text-amber-700">Pending Retrieval in Back Room</div>
+                </div>
+                <form method="post" action="{% url 'quality:regulatory_inspection_host_fulfill_request' regulatory_inspection_host.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline text-green-700 w-full btn-sm">
+                        <i data-lucide="check"></i> Mark Next Request Fulfilled
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Regulatory Findings & Citations</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                    <span class="text-muted">Form 483 Issued</span>
+                    {% if regulatory_inspection_host.form_483_issued %}
+                    <span class="badge badge-red">Form 483 Issued</span>
+                    {% else %}
+                    <span class="badge badge-green">No 483 Issued</span>
+                    {% endif %}
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                    <span class="text-muted">Formal Observations Count</span>
+                    <span class="font-bold text-slate-800">{{ regulatory_inspection_host.observations_count }}</span>
+                </div>
+                <div class="flex justify-between py-1">
+                    <span class="text-muted">Agency Determination</span>
+                    <span class="font-medium">{{ regulatory_inspection_host.get_formal_outcome_display }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
