@@ -13,7 +13,7 @@ from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.quality.forms.CalibrationAnalysis.CalibrationGages import CalibrationGageForm
 from apps.quality.models.CalibrationAnalysis.CalibrationGages import CalibrationGage
-from apps.quality.views._common import quality_object, quality_scope
+from apps.quality.views._common import _csv_safe, quality_object, quality_scope
 
 PAGE_SIZE = 15
 
@@ -164,10 +164,16 @@ def calibration_gage_export_csv(request):
     ])
     for g in qs:
         writer.writerow([
-            g.gage_id, g.name, g.get_gage_type_display(), g.get_criticality_display(),
-            g.get_status_display(), g.serial_number, g.measurement_range,
-            str(g.max_permissible_error), g.engineering_unit,
-            g.next_calibration_due.isoformat() if g.next_calibration_due else "",
-            g.storage_location
+            _csv_safe(g.gage_id),
+            _csv_safe(g.name),
+            _csv_safe(g.get_gage_type_display()),
+            _csv_safe(g.get_criticality_display()),
+            _csv_safe(g.get_status_display()),
+            _csv_safe(g.serial_number),
+            _csv_safe(g.measurement_range),
+            _csv_safe(str(g.max_permissible_error)),
+            _csv_safe(g.engineering_unit),
+            _csv_safe(g.next_calibration_due.isoformat() if g.next_calibration_due else ""),
+            _csv_safe(g.storage_location),
         ])
     return response
