@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Hold & Batch Release Board — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Final Quality Control</span>
+        <span class="mx-1">/</span>
+        <span>Hold & Release Board</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="shield-alert" class="w-6 h-6 text-amber-600"></i>
+        Quality Hold & Outgoing Release Board
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Command center for active electronic quality holds, pending acceptance sampling decisions, CoC sign-offs, and cleared shipments.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:final_inspection_lot_list' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="check-square" class="w-4 h-4"></i>
+        <span>Inspection Lots</span>
+      </a>
+      <a href="{% url 'quality:quality_release_authorization_list' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="truck" class="w-4 h-4"></i>
+        <span>All Releases</span>
+      </a>
+      <a href="{% url 'quality:final_inspection_lot_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Inspection Lot</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="stat-card card p-4 flex items-center gap-3">
+      <div class="stat-icon red p-2.5 rounded-lg bg-red-50 text-red-600">
+        <i data-lucide="lock" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900">{{ hold_lot_count }}</div>
+        <div class="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Lot Holds</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-3">
+      <div class="stat-icon orange p-2.5 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="shield-ban" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900">{{ hold_release_count }}</div>
+        <div class="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Shipping Holds</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-3">
+      <div class="stat-icon blue p-2.5 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="clock" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900">{{ pending_lot_count }}</div>
+        <div class="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Decisions Pending</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-3">
+      <div class="stat-icon purple p-2.5 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="signature" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900">{{ pending_coc_count }}</div>
+        <div class="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Unsigned CoCs</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-3">
+      <div class="stat-icon green p-2.5 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="truck" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900">{{ ready_release_count }}</div>
+        <div class="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Cleared to Ship</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operational Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Panel 1: Active Electronic Holds -->
+    <div class="card p-5 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3">
+        <div class="flex items-center gap-2">
+          <i data-lucide="lock" class="w-5 h-5 text-red-600"></i>
+          <h2 class="text-base font-bold text-slate-900">Active Quality & Shipping Holds</h2>
+        </div>
+        <span class="badge badge-red text-xs">{{ hold_lot_count|add:hold_release_count }} Active</span>
+      </div>
+
+      <!-- Lot Holds List -->
+      <div class="space-y-3">
+        <h3 class="text-xs font-bold text-slate-600 uppercase tracking-wider">Quarantined Inspection Lots</h3>
+        {% for lot in active_holds_lots %}
+          <div class="p-3 bg-red-50/50 rounded-lg border border-red-200 flex items-start justify-between gap-3 text-sm">
+            <div>
+              <div class="flex items-center gap-2">
+                <a href="{% url 'quality:final_inspection_lot_detail' lot.pk %}" class="font-bold text-red-700 hover:underline">
+                  {{ lot.number }}
+                </a>
+                <span class="badge badge-red text-xs">LOT HOLD</span>
+              </div>
+              <div class="text-xs text-slate-700 font-medium mt-0.5">{{ lot.item_name|default:lot.item_code }} (Lot: {{ lot.lot_number }})</div>
+              <p class="text-xs text-red-800 mt-1 italic">"{{ lot.hold_reason|default:"Reason not specified" }}"</p>
+            </div>
+            <a href="{% url 'quality:final_inspection_lot_detail' lot.pk %}" class="btn btn-outline text-xs bg-white text-slate-700 shrink-0">
+              Resolve
+            </a>
+          </div>
+        {% empty %}
+          <div class="text-xs text-slate-500 py-3 text-center bg-slate-50 rounded">No inspection lots currently on hold.</div>
+        {% endfor %}
+
+        <h3 class="text-xs font-bold text-slate-600 uppercase tracking-wider mt-4">Blocked Outbound Shipments</h3>
+        {% for rel in active_holds_releases %}
+          <div class="p-3 bg-red-50/50 rounded-lg border border-red-200 flex items-start justify-between gap-3 text-sm">
+            <div>
+              <div class="flex items-center gap-2">
+                <a href="{% url 'quality:quality_release_authorization_detail' rel.pk %}" class="font-bold text-red-700 hover:underline">
+                  {{ rel.number }}
+                </a>
+                <span class="badge badge-red text-xs">SHIPPING HOLD</span>
+              </div>
+              <div class="text-xs text-slate-700 font-medium mt-0.5">Customer: {{ rel.customer.name }} · Shipment: {{ rel.shipment_number|default:rel.shipment }}</div>
+              <p class="text-xs text-red-800 mt-1 italic">"{{ rel.hold_reason|default:"Shipping gate blocked by quality order" }}"</p>
+            </div>
+            <a href="{% url 'quality:quality_release_authorization_detail' rel.pk %}" class="btn btn-outline text-xs bg-white text-slate-700 shrink-0">
+              Resolve
+            </a>
+          </div>
+        {% empty %}
+          <div class="text-xs text-slate-500 py-3 text-center bg-slate-50 rounded">No outbound shipments currently on hold.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Panel 2: Pending Actions & Ready Releases -->
+    <div class="space-y-6">
+      <!-- Unsigned CoCs -->
+      <div class="card p-5 space-y-3">
+        <div class="flex items-center justify-between border-b pb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="award" class="w-5 h-5 text-purple-600"></i>
+            <h2 class="text-base font-bold text-slate-900">CoCs Awaiting Digital Signature</h2>
+          </div>
+          <span class="badge badge-amber text-xs">{{ pending_coc_count }} Pending</span>
+        </div>
+        <div class="space-y-2">
+          {% for coc in pending_cocs %}
+          <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between gap-3 text-sm">
+            <div>
+              <a href="{% url 'quality:certificate_of_conformance_detail' coc.pk %}" class="font-semibold text-blue-600 hover:underline">
+                {{ coc.number }}
+              </a>
+              <div class="text-xs text-slate-500">{{ coc.customer.name }} · {{ coc.item_name|default:coc.item_code }}</div>
+            </div>
+            <a href="{% url 'quality:certificate_of_conformance_detail' coc.pk %}" class="btn btn-outline text-xs bg-white">
+              Sign
+            </a>
+          </div>
+          {% empty %}
+          <div class="text-xs text-slate-500 py-3 text-center">No certificates awaiting signature.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Cleared to Ship -->
+      <div class="card p-5 space-y-3">
+        <div class="flex items-center justify-between border-b pb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="truck" class="w-5 h-5 text-green-600"></i>
+            <h2 class="text-base font-bold text-slate-900">Cleared & Ready for Shipment</h2>
+          </div>
+          <span class="badge badge-green text-xs">{{ ready_release_count }} Cleared</span>
+        </div>
+        <div class="space-y-2">
+          {% for rel in ready_releases %}
+          <div class="p-3 bg-green-50/40 rounded-lg border border-green-200 flex items-center justify-between gap-3 text-sm">
+            <div>
+              <a href="{% url 'quality:quality_release_authorization_detail' rel.pk %}" class="font-semibold text-green-800 hover:underline">
+                {{ rel.number }}
+              </a>
+              <div class="text-xs text-slate-600">Shipment {{ rel.shipment_number|default:rel.shipment }} · {{ rel.customer.name }} ({{ rel.quantity_authorized }} units)</div>
+            </div>
+            <span class="badge badge-green text-xs">CLEARED</span>
+          </div>
+          {% empty %}
+          <div class="text-xs text-slate-500 py-3 text-center">No shipments currently queued in ready release state.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
