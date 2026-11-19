@@ -45,10 +45,10 @@
   - **Issue**: Gages can select themselves as their own `reference_standard_parent` causing infinite recursion loops, and calibrations allow selecting the gage being calibrated inside `standards_used`.
   - **Fix**: Exclude `self.instance` from `reference_standard_parent` queryset and validate in `clean()`. In `CalibrationRecordForm.clean()`, reject if `gage in standards_used`. (fixed — 83057b61, d559ee50)
 
-- [ ] **[I6] Seed Quality `--flush` Sequence Omits 12.10 Models**:
+- [x] **[I6] Seed Quality `--flush` Sequence Omits 12.10 Models**:
   - **Location**: `apps/quality/management/commands/seed_quality.py:99-137`
   - **Issue**: `--flush` does not delete `MeasurementSystemAnalysis`, `OutOfToleranceInvestigation`, `CalibrationRecord`, and `CalibrationGage`.
-  - **Fix**: Add the 4 models to the `--flush` deletion block in reverse foreign key order.
+  - **Fix**: Add the 4 models to the `--flush` deletion block in reverse foreign key order. (fixed — aa8beaa6)
 
 - [ ] **[I7] Missing Subpackage `__init__.py` Files in `CalibrationAnalysis/` Folders**:
   - **Location**: `apps/quality/{models,forms,views,urls}/CalibrationAnalysis/__init__.py`
