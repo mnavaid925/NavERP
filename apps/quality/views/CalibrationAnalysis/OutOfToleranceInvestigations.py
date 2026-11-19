@@ -3,7 +3,7 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -44,14 +44,17 @@ def out_of_tolerance_investigation_list(request):
     if risk_filter:
         qs = qs.filter(risk_level=risk_filter)
 
-    total_oots = qs.count()
-    base_qs = quality_scope(OutOfToleranceInvestigation.objects.all(), request)
-    critical_count = base_qs.filter(risk_level="critical").count()
-    open_count = base_qs.filter(status__in=["open", "investigating", "mrb_review", "actions_pending"]).count()
+    kpi_aggregates = quality_scope(OutOfToleranceInvestigation.objects.all(), request).aggregate(
+        critical=Count("pk", filter=Q(risk_level="critical")),
+        open=Count("pk", filter=Q(status__in=["open", "investigating", "mrb_review", "actions_pending"])),
+    )
+    critical_count = kpi_aggregates["critical"]
+    open_count = kpi_aggregates["open"]
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    total_oots = page_obj.paginator.count
 
     context = {
         "oot_investigations": page_obj,
