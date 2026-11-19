@@ -59,4 +59,8 @@ class CalibrationRecordForm(TenantUniqueMixin, TenantModelForm):
         cal_date = cleaned.get("calibration_date")
         if cal_date and cal_date > timezone.now().date():
             self.add_error("calibration_date", "Calibration date cannot be in the future.")
+        gage = cleaned.get("gage")
+        standards = cleaned.get("standards_used")
+        if gage and standards and any(s.pk == gage.pk for s in standards):
+            self.add_error("standards_used", "A gage cannot be used as its own calibration reference standard.")
         return cleaned
