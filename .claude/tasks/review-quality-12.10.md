@@ -83,9 +83,9 @@
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py:28-36`
   - **Fix**: Add `| Q(service_vendor__name__icontains=search_query)`. (fixed — be4c6840)
 
-- [ ] **[M2] `calibration_gage_list` Search Omits System Number (`number__icontains`)**:
+- [x] **[M2] `calibration_gage_list` Search Omits System Number (`number__icontains`)**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationGages.py:27-34`
-  - **Fix**: Add `| Q(number__icontains=search_query)`.
+  - **Fix**: Add `| Q(number__icontains=search_query)`. (fixed — bc072ef1)
 
 - [ ] **[M3] OOT `suspect_window_start` Initial Value Uses Failed Date Instead of Last Pass**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py:101-105`
