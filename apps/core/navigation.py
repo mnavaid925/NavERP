@@ -3454,6 +3454,13 @@ LIVE_LINKS = {
         "Measurement System Analysis (MSA / Gage R&R)": "quality:measurement_system_analysis_list",
         "Calibration Vendor Management": "quality:calibration_vendor_directory",
     },
+    "12.11": {
+        "Audit Program Planning": "quality:audit_program_list",
+        "Audit Execution & Checklists": "quality:quality_audit_list",
+        "Audit Findings & Reporting": "quality:audit_finding_list",
+        "Corrective Action Tracking": "quality:audit_action_tracker",
+        "Regulatory & Certification Audits": "quality:regulatory_inspection_host_list",
+    },
 
 
 
