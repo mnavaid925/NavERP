@@ -12356,8 +12356,41 @@ Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info
 
 ---
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 
 ---
 
@@ -20498,8 +20531,41 @@ Two levels, bare page filenames, never flat `<entity>_<page>.html`.
 - **Journal postings, credit notes, payment blocks** -> `apps.accounting` (L29). 6.17 posts nothing.
 - **Stock/quarantine holds for non-compliant goods** -> inventory 5.14/5.15, SCM 4.9.
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 
 ---
 
@@ -26923,8 +26989,41 @@ convention (`_`-prefixed inside the folder that includes them — cf.
   (answered by the run series), pivot with >2 axes, cross-module tenant-wide analytics, cache/materialised
   aggregate tables, tiles in the Module 0 global home.
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 
 
 
@@ -27827,8 +27926,41 @@ move to the next. Do **not** interleave entities, and do **not** touch shared fi
 - Dashboards, cross-pipeline conversion rates, pipeline velocity, per-deal predictive scoring, benchmark trend data → **8.12**.
 - Marketing-sourced pipeline contribution and campaign ROI inside the forecast → **8.13**.
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 
 
 ### Close-out reconciliation (2026-09-27)
@@ -28287,8 +28419,41 @@ Lines 11156-11184 (8.4's Verify and Close-out) were found in the same sweep and 
 
 ---
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 ---
 
 # Sub-module 0.20 — Admin Console & System Operations (Module 0: Core / Foundation, `core`) — plan from research-core-0.20.md (2026-09-28)
@@ -28744,8 +28909,41 @@ and **never** a flat `<entity>_<page>.html`.
 - A unified cross-app support inbox with a single ticket identity — genuinely desirable, genuinely a cross-module refactor of CRM 1.4 + HRM 3.x. Deferred to a dedicated reconciliation pass, not smuggled into 0.20.
 - Community forums, suggested-article ML, AI triage (Freshservice's differentiators).
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 
 
 
@@ -28867,8 +29065,41 @@ PCI-DSS) — and leaves `RegulatoryFramework` untouched. Rejected alternative an
   between two apps' risk models is a cross-module project, not a 0.21 side effect.
 - **Risk snapshots / KRIs / RCSA campaigns** — P2, parked in research §1.3.
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 
 research §3.
 
@@ -31054,8 +31285,41 @@ Build entity by entity — finish one entity's 4 backend files + 3 templates bef
 - **A duplicate alert-row table**: field-rep alert delivery rows are `sales.MobileDealAlert` (8.16).
 - **A 5th model for enrichment**: bullet 5's auto-update half is `sales.PartyEnrichmentEvent` (8.3); its merge half is GAP-sales-8.17-02, not a half-built table.
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 
 
 ---
@@ -34605,8 +34869,41 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 3. **Automated Recurring Monthly CAM & Chargeback Batch Scheduler**: Scheduled Celery/cron monthly billing runs generating bulk `AssetSpaceChargeback` and `accounting.Invoice` batches.
 4. **Module 20 Facilities & Workplace Management (`20.1`–`20.20`)**: Hot-desking/meeting-room booking, visitor badges, janitorial routes, physical access-control zones, and workplace employee portals remain scoped to future Module 20 (`facilities`).
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
 
 
 ---
@@ -34653,9 +34950,9 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 ## Models (from research — 4)
 
 ### 1. `CalibrationGage` (`QGAG-`)
-- [ ] **File**: `apps/quality/models/CalibrationAnalysis/CalibrationGages.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QGAG"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/CalibrationAnalysis/CalibrationGages.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QGAG"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `gage_id_tag`: `CharField(max_length=64, help_text="Unique asset/gage tag e.g. GAG-2026-0042")`
   - `name`: `CharField(max_length=200, help_text="Tool/instrument name e.g. Mitutoyo Digital Caliper 0-150mm")`
   - `gage_type`: `CharField(max_length=32, choices=GAGE_TYPE_CHOICES, default="caliper", db_index=True)` — `"caliper"` (7), `"micrometer"` (10), `"dial_indicator"` (14), `"pressure_gage"` (13), `"temperature_probe"` (17), `"torque_wrench"` (13), `"multimeter"` (10), `"scale_balance"` (13), `"cmm"` (3), `"optical_comparator"` (18), `"height_gage"` (11), `"plug_ring_gage"` (14), `"reference_standard"` (18), `"other"` (5) (longest: 18 <= 32)
@@ -34683,8 +34980,8 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `nist_traceability_number`: `CharField(max_length=100, blank=True, help_text="NIST or National Metrology Institute test/trace report #")`
   - `calibration_procedure_doc`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="calibrated_gages", help_text="Calibration SOP or work instruction")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qgag_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qgag_ten_status")` (19)
   - `Index(fields=["tenant", "gage_type"], name="idx_qgag_ten_type")` (17)
@@ -34695,9 +34992,9 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "-created_at"], name="idx_qgag_ten_created")` (20)
 
 ### 2. `CalibrationRecord` (`QCAL-`)
-- [ ] **File**: `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCAL"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCAL"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255)`
   - `gage`: `ForeignKey("quality.CalibrationGage", on_delete=models.CASCADE, related_name="calibration_records")`
   - `calibration_date`: `DateField(default=timezone.now, db_index=True)`
@@ -34722,8 +35019,8 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `approved_at`: `DateTimeField(null=True, blank=True)`
   - `test_points_data`: `JSONField(default=list, blank=True, help_text="Array of test points: nominal, as-found, error, as-left, tolerance")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Form Exclusions**: `tenant`, `number`, `approved_at`, `test_points_data`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `approved_at`, `test_points_data`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcal_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "result_status"], name="idx_qcal_ten_result")` (19)
   - `Index(fields=["tenant", "as_found_condition"], name="idx_qcal_ten_as_found")` (21)
@@ -34734,9 +35031,9 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "-created_at"], name="idx_qcal_ten_created")` (20)
 
 ### 3. `OutOfToleranceInvestigation` (`QOOT-`)
-- [ ] **File**: `apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QOOT"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QOOT"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255)`
   - `calibration_record`: `ForeignKey("quality.CalibrationRecord", on_delete=models.CASCADE, related_name="oot_investigations")`
   - `gage`: `ForeignKey("quality.CalibrationGage", on_delete=models.CASCADE, related_name="oot_investigations")`
@@ -34763,8 +35060,8 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `quality_manager_signoff`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_oots")`
   - `signoff_date`: `DateField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qoot_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qoot_ten_status")` (19)
   - `Index(fields=["tenant", "risk_severity"], name="idx_qoot_ten_risk")` (17)
@@ -34774,9 +35071,9 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "-created_at"], name="idx_qoot_ten_created")` (20)
 
 ### 4. `MeasurementSystemAnalysis` (`QMSA-`)
-- [ ] **File**: `apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMSA"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMSA"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255)`
   - `gage`: `ForeignKey("quality.CalibrationGage", on_delete=models.CASCADE, related_name="msa_studies")`
   - `study_type`: `CharField(max_length=32, choices=STUDY_TYPE_CHOICES, default="gage_rr_crossed", db_index=True)` — `"gage_rr_crossed"` (15), `"gage_rr_nested"` (14), `"linearity_and_bias"` (18), `"stability_study"` (15), `"attribute_agreement"` (19), `"type_1_gage_study"` (17) (longest: 19 <= 32)
@@ -34809,8 +35106,8 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `approved_at`: `DateTimeField(null=True, blank=True)`
   - `conclusion`: `TextField(blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Form Exclusions**: `tenant`, `number`, `raw_study_data`, `approved_at`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `raw_study_data`, `approved_at`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qmsa_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "study_type"], name="idx_qmsa_ten_type")` (17)
   - `Index(fields=["tenant", "study_result"], name="idx_qmsa_ten_res")` (16)
@@ -34823,38 +35120,38 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Backend (`apps/quality/{models,forms,views,urls}/CalibrationAnalysis/`)
 
-- [ ] **Shared Helpers**:
+- [x] **Shared Helpers**:
   - `apps/quality/models/CalibrationAnalysis/_validators.py`: Custom validators for range checks, uncertainty ratio calculations, and guardbanding rules
   - `apps/quality/views/CalibrationAnalysis/_helpers.py`: Helper functions for query param parsing (`.isdigit()`), choice filters, tenant scoping, CSV export with formula neutralization, and audit logging
-- [ ] **Entity 1: CalibrationGage (`QGAG-`)**:
+- [x] **Entity 1: CalibrationGage (`QGAG-`)**:
   - `apps/quality/models/CalibrationAnalysis/CalibrationGages.py`
   - `apps/quality/forms/CalibrationAnalysis/CalibrationGages.py` (`CalibrationGageForm`)
   - `apps/quality/views/CalibrationAnalysis/CalibrationGages.py` (`calibration_gage_list`, `calibration_gage_detail`, `calibration_gage_create`, `calibration_gage_edit`, `calibration_gage_delete`, `calibration_gage_export_csv`, `calibration_gage_schedule_action`)
   - `apps/quality/urls/CalibrationAnalysis/CalibrationGages.py` (literal routes before `<int:pk>/`)
-- [ ] **Entity 2: CalibrationRecord (`QCAL-`)**:
+- [x] **Entity 2: CalibrationRecord (`QCAL-`)**:
   - `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`
   - `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py` (`CalibrationRecordForm`)
   - `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py` (`calibration_record_list`, `calibration_record_detail`, `calibration_record_create`, `calibration_record_edit`, `calibration_record_delete`, `calibration_record_export_csv`, `calibration_record_approve`)
   - `apps/quality/urls/CalibrationAnalysis/CalibrationRecords.py` (literal routes before `<int:pk>/`)
-- [ ] **Entity 3: OutOfToleranceInvestigation (`QOOT-`)**:
+- [x] **Entity 3: OutOfToleranceInvestigation (`QOOT-`)**:
   - `apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`
   - `apps/quality/forms/CalibrationAnalysis/OutOfToleranceInvestigations.py` (`OutOfToleranceInvestigationForm`)
   - `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py` (`out_of_tolerance_investigation_list`, `out_of_tolerance_investigation_detail`, `out_of_tolerance_investigation_create`, `out_of_tolerance_investigation_edit`, `out_of_tolerance_investigation_delete`, `out_of_tolerance_investigation_export_csv`, `out_of_tolerance_investigation_contain_action`, `out_of_tolerance_investigation_close_action`)
   - `apps/quality/urls/CalibrationAnalysis/OutOfToleranceInvestigations.py` (literal routes before `<int:pk>/`)
-- [ ] **Entity 4: MeasurementSystemAnalysis (`QMSA-`)**:
+- [x] **Entity 4: MeasurementSystemAnalysis (`QMSA-`)**:
   - `apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`
   - `apps/quality/forms/CalibrationAnalysis/MeasurementSystemAnalyses.py` (`MeasurementSystemAnalysisForm`)
   - `apps/quality/views/CalibrationAnalysis/MeasurementSystemAnalyses.py` (`measurement_system_analysis_list`, `measurement_system_analysis_detail`, `measurement_system_analysis_create`, `measurement_system_analysis_edit`, `measurement_system_analysis_delete`, `measurement_system_analysis_export_csv`, `measurement_system_analysis_calculate`)
   - `apps/quality/urls/CalibrationAnalysis/MeasurementSystemAnalyses.py` (literal routes before `<int:pk>/`)
-- [ ] **Accredited Calibration Lab Directory**:
+- [x] **Accredited Calibration Lab Directory**:
   - `apps/quality/views/CalibrationAnalysis/CalibrationVendorDirectory.py` (`calibration_vendor_directory`)
   - `apps/quality/urls/CalibrationAnalysis/CalibrationVendorDirectory.py` (`calibration-vendors/` -> `quality:calibration_vendor_directory`)
-- [ ] **Package Re-exports**:
+- [x] **Package Re-exports**:
   - `apps/quality/models/CalibrationAnalysis/__init__.py` & `apps/quality/models/__init__.py` re-exports
   - `apps/quality/forms/CalibrationAnalysis/__init__.py` & `apps/quality/forms/__init__.py` re-exports
   - `apps/quality/views/CalibrationAnalysis/__init__.py` & `apps/quality/views/__init__.py` re-exports
   - `apps/quality/urls/CalibrationAnalysis/__init__.py` & `apps/quality/urls/__init__.py` url patterns concatenation
-- [ ] **Admin & Seeder Integration**:
+- [x] **Admin & Seeder Integration**:
   - Register `CalibrationGage`, `CalibrationRecord`, `OutOfToleranceInvestigation`, `MeasurementSystemAnalysis` in `apps/quality/admin.py`
   - Extend `apps/quality/management/commands/seed_quality.py` with idempotent `_seed_submodule_12_10` creating realistic test data (Acme calibrated gages across machining cells, certified reference standards, passing/adjusted calibration records, active OOT investigation with suspect work order reverse-tracing, and completed AIAG Crossed Gage R&R study)
 
@@ -34862,7 +35159,7 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Wire-up
 
-- [ ] Add `LIVE_LINKS["12.10"]` in `apps/core/navigation.py` mapping the exact 5 `NavERP.md` feature bullets:
+- [x] Add `LIVE_LINKS["12.10"]` in `apps/core/navigation.py` mapping the exact 5 `NavERP.md` feature bullets:
   ```python
   "12.10": {
       "Calibration Schedule & Planning": "quality:calibration_gage_list",
@@ -34877,43 +35174,43 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Templates (`templates/quality/calibrationanalysis/`)
 
-- [ ] **Calibration Gage** (`templates/quality/calibrationanalysis/calibration_gage/`):
+- [x] **Calibration Gage** (`templates/quality/calibrationanalysis/calibration_gage/`):
   - `list.html`: Gage register, asset tag, tool type, classification, calibration status badge, next due date, location, filter bar, CSV export
   - `detail.html`: Gage specifications, measurement range, resolution, tolerances, custodian, maintenance history tab, linked calibration records, linked MSA studies
   - `form.html`: Create/edit form with interval settings, asset/work center selectors, document linkage, and tolerance configurations
-- [ ] **Calibration Record** (`templates/quality/calibrationanalysis/calibration_record/`):
+- [x] **Calibration Record** (`templates/quality/calibrationanalysis/calibration_record/`):
   - `list.html`: Calibration events, gage tag, date, type, as-found/as-left condition, overall result badge, certificate number, filter bar, CSV export
   - `detail.html`: Test points matrix (nominal vs found vs error vs left), expanded uncertainty ($U$), TUR ratio, guardband decision rule, technician/approver sign-offs, linked OOT button
   - `form.html`: Calibration execution form with ambient conditions (°C, % humidity), as-found/as-left dropdowns, vendor selector, and test points entry
-- [ ] **Out-of-Tolerance Investigation** (`templates/quality/calibrationanalysis/out_of_tolerance_investigation/`):
+- [x] **Out-of-Tolerance Investigation** (`templates/quality/calibrationanalysis/out_of_tolerance_investigation/`):
   - `list.html`: OOT events register, risk severity badge, status, suspect window dates, suspect work order counts, product disposition, filter bar, CSV export
   - `detail.html`: Impact assessment breakdown, Consumer vs Producer risk scores, reverse-tracing production scope, containment actions, MRB sign-off, direct links to NCR/CAPA
   - `form.html`: OOT investigation form with suspect dates, work center selector, risk ratings, containment actions, and disposition selections
-- [ ] **Measurement System Analysis** (`templates/quality/calibrationanalysis/measurement_system_analysis/`):
+- [x] **Measurement System Analysis** (`templates/quality/calibrationanalysis/measurement_system_analysis/`):
   - `list.html`: MSA study registry, study type (Crossed/Nested/Bias/Linearity), analysis method (ANOVA/Xbar-R), %GRR, NDC, study verdict badge, filter bar, CSV export
   - `detail.html`: AIAG summary scorecard (%GRR, EV, AV, PV, TV, P/T Ratio, NDC), variance component breakdown, linearity/bias regression stats, study conclusion, approval state
   - `form.html`: Study setup form with operators/parts/trials counts, specification tolerance, reference master value, and protocol document selector
-- [ ] **Calibration Vendor Directory** (`templates/quality/calibrationanalysis/calibration_vendor_directory.html`):
+- [x] **Calibration Vendor Directory** (`templates/quality/calibrationanalysis/calibration_vendor_directory.html`):
   - Dedicated directory of accredited calibration service laboratories (filtered from `core.Party`), displaying ISO/IEC 17025 accreditation badges, calibration lead times, active service contracts, and quick-link to serviced gages
 
 ---
 
 ## Verify
 
-- [ ] `python manage.py makemigrations quality` (creates incremental migration `0016_...`)
-- [ ] `python manage.py migrate quality`
-- [ ] `python manage.py seed_quality` **x2** (strictly idempotent, zero duplicate records or errors)
-- [ ] `python manage.py check` (0 issues reported)
-- [ ] Phase 3.5 Smoke (`qa-smoke-tester`): `temp/smoke_12_10.py` as `admin_acme` / `password` + throwaway Beta tenant asserting 200/302 across all 18 views + literal seeded strings/numbers in HTML (L8, L57) + zero `{#` / `{% comment` leaks + filter operations with `|stringformat:"d"` + junk parameter resilience (L11) + page 2 pagination (L9) + workflow POSTs (approvals, containment actions) + cross-tenant IDOR 404 isolation; verify sidebar shows `12.10` Live across all 5 bullets; delete `temp/smoke_12_10.py`
+- [x] `python manage.py makemigrations quality` (creates incremental migration `0016_...`)
+- [x] `python manage.py migrate quality`
+- [x] `python manage.py seed_quality` **x2** (strictly idempotent, zero duplicate records or errors)
+- [x] `python manage.py check` (0 issues reported)
+- [x] Phase 3.5 Smoke (`qa-smoke-tester`): `temp/smoke_12_10.py` as `admin_acme` / `password` + throwaway Beta tenant asserting 200/302 across all 18 views + literal seeded strings/numbers in HTML (L8, L57) + zero `{#` / `{% comment` leaks + filter operations with `|stringformat:"d"` + junk parameter resilience (L11) + page 2 pagination (L9) + workflow POSTs (approvals, containment actions) + cross-tenant IDOR 404 isolation; verify sidebar shows `12.10` Live across all 5 bullets; delete `temp/smoke_12_10.py`
 
 ---
 
 ## Close-out
 
-- [ ] Phase 4: Run 6 serial review passes (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` report-only -> `security-reviewer`) scoped to `BASE...HEAD` -> consolidate/dedupe sorted `C#`/`I#`/`M#` into `.claude/tasks/review-quality-12.10.md`
-- [ ] Phase 5: Run `code-fixer` agent against `.claude/tasks/review-quality-12.10.md` (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
-- [ ] Phase 6: Pin test contract & append `12.10` fixtures (`cal_*`) in `apps/quality/tests/conftest.py` (L59), then write 4 test modules serially: `test_calibrationanalysis_models.py`, `test_calibrationanalysis_forms.py`, `test_calibrationanalysis_views.py`, `test_calibrationanalysis_security.py` (using `test_calibrationanalysis_*` names), followed by one **unfiltered** `venv\Scripts\python.exe -m pytest -q -W ignore apps/quality/tests/` green pass (L47)
-- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` with Sub-module 12.10 models/routes/templates/seeder, mark 12.10 complete in `README.md`, record any gaps in `.agents/tasks/gaps-quality-12.10.md` (or declare None), and populate `## Review notes` below
+- [x] Phase 4: Run 6 serial review passes (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` report-only -> `security-reviewer`) scoped to `BASE...HEAD` -> consolidate/dedupe sorted `C#`/`I#`/`M#` into `.claude/tasks/review-quality-12.10.md`
+- [x] Phase 5: Run `code-fixer` agent against `.claude/tasks/review-quality-12.10.md` (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
+- [x] Phase 6: Pin test contract & append `12.10` fixtures (`cal_*`) in `apps/quality/tests/conftest.py` (L59), then write 4 test modules serially: `test_calibrationanalysis_models.py`, `test_calibrationanalysis_forms.py`, `test_calibrationanalysis_views.py`, `test_calibrationanalysis_security.py` (using `test_calibrationanalysis_*` names), followed by one **unfiltered** `venv\Scripts\python.exe -m pytest -q -W ignore apps/quality/tests/` green pass (L47)
+- [x] Phase 7: Update `.claude/skills/quality/SKILL.md` with Sub-module 12.10 models/routes/templates/seeder, mark 12.10 complete in `README.md`, record any gaps in `.agents/tasks/gaps-quality-12.10.md` (or declare None), and populate `## Review notes` below
 
 ---
 
@@ -34926,5 +35223,38 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ---
 
-## Review notes
-(filled in at the end)
+## Review notes — Sub-module 12.10 Close-out (2026-11-19)
+
+- **Scope Completed**: All 5 NavERP.md feature bullets for Sub-module 12.10 (Calibration Schedule & Planning, Calibration Execution & Records, Out-of-Tolerance Handling, Measurement System Analysis ANOVA Gage R&R, Calibration Vendor Management) are built, verified, and 100% green.
+- **Contract & Research Alignment**: Models, forms, views, and URL patterns match `.claude/tasks/contract-quality-12.10.md` and `.claude/tasks/research-quality-12.10.md`.
+- **Entities Built**:
+  1. `CalibrationGage` [QGAG-] (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`)
+  2. `CalibrationRecord` [QCAL-] (`apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`)
+  3. `OutOfToleranceInvestigation` [QOOT-] (`apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`)
+  4. `MeasurementSystemAnalysis` [QMSA-] (`apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`)
+  5. `CalibrationVendors` directory (`apps/quality/views/CalibrationAnalysis/CalibrationVendors.py`)
+- **Database & Seeder**:
+  - Incremental migrations: `0016_...` and `0018_...`
+  - Seeder command `seed_quality` extended with idempotent `_seed_submodule_12_10` (verified 2x pass with zero duplicates)
+  - Full `--flush` cascade wipe supported
+- **Runtime Smoke Verification (Phase 3.5)**:
+  - 39 endpoint test cases executed via test client against real seeded data for Acme & Globex
+  - 100% pass on view rendering, search, boundary pagination, and cross-tenant IDOR 404 blocking
+- **Phase 4 Review Wave**:
+  - Six serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+  - 23 structured findings (0 Critical, 11 Important, 12 Minor) documented in `.claude/tasks/review-quality-12.10.md`
+- **Phase 5 Code Fixer**:
+  - All 23 findings resolved in strict ID order by `code-fixer` agent with individual commits
+  - Verified `manage.py check` clean (0 issues)
+- **Phase 6 Test Suite**:
+  - 186 dedicated tests written across 4 test modules:
+    - `test_calibrationanalysis_models.py` (44 tests)
+    - `test_calibrationanalysis_forms.py` (45 tests)
+    - `test_calibrationanalysis_views.py` (73 tests)
+    - `test_calibrationanalysis_security.py` (24 tests)
+  - Full unfiltered quality test suite run: **1,844 passed in `apps/quality/tests/` (100% green)**
+- **Phase 7 Documentation & Gap Management**:
+  - Living skill guide updated: `.claude/skills/quality/SKILL.md`
+  - Root roadmap marked complete: `README.md`
+  - Gap register: `.agents/tasks/gaps-quality-12.10.md` (**Gaps**: None open; 4 deferred hardware/IoT enhancements documented)
+
