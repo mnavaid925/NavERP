@@ -81,6 +81,20 @@ from apps.quality.forms.FinalQuality.PackagingLabelVerifications import (
 from apps.quality.forms.FinalQuality.QualityReleaseAuthorizations import (
     QualityReleaseAuthorizationForm,
 )
+from apps.quality.forms.AuditManagement.AuditPrograms import (
+    AuditProgramForm,
+)
+from apps.quality.forms.AuditManagement.QualityAudits import (
+    QualityAuditForm,
+)
+from apps.quality.forms.AuditManagement.AuditFindings import (
+    AuditFindingForm,
+    AuditFindingResponseForm,
+)
+from apps.quality.forms.AuditManagement.RegulatoryInspectionHosts import (
+    InspectionLogRequestForm,
+    RegulatoryInspectionHostForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -124,5 +138,11 @@ __all__ = [
     "CertificateOfConformanceForm",
     "PackagingLabelVerificationForm",
     "QualityReleaseAuthorizationForm",
+    "AuditProgramForm",
+    "QualityAuditForm",
+    "AuditFindingForm",
+    "AuditFindingResponseForm",
+    "RegulatoryInspectionHostForm",
+    "InspectionLogRequestForm",
 ]
 
