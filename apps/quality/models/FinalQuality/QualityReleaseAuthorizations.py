@@ -164,6 +164,7 @@ class QualityReleaseAuthorization(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="quality_rel_tnt_stat_idx"),
             models.Index(fields=["tenant", "release_disposition"], name="quality_rel_tnt_disp_idx"),
             models.Index(fields=["tenant", "is_on_hold"], name="quality_rel_tnt_hold_idx"),
+            models.Index(fields=["tenant", "customer"], name="quality_rel_tnt_cust_idx"),
         ]
 
     def __str__(self):
