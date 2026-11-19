@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); and 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC) — Final Inspection Lots [QFQC-], Certificates of Conformance [QCOC-], Packaging & Labeling Verifications [QPKG-], Quality Release Authorizations [QREL-], and OQC Hold & Release Board). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.9), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); and 12.10 Calibration & Measurement System Analysis (MSA) — Gage registry [QGAG-], Metrological Calibration Records [QCAL-], Out-of-Tolerance Reverse-Tracing Investigations [QOOT-], AIAG ANOVA Gage R&R Studies [QMSA-], and ISO/IEC 17025 Accredited Calibration Vendor Directory). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.10), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -80,6 +80,13 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Quality Release Authorizations** [`QREL-`]: Multi-gate finished goods outbound shipping release authorizations. Enforces 4-way compliance validation (final inspection passed, zero open NCRs/CAPAs, packaging approved, CoC issued and signed), cross-record counterparty customer integrity validation, container security seals, carrier tracking references, hold-authorization conflict protection, and audit logging.
   - **OQC Hold & Release Board**: Real-time operational Kanban command center tracking active quarantine holds across inspection lots and shipping releases, pending inspection queues, pending CoC sign-offs, and cleared shipments with unsliced KPI metric summary cards.
 
+- **12.10 Calibration & Measurement System Analysis (MSA)**:
+  - **Calibration Gages & Instrument Registry** [`QGAG-`]: Master gage registry satisfying ISO 9001:2015 §7.1.5, ISO/IEC 17025, and FDA 21 CFR § 820.72. Tracks instrument tags (`gage_id`), gage types (`gage_block_master`, `digital_micrometer`, `vernier_digital_caliper`, `optical_comparator_vision`, `torque_wrench`, `multimeter_dmm`, `pressure_transducer_calibrator`, `cct_temperature_well`, `height_gage`, `thread_plug_ring_gage`, `custom_fixture_indicator`), criticality (`safety_critical`, `quality_critical`, `standard_commercial`), reference standard flags, NIST traceability numbers, ISO 17025 accreditation, metrological resolutions, accuracy ratings, max permissible error (MPE), calibration intervals, due date forecasting, and self-parenting prevention.
+  - **Calibration Execution & Metrology Records** [`QCAL-`]: Metrological event records across internal metrology labs and ISO 17025 accredited calibration vendors (`service_vendor` -> `core.Party`). Tracks certificate numbers, environmental telemetry (temperature °C, relative humidity %), expanded uncertainty ($U, k=2$), test uncertainty ratios ($TUR$), decision rules (`binary_shared_risk_simple`, `binary_guardbanded_ilac_g8`, `non_binary_fuzzy_acceptance`), guardbanded tolerance reduction, M2M reference standards used, and post-completion instrument state synchronization.
+  - **Out-of-Tolerance (OOT) Investigations** [`QOOT-`]: Reverse-tracing quality investigations initiated upon calibration failures (`fail_out_of_tolerance`). Automates suspect manufacturing window bounding between the last in-spec passing calibration and the failure event, production lot containment, MPE exceedance calculation, consumer vs. producer risk ratings, product recall triggers, and direct cross-module escalations to NCR (`QNCR-`) and CAPA (`QCAP-`).
+  - **Measurement System Analysis (MSA / Gage R&R)** [`QMSA-`]: AIAG MSA 4th Edition compliant measurement system analysis studies. Supports study types (`grr_crossed_anova`, `grr_nested_anova`, `linearity_and_bias`, `stability_study`, `attribute_agreement_kappa`, `type_1_gage_study`), ANOVA variance decomposition (Repeatability EV, Reproducibility AV, Total GRR, Part Variation PV, Total Variation TV), acceptance criteria evaluation (%GRR of study variation, %GRR of tolerance P/T ratio, and Number of Distinct Categories $ndc \ge 5$), linearity slopes, bias estimates, and regression goodness-of-fit $R^2$.
+  - **Calibration Vendor Governance Directory**: Directory of external calibration laboratories and metrology service providers linked to `core.Party`, tracking ISO/IEC 17025 accreditation statuses, active calibrations performed, and direct deep-links into performed calibration history.
+
 ---
 
 ## App Layout & Architecture
@@ -135,6 +142,11 @@ apps/quality/
       CertificatesOfConformance.py            <- CertificateOfConformance [QCOC-]
       PackagingLabelVerifications.py          <- PackagingLabelVerification [QPKG-]
       QualityReleaseAuthorizations.py         <- QualityReleaseAuthorization [QREL-]
+    CalibrationAnalysis/                      <- Sub-module 12.10 models
+      CalibrationGages.py                     <- CalibrationGage [QGAG-]
+      CalibrationRecords.py                   <- CalibrationRecord [QCAL-]
+      OutOfToleranceInvestigations.py         <- OutOfToleranceInvestigation [QOOT-]
+      MeasurementSystemAnalyses.py            <- MeasurementSystemAnalysis [QMSA-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -183,6 +195,11 @@ apps/quality/
       CertificatesOfConformance.py            <- CertificateOfConformanceForm
       PackagingLabelVerifications.py          <- PackagingLabelVerificationForm
       QualityReleaseAuthorizations.py         <- QualityReleaseAuthorizationForm
+    CalibrationAnalysis/                      <- Sub-module 12.10 forms
+      CalibrationGages.py                     <- CalibrationGageForm
+      CalibrationRecords.py                   <- CalibrationRecordForm
+      OutOfToleranceInvestigations.py         <- OutOfToleranceInvestigationForm
+      MeasurementSystemAnalyses.py            <- MeasurementSystemAnalysisForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -239,6 +256,12 @@ apps/quality/
       PackagingLabelVerifications.py          <- List, Detail, Create, Edit, Delete, Export
       QualityReleaseAuthorizations.py         <- List, Detail, Create, Edit, Delete, Toggle Hold, Export
       OqcHoldBoard.py                         <- OQC Hold & Release Board
+    CalibrationAnalysis/                      <- Sub-module 12.10 views
+      CalibrationGages.py                     <- List, Detail, Create, Edit, Delete, Export
+      CalibrationRecords.py                   <- List, Detail, Create, Edit, Delete, Export
+      OutOfToleranceInvestigations.py         <- List, Detail, Create, Edit, Delete, Export
+      MeasurementSystemAnalyses.py            <- List, Detail, Create, Edit, Delete, Export
+      CalibrationVendors.py                   <- Calibration Vendor Directory
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -294,13 +317,22 @@ apps/quality/
       PackagingLabelVerifications.py
       QualityReleaseAuthorizations.py
       OqcHoldBoard.py
+    CalibrationAnalysis/                      <- Sub-module 12.10 URLs
+      CalibrationGages.py
+      CalibrationRecords.py
+      OutOfToleranceInvestigations.py
+      MeasurementSystemAnalyses.py
+      CalibrationVendors.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.9)
-  tests/                                      <- Pytest test suite (100% green, 1,747 passing tests)
-    conftest.py                               <- Shared 12.1 through 12.9 fixtures
-    test_finalquality_models.py
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.10)
+  tests/                                      <- Pytest test suite (100% green, 1,844 passing tests)
+    conftest.py                               <- Shared 12.1 through 12.10 fixtures
+    test_calibrationanalysis_models.py        <- Sub-module 12.10 model tests (44 tests)
+    test_calibrationanalysis_forms.py         <- Sub-module 12.10 form tests (45 tests)
+    test_calibrationanalysis_views.py         <- Sub-module 12.10 view tests (73 tests)
+    test_calibrationanalysis_security.py      <- Sub-module 12.10 security tests (24 tests)
     test_finalquality_forms.py
     test_finalquality_views.py
     test_finalquality_security.py
@@ -809,6 +841,26 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
     - `QLPA-2026-00001` (Layer 1 Shift Supervisor audit on Work Center CNC-01, Shift 1, 100% compliance score)
     - `QLPA-2026-00002` (Layer 2 Area Manager audit on Cleanroom Molding, Shift 2, 85% compliance score with minor finding)
 
+- **12.10 Data**:
+  - 6 Calibration Gages per tenant:
+    - `GAG-STD-001` (Ceramic Master Gauge Block Set Grade 0, Reference Standard, active)
+    - `GAG-DIG-002` (Digital Outside Micrometer 0-25mm, active)
+    - `GAG-CAL-003` (Vernier Digital Caliper 150mm, active)
+    - `GAG-TORQ-004` (Electronic Torque Wrench 10-100 Nm, quarantined OOT)
+    - `GAG-DMM-005` (6.5 Digit Precision Multimeter, pending calibration)
+    - `GAG-OPT-006` (Optical Vision Measuring System, active)
+  - 4 Calibration Records per tenant:
+    - `EXT-CAL-2026-001` (Accredited external calibration on GAG-STD-001, Pass, guardbanded ILAC-G8)
+    - `INT-CAL-2026-002` (Internal routine calibration on GAG-DIG-002, Pass)
+    - `EXT-CAL-2026-003` (Accredited calibration on GAG-CAL-003, Pass with limitations)
+    - `INT-CAL-2026-OOT-01` (Failed calibration on GAG-TORQ-004, Fail Out of Tolerance, triggered OOT-2026-001)
+  - 1 Out-of-Tolerance Investigation per tenant:
+    - `OOT-2026-001` (Electronic Torque Wrench OOT, High Risk, 150 suspect units contained on hold, linked to CAPA)
+  - 3 Measurement System Analysis Studies per tenant:
+    - `MSA-2026-001` (Gage R&R ANOVA on Micrometer, %GRR 14.07%, NDC 9, Acceptable)
+    - `MSA-2026-002` (Gage R&R ANOVA on Digital Caliper, %GRR 22.40%, NDC 6, Marginal/Conditional)
+    - `MSA-2026-003` (Linearity and Bias Study on Master Gauge Blocks, R² 0.985, Acceptable)
+
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
 ---
@@ -874,6 +926,12 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - Multi-Gate Outgoing Release: Quality releases enforce a 4-point verification gate (final inspection lot passed, zero open NCRs/CAPAs, packaging approved, CoC issued and signed) plus cross-record counterparty customer verification before shipment clearance.
     - Quarantine Hold Governance: Activating a hold on an inspection lot or release requires tenant-admin authority and a non-empty `hold_reason`. Releasing while on hold is prohibited.
     - OQC Hold Board Performance: KPI counts are computed on unsliced querysets before slicing `[:10]` previews, avoiding SQL subquery overhead and count truncation.
+16. **Calibration & MSA Invariants (ISO 9001 §7.1.5 / ISO 17025 / AIAG MSA 4th Ed):**
+    - Metrological Circular Dependency Prevention: An instrument cannot select itself as its own master reference standard (`reference_standard_parent`), and a gage cannot be included in its own calibration `standards_used`.
+    - Calibration Completion Synchronization: Gages only transition status and recalibration due dates (`next_calibration_due = calibration_date + interval`) upon formal completion (`status == "completed"`). A failed calibration (`fail_out_of_tolerance`) immediately locks the gage in `quarantined_oot`.
+    - OOT Reverse-Tracing Window: When creating an Out-of-Tolerance investigation, the initial suspect manufacturing window defaults between the last valid in-spec passing calibration date and the failure event date.
+    - AIAG ANOVA Variance Decomposition: MSA Gage R&R calculates repeatability $EV$, reproducibility $AV$, total Gage R&R $GRR = \sqrt{EV^2 + AV^2}$, part variation $PV$, and total variation $TV = \sqrt{GRR^2 + PV^2}$. Acceptance evaluates $\%GRR = (GRR / TV) \times 100\%$ and $ndc = 1.41 \times (PV / GRR) \ge 5$.
+    - CSV Formula Sanitization: All calibration and MSA CSV exports apply `_csv_safe` formula sanitization (leading quote neutralization for `=`, `+`, `-`, `@`, `\t`, `\r`) with `X-Content-Type-Options: nosniff`.
 
 ---
 
@@ -946,6 +1004,13 @@ LIVE_LINKS = {
         "Certificate of Conformance (CoC)": "quality:certificate_of_conformance_list",
         "Packaging & Labeling Verification": "quality:packaging_label_verification_list",
         "Shipment Release & Traceability": "quality:quality_release_authorization_list",
+    },
+    "12.10": {
+        "Calibration Schedule & Planning": "quality:calibration_gage_list",
+        "Calibration Execution & Records": "quality:calibration_record_list",
+        "Out-of-Tolerance (OOT) Handling": "quality:out_of_tolerance_investigation_list",
+        "Measurement System Analysis (MSA / Gage R&R)": "quality:measurement_system_analysis_list",
+        "Calibration Vendor Management": "quality:calibration_vendor_directory",
     },
 }
 ```
