@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Packaging & Labeling Verifications — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:oqc_hold_board' %}" class="hover:underline">Final & Outgoing Quality</a>
+        <span class="mx-1">/</span>
+        <span>Packaging & Labeling</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="barcode" class="w-6 h-6 text-blue-600"></i>
+        Packaging & Labeling Verifications
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Pre-shipment packaging verification, 1D/2D barcode grading (ISO/IEC 15415/15416), label accuracy against artwork masters, and carton integrity.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:packaging_label_verification_export' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export CSV</span>
+      </a>
+      <a href="{% url 'quality:packaging_label_verification_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Verification</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="box" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ total_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total Audits</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="check-circle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ verified_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Passed & Released</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon red p-3 rounded-lg bg-red-50 text-red-600">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ failed_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Relabel / Repack / Quarantine</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div>
+        <label for="q" class="form-label text-xs font-semibold text-slate-600">Search</label>
+        <input type="text" name="q" id="q" value="{{ q }}" placeholder="Number, item, lot, barcode..." class="form-input text-sm w-full">
+      </div>
+      <div>
+        <label for="disposition" class="form-label text-xs font-semibold text-slate-600">Disposition</label>
+        <select name="disposition" id="disposition" class="form-select text-sm w-full">
+          <option value="">All Dispositions</option>
+          {% for val, label in disposition_choices %}
+            <option value="{{ val }}" {% if disposition == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="grade" class="form-label text-xs font-semibold text-slate-600">ISO/IEC Print Grade</label>
+        <select name="grade" id="grade" class="form-select text-sm w-full">
+          <option value="">All Barcode Grades</option>
+          {% for val, label in grade_choices %}
+            <option value="{{ val }}" {% if grade == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="status" class="form-label text-xs font-semibold text-slate-600">Status</label>
+        <select name="status" id="status" class="form-select text-sm w-full">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary text-sm flex-1">
+          <i data-lucide="filter" class="w-4 h-4 mr-1"></i>Filter
+        </button>
+        <a href="{% url 'quality:packaging_label_verification_list' %}" class="btn btn-outline text-sm" title="Clear Filters" aria-label="Clear Filters">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Records Table -->
+  <div class="card overflow-hidden">
+    <div class="table-wrap">
+      <table class="table w-full text-left text-sm">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 border-b border-slate-200">
+            <th class="py-3 px-4">Verification #</th>
+            <th class="py-3 px-4">Item & Lot</th>
+            <th class="py-3 px-4">Cartons</th>
+            <th class="py-3 px-4">Barcode Symbology</th>
+            <th class="py-3 px-4">Print Grade</th>
+            <th class="py-3 px-4">Disposition</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for ver in verifications %}
+          <tr class="hover:bg-slate-50/60 transition-colors">
+            <td class="py-3 px-4">
+              <a href="{% url 'quality:packaging_label_verification_detail' ver.pk %}" class="font-semibold text-blue-600 hover:underline flex items-center gap-1.5">
+                <i data-lucide="barcode" class="w-4 h-4 text-slate-400"></i>
+                {{ ver.number }}
+              </a>
+              <div class="text-xs text-slate-500 mt-0.5">{{ ver.title }}</div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-medium text-slate-800">{{ ver.item_name|default:ver.item_code|default:"—" }}</div>
+              <div class="text-xs text-slate-500">
+                {% if ver.lot_number %}Lot: <span class="font-mono text-slate-700">{{ ver.lot_number }}</span>{% endif %}
+                {% if ver.label_part_number %} · Label: {{ ver.label_part_number }}{% endif %}
+              </div>
+            </td>
+            <td class="py-3 px-4 font-semibold text-slate-700">
+              {{ ver.carton_count_inspected }} ctn
+            </td>
+            <td class="py-3 px-4">
+              <span class="badge {{ ver.barcode_css }} text-xs">
+                {{ ver.get_barcode_symbology_display }}
+              </span>
+            </td>
+            <td class="py-3 px-4">
+              <span class="badge {{ ver.grade_css }} text-xs font-mono">
+                {{ ver.get_iso_iec_print_grade_display|slice:":7" }}
+              </span>
+            </td>
+            <td class="py-3 px-4">
+              <span class="badge {{ ver.disposition_css }} text-xs">
+                {{ ver.get_disposition_display }}
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right">
+              <div class="flex items-center justify-end gap-1">
+                <a href="{% url 'quality:packaging_label_verification_detail' ver.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600 hover:bg-blue-50" title="View Detail">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+                <a href="{% url 'quality:packaging_label_verification_edit' ver.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600 hover:bg-amber-50" title="Edit Verification">
+                  <i data-lucide="pencil" class="w-4 h-4"></i>
+                </a>
+                {% if user.is_staff or user.is_superuser %}
+                <form method="post" action="{% url 'quality:packaging_label_verification_delete' ver.pk %}" class="inline" onsubmit="return confirm('Delete Packaging Verification {{ ver.number }}?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600 hover:bg-red-50" title="Delete Verification">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="py-12 text-center text-slate-500">
+              <div class="empty-state flex flex-col items-center justify-center space-y-3">
+                <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                  <i data-lucide="barcode" class="w-6 h-6"></i>
+                </div>
+                <div class="text-base font-medium text-slate-700">No Packaging Verifications Found</div>
+                <p class="text-xs text-slate-500 max-w-sm">No barcode and packaging inspections match your criteria.</p>
+                <a href="{% url 'quality:packaging_label_verification_create' %}" class="btn btn-primary text-sm mt-2">
+                  <i data-lucide="plus" class="w-4 h-4 mr-1"></i>New Verification
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+      <div>
+        Showing page <span class="font-semibold text-slate-800">{{ page_obj.number }}</span> of <span class="font-semibold text-slate-800">{{ page_obj.paginator.num_pages }}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if disposition %}&disposition={{ disposition }}{% endif %}{% if grade %}&grade={{ grade }}{% endif %}{% if status %}&status={{ status }}{% endif %}" class="btn btn-outline text-xs">
+            Previous
+          </a>
+        {% else %}
+          <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+        {% endif %}
+
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if disposition %}&disposition={{ disposition }}{% endif %}{% if grade %}&grade={{ grade }}{% endif %}{% if status %}&status={{ status }}{% endif %}" class="btn btn-outline text-xs">
+            Next
+          </a>
+        {% else %}
+          <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
