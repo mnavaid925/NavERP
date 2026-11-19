@@ -35,3 +35,12 @@ def safe_parse_date(value):
         return parse_date(value)
     except (TypeError, ValueError):
         return None
+
+
+def _csv_safe(val):
+    if val is None:
+        return ""
+    text = str(val)
+    if text.startswith(("\t", "\r", "\n")) or text.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
