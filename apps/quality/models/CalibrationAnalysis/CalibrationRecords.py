@@ -151,7 +151,8 @@ class CalibrationRecord(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} — {self.gage.gage_id} ({self.get_overall_result_display()})"
+        gage_label = self.gage.gage_id if "gage" in getattr(self._state, "fields_cache", {}) else f"Gage #{self.gage_id}"
+        return f"{self.number} — {gage_label} ({self.get_overall_result_display()})"
 
     @property
     def result_css(self):
