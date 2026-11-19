@@ -29,8 +29,7 @@ def _csv_safe(val):
 @login_required
 def quality_release_authorization_list(request):
     qs = QualityReleaseAuthorization.objects.filter(tenant=request.tenant).select_related(
-        "customer", "shipment", "sales_order", "inspection_lot",
-        "certificate_of_conformance", "packaging_verification", "releasing_officer"
+        "customer", "shipment"
     )
 
     q = request.GET.get("q", "").strip()
@@ -169,6 +168,9 @@ def quality_release_authorization_edit(request, pk):
 @tenant_admin_required
 def quality_release_authorization_delete(request, pk):
     release = get_object_or_404(QualityReleaseAuthorization, pk=pk, tenant=request.tenant)
+    if release.status == "authorized":
+        messages.error(request, f"Authorized quality release {release.number} cannot be deleted. Revoke or place on hold instead to preserve traceability.")
+        return redirect("quality:quality_release_authorization_detail", pk=release.pk)
     number = release.number
     write_audit_log(request.user, release, "delete", tenant=request.tenant)
     release.delete()
@@ -178,6 +180,7 @@ def quality_release_authorization_delete(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def quality_release_authorization_toggle_hold(request, pk):
     release = get_object_or_404(QualityReleaseAuthorization, pk=pk, tenant=request.tenant)
     reason = request.POST.get("hold_reason", "").strip()
@@ -187,10 +190,12 @@ def quality_release_authorization_toggle_hold(request, pk):
         action = "release"
         msg = f"Quality release {release.number} removed from hold."
     else:
+        if not reason:
+            messages.error(request, "A non-empty hold reason is mandatory when placing a release on hold.")
+            return redirect("quality:quality_release_authorization_detail", pk=release.pk)
         release.is_on_hold = True
         release.status = "active_hold"
-        if reason:
-            release.hold_reason = reason
+        release.hold_reason = reason
         action = "hold"
         msg = f"Quality release {release.number} placed on shipping hold."
     release.save()
@@ -201,8 +206,8 @@ def quality_release_authorization_toggle_hold(request, pk):
 
 @login_required
 def quality_release_authorization_export(request):
-    write_audit_log(request.user, QualityReleaseAuthorization(), "export", tenant=request.tenant)
-    qs = QualityReleaseAuthorization.objects.filter(tenant=request.tenant).order_by("-created_at")
+    write_audit_log(request.user, None, "export", changes={"model": "QualityReleaseAuthorization"}, tenant=request.tenant)
+    qs = QualityReleaseAuthorization.objects.filter(tenant=request.tenant).select_related("customer", "releasing_officer").order_by("-created_at")
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="quality_releases.csv"'
