@@ -91,6 +91,23 @@ def calibration_record_detail(request, pk):
     return render(request, "quality/calibrationanalysis/calibration_record/detail.html", context)
 
 
+def _sync_gage_calibration(record):
+    if record.status == "completed":
+        gage = record.gage
+        gage.last_calibration_date = record.calibration_date
+        gage.last_calibration_result = record.get_overall_result_display()
+        if gage.calibration_interval_days and record.calibration_date:
+            gage.next_calibration_due = record.calibration_date + timedelta(days=gage.calibration_interval_days)
+
+        if record.overall_result == "fail_out_of_tolerance":
+            gage.status = "quarantined_oot"
+        elif record.overall_result == "fail_unrepairable":
+            gage.status = "out_of_service"
+        elif record.overall_result in ("pass", "pass_with_limitations"):
+            gage.status = "active_in_service"
+        gage.save()
+
+
 @login_required
 def calibration_record_create(request):
     initial = {}
@@ -106,18 +123,8 @@ def calibration_record_create(request):
             record.save()
             form.save_m2m()
 
-            # Synchronize gage calibration status and next due date
-            gage = record.gage
-            gage.last_calibration_date = record.calibration_date
-            gage.last_calibration_result = record.get_overall_result_display()
-            if gage.calibration_interval_days:
-                gage.next_calibration_due = record.calibration_date + timedelta(days=gage.calibration_interval_days)
-
-            if record.overall_result == "fail_out_of_tolerance":
-                gage.status = "quarantined_oot"
-            elif record.overall_result in ("pass", "pass_with_limitations"):
-                gage.status = "active_in_service"
-            gage.save()
+            # Synchronize gage calibration status and next due date strictly on completed status
+            _sync_gage_calibration(record)
 
             write_audit_log(request.user, record, "create", tenant=request.tenant)
             messages.success(request, f"Calibration record {record.number} created.")
@@ -141,6 +148,7 @@ def calibration_record_edit(request, pk):
         form = CalibrationRecordForm(request.POST, instance=record, tenant=request.tenant)
         if form.is_valid():
             record = form.save()
+            _sync_gage_calibration(record)
             write_audit_log(request.user, record, "update", tenant=request.tenant)
             messages.success(request, f"Calibration record {record.number} updated.")
             return redirect("quality:calibration_record_detail", pk=record.pk)
