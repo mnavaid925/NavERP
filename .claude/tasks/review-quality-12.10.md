@@ -55,10 +55,10 @@
   - **Issue**: Subpackage directories lack `__init__.py` files with standard explicit `__all__` re-exports.
   - **Fix**: Create `__init__.py` in each of the 4 directories re-exporting all sub-module entities and routes. (fixed — 9a312c4d, 9344f3ec, 9950cb7d, e3da49e8)
 
-- [ ] **[I8] Chained N+1 Query via `CalibrationRecord.__str__` in `OutOfToleranceInvestigationForm`**:
+- [x] **[I8] Chained N+1 Query via `CalibrationRecord.__str__` in `OutOfToleranceInvestigationForm`**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/OutOfToleranceInvestigations.py:50-52` and `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py:153-154`
   - **Issue**: Rendering `calibration_record` dropdown stringifies each record via `self.gage.gage_id`, triggering N+1 queries.
-  - **Fix**: Add `.select_related("gage")` to `calibration_record` form queryset, and add cached check in `CalibrationRecord.__str__`.
+  - **Fix**: Add `.select_related("gage")` to `calibration_record` form queryset, and add cached check in `CalibrationRecord.__str__`. (fixed — 29ec6dac, e8308a10)
 
 - [ ] **[I9] Prefetch Cache Bypass in `calibration_record_detail`**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py:77-84`
