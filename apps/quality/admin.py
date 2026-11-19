@@ -747,6 +747,7 @@ class CalibrationRecordAdmin(admin.ModelAdmin):
     list_filter = ("calibration_type", "overall_result", "as_found_condition", "status", "tenant")
     search_fields = ("number", "gage__gage_id", "gage__name", "certificate_number", "technician_name")
     list_select_related = ("tenant", "gage", "service_vendor", "calibrated_by_user", "approved_by")
+    filter_horizontal = ("standards_used",)
 
 
 @admin.register(OutOfToleranceInvestigation)
