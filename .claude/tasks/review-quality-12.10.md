@@ -107,17 +107,17 @@
   - **Location**: `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py:95-103`
   - **Fix**: Add `select_related("gage")` to `record` lookup. (fixed — a6528663)
 
-- [ ] **[M8] Duplicate `COUNT(*)` Queries on List Views**:
+- [x] **[M8] Duplicate `COUNT(*)` Queries on List Views**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/{CalibrationGages,CalibrationRecords,OutOfToleranceInvestigations,MeasurementSystemAnalyses,CalibrationVendors}.py`
-  - **Fix**: Evaluate `page_obj.paginator.count` instead of pre-calling `qs.count()`.
+  - **Fix**: Evaluate `page_obj.paginator.count` instead of pre-calling `qs.count()`. (fixed — 3e020000, 96524564, e497b7a5, bd0f3202, a3ea5770)
 
-- [ ] **[M9] Separate KPI Count Queries in `calibration_gage_list` and `out_of_tolerance_investigation_list`**:
+- [x] **[M9] Separate KPI Count Queries in `calibration_gage_list` and `out_of_tolerance_investigation_list`**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/{CalibrationGages,OutOfToleranceInvestigations}.py`
-  - **Fix**: Combine into a single conditional aggregate query.
+  - **Fix**: Combine into a single conditional aggregate query. (fixed — 3e020000, e497b7a5)
 
-- [ ] **[M10] Vendor Directory Count Scoping & Role Filter Optimization**:
+- [x] **[M10] Vendor Directory Count Scoping & Role Filter Optimization**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationVendors.py:18-23`
-  - **Fix**: Simplify `Q(roles__role__in=["vendor", "supplier"])` and add explicit `filter=Q(calibrations_performed__tenant=request.tenant)` to `Count`.
+  - **Fix**: Simplify `Q(roles__role__in=["vendor", "supplier"])` and add explicit `filter=Q(calibrations_performed__tenant=request.tenant)` to `Count`. (fixed — a3ea5770)
 
 - [ ] **[M11] Unrestricted Mass Assignment of `test_points_data` in `CalibrationRecordForm`**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py:15-18`
