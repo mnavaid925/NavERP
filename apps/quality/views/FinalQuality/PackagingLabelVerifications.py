@@ -27,9 +27,7 @@ def _csv_safe(val):
 
 @login_required
 def packaging_label_verification_list(request):
-    qs = PackagingLabelVerification.objects.filter(tenant=request.tenant).select_related(
-        "artwork_master", "inspection_lot", "shipment", "verifier"
-    )
+    qs = PackagingLabelVerification.objects.filter(tenant=request.tenant)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -164,8 +162,8 @@ def packaging_label_verification_delete(request, pk):
 
 @login_required
 def packaging_label_verification_export(request):
-    write_audit_log(request.user, PackagingLabelVerification(), "export", tenant=request.tenant)
-    qs = PackagingLabelVerification.objects.filter(tenant=request.tenant).order_by("-created_at")
+    write_audit_log(request.user, None, "export", changes={"model": "PackagingLabelVerification"}, tenant=request.tenant)
+    qs = PackagingLabelVerification.objects.filter(tenant=request.tenant).select_related("verifier").order_by("-created_at")
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="packaging_label_verifications.csv"'
