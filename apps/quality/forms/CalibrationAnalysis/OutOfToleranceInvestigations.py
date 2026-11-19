@@ -48,7 +48,7 @@ class OutOfToleranceInvestigationForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["calibration_record"].queryset = CalibrationRecord.objects.filter(tenant=self.tenant)
+            self.fields["calibration_record"].queryset = CalibrationRecord.objects.filter(tenant=self.tenant).select_related("gage")
             self.fields["gage"].queryset = CalibrationGage.objects.filter(tenant=self.tenant)
             self.fields["suspect_work_center"].queryset = WorkCenter.objects.filter(tenant=self.tenant)
             self.fields["linked_ncr"].queryset = NonConformanceReport.objects.filter(tenant=self.tenant)
