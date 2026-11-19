@@ -97,8 +97,8 @@
         <thead>
           <tr class="bg-slate-50 text-slate-600 text-xs font-semibold uppercase border-b border-slate-200">
             <th class="py-2.5 px-4">Source of Variation</th>
-            <th class="py-2.5 px-4">Standard Deviation ($\sigma$)</th>
-            <th class="py-2.5 px-4">Study Variation ($6\sigma$)</th>
+            <th class="py-2.5 px-4">Standard Deviation (&sigma;)</th>
+            <th class="py-2.5 px-4">Study Variation (6&sigma;)</th>
             <th class="py-2.5 px-4">% Study Variation (%SV)</th>
             <th class="py-2.5 px-4">Interpretation</th>
           </tr>
@@ -137,7 +137,7 @@
             <td class="py-2.5 px-4 text-slate-900">{{ msa_study.total_variation_tv }}</td>
             <td class="py-2.5 px-4 text-slate-900">—</td>
             <td class="py-2.5 px-4 text-slate-900">100.00%</td>
-            <td class="py-2.5 px-4 font-sans text-slate-900">Total study envelope ($TV^2 = GRR^2 + PV^2$)</td>
+            <td class="py-2.5 px-4 font-sans text-slate-900">Total study envelope (TV&sup2; = GRR&sup2; + PV&sup2;)</td>
           </tr>
         </tbody>
       </table>
@@ -237,7 +237,7 @@
           <dd class="font-mono text-slate-800">{{ msa_study.linearity_slope|default:"—" }}</dd>
         </div>
         <div class="col-span-2">
-          <dt class="text-xs text-slate-400">Goodness of Fit ($R^2$)</dt>
+          <dt class="text-xs text-slate-400">Goodness of Fit (R&sup2;)</dt>
           <dd class="font-mono font-bold text-blue-600">{{ msa_study.linearity_r_squared|default:"—" }}</dd>
         </div>
       </dl>
