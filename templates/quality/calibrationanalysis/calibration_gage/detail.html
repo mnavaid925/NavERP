@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}{{ gage.gage_id }} — {{ gage.name }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Breadcrumb & Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:calibration_gage_list' %}" class="hover:underline">Gages</a>
+        <span class="mx-1">/</span>
+        <span class="font-mono text-slate-700">{{ gage.gage_id }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="gauge" class="w-6 h-6 text-blue-600"></i>
+          <span>{{ gage.name }}</span>
+        </h1>
+        <span class="badge {{ gage.status_css }} text-xs">{{ gage.get_status_display }}</span>
+        <span class="badge {{ gage.criticality_css }} text-xs">{{ gage.get_criticality_display }}</span>
+        {% if gage.is_reference_standard %}
+          <span class="badge badge-info text-xs">Reference Standard</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-slate-500 mt-1 font-mono">
+        Tag: {{ gage.gage_id }} | System Ref: {{ gage.number }} | Serial: {{ gage.serial_number|default:"N/A" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2 flex-wrap">
+      <a href="{% url 'quality:calibration_record_create' %}?gage={{ gage.pk }}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="file-check" class="w-4 h-4"></i>
+        <span>Execute Calibration</span>
+      </a>
+      <a href="{% url 'quality:out_of_tolerance_investigation_create' %}?gage={{ gage.pk }}" class="btn btn-outline text-red-600 border-red-200 hover:bg-red-50 flex items-center gap-1.5 text-sm">
+        <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+        <span>Log OOT Event</span>
+      </a>
+      <a href="{% url 'quality:measurement_system_analysis_create' %}?gage={{ gage.pk }}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="bar-chart-2" class="w-4 h-4"></i>
+        <span>Run MSA</span>
+      </a>
+      <a href="{% url 'quality:calibration_gage_edit' gage.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Metrology & Operational Overview Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Metrology Technical Specifications -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+        <i data-lucide="sliders" class="w-4 h-4 text-blue-500"></i>
+        Metrology & Measurement Capability
+      </h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-slate-400">Gage Type</dt>
+          <dd class="font-medium text-slate-800">{{ gage.get_gage_type_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Measurement Unit</dt>
+          <dd class="font-medium text-slate-800 font-mono">{{ gage.engineering_unit }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Operating Range</dt>
+          <dd class="font-medium text-slate-800 font-mono">{{ gage.measurement_range|default:"Not specified" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Resolution</dt>
+          <dd class="font-medium text-slate-800 font-mono">{{ gage.resolution|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Manufacturer & Model</dt>
+          <dd class="font-medium text-slate-800">{{ gage.manufacturer|default:"—" }} {{ gage.model_number }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Accuracy Specification</dt>
+          <dd class="font-medium text-slate-800 font-mono">{{ gage.accuracy_spec|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Max Permissible Error (MPE)</dt>
+          <dd class="font-bold text-blue-600 font-mono">±{{ gage.max_permissible_error }} {{ gage.engineering_unit }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">NIST Traceability Number</dt>
+          <dd class="font-medium text-slate-800 font-mono">{{ gage.nist_traceability_number|default:"—" }}</dd>
+        </div>
+        {% if gage.reference_standard_parent %}
+          <div class="col-span-2">
+            <dt class="text-xs text-slate-400">Calibrated Against Master Standard</dt>
+            <dd class="font-medium text-blue-600">
+              <a href="{% url 'quality:calibration_gage_detail' gage.reference_standard_parent.pk %}" class="hover:underline">
+                {{ gage.reference_standard_parent.gage_id }} — {{ gage.reference_standard_parent.name }}
+              </a>
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- Crib Custody & Calibration Schedule -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+        <i data-lucide="calendar" class="w-4 h-4 text-green-500"></i>
+        Crib Custody & Calibration Schedule
+      </h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-slate-400">Calibration Interval</dt>
+          <dd class="font-medium text-slate-800 font-mono">{{ gage.calibration_interval_days }} Days</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Last Calibrated</dt>
+          <dd class="font-medium text-slate-800 font-mono">{{ gage.last_calibration_date|default:"Never" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Next Recalibration Due</dt>
+          <dd class="font-bold font-mono {% if gage.status == 'past_due' %}text-red-600{% else %}text-slate-800{% endif %}">
+            {{ gage.next_calibration_due|default:"Not Scheduled" }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Last Result</dt>
+          <dd class="font-medium text-slate-800">{{ gage.last_calibration_result|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Storage Location</dt>
+          <dd class="font-medium text-slate-800">{{ gage.storage_location|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Designated Custodian</dt>
+          <dd class="font-medium text-slate-800">
+            {% if gage.custodian %}
+              {{ gage.custodian.get_full_name|default:gage.custodian.username }}
+            {% else %}
+              <span class="text-slate-400">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Department</dt>
+          <dd class="font-medium text-slate-800">
+            {% if gage.department %}{{ gage.department.name }}{% else %}<span class="text-slate-400">—</span>{% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Assigned Work Center</dt>
+          <dd class="font-medium text-slate-800">
+            {% if gage.work_center %}{{ gage.work_center.name }}{% else %}<span class="text-slate-400">—</span>{% endif %}
+          </dd>
+        </div>
+        {% if gage.sop_document %}
+          <div class="col-span-2">
+            <dt class="text-xs text-slate-400">Calibration Procedure (SOP)</dt>
+            <dd class="font-medium text-blue-600">
+              <a href="{% url 'quality:controlled_document_detail' gage.sop_document.pk %}" class="hover:underline">
+                {{ gage.sop_document.document_number }} — {{ gage.sop_document.title }}
+              </a>
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+
+  {% if gage.notes %}
+    <div class="card p-4">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Technician Notes & Special Handling</h3>
+      <div class="text-sm text-slate-700 whitespace-pre-line">{{ gage.notes }}</div>
+    </div>
+  {% endif %}
+
+  <!-- Calibration Records Tabular History -->
+  <div class="card overflow-hidden">
+    <div class="card-header bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+      <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+        <i data-lucide="file-check-2" class="w-4 h-4 text-blue-600"></i>
+        <span>Calibration History Log (Last 10 Events)</span>
+      </h2>
+      <a href="{% url 'quality:calibration_record_create' %}?gage={{ gage.pk }}" class="btn btn-outline text-xs px-2.5 py-1">
+        + Log Event
+      </a>
+    </div>
+    <div class="table-wrap">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 text-xs font-semibold uppercase border-b border-slate-200">
+            <th class="py-2.5 px-4">Record Number</th>
+            <th class="py-2.5 px-4">Date</th>
+            <th class="py-2.5 px-4">Cal Type</th>
+            <th class="py-2.5 px-4">As-Found</th>
+            <th class="py-2.5 px-4">As-Left</th>
+            <th class="py-2.5 px-4">Overall Result</th>
+            <th class="py-2.5 px-4">Max Error</th>
+            <th class="py-2.5 px-4">Certificate #</th>
+            <th class="py-2.5 px-4 text-right">View</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for r in calibration_history %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-2.5 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'quality:calibration_record_detail' r.pk %}" class="hover:underline">{{ r.number }}</a>
+              </td>
+              <td class="py-2.5 px-4 text-xs font-mono">{{ r.calibration_date|date:"Y-m-d" }}</td>
+              <td class="py-2.5 px-4 text-xs">{{ r.get_calibration_type_display }}</td>
+              <td class="py-2.5 px-4 text-xs">{{ r.get_as_found_condition_display }}</td>
+              <td class="py-2.5 px-4 text-xs">{{ r.get_as_left_condition_display }}</td>
+              <td class="py-2.5 px-4">
+                <span class="badge {{ r.result_css }} text-xs">{{ r.get_overall_result_display }}</span>
+              </td>
+              <td class="py-2.5 px-4 text-xs font-mono">{{ r.max_observed_error }} {{ gage.engineering_unit }}</td>
+              <td class="py-2.5 px-4 text-xs font-mono text-slate-500">{{ r.certificate_number|default:"—" }}</td>
+              <td class="py-2.5 px-4 text-right">
+                <a href="{% url 'quality:calibration_record_detail' r.pk %}" class="btn btn-icon p-1 text-slate-500 hover:text-blue-600" title="View Record">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="py-6 text-center text-slate-400 text-xs">
+                No calibration events recorded yet for this instrument.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Out-of-Tolerance History & MSA Studies Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- OOT Investigations -->
+    <div class="card overflow-hidden">
+      <div class="card-header bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i>
+          <span>OOT Investigations</span>
+        </h2>
+        <a href="{% url 'quality:out_of_tolerance_investigation_create' %}?gage={{ gage.pk }}" class="text-xs text-red-600 hover:underline">
+          + New Investigation
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-50 text-slate-600 uppercase border-b border-slate-200">
+              <th class="py-2 px-3">OOT Ref</th>
+              <th class="py-2 px-3">Date</th>
+              <th class="py-2 px-3">Risk</th>
+              <th class="py-2 px-3">Status</th>
+              <th class="py-2 px-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for oot in oot_history %}
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-3 font-mono font-medium text-blue-600">
+                  <a href="{% url 'quality:out_of_tolerance_investigation_detail' oot.pk %}" class="hover:underline">{{ oot.number }}</a>
+                </td>
+                <td class="py-2 px-3 font-mono">{{ oot.discovery_date|date:"Y-m-d" }}</td>
+                <td class="py-2 px-3">
+                  <span class="badge {{ oot.risk_css }} text-[10px]">{{ oot.get_risk_level_display }}</span>
+                </td>
+                <td class="py-2 px-3">
+                  <span class="badge {{ oot.status_css }} text-[10px]">{{ oot.get_status_display }}</span>
+                </td>
+                <td class="py-2 px-3 text-right">
+                  <a href="{% url 'quality:out_of_tolerance_investigation_detail' oot.pk %}" class="hover:underline text-blue-600">Review</a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" class="py-4 text-center text-slate-400">Zero OOT investigations on record.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Measurement System Analysis (MSA) -->
+    <div class="card overflow-hidden">
+      <div class="card-header bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <i data-lucide="bar-chart-2" class="w-4 h-4 text-purple-600"></i>
+          <span>MSA / Gage R&R Studies</span>
+        </h2>
+        <a href="{% url 'quality:measurement_system_analysis_create' %}?gage={{ gage.pk }}" class="text-xs text-blue-600 hover:underline">
+          + Launch Study
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-50 text-slate-600 uppercase border-b border-slate-200">
+              <th class="py-2 px-3">Study #</th>
+              <th class="py-2 px-3">Type</th>
+              <th class="py-2 px-3">%GRR</th>
+              <th class="py-2 px-3">NDC</th>
+              <th class="py-2 px-3">Result</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for msa in msa_studies %}
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-3 font-mono font-medium text-blue-600">
+                  <a href="{% url 'quality:measurement_system_analysis_detail' msa.pk %}" class="hover:underline">{{ msa.number }}</a>
+                </td>
+                <td class="py-2 px-3">{{ msa.get_study_type_display }}</td>
+                <td class="py-2 px-3 font-mono font-bold {% if msa.percent_gage_rr_study_variation > 30 %}text-red-600{% elif msa.percent_gage_rr_study_variation > 10 %}text-amber-600{% else %}text-green-600{% endif %}">
+                  {{ msa.percent_gage_rr_study_variation }}%
+                </td>
+                <td class="py-2 px-3 font-mono">{{ msa.number_of_distinct_categories_ndc }}</td>
+                <td class="py-2 px-3">
+                  <span class="badge {{ msa.result_css }} text-[10px]">{{ msa.get_study_result_display }}</span>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" class="py-4 text-center text-slate-400">Zero MSA studies executed.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
