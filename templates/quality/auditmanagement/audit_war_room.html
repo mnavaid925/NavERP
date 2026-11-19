@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Regulatory Inspection War Room — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:regulatory_inspection_host_list' %}">Inspections</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>War Room</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Inspection War Room & Command Center</h1>
+            <span class="badge badge-amber flex items-center gap-1.5 animate-pulse">
+                <i data-lucide="radio" class="w-3.5 h-3.5"></i> Live Command Center
+            </span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:regulatory_inspection_host_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i> All Host Records
+        </a>
+        {% if selected_host %}
+        <a href="{% url 'quality:regulatory_inspection_host_detail' selected_host.pk %}" class="btn btn-primary">
+            <i data-lucide="eye"></i> Inspection Detail
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+{% if selected_host %}
+<div class="card mb-6 bg-slate-900 text-white border-0 shadow-lg">
+    <div class="card-body">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4 mb-4">
+            <div>
+                <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Active Inspection Session</span>
+                <h2 class="text-xl font-bold text-white mt-0.5">{{ selected_host.inspection_title }}</h2>
+                <div class="text-sm text-slate-300 flex items-center gap-2 mt-1">
+                    <span class="badge badge-red">{{ selected_host.get_agency_or_body_display }}</span>
+                    <span>{{ selected_host.agency_name }}</span>
+                    <span>•</span>
+                    <span>Inspector: <strong>{{ selected_host.lead_inspector_name }}</strong></span>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="text-right">
+                    <div class="text-xs text-slate-400">War Room Staging Location</div>
+                    <div class="font-semibold text-white">{{ selected_host.war_room_location }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="p-3 bg-slate-800/80 rounded border border-slate-700">
+                <div class="text-xs text-slate-400">Front Room Lead</div>
+                <div class="font-medium text-white text-sm mt-0.5">
+                    {% if selected_host.front_room_lead %}
+                    {{ selected_host.front_room_lead.get_full_name|default:selected_host.front_room_lead.username }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </div>
+            </div>
+            <div class="p-3 bg-slate-800/80 rounded border border-slate-700">
+                <div class="text-xs text-slate-400">Back Room Coordinator</div>
+                <div class="font-medium text-white text-sm mt-0.5">
+                    {% if selected_host.back_room_lead %}
+                    {{ selected_host.back_room_lead.get_full_name|default:selected_host.back_room_lead.username }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </div>
+            </div>
+            <div class="p-3 bg-slate-800/80 rounded border border-slate-700">
+                <div class="text-xs text-slate-400">Official Scribe</div>
+                <div class="font-medium text-white text-sm mt-0.5">
+                    {% if selected_host.scribe_user %}
+                    {{ selected_host.scribe_user.get_full_name|default:selected_host.scribe_user.username }}
+                    {% else %}
+                    Unassigned
+                    {% endif %}
+                </div>
+            </div>
+            <div class="p-3 bg-slate-800/80 rounded border border-slate-700">
+                <div class="text-xs text-slate-400">Request Fulfillment</div>
+                <div class="font-bold text-emerald-400 text-sm mt-0.5">
+                    {{ selected_host.requests_fulfilled_count }} / {{ selected_host.requests_logged_count }} fulfilled ({{ fulfillment_rate }}%)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Live Request Stream & Debrief Log</h3>
+                <span class="text-xs text-muted">Auto-records chronological requests</span>
+            </div>
+            <div class="card-body">
+                <div class="bg-slate-900 text-emerald-400 font-mono p-4 rounded-md text-xs whitespace-pre-wrap leading-relaxed max-h-[30rem] overflow-y-auto border border-slate-800 shadow-inner">
+                    {{ selected_host.daily_summary_notes|default:"No active document requests or queries recorded in this session." }}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Log New Document / Evidence Request</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:regulatory_inspection_host_log_request' selected_host.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label class="form-label">Inspector Document / Record Request Description <span class="text-danger">*</span></label>
+                        {{ request_form.request_description }}
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label">Assign Back Room SME / Retriever</label>
+                            {{ request_form.assigned_sme }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Retrieval Priority SLA</label>
+                            {{ request_form.priority }}
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="plus"></i> Dispatch Request to Back Room
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Back Room Fulfillment Queue</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-4 bg-slate-50 rounded border border-slate-200 text-center">
+                    <div class="text-3xl font-bold text-slate-800">{{ selected_host.pending_requests_count }}</div>
+                    <div class="text-xs text-muted uppercase tracking-wider font-semibold mt-1">Pending In Retrieval</div>
+                </div>
+
+                {% if selected_host.pending_requests_count > 0 %}
+                <form method="post" action="{% url 'quality:regulatory_inspection_host_fulfill_request' selected_host.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary w-full bg-emerald-600 hover:bg-emerald-700">
+                        <i data-lucide="check"></i> Deliver Next Document to Front Room
+                    </button>
+                </form>
+                {% else %}
+                <div class="p-3 bg-green-50 text-green-800 text-xs rounded border border-green-200 text-center">
+                    All logged requests have been delivered to Front Room.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Other Inspection Sessions</h3>
+            </div>
+            <div class="card-body space-y-2">
+                {% for insp in active_inspections %}
+                <a href="?host={{ insp.pk }}" class="block p-3 rounded border {% if insp.pk == selected_host.pk %}border-primary bg-primary/5 font-semibold text-primary{% else %}border-slate-200 hover:bg-slate-50 text-slate-700{% endif %} text-xs transition-colors">
+                    <div class="font-medium truncate">{{ insp.number }} - {{ insp.inspection_title }}</div>
+                    <div class="text-2xs text-muted mt-0.5">{{ insp.agency_name }} • {{ insp.scheduled_start_date }}</div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body text-center py-12">
+        <i data-lucide="radio" class="w-12 h-12 mx-auto text-muted mb-3"></i>
+        <h3 class="text-lg font-medium text-slate-800">No Active Inspection Staged</h3>
+        <p class="text-sm text-muted max-w-md mx-auto mt-1">
+            There are currently no active or prepared regulatory inspections. Create a new inspection host record to initialize the War Room command center.
+        </p>
+        <a href="{% url 'quality:regulatory_inspection_host_create' %}" class="btn btn-primary mt-4">
+            <i data-lucide="plus"></i> New Inspection Record
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
