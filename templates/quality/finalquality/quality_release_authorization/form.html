@@ -97,6 +97,10 @@
             {{ form.sales_order }}
           </div>
           <div class="form-group">
+            <label for="{{ form.sales_order_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sales Order # (Manual)</label>
+            {{ form.sales_order_number }}
+          </div>
+          <div class="form-group">
             <label for="{{ form.lot_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Finished Lot Number</label>
             {{ form.lot_number }}
           </div>
