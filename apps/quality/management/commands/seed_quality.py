@@ -97,6 +97,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            MeasurementSystemAnalysis.objects.all().delete()
+            OutOfToleranceInvestigation.objects.all().delete()
+            CalibrationRecord.objects.all().delete()
+            CalibrationGage.objects.all().update(reference_standard_parent=None)
+            CalibrationGage.objects.all().delete()
             QualityReleaseAuthorization.objects.all().delete()
             PackagingLabelVerification.objects.all().delete()
             CertificateOfConformance.objects.all().delete()
