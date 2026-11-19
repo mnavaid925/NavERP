@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:final_inspection_lot_list' %}" class="hover:underline">Final Inspection Lots</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="check-square" class="w-6 h-6 text-blue-600"></i>
+        {{ title }}
+      </h1>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_edit and lot %}{% url 'quality:final_inspection_lot_detail' lot.pk %}{% else %}{% url 'quality:final_inspection_lot_list' %}{% endif %}" class="btn btn-outline text-sm">
+        Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm space-y-1">
+        {% for error in form.non_field_errors %}
+          <p class="flex items-center gap-1.5"><i data-lucide="alert-circle" class="w-4 h-4"></i> {{ error }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Section 1: Inspection Profile -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="clipboard" class="w-4 h-4 text-blue-600"></i>
+          1. Inspection Lot Details
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="sm:col-span-2 form-group">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lot Title / Description *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_stage.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Inspection Stage *</label>
+            {{ form.inspection_stage }}
+            {% if form.inspection_stage.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.inspection_stage.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Inspection Status *</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.usage_decision.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Usage Decision *</label>
+            {{ form.usage_decision }}
+            {% if form.usage_decision.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.usage_decision.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="sm:col-span-3 form-group">
+            <label for="{{ form.decision_rationale.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Decision Rationale</label>
+            {{ form.decision_rationale }}
+            <p class="text-xs text-slate-500 mt-0.5">Required when accepting with concession, quarantining, or rejecting.</p>
+            {% if form.decision_rationale.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.decision_rationale.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Sampling & Counts -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+          2. Sampling Plan, AQL & Quantities
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div class="sm:col-span-2 form-group">
+            <label for="{{ form.sampling_standard.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sampling Standard</label>
+            {{ form.sampling_standard }}
+            {% if form.sampling_standard.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sampling_standard.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lot_quantity.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lot Quantity *</label>
+            {{ form.lot_quantity }}
+            {% if form.lot_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lot_quantity.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.sample_size_inspected.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sample Inspected *</label>
+            {{ form.sample_size_inspected }}
+            {% if form.sample_size_inspected.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sample_size_inspected.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.aql_critical.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">AQL Critical (%)</label>
+            {{ form.aql_critical }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.aql_major.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">AQL Major (%)</label>
+            {{ form.aql_major }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.aql_minor.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">AQL Minor (%)</label>
+            {{ form.aql_minor }}
+          </div>
+          <div class="form-group"></div>
+          <div class="form-group">
+            <label for="{{ form.units_passed.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Units Passed</label>
+            {{ form.units_passed }}
+            {% if form.units_passed.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.units_passed.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.units_rejected.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Units Rejected</label>
+            {{ form.units_rejected }}
+            {% if form.units_rejected.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.units_rejected.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.critical_defects_count.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Critical Defects</label>
+            {{ form.critical_defects_count }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.major_defects_count.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Major Defects</label>
+            {{ form.major_defects_count }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Checkpoint Gates & Hold -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="check-circle-2" class="w-4 h-4 text-blue-600"></i>
+          3. Inspection Protocols & Hold Flags
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="space-y-3 bg-slate-50 p-4 rounded-lg border">
+            <span class="text-xs font-bold text-slate-700 uppercase tracking-wider block">Protocol Checkpoints</span>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.visual_inspection_passed }}
+              <span>Visual & Cosmetic Inspection Passed</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.dimensional_inspection_passed }}
+              <span>Dimensional Tolerances Passed</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.functional_test_passed }}
+              <span>End-of-Line Functional Test Passed</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.packaging_inspection_passed }}
+              <span>Packaging & Labeling Specification Passed</span>
+            </label>
+          </div>
+          <div class="space-y-3 bg-amber-50/50 p-4 rounded-lg border border-amber-200">
+            <span class="text-xs font-bold text-amber-800 uppercase tracking-wider block">Quality Hold Gate</span>
+            <label class="flex items-center gap-2 text-sm text-amber-900 cursor-pointer">
+              {{ form.is_on_hold }}
+              <span class="font-semibold">Place this Lot on Active Quality Hold</span>
+            </label>
+            <div class="form-group mt-2">
+              <label for="{{ form.hold_reason.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Hold Reason</label>
+              {{ form.hold_reason }}
+              {% if form.hold_reason.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.hold_reason.errors.0 }}</div>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Traceability & Orders -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          4. Material Traceability & Orders
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Item / Part Code</label>
+            {{ form.item_code }}
+          </div>
+          <div class="sm:col-span-2 form-group">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Item Description</label>
+            {{ form.item_name }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lot_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lot Number</label>
+            {{ form.lot_number }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.batch_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Batch Number</label>
+            {{ form.batch_number }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.serial_number_range.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Serial Range</label>
+            {{ form.serial_number_range }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.customer.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Customer</label>
+            {{ form.customer }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.sales_order.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Sales Order</label>
+            {{ form.sales_order }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_order.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Work Order</label>
+            {{ form.work_order }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Personnel & Sign-off -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="user-check" class="w-4 h-4 text-blue-600"></i>
+          5. Linked QMS Records & Personnel
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.inspection_plan.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Inspection Plan (SOP)</label>
+            {{ form.inspection_plan }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.non_conformance.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked NCR</label>
+            {{ form.non_conformance }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.process_deviation.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Deviation</label>
+            {{ form.process_deviation }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspector.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Inspector</label>
+            {{ form.inspector }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Inspection Date</label>
+            {{ form.inspection_date }}
+          </div>
+          <div></div>
+          <div class="form-group">
+            <label for="{{ form.decision_by.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Decision Authority</label>
+            {{ form.decision_by }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.decision_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Decision Date</label>
+            {{ form.decision_date }}
+          </div>
+          <div class="sm:col-span-3 form-group">
+            <label for="{{ form.inspection_notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Inspection Notes</label>
+            {{ form.inspection_notes }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 border-t pt-4">
+        <a href="{% if is_edit and lot %}{% url 'quality:final_inspection_lot_detail' lot.pk %}{% else %}{% url 'quality:final_inspection_lot_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm">
+          <i data-lucide="save" class="w-4 h-4 mr-1"></i>
+          {% if is_edit %}Save Changes{% else %}Create Inspection Lot{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
