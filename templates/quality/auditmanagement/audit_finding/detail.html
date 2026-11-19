@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+
+{% block title %}{{ audit_finding.number }} — Audit Finding — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:audit_finding_list' %}">Findings</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ audit_finding.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ audit_finding.title }}</h1>
+            {% if audit_finding.severity == 'critical' or audit_finding.severity == 'major' %}
+            <span class="badge badge-red">{{ audit_finding.get_severity_display }}</span>
+            {% elif audit_finding.severity == 'minor' %}
+            <span class="badge badge-amber">{{ audit_finding.get_severity_display }}</span>
+            {% elif audit_finding.severity == 'commendation' %}
+            <span class="badge badge-green">{{ audit_finding.get_severity_display }}</span>
+            {% else %}
+            <span class="badge badge-info">{{ audit_finding.get_severity_display }}</span>
+            {% endif %}
+
+            {% if audit_finding.status == 'closed' %}
+            <span class="badge badge-green">{{ audit_finding.get_status_display }}</span>
+            {% elif audit_finding.status == 'issued' or audit_finding.status == 'capa_in_progress' %}
+            <span class="badge badge-amber">{{ audit_finding.get_status_display }}</span>
+            {% elif audit_finding.status == 'escalated' %}
+            <span class="badge badge-red">{{ audit_finding.get_status_display }}</span>
+            {% else %}
+            <span class="badge badge-info">{{ audit_finding.get_status_display }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if audit_finding.requires_capa %}
+        <form method="post" action="{% url 'quality:audit_finding_create_capa' audit_finding.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-amber-600 hover:bg-amber-700">
+                <i data-lucide="shield-alert"></i> Initiate CAPA
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'quality:audit_finding_edit' audit_finding.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form method="post" action="{% url 'quality:audit_finding_delete' audit_finding.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Finding {{ audit_finding.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Finding Particulars & Requirement Citation</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Finding Number</dt>
+                        <dd class="font-mono font-semibold">{{ audit_finding.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Parent Audit</dt>
+                        <dd>
+                            <a href="{% url 'quality:quality_audit_detail' audit_finding.audit.pk %}" class="text-primary hover:underline font-medium">
+                                {{ audit_finding.audit.number }} - {{ audit_finding.audit.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Observation Severity</dt>
+                        <dd>
+                            {% if audit_finding.severity == 'critical' or audit_finding.severity == 'major' %}
+                            <span class="badge badge-red">{{ audit_finding.get_severity_display }}</span>
+                            {% elif audit_finding.severity == 'minor' %}
+                            <span class="badge badge-amber">{{ audit_finding.get_severity_display }}</span>
+                            {% else %}
+                            <span class="badge badge-info">{{ audit_finding.get_severity_display }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Governing Standard & Clause</dt>
+                        <dd class="font-mono font-medium">{{ audit_finding.standard_clause }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Audited Org Unit</dt>
+                        <dd>
+                            {% if audit_finding.audited_org_unit %}
+                            {{ audit_finding.audited_org_unit.name }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Remediation Assignee</dt>
+                        <dd>
+                            {% if audit_finding.assignee %}
+                            {{ audit_finding.assignee.get_full_name|default:audit_finding.assignee.username }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Response SLA Due Date</dt>
+                        <dd>
+                            <span class="{% if audit_finding.is_overdue %}text-danger font-semibold{% endif %}">
+                                {{ audit_finding.response_due_date }}
+                            </span>
+                            {% if audit_finding.is_overdue %}
+                            <span class="badge badge-red ml-1">Overdue</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Response Received Date</dt>
+                        <dd>{{ audit_finding.response_received_date|default:"Awaiting response" }}</dd>
+                    </div>
+                    {% if audit_finding.linked_capa %}
+                    <div class="detail-item">
+                        <dt>Closed-Loop CAPA Investigation</dt>
+                        <dd>
+                            <a href="{% url 'quality:capa_investigation_detail' audit_finding.linked_capa.pk %}" class="badge badge-amber hover:underline">
+                                {{ audit_finding.linked_capa.number }} - {{ audit_finding.linked_capa.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if audit_finding.linked_ncr %}
+                    <div class="detail-item">
+                        <dt>Non-Conformance Report</dt>
+                        <dd>
+                            <a href="{% url 'quality:non_conformance_report_detail' audit_finding.linked_ncr.pk %}" class="badge badge-red hover:underline">
+                                {{ audit_finding.linked_ncr.number }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Evidence & Audit Criteria Details</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Specified Requirement Statement</h4>
+                    <div class="bg-slate-50 p-4 rounded-md text-sm text-slate-800 whitespace-pre-wrap leading-relaxed border border-slate-200">
+                        {{ audit_finding.requirement_statement }}
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Objective Condition Evidence Observed</h4>
+                    <div class="bg-red-50 p-4 rounded-md text-sm text-slate-900 whitespace-pre-wrap leading-relaxed border border-red-200">
+                        {{ audit_finding.condition_evidence }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Auditee Remediation Response & CAPA Plan</h3>
+            </div>
+            <div class="card-body space-y-4">
+                {% if audit_finding.containment_action or audit_finding.root_cause_summary or audit_finding.corrective_action_plan %}
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">1. Immediate Containment Action</h4>
+                    <div class="bg-slate-50 p-3 rounded text-sm text-slate-800 border border-slate-200">
+                        {{ audit_finding.containment_action|default:"No immediate containment documented." }}
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">2. Root Cause Analysis</h4>
+                    <div class="bg-slate-50 p-3 rounded text-sm text-slate-800 border border-slate-200">
+                        {{ audit_finding.root_cause_summary|default:"Root cause analysis pending." }}
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">3. Corrective & Preventive Action Plan</h4>
+                    <div class="bg-slate-50 p-3 rounded text-sm text-slate-800 border border-slate-200">
+                        {{ audit_finding.corrective_action_plan|default:"Corrective action plan pending." }}
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-sm text-muted">No remediation response has been submitted yet.</p>
+                {% endif %}
+
+                {% if response_form %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="font-semibold text-slate-800 text-sm mb-3">Submit / Update Remediation Response</h4>
+                    <form method="post" action="{% url 'quality:audit_finding_submit_response' audit_finding.pk %}" class="space-y-4">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label class="form-label">Immediate Containment Action</label>
+                            {{ response_form.containment_action }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Root Cause Summary</label>
+                            {{ response_form.root_cause_summary }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Corrective Action Plan</label>
+                            {{ response_form.corrective_action_plan }}
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i data-lucide="send"></i> Submit Remediation Response
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Verification & Closure</h3>
+            </div>
+            <div class="card-body space-y-4">
+                {% if audit_finding.status == 'closed' %}
+                <div class="p-3 bg-green-50 rounded border border-green-200 text-green-800 text-sm">
+                    <div class="font-semibold flex items-center gap-1.5"><i data-lucide="check-circle-2" class="w-4 h-4"></i> Verified and Closed</div>
+                    <div class="text-xs mt-1">Closed Date: {{ audit_finding.closed_date }}</div>
+                    {% if audit_finding.closure_verified_by %}
+                    <div class="text-xs">Verified By: {{ audit_finding.closure_verified_by.get_full_name|default:audit_finding.closure_verified_by.username }}</div>
+                    {% endif %}
+                </div>
+                {% if audit_finding.closure_notes %}
+                <div>
+                    <h5 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Auditor Verification Rationale</h5>
+                    <div class="bg-slate-50 p-3 rounded text-xs text-slate-800 border border-slate-200">
+                        {{ audit_finding.closure_notes }}
+                    </div>
+                </div>
+                {% endif %}
+                {% else %}
+                <form method="post" action="{% url 'quality:audit_finding_verify_close' audit_finding.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="closure_notes" class="form-label text-xs">Auditor Verification Notes</label>
+                        <textarea name="closure_notes" id="closure_notes" class="form-textarea text-xs" rows="3" placeholder="Objective evidence that actions have been effectively implemented..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-outline text-green-700 w-full">
+                        <i data-lucide="check-circle-2"></i> Verify & Close Finding
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Closed-Loop Linkage</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted text-xs block">Governing Quality Audit</span>
+                    <a href="{% url 'quality:quality_audit_detail' audit_finding.audit.pk %}" class="font-medium text-primary hover:underline">
+                        {{ audit_finding.audit.number }}
+                    </a>
+                </div>
+                <div>
+                    <span class="text-muted text-xs block">CAPA Investigation</span>
+                    {% if audit_finding.linked_capa %}
+                    <a href="{% url 'quality:capa_investigation_detail' audit_finding.linked_capa.pk %}" class="badge badge-amber hover:underline">
+                        {{ audit_finding.linked_capa.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-xs text-muted">No CAPA linked</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted text-xs block">Non-Conformance Report</span>
+                    {% if audit_finding.linked_ncr %}
+                    <a href="{% url 'quality:non_conformance_report_detail' audit_finding.linked_ncr.pk %}" class="badge badge-red hover:underline">
+                        {{ audit_finding.linked_ncr.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-xs text-muted">No NCR linked</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
