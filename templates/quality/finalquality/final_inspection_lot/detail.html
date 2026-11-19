@@ -251,12 +251,12 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs text-slate-500">Inspector</dt>
-            <dd class="text-slate-800">{{ lot.inspector.get_full_name|default:lot.inspector.username|default:"Unassigned" }}</dd>
+            <dd class="text-slate-800">{% if lot.inspector %}{{ lot.inspector.get_full_name|default:lot.inspector.username }}{% else %}Unassigned{% endif %}</dd>
             <dd class="text-xs text-slate-500">{{ lot.inspection_date|default:"Date not set" }}</dd>
           </div>
           <div>
             <dt class="text-xs text-slate-500">Decision Authority</dt>
-            <dd class="text-slate-800">{{ lot.decision_by.get_full_name|default:lot.decision_by.username|default:"Pending Decision" }}</dd>
+            <dd class="text-slate-800">{% if lot.decision_by %}{{ lot.decision_by.get_full_name|default:lot.decision_by.username }}{% else %}Pending Decision{% endif %}</dd>
             <dd class="text-xs text-slate-500">{{ lot.decision_date|default:"" }}</dd>
           </div>
           {% if lot.inspection_plan %}
