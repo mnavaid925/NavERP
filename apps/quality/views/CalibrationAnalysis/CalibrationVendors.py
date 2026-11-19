@@ -35,11 +35,13 @@ def calibration_vendor_directory(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
     total_vendors = page_obj.paginator.count
+    accredited_count = total_vendors
 
     context = {
         "vendors": page_obj,
         "page_obj": page_obj,
         "search_query": search_query,
         "total_vendors": total_vendors,
+        "accredited_count": accredited_count,
     }
     return render(request, "quality/calibrationanalysis/calibration_vendor_directory.html", context)
