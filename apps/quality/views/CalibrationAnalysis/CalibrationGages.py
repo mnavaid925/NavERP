@@ -28,6 +28,7 @@ def calibration_gage_list(request):
     if search_query:
         qs = qs.filter(
             Q(gage_id__icontains=search_query)
+            | Q(number__icontains=search_query)
             | Q(name__icontains=search_query)
             | Q(serial_number__icontains=search_query)
             | Q(manufacturer__icontains=search_query)
