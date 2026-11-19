@@ -60,10 +60,10 @@
   - **Issue**: Rendering `calibration_record` dropdown stringifies each record via `self.gage.gage_id`, triggering N+1 queries.
   - **Fix**: Add `.select_related("gage")` to `calibration_record` form queryset, and add cached check in `CalibrationRecord.__str__`. (fixed — 29ec6dac, e8308a10)
 
-- [ ] **[I9] Prefetch Cache Bypass in `calibration_record_detail`**:
+- [x] **[I9] Prefetch Cache Bypass in `calibration_record_detail`**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py:77-84`
   - **Issue**: Calling `.filter(tenant=request.tenant).first()` on prefetched `record.oot_investigations` issues an extra SQL query.
-  - **Fix**: Retrieve from prefetched collection: `next(iter(record.oot_investigations.all()), None)`.
+  - **Fix**: Retrieve from prefetched collection: `next(iter(record.oot_investigations.all()), None)`. (fixed — 2cbe1624)
 
 - [ ] **[I10] Missing `limit_choices_to={"is_reference_standard": True}` on `CalibrationRecord.standards_used`**:
   - **Location**: `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py:117-119`
