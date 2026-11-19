@@ -41,3 +41,14 @@
 - **[EX-M7] Minor**: `apps/quality/admin.py:734-750` `CalibrationRecordAdmin` missing `filter_horizontal = ("standards_used",)`.
 
 ---
+
+## 3. Frontend Reviewer Pass
+- **Reviewer**: `frontend-reviewer`
+- **Status**: Completed
+
+### Findings
+- **[FR-I1] Important**: `templates/quality/calibrationanalysis/measurement_system_analysis/detail.html:100, 140, 240` and `calibration_record/detail.html:101, 113` Raw unparsed LaTeX math syntax (`$\sigma$`, `$6\sigma$`, `$TV^2 = GRR^2 + PV^2$`, `$R^2$`, `$U$`) rendered literally in UI instead of semantic HTML entities (`&sigma;`, `6&sigma;`, `&sup2;`).
+- **[FR-M1] Minor**: `templates/quality/calibrationanalysis/calibration_gage/detail.html:62`, `calibration_record/detail.html:75`, `out_of_tolerance_investigation/detail.html:68`, `measurement_system_analysis/detail.html:155` Definition lists use hardcoded `grid-cols-2` without mobile breakpoint instead of `.detail-grid` or `sm:grid-cols-2`.
+- **[FR-M2] Minor**: `templates/quality/calibrationanalysis/calibration_vendor_directory.html:103` Vendor card action button `?q={{ v.name|urlencode }}` relies on backend `CalibrationRecord` search including `service_vendor__name`.
+
+---
