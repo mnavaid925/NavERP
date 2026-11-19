@@ -20,10 +20,10 @@
 
 ### Important (11)
 
-- [ ] **[I1] CSV Formula Injection Neutralization**:
+- [x] **[I1] CSV Formula Injection Neutralization**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/{CalibrationGages,CalibrationRecords,OutOfToleranceInvestigations,MeasurementSystemAnalyses}.py` and `apps/quality/views/_common.py`
   - **Issue**: User-controlled text fields exported to CSV lack formula injection neutralization (`_csv_safe`).
-  - **Fix**: Define `_csv_safe(val)` in `apps/quality/views/_common.py` (prefix with `'` if starting with `=`, `+`, `-`, `@`, `\t`, `\r`) and wrap all text cells across the 4 export views.
+  - **Fix**: Define `_csv_safe(val)` in `apps/quality/views/_common.py` (prefix with `'` if starting with `=`, `+`, `-`, `@`, `\t`, `\r`) and wrap all text cells across the 4 export views. (fixed — 1615c765, 2df06fc8, 84327980, e3b3280f, ca2ceee4)
 
 - [ ] **[I2] Premature Gage State Synchronization on Draft Calibration Records**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py:109-121`
