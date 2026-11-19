@@ -48,9 +48,12 @@ class CalibrationGageForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["reference_standard_parent"].queryset = CalibrationGage.objects.filter(
+            parent_qs = CalibrationGage.objects.filter(
                 tenant=self.tenant, is_reference_standard=True
             )
+            if self.instance and self.instance.pk:
+                parent_qs = parent_qs.exclude(pk=self.instance.pk)
+            self.fields["reference_standard_parent"].queryset = parent_qs
             self.fields["asset_link"].queryset = Asset.objects.filter(tenant=self.tenant)
             self.fields["work_center"].queryset = WorkCenter.objects.filter(tenant=self.tenant)
             self.fields["department"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
@@ -63,6 +66,9 @@ class CalibrationGageForm(TenantUniqueMixin, TenantModelForm):
             self, cleaned,
             ["reference_standard_parent", "asset_link", "work_center", "department", "custodian", "sop_document"]
         )
+        parent = cleaned.get("reference_standard_parent")
+        if self.instance and self.instance.pk and parent and parent.pk == self.instance.pk:
+            self.add_error("reference_standard_parent", "A gage cannot be its own reference standard parent.")
         interval = cleaned.get("calibration_interval_days")
         if interval is not None and interval <= 0:
             self.add_error("calibration_interval_days", "Interval must be greater than zero.")
