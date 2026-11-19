@@ -190,7 +190,7 @@
                 <a href="{% url 'quality:quality_release_authorization_edit' rel.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600 hover:bg-amber-50" title="Edit Release">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </a>
-                {% if user.is_staff or user.is_superuser %}
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
                 <form method="post" action="{% url 'quality:quality_release_authorization_delete' rel.pk %}" class="inline" onsubmit="return confirm('Delete Quality Release {{ rel.number }}?');">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600 hover:bg-red-50" title="Delete Release">
