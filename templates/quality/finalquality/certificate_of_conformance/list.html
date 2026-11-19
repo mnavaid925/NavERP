@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Certificates of Conformance (CoC) — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:oqc_hold_board' %}" class="hover:underline">Final & Outgoing Quality</a>
+        <span class="mx-1">/</span>
+        <span>Certificates of Conformance</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="award" class="w-6 h-6 text-blue-600"></i>
+        Certificates of Conformance (CoC)
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Customer & regulatory compliance declarations, multi-industry engineering specifications, test result records, and digital signature sign-offs.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:certificate_of_conformance_export' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export CSV</span>
+      </a>
+      <a href="{% url 'quality:certificate_of_conformance_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Certificate</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="file-check" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ total_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total Certificates</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="check-circle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ signed_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Digitally Signed & Released</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-orange-50 text-orange-600">
+        <i data-lucide="clock" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ review_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Under QA Review</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div>
+        <label for="q" class="form-label text-xs font-semibold text-slate-600">Search</label>
+        <input type="text" name="q" id="q" value="{{ q }}" placeholder="Number, customer, item, PO..." class="form-input text-sm w-full">
+      </div>
+      <div>
+        <label for="type" class="form-label text-xs font-semibold text-slate-600">Specification Type</label>
+        <select name="type" id="type" class="form-select text-sm w-full">
+          <option value="">All Formats</option>
+          {% for val, label in type_choices %}
+            <option value="{{ val }}" {% if type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="status" class="form-label text-xs font-semibold text-slate-600">Status</label>
+        <select name="status" id="status" class="form-select text-sm w-full">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="customer" class="form-label text-xs font-semibold text-slate-600">Customer</label>
+        <select name="customer" id="customer" class="form-select text-sm w-full">
+          <option value="">All Customers</option>
+          {% for cust in customers %}
+            <option value="{{ cust.pk|stringformat:'d' }}" {% if customer_id == cust.pk|stringformat:'d' %}selected{% endif %}>
+              {{ cust.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary text-sm flex-1">
+          <i data-lucide="filter" class="w-4 h-4 mr-1"></i>Filter
+        </button>
+        <a href="{% url 'quality:certificate_of_conformance_list' %}" class="btn btn-outline text-sm" title="Clear Filters" aria-label="Clear Filters">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Records Table -->
+  <div class="card overflow-hidden">
+    <div class="table-wrap">
+      <table class="table w-full text-left text-sm">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 border-b border-slate-200">
+            <th class="py-3 px-4">Certificate #</th>
+            <th class="py-3 px-4">Customer & Order</th>
+            <th class="py-3 px-4">Item & Batch</th>
+            <th class="py-3 px-4">Certified Qty</th>
+            <th class="py-3 px-4">Standard / Format</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for cert in certificates %}
+          <tr class="hover:bg-slate-50/60 transition-colors">
+            <td class="py-3 px-4">
+              <a href="{% url 'quality:certificate_of_conformance_detail' cert.pk %}" class="font-semibold text-blue-600 hover:underline flex items-center gap-1.5">
+                <i data-lucide="award" class="w-4 h-4 text-slate-400"></i>
+                {{ cert.number }}
+              </a>
+              <div class="text-xs text-slate-500 font-mono mt-0.5">{{ cert.qr_verification_code }}</div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-medium text-slate-800">{{ cert.customer.name }}</div>
+              <div class="text-xs text-slate-500">
+                {% if cert.customer_po_number %}PO: {{ cert.customer_po_number }}{% endif %}
+                {% if cert.sales_order_number %} · SO: {{ cert.sales_order_number }}{% endif %}
+              </div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-medium text-slate-800">{{ cert.item_name|default:cert.item_code|default:"—" }}</div>
+              <div class="text-xs text-slate-500">
+                {% if cert.lot_number %}Lot: <span class="font-mono text-slate-700">{{ cert.lot_number }}</span>{% endif %}
+                {% if cert.revision %} · {{ cert.revision }}{% endif %}
+              </div>
+            </td>
+            <td class="py-3 px-4 font-semibold text-slate-700">
+              {{ cert.certified_quantity }} units
+            </td>
+            <td class="py-3 px-4">
+              <span class="badge {{ cert.type_css }} text-xs">
+                {{ cert.get_certificate_type_display }}
+              </span>
+            </td>
+            <td class="py-3 px-4">
+              <span class="badge {{ cert.status_css }} text-xs">
+                {{ cert.get_status_display }}
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right">
+              <div class="flex items-center justify-end gap-1">
+                <a href="{% url 'quality:certificate_of_conformance_detail' cert.pk %}" class="btn btn-icon text-slate-500 hover:text-blue-600 hover:bg-blue-50" title="View Detail">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+                <a href="{% url 'quality:certificate_of_conformance_edit' cert.pk %}" class="btn btn-icon text-slate-500 hover:text-amber-600 hover:bg-amber-50" title="Edit Certificate">
+                  <i data-lucide="pencil" class="w-4 h-4"></i>
+                </a>
+                {% if user.is_staff or user.is_superuser %}
+                <form method="post" action="{% url 'quality:certificate_of_conformance_delete' cert.pk %}" class="inline" onsubmit="return confirm('Delete Certificate {{ cert.number }}?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon text-slate-500 hover:text-red-600 hover:bg-red-50" title="Delete Certificate">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="py-12 text-center text-slate-500">
+              <div class="empty-state flex flex-col items-center justify-center space-y-3">
+                <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                  <i data-lucide="award" class="w-6 h-6"></i>
+                </div>
+                <div class="text-base font-medium text-slate-700">No Certificates of Conformance Found</div>
+                <p class="text-xs text-slate-500 max-w-sm">No compliance certificates match your filter criteria.</p>
+                <a href="{% url 'quality:certificate_of_conformance_create' %}" class="btn btn-primary text-sm mt-2">
+                  <i data-lucide="plus" class="w-4 h-4 mr-1"></i>Create First CoC
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm text-slate-600">
+      <div>
+        Showing page <span class="font-semibold text-slate-800">{{ page_obj.number }}</span> of <span class="font-semibold text-slate-800">{{ page_obj.paginator.num_pages }}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if type %}&type={{ type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if customer_id %}&customer={{ customer_id }}{% endif %}" class="btn btn-outline text-xs">
+            Previous
+          </a>
+        {% else %}
+          <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+        {% endif %}
+
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if type %}&type={{ type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if customer_id %}&customer={{ customer_id }}{% endif %}" class="btn btn-outline text-xs">
+            Next
+          </a>
+        {% else %}
+          <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
