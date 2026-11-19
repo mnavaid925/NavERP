@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management (Approved Vendor List (AVL) Governance Directory, Supplier Qualification Audits [QSQA-], Multi-Dimensional Weighted Quality Scorecards [QSSC-], Supplier Corrective Action Requests (SCAR) [QSCA-], and Supplier Change Notifications (SCN/PCN) [QSCN-]); 12.7 Incoming Quality Control (IQC) — Incoming Inspection Plans [QIIP-], Inspection Lots & Sampling [QIIL-], Certificate of Analysis Management [QCOA-], Quality Return Authorizations (RMA) [QRMA-], and SPC Analytics Dashboard; and 12.8 In-Process Quality Control (IPQC) — In-Process Inspections [QIPQ-], First Article Inspection (FAI) [QFAI-], Process Parameter Monitoring & SPC Excursions [QPAR-], and Layered Process Audits (LPA) [QLPA-]). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.8), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); and 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC) — Final Inspection Lots [QFQC-], Certificates of Conformance [QCOC-], Packaging & Labeling Verifications [QPKG-], Quality Release Authorizations [QREL-], and OQC Hold & Release Board). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.9), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -73,6 +73,13 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Process Parameter Logs** [`QPAR-`]: Machine & environmental telemetry logs across parameter types (`temperature`, `pressure`, `speed_feed`, `humidity`, `dwell_time`, `torque_force`, `voltage_current`, `cycle_time`, `concentration_ph`), target nominal, USL/LSL tolerances, measured values, excursion flags (`in_control`, `warning_trend`, `out_of_control_excursion`), automated SPC excursion detection via standard deviations and control limits, immediate containment actions, and production order/work center tracking.
   - **Layered Process Audits (LPA)** [`QLPA-`]: CQI-8 compliant multi-tier hierarchical audit checklists across audit levels (`layer_1_shift_supervisor`, `layer_2_area_manager`, `layer_3_plant_executive`, `layer_4_specialist_safety_quality`), manufacturing work center and shift evaluations, question compliance scoring, automated compliance score calculation ($0-100\%$), findings count, and audit closure sign-off.
 
+- **12.9 Final Quality Control (FQC) & Outgoing Quality Control (OQC)**:
+  - **Final Inspection Lots** [`QFQC-`]: Finished goods release protocols across inspection stages (`post_packaging_oqc`, `pre_packaging_fqc`, `finished_goods_dock`, `functional_end_of_line`, `pre_shipment_audit`), sampling standards (`ansi_asq_z1_4_normal`, `ansi_asq_z1_4_tightened`, `c_zero_sampling`, `hundred_percent_inspection`), AQL defect triage (critical, major, minor), defect counts, units passed/rejected, multi-stage compliance checks (visual, dimensional, functional, packaging), usage decisions (`accepted`, `accepted_with_concession`, `quarantined_hold`, `rejected_mrb`), pass rate percentage telemetry, and quarantine hold management.
+  - **Certificates of Conformance (CoC)** [`QCOC-`]: Formal customer attestation certificates across regulatory profiles (`standard_commercial`, `aerospace_as9100_as9102`, `medical_device_iso13485`, `automotive_iatf_16949`, `custom_customer_format`), customer and sales order linkages, applicable engineering specifications, test result summaries, legal conformance declarations, tamper-evident unique QR verification codes (`COC-`), cryptographic SHA-256 digital signature binding, post-signature immutability locks, and regulatory deletion guards.
+  - **Packaging & Labeling Verifications** [`QPKG-`]: Shipping carton and pallet verification conforming to ISO/IEC 15415/15416 and GS1 standards. Barcode symbologies (`datamatrix_gs1_2d`, `code_128_1d`, `qr_code_2d`, `gs1_128_sscc`, `upc_ean_retail`), ISO/IEC print grading (`grade_a_4_0`, `grade_b_3_0`, `grade_c_2_0`, `grade_d_1_0`, `grade_f_fail`), decoded scanned payload verification, regulatory markings verification (CE, UL, RoHS, FDA, country-of-origin), carton integrity, tamper seals, and disposition tracking (`pass_released`, `relabel_required`, `repack_required`, `reject_quarantine`).
+  - **Quality Release Authorizations** [`QREL-`]: Multi-gate finished goods outbound shipping release authorizations. Enforces 4-way compliance validation (final inspection passed, zero open NCRs/CAPAs, packaging approved, CoC issued and signed), cross-record counterparty customer integrity validation, container security seals, carrier tracking references, hold-authorization conflict protection, and audit logging.
+  - **OQC Hold & Release Board**: Real-time operational Kanban command center tracking active quarantine holds across inspection lots and shipping releases, pending inspection queues, pending CoC sign-offs, and cleared shipments with unsliced KPI metric summary cards.
+
 ---
 
 ## App Layout & Architecture
@@ -123,6 +130,11 @@ apps/quality/
       FirstArticleInspections.py              <- FirstArticleInspection [QFAI-]
       ProcessParameterLogs.py                 <- ProcessParameterLog [QPAR-]
       LayeredProcessAudits.py                 <- LayeredProcessAudit [QLPA-]
+    FinalQuality/                             <- Sub-module 12.9 models
+      FinalInspectionLots.py                  <- FinalInspectionLot [QFQC-]
+      CertificatesOfConformance.py            <- CertificateOfConformance [QCOC-]
+      PackagingLabelVerifications.py          <- PackagingLabelVerification [QPKG-]
+      QualityReleaseAuthorizations.py         <- QualityReleaseAuthorization [QREL-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -166,6 +178,11 @@ apps/quality/
       FirstArticleInspections.py              <- FirstArticleInspectionForm
       ProcessParameterLogs.py                 <- ProcessParameterLogForm
       LayeredProcessAudits.py                 <- LayeredProcessAuditForm
+    FinalQuality/                             <- Sub-module 12.9 forms
+      FinalInspectionLots.py                  <- FinalInspectionLotForm
+      CertificatesOfConformance.py            <- CertificateOfConformanceForm
+      PackagingLabelVerifications.py          <- PackagingLabelVerificationForm
+      QualityReleaseAuthorizations.py         <- QualityReleaseAuthorizationForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -216,6 +233,12 @@ apps/quality/
       ProcessParameterLogs.py                 <- List, Detail, Create, Edit, Delete, Export
       LayeredProcessAudits.py                 <- List, Detail, Create, Edit, Delete, Export
       SpcAnalytics.py                         <- SPC Analytics Dashboard, Export
+    FinalQuality/                             <- Sub-module 12.9 views
+      FinalInspectionLots.py                  <- List, Detail, Create, Edit, Delete, Toggle Hold, Export
+      CertificatesOfConformance.py            <- List, Detail, Create, Edit, Delete, Sign, Export
+      PackagingLabelVerifications.py          <- List, Detail, Create, Edit, Delete, Export
+      QualityReleaseAuthorizations.py         <- List, Detail, Create, Edit, Delete, Toggle Hold, Export
+      OqcHoldBoard.py                         <- OQC Hold & Release Board
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -265,12 +288,22 @@ apps/quality/
       ProcessParameterLogs.py
       LayeredProcessAudits.py
       SpcAnalytics.py
+    FinalQuality/                             <- Sub-module 12.9 URLs
+      FinalInspectionLots.py
+      CertificatesOfConformance.py
+      PackagingLabelVerifications.py
+      QualityReleaseAuthorizations.py
+      OqcHoldBoard.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.8)
-  tests/                                      <- Pytest test suite (100% green, 1,490 passing tests)
-    conftest.py                               <- Shared 12.1 through 12.8 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.9)
+  tests/                                      <- Pytest test suite (100% green, 1,747 passing tests)
+    conftest.py                               <- Shared 12.1 through 12.9 fixtures
+    test_finalquality_models.py
+    test_finalquality_forms.py
+    test_finalquality_views.py
+    test_finalquality_security.py
     test_documentcontrol_models.py
     test_documentcontrol_forms.py
     test_documentcontrol_views.py
@@ -835,6 +868,12 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - Automated QMS NCR Escalation: In-process inspections with failed disposition (`escalate_to_ncr`) or critical defects link directly to `quality:non_conformance_report_detail` across list and detail interfaces.
     - CQI-8 Audit Score Clamping: `LayeredProcessAudit.save()` automatically computes compliance score percentage and clamps values between $0.00\%$ and $100.00\%$ to prevent division by zero or out-of-range scoring anomalies.
     - Server-Side User Attribution: Critical audit fields (`logged_by` on `ProcessParameterLog` and `approved_by` on `FirstArticleInspection`) are strictly excluded from edit forms and assigned server-side from `request.user` to prevent client-side credential spoofing.
+15. **Final Quality Control & Outgoing Quality Control (FQC / OQC) Invariants:**
+    - CoC Cryptographic Signing: `certificate_of_conformance_sign` requires tenant-admin permissions, locks approved/revoked records against re-signing, and binds critical document specs into the SHA-256 digest (`number:tenant_id:user_id:customer_id:item_code:lot_number:certified_quantity:specs:test_results:timestamp`).
+    - Post-Signing Immutability: Editing or hard-deleting approved/signed Certificates of Conformance or authorized Quality Release Authorizations is strictly blocked to preserve non-repudiation and regulatory compliance audit trails.
+    - Multi-Gate Outgoing Release: Quality releases enforce a 4-point verification gate (final inspection lot passed, zero open NCRs/CAPAs, packaging approved, CoC issued and signed) plus cross-record counterparty customer verification before shipment clearance.
+    - Quarantine Hold Governance: Activating a hold on an inspection lot or release requires tenant-admin authority and a non-empty `hold_reason`. Releasing while on hold is prohibited.
+    - OQC Hold Board Performance: KPI counts are computed on unsliced querysets before slicing `[:10]` previews, avoiding SQL subquery overhead and count truncation.
 
 ---
 
@@ -901,5 +940,12 @@ LIVE_LINKS = {
         "quality:spc_dashboard",
         "quality:layered_process_audit_list",
     ],
+    "12.9": {
+        "Final Inspection Protocols": "quality:final_inspection_lot_list",
+        "Lot Sampling & Acceptance Testing": "quality:oqc_hold_board",
+        "Certificate of Conformance (CoC)": "quality:certificate_of_conformance_list",
+        "Packaging & Labeling Verification": "quality:packaging_label_verification_list",
+        "Shipment Release & Traceability": "quality:quality_release_authorization_list",
+    },
 }
 ```
