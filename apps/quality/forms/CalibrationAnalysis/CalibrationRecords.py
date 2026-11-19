@@ -14,7 +14,7 @@ User = get_user_model()
 class CalibrationRecordForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = CalibrationRecord
-        exclude = ("tenant", "number", "approved_at", "created_at", "updated_at")
+        exclude = ("tenant", "number", "approved_at", "test_points_data", "created_at", "updated_at")
         widgets = {
             "gage": forms.Select(attrs={"class": "form-select"}),
             "calibration_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
