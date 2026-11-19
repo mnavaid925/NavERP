@@ -68,10 +68,6 @@
             {{ form.customer_po_number }}
           </div>
           <div class="form-group">
-            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Document Status *</label>
-            {{ form.status }}
-          </div>
-          <div class="form-group">
             <label for="{{ form.sales_order.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Sales Order</label>
             {{ form.sales_order }}
           </div>
@@ -82,6 +78,10 @@
           <div class="form-group">
             <label for="{{ form.shipment.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Outbound Shipment</label>
             {{ form.shipment }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.shipment_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Shipment # (Manual)</label>
+            {{ form.shipment_number }}
           </div>
         </div>
       </div>
@@ -155,7 +155,7 @@
         </div>
       </div>
 
-      <!-- Section 4: Signatory & Notes -->
+      <!-- Section 4: Signatory Title & Notes -->
       <div>
         <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
           <i data-lucide="signature" class="w-4 h-4 text-blue-600"></i>
@@ -163,16 +163,13 @@
         </h2>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div class="form-group">
-            <label for="{{ form.authorized_signatory.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Authorized Signatory</label>
-            {{ form.authorized_signatory }}
-          </div>
-          <div class="form-group">
-            <label for="{{ form.signatory_title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Signatory Title</label>
+            <label for="{{ form.signatory_title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Designated Signatory Title</label>
             {{ form.signatory_title }}
+            <p class="text-xs text-slate-500 mt-0.5">Title of the QA authority authorized to sign.</p>
           </div>
-          <div class="form-group">
-            <label for="{{ form.signed_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Signed Date</label>
-            {{ form.signed_date }}
+          <div class="sm:col-span-2 p-3 bg-slate-50 rounded border text-xs text-slate-600 flex items-center gap-2">
+            <i data-lucide="info" class="w-4 h-4 text-blue-500 shrink-0"></i>
+            <span>Digital signature, cryptographic SHA-256 stamp, and status transition to Approved are executed post-creation via the <strong>Digitally Sign & Approve</strong> action.</span>
           </div>
           <div class="sm:col-span-3 form-group">
             <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Internal Quality Notes</label>
