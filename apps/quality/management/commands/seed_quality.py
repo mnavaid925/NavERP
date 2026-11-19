@@ -3186,7 +3186,7 @@ class Command(BaseCommand):
                 tenant=tenant,
                 title="Pre-Packaging FQC - Aerospace Precision Actuator Housing",
                 inspection_stage="pre_packaging_fqc",
-                sampling_standard="c0_zero_acceptance",
+                sampling_standard="c_zero_sampling",
                 aql_critical=Decimal("0.00"),
                 aql_major=Decimal("0.25"),
                 aql_minor=Decimal("1.50"),
