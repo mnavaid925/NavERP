@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Measurement System Analysis (MSA / Gage R&R) — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Calibration & MSA</span>
+        <span class="mx-1">/</span>
+        <span>MSA Studies</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="bar-chart-2" class="w-6 h-6 text-purple-600"></i>
+        Measurement System Analysis (MSA / Gage R&R)
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        AIAG MSA 4th Edition studies: Repeatability (EV), Reproducibility (AV), Part Variation (PV), %GRR, and Number of Distinct Categories (ndc).
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:calibration_gage_list' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="gauge" class="w-4 h-4"></i>
+        <span>Gage Registry</span>
+      </a>
+      <a href="{% url 'quality:measurement_system_analysis_export_csv' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export CSV</span>
+      </a>
+      <a href="{% url 'quality:measurement_system_analysis_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Launch Study</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="line-chart" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ total_studies }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total MSA Studies</div>
+      </div>
+    </div>
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ acceptable_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Acceptable Systems (%GRR &lt; 10%)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label for="q" class="form-label text-xs font-semibold text-slate-600 uppercase mb-1 block">Search</label>
+        <div class="relative">
+          <input type="text" id="q" name="q" value="{{ search_query }}" placeholder="Study #, title, gage tag, characteristic..." class="form-input text-sm w-full pl-9" />
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        </div>
+      </div>
+      <div>
+        <label for="study_type" class="form-label text-xs font-semibold text-slate-600 uppercase mb-1 block">Study Type</label>
+        <select id="study_type" name="study_type" class="form-select text-sm w-full">
+          <option value="">All Study Types</option>
+          {% for val, label in study_type_choices %}
+            <option value="{{ val }}" {% if study_type_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <div class="flex-1">
+          <label for="study_result" class="form-label text-xs font-semibold text-slate-600 uppercase mb-1 block">Study Verdict</label>
+          <select id="study_result" name="study_result" class="form-select text-sm w-full">
+            <option value="">All Verdicts</option>
+            {% for val, label in result_choices %}
+              <option value="{{ val }}" {% if result_filter == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-outline text-sm h-10 px-4">Filter</button>
+        {% if search_query or study_type_filter or result_filter %}
+          <a href="{% url 'quality:measurement_system_analysis_list' %}" class="btn btn-outline text-sm h-10 px-3 text-slate-500" title="Reset Filters">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Studies Table -->
+  <div class="card overflow-hidden">
+    <div class="table-wrap">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 text-xs font-semibold uppercase border-b border-slate-200">
+            <th class="py-3 px-4">Study #</th>
+            <th class="py-3 px-4">Study Title</th>
+            <th class="py-3 px-4">Gage Tag</th>
+            <th class="py-3 px-4">Study Type</th>
+            <th class="py-3 px-4">Method</th>
+            <th class="py-3 px-4">%GRR</th>
+            <th class="py-3 px-4">P/T Ratio</th>
+            <th class="py-3 px-4">NDC</th>
+            <th class="py-3 px-4">Study Verdict</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for m in msa_studies %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'quality:measurement_system_analysis_detail' m.pk %}" class="hover:underline">{{ m.number }}</a>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ m.study_title }}</div>
+                <div class="text-xs text-slate-500">{{ m.characteristic_name }} (Tol: {{ m.specification_tolerance }})</div>
+              </td>
+              <td class="py-3 px-4 font-mono text-xs">
+                <a href="{% url 'quality:calibration_gage_detail' m.gage.pk %}" class="text-blue-600 hover:underline">
+                  {{ m.gage.gage_id }}
+                </a>
+              </td>
+              <td class="py-3 px-4 text-xs">
+                <span class="badge {{ m.study_type_css }} text-xs">{{ m.get_study_type_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-xs">{{ m.get_analysis_method_display }}</td>
+              <td class="py-3 px-4 font-mono font-bold {% if m.percent_gage_rr_study_variation > 30 %}text-red-600{% elif m.percent_gage_rr_study_variation > 10 %}text-amber-600{% else %}text-green-600{% endif %}">
+                {{ m.percent_gage_rr_study_variation }}%
+              </td>
+              <td class="py-3 px-4 font-mono text-xs">{{ m.percent_tolerance_pt_ratio }}%</td>
+              <td class="py-3 px-4 font-mono font-bold {% if m.number_of_distinct_categories_ndc < 5 %}text-red-600{% else %}text-green-600{% endif %}">
+                {{ m.number_of_distinct_categories_ndc }}
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ m.result_css }} text-xs">{{ m.get_study_result_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-right">
+                <div class="table-actions flex items-center justify-end gap-1">
+                  <a href="{% url 'quality:measurement_system_analysis_detail' m.pk %}" class="btn btn-icon p-1.5 hover:bg-slate-100 rounded text-slate-600" title="View Details">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'quality:measurement_system_analysis_edit' m.pk %}" class="btn btn-icon p-1.5 hover:bg-slate-100 rounded text-slate-600" title="Edit Study">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'quality:measurement_system_analysis_delete' m.pk %}" onsubmit="return confirm('Delete study {{ m.number }}?');" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon p-1.5 hover:bg-red-50 rounded text-red-500" title="Delete">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10" class="py-12 text-center text-slate-500">
+                <div class="empty-state flex flex-col items-center justify-center">
+                  <i data-lucide="bar-chart-2" class="w-12 h-12 text-slate-300 mb-3"></i>
+                  <div class="text-base font-medium text-slate-700 mb-1">No Measurement System Analyses conducted</div>
+                  <p class="text-xs text-slate-400 max-w-sm mb-4">
+                    Execute crossed ANOVA Gage R&R, nested destructive studies, or linearity and bias evaluations.
+                  </p>
+                  <a href="{% url 'quality:measurement_system_analysis_create' %}" class="btn btn-primary text-xs">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Launch MSA Study
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+      <div class="pagination flex items-center justify-between px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
+        <div>
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} MSA studies
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if study_type_filter %}&study_type={{ study_type_filter }}{% endif %}{% if result_filter %}&study_result={{ result_filter }}{% endif %}" class="btn btn-outline px-2 py-1 text-xs">
+              Previous
+            </a>
+          {% else %}
+            <span class="btn btn-outline px-2 py-1 text-xs opacity-50 cursor-not-allowed">Previous</span>
+          {% endif %}
+          <span class="px-2 py-1">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if study_type_filter %}&study_type={{ study_type_filter }}{% endif %}{% if result_filter %}&study_result={{ result_filter }}{% endif %}" class="btn btn-outline px-2 py-1 text-xs">
+              Next
+            </a>
+          {% else %}
+            <span class="btn btn-outline px-2 py-1 text-xs opacity-50 cursor-not-allowed">Next</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
