@@ -27,9 +27,7 @@ def _csv_safe(val):
 
 @login_required
 def final_inspection_lot_list(request):
-    qs = FinalInspectionLot.objects.filter(tenant=request.tenant).select_related(
-        "customer", "sales_order", "work_order", "inspector", "decision_by", "non_conformance"
-    )
+    qs = FinalInspectionLot.objects.filter(tenant=request.tenant)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -173,6 +171,7 @@ def final_inspection_lot_delete(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def final_inspection_lot_toggle_hold(request, pk):
     lot = get_object_or_404(FinalInspectionLot, pk=pk, tenant=request.tenant)
     reason = request.POST.get("hold_reason", "").strip()
@@ -181,9 +180,11 @@ def final_inspection_lot_toggle_hold(request, pk):
         action = "release"
         msg = f"Inspection lot {lot.number} removed from hold."
     else:
+        if not reason:
+            messages.error(request, "A non-empty hold reason is mandatory when placing an inspection lot on hold.")
+            return redirect("quality:final_inspection_lot_detail", pk=lot.pk)
         lot.is_on_hold = True
-        if reason:
-            lot.hold_reason = reason
+        lot.hold_reason = reason
         action = "hold"
         msg = f"Inspection lot {lot.number} placed on hold."
     lot.save()
@@ -194,7 +195,7 @@ def final_inspection_lot_toggle_hold(request, pk):
 
 @login_required
 def final_inspection_lot_export(request):
-    write_audit_log(request.user, FinalInspectionLot(), "export", tenant=request.tenant)
+    write_audit_log(request.user, None, "export", changes={"model": "FinalInspectionLot"}, tenant=request.tenant)
     qs = FinalInspectionLot.objects.filter(tenant=request.tenant).order_by("-created_at")
 
     response = HttpResponse(content_type="text/csv")
