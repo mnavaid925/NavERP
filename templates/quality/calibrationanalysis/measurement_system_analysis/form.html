@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit MSA Study {{ msa_study.number }}{% else %}Launch MSA Study{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:measurement_system_analysis_list' %}" class="hover:underline">MSA Studies</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ msa_study.number }}{% else %}New Study{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="bar-chart-2" class="w-6 h-6 text-purple-600"></i>
+        <span>{% if is_edit %}Edit MSA Study: {{ msa_study.number }}{% else %}Launch Measurement System Analysis (MSA){% endif %}</span>
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Configure study design parameters (operators, parts, trials), tolerance, and computed AIAG metrics (%GRR, ndc).
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Study Header -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-purple-500"></i>
+          Study Header & Target Instrument
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.study_title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Study Title <span class="text-red-500">*</span>
+            </label>
+            {{ form.study_title }}
+            {% if form.study_title.errors %}<div class="text-xs text-red-600 mt-1">{{ form.study_title.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.gage.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Target Instrument / Gage <span class="text-red-500">*</span>
+            </label>
+            {{ form.gage }}
+            {% if form.gage.errors %}<div class="text-xs text-red-600 mt-1">{{ form.gage.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.study_type.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Study Protocol Type
+            </label>
+            {{ form.study_type }}
+            {% if form.study_type.errors %}<div class="text-xs text-red-600 mt-1">{{ form.study_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.analysis_method.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Analysis Method
+            </label>
+            {{ form.analysis_method }}
+            {% if form.analysis_method.errors %}<div class="text-xs text-red-600 mt-1">{{ form.analysis_method.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.characteristic_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Characteristic Name <span class="text-red-500">*</span>
+            </label>
+            {{ form.characteristic_name }}
+            {% if form.characteristic_name.errors %}<div class="text-xs text-red-600 mt-1">{{ form.characteristic_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.study_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Study Date <span class="text-red-500">*</span>
+            </label>
+            {{ form.study_date }}
+            {% if form.study_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.study_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Study Status
+            </label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.study_result.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Overall Verdict
+            </label>
+            {{ form.study_result }}
+            {% if form.study_result.errors %}<div class="text-xs text-red-600 mt-1">{{ form.study_result.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Study Design Grid -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-500"></i>
+          Sampling Scheme & Tolerance Parameters
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.number_of_operators.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Operators Count <span class="text-red-500">*</span>
+            </label>
+            {{ form.number_of_operators }}
+            {% if form.number_of_operators.errors %}<div class="text-xs text-red-600 mt-1">{{ form.number_of_operators.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.number_of_parts.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Parts Count <span class="text-red-500">*</span>
+            </label>
+            {{ form.number_of_parts }}
+            {% if form.number_of_parts.errors %}<div class="text-xs text-red-600 mt-1">{{ form.number_of_parts.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.number_of_trials.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Trials Count <span class="text-red-500">*</span>
+            </label>
+            {{ form.number_of_trials }}
+            {% if form.number_of_trials.errors %}<div class="text-xs text-red-600 mt-1">{{ form.number_of_trials.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.specification_tolerance.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Specification Tolerance <span class="text-red-500">*</span>
+            </label>
+            {{ form.specification_tolerance }}
+            {% if form.specification_tolerance.errors %}<div class="text-xs text-red-600 mt-1">{{ form.specification_tolerance.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Computed AIAG Metrics -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="bar-chart-2" class="w-4 h-4 text-green-500"></i>
+          Computed Statistical & AIAG Metrics
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.percent_gage_rr_study_variation.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              %GRR (Study Variation)
+            </label>
+            {{ form.percent_gage_rr_study_variation }}
+            {% if form.percent_gage_rr_study_variation.errors %}<div class="text-xs text-red-600 mt-1">{{ form.percent_gage_rr_study_variation.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.percent_tolerance_pt_ratio.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              P/T Ratio (% of Tolerance)
+            </label>
+            {{ form.percent_tolerance_pt_ratio }}
+            {% if form.percent_tolerance_pt_ratio.errors %}<div class="text-xs text-red-600 mt-1">{{ form.percent_tolerance_pt_ratio.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.number_of_distinct_categories_ndc.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Distinct Categories (ndc)
+            </label>
+            {{ form.number_of_distinct_categories_ndc }}
+            {% if form.number_of_distinct_categories_ndc.errors %}<div class="text-xs text-red-600 mt-1">{{ form.number_of_distinct_categories_ndc.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.repeatability_ev.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Repeatability (EV)</label>
+            {{ form.repeatability_ev }}
+            {% if form.repeatability_ev.errors %}<div class="text-xs text-red-600 mt-1">{{ form.repeatability_ev.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.reproducibility_av.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Reproducibility (AV)</label>
+            {{ form.reproducibility_av }}
+            {% if form.reproducibility_av.errors %}<div class="text-xs text-red-600 mt-1">{{ form.reproducibility_av.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.gage_rr_grr.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Total Gage R&R (GRR)</label>
+            {{ form.gage_rr_grr }}
+            {% if form.gage_rr_grr.errors %}<div class="text-xs text-red-600 mt-1">{{ form.gage_rr_grr.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.part_variation_pv.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Part Variation (PV)</label>
+            {{ form.part_variation_pv }}
+            {% if form.part_variation_pv.errors %}<div class="text-xs text-red-600 mt-1">{{ form.part_variation_pv.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.total_variation_tv.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Total Variation (TV)</label>
+            {{ form.total_variation_tv }}
+            {% if form.total_variation_tv.errors %}<div class="text-xs text-red-600 mt-1">{{ form.total_variation_tv.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.reference_master_value.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Reference Master Value</label>
+            {{ form.reference_master_value }}
+            {% if form.reference_master_value.errors %}<div class="text-xs text-red-600 mt-1">{{ form.reference_master_value.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.bias_value.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Bias Value</label>
+            {{ form.bias_value }}
+            {% if form.bias_value.errors %}<div class="text-xs text-red-600 mt-1">{{ form.bias_value.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.bias_percentage.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Bias % of Tol</label>
+            {{ form.bias_percentage }}
+            {% if form.bias_percentage.errors %}<div class="text-xs text-red-600 mt-1">{{ form.bias_percentage.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.linearity_r_squared.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Linearity R² Fit</label>
+            {{ form.linearity_r_squared }}
+            {% if form.linearity_r_squared.errors %}<div class="text-xs text-red-600 mt-1">{{ form.linearity_r_squared.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Sign-Off & Governance -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="check-square" class="w-4 h-4 text-slate-500"></i>
+          Governance & Sign-Off
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.study_protocol_doc.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Study Protocol (Controlled Doc)</label>
+            {{ form.study_protocol_doc }}
+            {% if form.study_protocol_doc.errors %}<div class="text-xs text-red-600 mt-1">{{ form.study_protocol_doc.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.study_lead.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Study Lead</label>
+            {{ form.study_lead }}
+            {% if form.study_lead.errors %}<div class="text-xs text-red-600 mt-1">{{ form.study_lead.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.approved_by.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Approved By</label>
+            {{ form.approved_by }}
+            {% if form.approved_by.errors %}<div class="text-xs text-red-600 mt-1">{{ form.approved_by.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.conclusion.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Metrologist Conclusion</label>
+        {{ form.conclusion }}
+        {% if form.conclusion.errors %}<div class="text-xs text-red-600 mt-1">{{ form.conclusion.errors }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">General Notes</label>
+        {{ form.notes }}
+        {% if form.notes.errors %}<div class="text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <a href="{% if is_edit %}{% url 'quality:measurement_system_analysis_detail' msa_study.pk %}{% else %}{% url 'quality:measurement_system_analysis_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm px-6">
+          {% if is_edit %}Update Study{% else %}Save & Run Analysis{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
