@@ -91,9 +91,9 @@
   - **Location**: `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py:101-105`
   - **Fix**: Query last passing calibration date before the failure event to set initial suspect window start. (fixed — a6528663)
 
-- [ ] **[M4] Phantom Attribute `v.legal_name` in `calibration_vendor_directory.html`**:
+- [x] **[M4] Phantom Attribute `v.legal_name` in `calibration_vendor_directory.html`**:
   - **Location**: `templates/quality/calibrationanalysis/calibration_vendor_directory.html:82-84`
-  - **Fix**: Remove dead conditional check for `v.legal_name`.
+  - **Fix**: Remove dead conditional check for `v.legal_name`. (fixed — 324e4f5c)
 
 - [ ] **[M5] `CalibrationRecordAdmin` Missing `filter_horizontal` for `standards_used`**:
   - **Location**: `apps/quality/admin.py:734-750`
