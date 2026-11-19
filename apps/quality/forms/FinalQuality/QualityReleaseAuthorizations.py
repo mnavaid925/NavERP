@@ -94,7 +94,7 @@ class QualityReleaseAuthorizationForm(TenantUniqueMixin, TenantModelForm):
 
             try:
                 SalesOrder = apps.get_model("scm", "SalesOrder")
-                self.fields["sales_order"].queryset = SalesOrder.objects.filter(tenant=self.tenant).order_by("-created_at")
+                self.fields["sales_order"].queryset = SalesOrder.objects.filter(tenant=self.tenant).select_related("customer").order_by("-created_at")
             except LookupError:
                 pass
 
@@ -106,7 +106,7 @@ class QualityReleaseAuthorizationForm(TenantUniqueMixin, TenantModelForm):
 
             try:
                 CertificateOfConformance = apps.get_model("quality", "CertificateOfConformance")
-                self.fields["certificate_of_conformance"].queryset = CertificateOfConformance.objects.filter(tenant=self.tenant).order_by("-created_at")
+                self.fields["certificate_of_conformance"].queryset = CertificateOfConformance.objects.filter(tenant=self.tenant).select_related("customer").order_by("-created_at")
             except LookupError:
                 pass
 
@@ -128,12 +128,29 @@ class QualityReleaseAuthorizationForm(TenantUniqueMixin, TenantModelForm):
 
         is_on_hold = cleaned_data.get("is_on_hold")
         hold_reason = cleaned_data.get("hold_reason")
+        status = cleaned_data.get("status")
+        release_disposition = cleaned_data.get("release_disposition")
+
         if is_on_hold and not hold_reason:
             self.add_error("hold_reason", "A hold reason is mandatory when shipment release is on hold.")
 
-        release_disposition = cleaned_data.get("release_disposition")
+        if is_on_hold and (status == "authorized" or release_disposition == "released_full"):
+            self.add_error("status", "Cannot authorize or fully release a shipment while an active quality hold is engaged.")
+
         concession = cleaned_data.get("concession_rationale")
         if release_disposition == "conditional_release" and not concession:
             self.add_error("concession_rationale", "Concession rationale is mandatory for conditional release approvals.")
+
+        customer = cleaned_data.get("customer")
+        if customer:
+            sales_order = cleaned_data.get("sales_order")
+            if sales_order and getattr(sales_order, "customer_id", None) and sales_order.customer_id != customer.pk:
+                self.add_error("sales_order", "Linked sales order does not belong to the selected customer.")
+            inspection_lot = cleaned_data.get("inspection_lot")
+            if inspection_lot and getattr(inspection_lot, "customer_id", None) and inspection_lot.customer_id != customer.pk:
+                self.add_error("inspection_lot", "Linked inspection lot does not belong to the selected customer.")
+            coc = cleaned_data.get("certificate_of_conformance")
+            if coc and getattr(coc, "customer_id", None) and coc.customer_id != customer.pk:
+                self.add_error("certificate_of_conformance", "Linked Certificate of Conformance does not belong to the selected customer.")
 
         return cleaned_data
