@@ -60,6 +60,7 @@ def calibration_gage_list(request):
 
     context = {
         "gages": page_obj,
+        "gage_list": page_obj,
         "page_obj": page_obj,
         "search_query": search_query,
         "status_filter": status_filter,
@@ -89,7 +90,9 @@ def calibration_gage_detail(request, pk):
         "gage": gage,
         "obj": gage,
         "calibration_history": calibration_history,
+        "calibrations": calibration_history,
         "oot_history": oot_history,
+        "oot_investigations": oot_history,
         "msa_studies": msa_studies,
     }
     return render(request, "quality/calibrationanalysis/calibration_gage/detail.html", context)
