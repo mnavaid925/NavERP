@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from apps.core.forms import TenantModelForm
 from apps.core.models import Party
@@ -55,4 +56,7 @@ class CalibrationRecordForm(TenantUniqueMixin, TenantModelForm):
             self, cleaned,
             ["gage", "service_vendor", "standards_used", "calibrated_by_user", "approved_by"]
         )
+        cal_date = cleaned.get("calibration_date")
+        if cal_date and cal_date > timezone.now().date():
+            self.add_error("calibration_date", "Calibration date cannot be in the future.")
         return cleaned
