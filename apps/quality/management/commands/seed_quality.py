@@ -67,6 +67,18 @@ from apps.quality.models.CalibrationAnalysis.CalibrationGages import Calibration
 from apps.quality.models.CalibrationAnalysis.CalibrationRecords import CalibrationRecord
 from apps.quality.models.CalibrationAnalysis.OutOfToleranceInvestigations import OutOfToleranceInvestigation
 from apps.quality.models.CalibrationAnalysis.MeasurementSystemAnalyses import MeasurementSystemAnalysis
+from apps.quality.models.FinalQuality.CertificatesOfConformance import (
+    CertificateOfConformance,
+)
+from apps.quality.models.FinalQuality.FinalInspectionLots import (
+    FinalInspectionLot,
+)
+from apps.quality.models.FinalQuality.PackagingLabelVerifications import (
+    PackagingLabelVerification,
+)
+from apps.quality.models.FinalQuality.QualityReleaseAuthorizations import (
+    QualityReleaseAuthorization,
+)
 
 
 User = get_user_model()
@@ -85,6 +97,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            QualityReleaseAuthorization.objects.all().delete()
+            PackagingLabelVerification.objects.all().delete()
+            CertificateOfConformance.objects.all().delete()
+            FinalInspectionLot.objects.all().delete()
             LayeredProcessAudit.objects.all().delete()
             ProcessParameterLog.objects.all().delete()
             FirstArticleInspection.objects.all().delete()
@@ -134,6 +150,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_6(tenant)
             self._seed_submodule_12_7(tenant)
             self._seed_submodule_12_8(tenant)
+            self._seed_submodule_12_9(tenant)
             self._seed_submodule_12_10(tenant)
 
 
@@ -3090,6 +3107,331 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.10 Calibration & Measurement System Analysis (MSA) seeded successfully."))
+
+    def _seed_submodule_12_9(self, tenant):
+        if FinalInspectionLot.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.9 Final Quality Control (FQC / OQC) data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.9 Final Quality Control (FQC / OQC)...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not admin_user:
+            self.stdout.write(f"[{tenant.name}] Warning: No user found for tenant.")
+            return
+
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
+        inspector_user = users[1] if len(users) > 1 else admin_user
+        verifier_user = users[2] if len(users) > 2 else admin_user
+
+        customer = (
+            Party.objects.filter(tenant=tenant, roles__role__in=("customer", "client")).first()
+            or Party.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not customer:
+            customer = Party.objects.create(
+                tenant=tenant,
+                name=f"{tenant.name} Premier Aero Client",
+            )
+
+        sop_doc = ControlledDocument.objects.filter(tenant=tenant).first()
+
+        now = timezone.now()
+        today = now.date()
+
+        with transaction.atomic():
+            # 1. Final Inspection Lots (QFQC)
+            lot_1 = FinalInspectionLot.objects.create(
+                tenant=tenant,
+                title="Post-Packaging OQC - Medical Titanium Bone Screws Batch 44",
+                inspection_stage="post_packaging_oqc",
+                sampling_standard="ansi_asq_z1_4_normal",
+                aql_critical=Decimal("0.00"),
+                aql_major=Decimal("0.65"),
+                aql_minor=Decimal("4.00"),
+                status="completed",
+                usage_decision="accepted",
+                decision_rationale="AQL inspection conforming to ISO 2859-1 Level II. Zero critical defects found.",
+                item_code="MED-TBS-40",
+                item_name="Titanium Polyaxial Bone Screw 4.0mm x 40mm",
+                lot_number="LOT-2026-FQC-001",
+                batch_number="BATCH-M44",
+                serial_number_range="TBS-44001 through TBS-44500",
+                lot_quantity=5000,
+                sample_size_inspected=200,
+                critical_defects_count=0,
+                major_defects_count=0,
+                minor_defects_count=1,
+                units_passed=199,
+                units_rejected=1,
+                visual_inspection_passed=True,
+                dimensional_inspection_passed=True,
+                functional_test_passed=True,
+                packaging_inspection_passed=True,
+                is_on_hold=False,
+                customer=customer,
+                sales_order_number="SO-2026-9041",
+                inspection_plan=sop_doc,
+                inspector=inspector_user,
+                decision_by=verifier_user,
+                inspection_date=today - datetime.timedelta(days=2),
+                decision_date=today - datetime.timedelta(days=2),
+                inspection_notes="Cleanroom double sterile blister pack inspected under laminar flow hood.",
+            )
+
+            lot_2 = FinalInspectionLot.objects.create(
+                tenant=tenant,
+                title="Pre-Packaging FQC - Aerospace Precision Actuator Housing",
+                inspection_stage="pre_packaging_fqc",
+                sampling_standard="c0_zero_acceptance",
+                aql_critical=Decimal("0.00"),
+                aql_major=Decimal("0.25"),
+                aql_minor=Decimal("1.50"),
+                status="completed",
+                usage_decision="accepted_with_concession",
+                decision_rationale="Minor surface anodizing cosmetic variation accepted per customer engineering deviation DEV-2026-08.",
+                item_code="AERO-ACT-770",
+                item_name="Electro-Hydraulic Flight Actuator Housing",
+                lot_number="LOT-2026-FQC-002",
+                batch_number="BATCH-ACT-77",
+                serial_number_range="ACT-7701 through ACT-7780",
+                lot_quantity=80,
+                sample_size_inspected=80,
+                critical_defects_count=0,
+                major_defects_count=0,
+                minor_defects_count=2,
+                units_passed=78,
+                units_rejected=0,
+                visual_inspection_passed=True,
+                dimensional_inspection_passed=True,
+                functional_test_passed=True,
+                packaging_inspection_passed=True,
+                is_on_hold=False,
+                customer=customer,
+                sales_order_number="SO-2026-9115",
+                inspection_plan=sop_doc,
+                inspector=inspector_user,
+                decision_by=admin_user,
+                inspection_date=today - datetime.timedelta(days=1),
+                decision_date=today - datetime.timedelta(days=1),
+                inspection_notes="100% C=0 inspection protocol applied for flight-critical component.",
+            )
+
+            lot_3 = FinalInspectionLot.objects.create(
+                tenant=tenant,
+                title="Finished Goods Dock Hold - Automotive Sensor Harness Assembly",
+                inspection_stage="finished_goods_dock",
+                sampling_standard="ansi_asq_z1_4_tightened",
+                aql_critical=Decimal("0.00"),
+                aql_major=Decimal("1.00"),
+                aql_minor=Decimal("2.50"),
+                status="in_progress",
+                usage_decision="quarantined_hold",
+                decision_rationale="Outer shipping carton moisture indicator turned pink. Batch quarantined on hold pending repack audit.",
+                item_code="AUTO-HARN-09",
+                item_name="Powertrain CAN Bus Shielded Sensor Wiring Harness",
+                lot_number="LOT-2026-FQC-003",
+                batch_number="BATCH-HARN-09B",
+                lot_quantity=1500,
+                sample_size_inspected=125,
+                critical_defects_count=0,
+                major_defects_count=3,
+                minor_defects_count=4,
+                units_passed=118,
+                units_rejected=7,
+                visual_inspection_passed=False,
+                dimensional_inspection_passed=True,
+                functional_test_passed=True,
+                packaging_inspection_passed=False,
+                is_on_hold=True,
+                hold_reason="Shipping pallet barrier bag unsealed during dock staging. Quarantine hold placed.",
+                customer=customer,
+                sales_order_number="SO-2026-9280",
+                inspector=inspector_user,
+                decision_by=None,
+                inspection_date=today,
+                decision_date=None,
+                inspection_notes="Sample pulled from dock bay 4. Awaiting packaging integrity verification.",
+            )
+
+            # 2. Certificates of Conformance (QCOC)
+            coc_1 = CertificateOfConformance.objects.create(
+                tenant=tenant,
+                title="Certificate of Conformance - Titanium Bone Screws Batch 44",
+                certificate_type="medical_device_iso13485",
+                status="approved_signed",
+                customer=customer,
+                customer_po_number="PO-CUST-88392",
+                sales_order_number="SO-2026-9041",
+                item_code="MED-TBS-40",
+                item_name="Titanium Polyaxial Bone Screw 4.0mm x 40mm",
+                revision="Rev C",
+                lot_number="LOT-2026-FQC-001",
+                batch_number="BATCH-M44",
+                serial_numbers_text="TBS-44001 through TBS-44500",
+                certified_quantity=5000,
+                inspection_lot=lot_1,
+                applicable_specifications="ISO 13485:2016, ASTM F136 Ti-6Al-4V ELI, FDA 21 CFR Part 820",
+                test_results_summary="Tensile yield: 860 MPa (spec >= 795 MPa). Dimensional: Cpk 1.84. Sterility: EtO SAL 10^-6 validated.",
+                conformance_statement="We hereby certify that the items identified above were manufactured, inspected, and tested in accordance with the contract requirements, applicable drawings, and validated manufacturing processes.",
+                authorized_signatory=admin_user,
+                signatory_title="Director of Quality Assurance",
+                signed_date=today - datetime.timedelta(days=2),
+                digital_signature_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                notes="Original digital certificate transmitted electronically to customer regulatory portal.",
+            )
+
+            coc_2 = CertificateOfConformance.objects.create(
+                tenant=tenant,
+                title="Certificate of Conformance - Flight Actuator Housing",
+                certificate_type="aerospace_as9100_as9102",
+                status="under_review",
+                customer=customer,
+                customer_po_number="PO-AERO-77104",
+                sales_order_number="SO-2026-9115",
+                item_code="AERO-ACT-770",
+                item_name="Electro-Hydraulic Flight Actuator Housing",
+                revision="Rev F",
+                lot_number="LOT-2026-FQC-002",
+                batch_number="BATCH-ACT-77",
+                serial_numbers_text="ACT-7701 through ACT-7780",
+                certified_quantity=80,
+                inspection_lot=lot_2,
+                applicable_specifications="AS9100D, AMS 4928 Titanium Bar, MIL-STD-130N",
+                test_results_summary="Hydrostatic pressure tested to 4500 PSI with zero leakage. Anodize thickness 0.0018 in.",
+                conformance_statement="Goods conform in all material respects to engineering drawings and purchase order specifications, subject to approved customer concession DEV-2026-08.",
+                authorized_signatory=verifier_user,
+                signatory_title="Quality Engineering Manager",
+                signed_date=None,
+                notes="Pending customer MRB co-signature on concession deviation.",
+            )
+
+            # 3. Packaging & Label Verifications (QPKG)
+            pkg_1 = PackagingLabelVerification.objects.create(
+                tenant=tenant,
+                title="UDI Barcode & Packaging Audit - Titanium Screws M44",
+                status="verified",
+                disposition="pass_released",
+                item_code="MED-TBS-40",
+                item_name="Titanium Polyaxial Bone Screw 4.0mm x 40mm",
+                lot_number="LOT-2026-FQC-001",
+                carton_count_inspected=25,
+                label_part_number="LBL-MED-TBS40",
+                label_artwork_revision="Rev 3",
+                artwork_master=sop_doc,
+                barcode_symbology="datamatrix_gs1_2d",
+                scanned_barcode_data="(01)00850012345678(17)311231(10)LOT-2026-FQC-001(21)TBS-44001",
+                iso_iec_print_grade="grade_a_4_0",
+                label_content_accurate=True,
+                regulatory_symbols_present=True,
+                serialization_verified=True,
+                carton_integrity_intact=True,
+                tamper_evident_seal_intact=True,
+                cushioning_dunnage_adequate=True,
+                pallet_stacking_compliant=True,
+                inspection_lot=lot_1,
+                verifier=inspector_user,
+                verified_date=today - datetime.timedelta(days=2),
+                discrepancy_details="",
+                notes="ISO/IEC 15415 grading performed using Cognex DataMan 8600 verifier. Grade 4.0 (A) across all 25 cartons.",
+            )
+
+            pkg_2 = PackagingLabelVerification.objects.create(
+                tenant=tenant,
+                title="Pallet Label & Integrity Inspection - Harness Batch 09B",
+                status="failed",
+                disposition="relabel_required",
+                item_code="AUTO-HARN-09",
+                item_name="Powertrain CAN Bus Shielded Sensor Wiring Harness",
+                lot_number="LOT-2026-FQC-003",
+                carton_count_inspected=12,
+                label_part_number="LBL-AUTO-HARN09",
+                label_artwork_revision="Rev 1",
+                barcode_symbology="code_128_1d",
+                scanned_barcode_data="AI-HARN-09B-1250",
+                iso_iec_print_grade="grade_d_1_0",
+                label_content_accurate=True,
+                regulatory_symbols_present=False,
+                serialization_verified=False,
+                carton_integrity_intact=False,
+                tamper_evident_seal_intact=False,
+                cushioning_dunnage_adequate=True,
+                pallet_stacking_compliant=False,
+                inspection_lot=lot_3,
+                verifier=inspector_user,
+                verified_date=today,
+                discrepancy_details="Thermal print ribbon low density causing Code 128 modulation failure (Grade D). Moisture indicator triggered on pallet wrap.",
+                notes="Reprint all 12 carton labels on Zebra ZT411 with fresh 5095 resin ribbon. Pallet repack required.",
+            )
+
+            # 4. Quality Release Authorizations (QREL)
+            rel_1 = QualityReleaseAuthorization.objects.create(
+                tenant=tenant,
+                title="Final Outgoing Release - Bone Screws Batch 44 to Central Hospital",
+                status="authorized",
+                release_disposition="released_full",
+                customer=customer,
+                destination_country="United States",
+                destination_facility="Metro Health Regional Distribution Center, Dock 2",
+                sales_order_number="SO-2026-9041",
+                lot_number="LOT-2026-FQC-001",
+                quantity_authorized=5000,
+                inspection_lot=lot_1,
+                certificate_of_conformance=coc_1,
+                packaging_verification=pkg_1,
+                is_on_hold=False,
+                hold_reason="",
+                final_inspection_passed=True,
+                no_open_ncrs_or_capas=True,
+                packaging_label_approved=True,
+                coc_issued_and_signed=True,
+                export_compliance_verified=True,
+                certificate_of_origin_attached=True,
+                shipping_container_security_seal="SEAL-US-991204",
+                carrier_name="FedEx HealthCare Priority",
+                tracking_reference="FX-774910284711",
+                releasing_officer=admin_user,
+                release_date=today - datetime.timedelta(days=2),
+                concession_rationale="",
+                notes="All QMS release gates cleared. Gate pass printed and affixed to lead shipping carton.",
+            )
+
+            rel_2 = QualityReleaseAuthorization.objects.create(
+                tenant=tenant,
+                title="Shipping Quality Hold - CAN Bus Harness Batch 09B",
+                status="active_hold",
+                release_disposition="quarantined_hold",
+                customer=customer,
+                destination_country="Germany",
+                destination_facility="Munich Assembly Plant 4",
+                sales_order_number="SO-2026-9280",
+                lot_number="LOT-2026-FQC-003",
+                quantity_authorized=1500,
+                inspection_lot=lot_3,
+                certificate_of_conformance=None,
+                packaging_verification=pkg_2,
+                is_on_hold=True,
+                hold_reason="Pallet packaging failed moisture integrity audit and barcode grading D. Shipping blocked.",
+                final_inspection_passed=False,
+                no_open_ncrs_or_capas=False,
+                packaging_label_approved=False,
+                coc_issued_and_signed=False,
+                export_compliance_verified=True,
+                certificate_of_origin_attached=False,
+                shipping_container_security_seal="",
+                carrier_name="DHL Global Forwarding",
+                tracking_reference="",
+                releasing_officer=inspector_user,
+                release_date=today,
+                concession_rationale="Release blocked until relabeling and repack verification completed.",
+                notes="Active quality hold placed in ERP. Warehouse dock staging notified.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.9 Final Quality Control (FQC / OQC) seeded successfully."))
+
 
 
 
