@@ -11,47 +11,57 @@ from apps.quality.models.FinalQuality.QualityReleaseAuthorizations import Qualit
 def oqc_hold_board(request):
     tenant = request.tenant
 
-    # Active Holds
-    active_holds_lots = FinalInspectionLot.objects.filter(
-        tenant=tenant,
-        is_on_hold=True,
-    ).select_related("customer", "sales_order", "inspector").order_by("-updated_at")
+    # Active Holds (pre-evaluated to avoid duplicate SQL queries)
+    active_holds_lots = list(
+        FinalInspectionLot.objects.filter(
+            tenant=tenant,
+            is_on_hold=True,
+        ).select_related("customer", "sales_order", "inspector").order_by("-updated_at")
+    )
+    active_holds_releases = list(
+        QualityReleaseAuthorization.objects.filter(
+            tenant=tenant,
+            is_on_hold=True,
+        ).select_related("customer", "shipment", "releasing_officer").order_by("-updated_at")
+    )
 
-    active_holds_releases = QualityReleaseAuthorization.objects.filter(
-        tenant=tenant,
-        is_on_hold=True,
-    ).select_related("customer", "shipment", "releasing_officer").order_by("-updated_at")
-
-    # Pending Inspections
-    pending_inspection_lots = FinalInspectionLot.objects.filter(
+    # Pending Inspections count (dead queryset omitted from context)
+    pending_lot_count = FinalInspectionLot.objects.filter(
         tenant=tenant,
         usage_decision="pending",
-    ).select_related("customer", "inspector").order_by("-created_at")[:10]
+    ).count()
 
-    # Pending CoCs awaiting signature
-    pending_cocs = CertificateOfConformance.objects.filter(
+    # Pending CoCs awaiting signature (count computed on unsliced queryset)
+    pending_cocs_qs = CertificateOfConformance.objects.filter(
         tenant=tenant,
         status__in=["draft", "under_review"],
-    ).select_related("customer").order_by("-created_at")[:10]
+    ).select_related("customer").order_by("-created_at")
+    pending_coc_count = pending_cocs_qs.count()
+    pending_cocs = pending_cocs_qs[:10]
 
-    # Ready Releases (cleared to ship)
-    ready_releases = QualityReleaseAuthorization.objects.filter(
+    # Ready Releases cleared to ship (prerequisite flags aligned with is_cleared_to_ship)
+    ready_releases_qs = QualityReleaseAuthorization.objects.filter(
         tenant=tenant,
         status="authorized",
         release_disposition__in=["released_full", "conditional_release"],
         is_on_hold=False,
-    ).select_related("customer", "shipment").order_by("-updated_at")[:10]
+        final_inspection_passed=True,
+        no_open_ncrs_or_capas=True,
+        packaging_label_approved=True,
+        coc_issued_and_signed=True,
+    ).select_related("customer", "shipment").order_by("-updated_at")
+    ready_release_count = ready_releases_qs.count()
+    ready_releases = ready_releases_qs[:10]
 
     context = {
         "active_holds_lots": active_holds_lots,
         "active_holds_releases": active_holds_releases,
-        "pending_inspection_lots": pending_inspection_lots,
         "pending_cocs": pending_cocs,
         "ready_releases": ready_releases,
-        "hold_lot_count": active_holds_lots.count(),
-        "hold_release_count": active_holds_releases.count(),
-        "pending_lot_count": pending_inspection_lots.count(),
-        "pending_coc_count": pending_cocs.count(),
-        "ready_release_count": ready_releases.count(),
+        "hold_lot_count": len(active_holds_lots),
+        "hold_release_count": len(active_holds_releases),
+        "pending_lot_count": pending_lot_count,
+        "pending_coc_count": pending_coc_count,
+        "ready_release_count": ready_release_count,
     }
     return render(request, "quality/finalquality/oqc_hold_board.html", context)
