@@ -40,10 +40,10 @@
   - **Issue**: `clean()` does not validate that `calibration_date` cannot be in the future, violating contract Section 2.2.
   - **Fix**: In `clean()`, add `if cal_date and cal_date > timezone.now().date(): self.add_error("calibration_date", "Calibration date cannot be in the future.")`. (fixed — 01e9ca78)
 
-- [ ] **[I5] Metrological Circular Dependency (Instrument Self-Parenting & Self-Calibration)**:
+- [x] **[I5] Metrological Circular Dependency (Instrument Self-Parenting & Self-Calibration)**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/CalibrationGages.py:50-53, 60-69` and `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py:46-48, 52-58`
   - **Issue**: Gages can select themselves as their own `reference_standard_parent` causing infinite recursion loops, and calibrations allow selecting the gage being calibrated inside `standards_used`.
-  - **Fix**: Exclude `self.instance` from `reference_standard_parent` queryset and validate in `clean()`. In `CalibrationRecordForm.clean()`, reject if `gage in standards_used`.
+  - **Fix**: Exclude `self.instance` from `reference_standard_parent` queryset and validate in `clean()`. In `CalibrationRecordForm.clean()`, reject if `gage in standards_used`. (fixed — 83057b61, d559ee50)
 
 - [ ] **[I6] Seed Quality `--flush` Sequence Omits 12.10 Models**:
   - **Location**: `apps/quality/management/commands/seed_quality.py:99-137`
