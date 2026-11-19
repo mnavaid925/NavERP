@@ -130,6 +130,10 @@
             <label for="{{ form.major_defects_count.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Major Defects</label>
             {{ form.major_defects_count }}
           </div>
+          <div class="form-group">
+            <label for="{{ form.minor_defects_count.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Minor Defects</label>
+            {{ form.minor_defects_count }}
+          </div>
         </div>
       </div>
 
@@ -210,8 +214,16 @@
             {{ form.sales_order }}
           </div>
           <div class="form-group">
+            <label for="{{ form.sales_order_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sales Order # (Manual)</label>
+            {{ form.sales_order_number }}
+          </div>
+          <div class="form-group">
             <label for="{{ form.work_order.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Work Order</label>
             {{ form.work_order }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_order_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Work Order # (Manual)</label>
+            {{ form.work_order_number }}
           </div>
         </div>
       </div>
