@@ -80,7 +80,7 @@ def calibration_record_detail(request, pk):
         prefetch_related=("standards_used", "oot_investigations")
     )
     standards_list = record.standards_used.all()
-    oot_investigation = record.oot_investigations.filter(tenant=request.tenant).first()
+    oot_investigation = next(iter(record.oot_investigations.all()), None)
 
     context = {
         "calibration_record": record,
