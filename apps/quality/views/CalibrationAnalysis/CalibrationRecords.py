@@ -33,6 +33,7 @@ def calibration_record_list(request):
             | Q(gage__name__icontains=search_query)
             | Q(certificate_number__icontains=search_query)
             | Q(technician_name__icontains=search_query)
+            | Q(service_vendor__name__icontains=search_query)
         )
 
     result_filter = request.GET.get("overall_result", "").strip()
