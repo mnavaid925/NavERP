@@ -87,9 +87,9 @@
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationGages.py:27-34`
   - **Fix**: Add `| Q(number__icontains=search_query)`. (fixed — bc072ef1)
 
-- [ ] **[M3] OOT `suspect_window_start` Initial Value Uses Failed Date Instead of Last Pass**:
+- [x] **[M3] OOT `suspect_window_start` Initial Value Uses Failed Date Instead of Last Pass**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py:101-105`
-  - **Fix**: Query last passing calibration date before the failure event to set initial suspect window start.
+  - **Fix**: Query last passing calibration date before the failure event to set initial suspect window start. (fixed — a6528663)
 
 - [ ] **[M4] Phantom Attribute `v.legal_name` in `calibration_vendor_directory.html`**:
   - **Location**: `templates/quality/calibrationanalysis/calibration_vendor_directory.html:82-84`
