@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Finding Remediation & Action Tracker — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:audit_finding_list' %}">Findings</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Action Tracker</span>
+        </div>
+        <h1 class="page-title">Audit Finding Remediation & Action Tracker</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:audit_finding_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i> Findings Register
+        </a>
+        <a href="{% url 'quality:audit_finding_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Log Finding
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Open Findings</div>
+            <div class="stat-value">{{ total_open_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Critical / Major</div>
+            <div class="stat-value">{{ critical_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="calendar-x"></i>
+        </div>
+        <div>
+            <div class="stat-label">Overdue SLAs</div>
+            <div class="stat-value">{{ overdue_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Pending Verification</div>
+            <div class="stat-value">{{ pending_verification_count }}</div>
+        </div>
+    </div>
+</div>
+
+{% if overdue_findings %}
+<div class="card mb-6 border-red-300">
+    <div class="card-header bg-red-50 text-red-900 flex justify-between items-center">
+        <h3 class="card-title flex items-center gap-2">
+            <i data-lucide="alert-octagon" class="w-5 h-5 text-red-600"></i> Overdue Remediation SLAs Requiring Escalation
+        </h3>
+        <span class="badge badge-red">{{ overdue_findings|length }} Overdue</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Finding #</th>
+                    <th>Severity</th>
+                    <th>Standard & Clause</th>
+                    <th>Title</th>
+                    <th>Assignee</th>
+                    <th>SLA Deadline</th>
+                    <th>Status</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fnd in overdue_findings %}
+                <tr class="bg-red-50/30">
+                    <td>
+                        <a href="{% url 'quality:audit_finding_detail' fnd.pk %}" class="font-semibold text-danger hover:underline">
+                            {{ fnd.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge badge-red">{{ fnd.get_severity_display }}</span>
+                    </td>
+                    <td><span class="font-mono text-xs">{{ fnd.standard_clause }}</span></td>
+                    <td><div class="font-medium text-slate-900">{{ fnd.title }}</div></td>
+                    <td>
+                        {% if fnd.assignee %}
+                        {{ fnd.assignee.get_full_name|default:fnd.assignee.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs font-bold text-danger">{{ fnd.response_due_date }}</span></td>
+                    <td><span class="badge badge-red">{{ fnd.get_status_display }}</span></td>
+                    <td class="text-right">
+                        <a href="{% url 'quality:audit_finding_detail' fnd.pk %}" class="btn btn-outline btn-sm">
+                            Remediate
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="card-title">All Open Audit Findings & Action Items</h3>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Finding #</th>
+                    <th>Severity</th>
+                    <th>Clause</th>
+                    <th>Title & Summary</th>
+                    <th>Parent Audit</th>
+                    <th>Assignee</th>
+                    <th>Response Due</th>
+                    <th>Status</th>
+                    <th>CAPA</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fnd in open_findings %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:audit_finding_detail' fnd.pk %}" class="font-semibold text-primary hover:underline">
+                            {{ fnd.number }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if fnd.severity == 'critical' or fnd.severity == 'major' %}
+                        <span class="badge badge-red">{{ fnd.get_severity_display }}</span>
+                        {% elif fnd.severity == 'minor' %}
+                        <span class="badge badge-amber">{{ fnd.get_severity_display }}</span>
+                        {% else %}
+                        <span class="badge badge-info">{{ fnd.get_severity_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="font-mono text-xs">{{ fnd.standard_clause }}</span></td>
+                    <td><div class="font-medium text-slate-900">{{ fnd.title }}</div></td>
+                    <td>
+                        <a href="{% url 'quality:quality_audit_detail' fnd.audit.pk %}" class="text-xs text-primary hover:underline">
+                            {{ fnd.audit.number }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if fnd.assignee %}
+                        <span class="text-xs">{{ fnd.assignee.get_full_name|default:fnd.assignee.username }}</span>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs {% if fnd.is_overdue %}text-danger font-bold{% endif %}">
+                            {{ fnd.response_due_date }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if fnd.status == 'issued' or fnd.status == 'capa_in_progress' %}
+                        <span class="badge badge-amber">{{ fnd.get_status_display }}</span>
+                        {% elif fnd.status == 'escalated' %}
+                        <span class="badge badge-red">{{ fnd.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-info">{{ fnd.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if fnd.linked_capa %}
+                        <a href="{% url 'quality:capa_investigation_detail' fnd.linked_capa.pk %}" class="badge badge-amber hover:underline">
+                            {{ fnd.linked_capa.number }}
+                        </a>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <a href="{% url 'quality:audit_finding_detail' fnd.pk %}" class="btn btn-outline btn-sm">
+                            View
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-6 text-muted">
+                        No open audit findings requiring action! All observations are verified closed.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
