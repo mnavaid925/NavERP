@@ -21,7 +21,7 @@ PAGE_SIZE = 15
 @login_required
 def calibration_gage_list(request):
     qs = quality_scope(CalibrationGage.objects.all(), request).select_related(
-        "department", "custodian", "work_center"
+        "department", "custodian", "work_center", "asset_link"
     )
 
     search_query = request.GET.get("q", "").strip()
