@@ -115,7 +115,10 @@ class CalibrationRecord(TenantNumbered):
         help_text="Array of calibration points: nominal, as_found, error, as_left, limit"
     )
     standards_used = models.ManyToManyField(
-        "quality.CalibrationGage", blank=True, related_name="calibrations_verified"
+        "quality.CalibrationGage",
+        blank=True,
+        limit_choices_to={"is_reference_standard": True},
+        related_name="calibrations_verified",
     )
     standard_traceability_notes = models.TextField(
         blank=True, help_text="Summary of reference standards, certificates, and expiration dates"
