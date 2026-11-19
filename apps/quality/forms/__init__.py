@@ -69,6 +69,18 @@ from apps.quality.forms.CalibrationAnalysis.OutOfToleranceInvestigations import 
 from apps.quality.forms.CalibrationAnalysis.MeasurementSystemAnalyses import (
     MeasurementSystemAnalysisForm,
 )
+from apps.quality.forms.FinalQuality.CertificatesOfConformance import (
+    CertificateOfConformanceForm,
+)
+from apps.quality.forms.FinalQuality.FinalInspectionLots import (
+    FinalInspectionLotForm,
+)
+from apps.quality.forms.FinalQuality.PackagingLabelVerifications import (
+    PackagingLabelVerificationForm,
+)
+from apps.quality.forms.FinalQuality.QualityReleaseAuthorizations import (
+    QualityReleaseAuthorizationForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -108,5 +120,9 @@ __all__ = [
     "CalibrationRecordForm",
     "OutOfToleranceInvestigationForm",
     "MeasurementSystemAnalysisForm",
+    "FinalInspectionLotForm",
+    "CertificateOfConformanceForm",
+    "PackagingLabelVerificationForm",
+    "QualityReleaseAuthorizationForm",
 ]
 
