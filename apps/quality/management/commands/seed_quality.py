@@ -79,6 +79,10 @@ from apps.quality.models.FinalQuality.PackagingLabelVerifications import (
 from apps.quality.models.FinalQuality.QualityReleaseAuthorizations import (
     QualityReleaseAuthorization,
 )
+from apps.quality.models.AuditManagement.AuditPrograms import AuditProgram
+from apps.quality.models.AuditManagement.QualityAudits import QualityAudit
+from apps.quality.models.AuditManagement.AuditFindings import AuditFinding
+from apps.quality.models.AuditManagement.RegulatoryInspectionHosts import RegulatoryInspectionHost
 
 
 User = get_user_model()
@@ -97,6 +101,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            RegulatoryInspectionHost.objects.all().delete()
+            AuditFinding.objects.all().delete()
+            QualityAudit.objects.all().delete()
+            AuditProgram.objects.all().delete()
             MeasurementSystemAnalysis.objects.all().delete()
             OutOfToleranceInvestigation.objects.all().delete()
             CalibrationRecord.objects.all().delete()
@@ -157,6 +165,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_8(tenant)
             self._seed_submodule_12_9(tenant)
             self._seed_submodule_12_10(tenant)
+            self._seed_submodule_12_11(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -3436,6 +3445,293 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.9 Final Quality Control (FQC / OQC) seeded successfully."))
+
+    def _seed_submodule_12_11(self, tenant):
+        if AuditProgram.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.11 Audit Management data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.11 Audit Management...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        quality_lead = (
+            User.objects.filter(tenant=tenant, username__icontains="quality").order_by("pk").first()
+            or User.objects.filter(tenant=tenant, username__icontains="inspector").order_by("pk").first()
+            or admin_user
+        )
+        external_party = (
+            Party.objects.filter(tenant=tenant, roles__role="supplier").first()
+            or Party.objects.filter(tenant=tenant).first()
+        )
+        org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        sop_doc = ControlledDocument.objects.filter(tenant=tenant).first()
+        linked_capa = CapaInvestigation.objects.filter(tenant=tenant).first()
+        linked_ncr = NonConformanceReport.objects.filter(tenant=tenant).first()
+
+        now = timezone.now()
+        today = now.date()
+
+        with transaction.atomic():
+            # 1. Audit Programs
+            prog_enterprise = AuditProgram.objects.create(
+                tenant=tenant,
+                title="FY2026 Enterprise Quality & Regulatory Audit Program",
+                program_year=today.year,
+                program_type="integrated_enterprise",
+                risk_basis="high_risk_semi_annual",
+                scope_description="Global quality oversight covering ISO 13485:2016 design controls, FDA 21 CFR 820 / QMSR compliance, and critical supplier qualifications.",
+                start_date=today.replace(month=1, day=1),
+                end_date=today.replace(month=12, day=31),
+                allocated_budget_hours=480,
+                status="active",
+                program_manager=admin_user,
+                notes="Board-approved enterprise quality compliance program for fiscal year.",
+            )
+
+            prog_supplier = AuditProgram.objects.create(
+                tenant=tenant,
+                title="FY2026 Supplier & External Vendor Quality Program",
+                program_year=today.year,
+                program_type="supplier_external",
+                risk_basis="medium_risk_biennial",
+                scope_description="Tier 1 medical components, microelectronics, raw titanium blanks, and contract packaging vendor audit universe.",
+                start_date=today.replace(month=1, day=1),
+                end_date=today.replace(month=12, day=31),
+                allocated_budget_hours=240,
+                status="active",
+                program_manager=quality_lead,
+                notes="Risk-based audit frequency derived from supplier criticality score matrix.",
+            )
+
+            # 2. Quality Audits
+            audit_internal = QualityAudit.objects.create(
+                tenant=tenant,
+                program=prog_enterprise,
+                title="ISO 13485:2016 Design Controls & Risk Management Audit",
+                audit_type="internal_system",
+                audit_method="on_site",
+                standard_framework="iso_13485_2016",
+                target_org_unit=org_unit,
+                external_entity=None,
+                lead_auditor=quality_lead,
+                auditee_lead=admin_user,
+                audit_checklist_sop=sop_doc,
+                planned_start_date=today - datetime.timedelta(days=45),
+                planned_end_date=today - datetime.timedelta(days=42),
+                actual_start_date=today - datetime.timedelta(days=45),
+                actual_end_date=today - datetime.timedelta(days=42),
+                scope_objectives="Verification of DHF traceability, ISO 14971 risk mitigations, and design transfer sign-offs across product engineering.",
+                product_scope="CardioSense Pro Series IV",
+                lot_number_sampled="LOT-2026-ENG-088",
+                status="closed",
+                outcome="minor_findings",
+                executive_summary="Design control files were comprehensive and compliant with ISO 13485 §7.3. Isolated document revision date gaps identified in risk analysis tables.",
+                report_published_date=today - datetime.timedelta(days=35),
+                total_findings_count=2,
+                critical_findings_count=0,
+                major_findings_count=0,
+                minor_findings_count=1,
+                ofi_findings_count=1,
+                notes="Audit closed following successful verification of corrective action evidence.",
+            )
+
+            audit_process = QualityAudit.objects.create(
+                tenant=tenant,
+                program=prog_enterprise,
+                title="FDA 21 CFR 820 QMSR Cleanroom & Production Controls Audit",
+                audit_type="internal_process",
+                audit_method="hybrid",
+                standard_framework="fda_21cfr820_qmsr",
+                target_org_unit=org_unit,
+                external_entity=None,
+                lead_auditor=quality_lead,
+                auditee_lead=admin_user,
+                audit_checklist_sop=sop_doc,
+                planned_start_date=today - datetime.timedelta(days=5),
+                planned_end_date=today + datetime.timedelta(days=2),
+                actual_start_date=today - datetime.timedelta(days=5),
+                actual_end_date=None,
+                scope_objectives="Process validation (IQ/OQ/PQ), environmental particulate monitoring logs, and DHR line clearance adherence.",
+                product_scope="NeuroVascular Guidewire Assembly",
+                lot_number_sampled="LOT-2026-FQC-001",
+                status="in_progress",
+                outcome="pending",
+                executive_summary="Fieldwork ongoing across cleanroom production suites and packaging lines.",
+                report_published_date=None,
+                total_findings_count=1,
+                critical_findings_count=0,
+                major_findings_count=1,
+                minor_findings_count=0,
+                ofi_findings_count=0,
+                notes="Cleanroom environmental particulate monitoring records sampled and evaluated.",
+            )
+
+            audit_regulatory = QualityAudit.objects.create(
+                tenant=tenant,
+                program=None,
+                title="US FDA Routine cGMP & QSIT Bi-Annual Facility Inspection",
+                audit_type="regulatory_fda",
+                audit_method="on_site",
+                standard_framework="fda_21cfr820_qmsr",
+                target_org_unit=org_unit,
+                external_entity=external_party,
+                lead_auditor=quality_lead,
+                auditee_lead=admin_user,
+                audit_checklist_sop=sop_doc,
+                planned_start_date=today - datetime.timedelta(days=2),
+                planned_end_date=today + datetime.timedelta(days=3),
+                actual_start_date=today - datetime.timedelta(days=2),
+                actual_end_date=None,
+                scope_objectives="FDA QSIT comprehensive inspection covering Management Controls, Design Controls, CAPA, and Production & Process Controls (P&PC).",
+                product_scope="Implantable Titanium Spinal Cage",
+                lot_number_sampled="LOT-2026-SP-901",
+                status="in_progress",
+                outcome="pending",
+                executive_summary="Lead investigator Dr. A. Vance on site conducting daily interviews and sampling CAPA records.",
+                report_published_date=None,
+                total_findings_count=0,
+                critical_findings_count=0,
+                major_findings_count=0,
+                minor_findings_count=0,
+                ofi_findings_count=0,
+                notes="War room activated; primary spokesperson escorting investigator through cleanroom facility.",
+            )
+
+            # 3. Audit Findings
+            AuditFinding.objects.create(
+                tenant=tenant,
+                audit=audit_internal,
+                finding_number_in_audit=1,
+                title="Risk analysis document revision date disparity in DHF Table 4",
+                severity="minor",
+                standard_clause="ISO 13485:2016 §7.3.3 / ISO 14971:2019 §5.4",
+                requirement_statement="Design risk management files shall maintain contemporaneous revision history aligned with engineering change orders.",
+                condition_evidence="DHF-774 Rev C referenced Risk File RA-102 Rev B instead of active Rev C dated 2025-11-14.",
+                audited_org_unit=org_unit,
+                assignee=admin_user,
+                response_due_date=today - datetime.timedelta(days=15),
+                response_received_date=today - datetime.timedelta(days=18),
+                containment_action="Administrative cross-reference matrix corrected immediately.",
+                root_cause_summary="Document control link in electronic change notice template was manually typed instead of auto-populated.",
+                corrective_action_plan="Updated PLM change workflow script to enforce automated document parent-child revision matching.",
+                linked_capa=linked_capa,
+                linked_ncr=linked_ncr,
+                status="closed",
+                closure_verified_by=quality_lead,
+                closed_date=today - datetime.timedelta(days=10),
+                closure_notes="Verified updated PLM workflow and revised DHF cross-reference index. Finding verified and closed.",
+            )
+
+            AuditFinding.objects.create(
+                tenant=tenant,
+                audit=audit_internal,
+                finding_number_in_audit=2,
+                title="Software automated testing traceability to risk index",
+                severity="observation_ofi",
+                standard_clause="IEC 62304:2006/AMD 1:2015 §5.2",
+                requirement_statement="Software system tests should provide bi-directional traceability to hazard mitigations.",
+                condition_evidence="Automated test suite reports pass/fail in CI/CD pipeline but does not directly map test case IDs to hazard control IDs in the hazard traceability matrix.",
+                audited_org_unit=org_unit,
+                assignee=admin_user,
+                response_due_date=today + datetime.timedelta(days=30),
+                response_received_date=None,
+                containment_action="N/A - observation for improvement.",
+                root_cause_summary="",
+                corrective_action_plan="Integrate Pytest hazard tag decorators into continuous integration dashboard.",
+                linked_capa=None,
+                linked_ncr=None,
+                status="response_submitted",
+                closure_verified_by=None,
+                closed_date=None,
+                closure_notes="",
+            )
+
+            AuditFinding.objects.create(
+                tenant=tenant,
+                audit=audit_process,
+                finding_number_in_audit=1,
+                title="Differential pressure gauge out of calibration in Cleanroom Suite B",
+                severity="major",
+                standard_clause="21 CFR 820.72 / ISO 13485:2016 §6.4",
+                requirement_statement="Environmental control and monitoring equipment shall be calibrated at specified intervals.",
+                condition_evidence="Magnehelic gauge DP-04 calibration expired on 2026-01-15 while cleanroom suite continued active packaging operations.",
+                audited_org_unit=org_unit,
+                assignee=admin_user,
+                response_due_date=today + datetime.timedelta(days=14),
+                response_received_date=None,
+                containment_action="Gage immediately replaced with calibrated spare DP-12 and secondary calibration verified.",
+                root_cause_summary="Work order assignment dropped during CMMS database maintenance migration.",
+                corrective_action_plan="Initiating CAPA for calibration scheduling redundancy and monthly physical sticker sweeps.",
+                linked_capa=linked_capa,
+                linked_ncr=linked_ncr,
+                status="capa_in_progress",
+                closure_verified_by=None,
+                closed_date=None,
+                closure_notes="",
+            )
+
+            # 4. Regulatory Inspection Host Records (War Room)
+            RegulatoryInspectionHost.objects.create(
+                tenant=tenant,
+                audit=audit_regulatory,
+                inspection_title="US FDA cGMP / QSIT Medical Device Surveillance Inspection",
+                agency_or_body="fda_cdrh",
+                agency_name="US Food & Drug Administration - CDRH / ORA",
+                lead_inspector_name="Consumer Safety Officer Arthur Vance, Ph.D.",
+                inspector_credentials="FDA Investigator Badge #60144 / Minneapolis District Office",
+                inspection_purpose="routine_surveillance",
+                announcement_status="announced",
+                scheduled_start_date=today - datetime.timedelta(days=2),
+                scheduled_end_date=today + datetime.timedelta(days=3),
+                actual_start_date=today - datetime.timedelta(days=2),
+                actual_end_date=None,
+                front_room_lead=admin_user,
+                back_room_lead=quality_lead,
+                scribe_user=quality_lead,
+                war_room_location="Executive Conference Room Alpha (Front Room) & Quality Training Lab B (Back Room)",
+                status="active_inspection",
+                requests_logged_count=18,
+                requests_fulfilled_count=16,
+                form_483_issued=False,
+                observations_count=0,
+                formal_outcome="pending",
+                daily_summary_notes="Day 1: Management Review minutes and Org chart reviewed with zero questions. Day 2: Sampled 5 CAPA records from 2025. Back room staging responded within average 12 minutes.",
+                closeout_memo="",
+            )
+
+            RegulatoryInspectionHost.objects.create(
+                tenant=tenant,
+                audit=None,
+                inspection_title="TÜV SÜD ISO 13485:2016 & EU MDR Annex IX Recertification",
+                agency_or_body="iso_notified_body",
+                agency_name="TÜV SÜD Product Service GmbH (Notified Body 0123)",
+                lead_inspector_name="Lead Auditor Klaus Becker, Dipl.-Ing.",
+                inspector_credentials="TÜV SÜD Auditor Registration #TS-99214",
+                inspection_purpose="recertification_audit",
+                announcement_status="announced",
+                scheduled_start_date=today - datetime.timedelta(days=60),
+                scheduled_end_date=today - datetime.timedelta(days=57),
+                actual_start_date=today - datetime.timedelta(days=60),
+                actual_end_date=today - datetime.timedelta(days=57),
+                front_room_lead=admin_user,
+                back_room_lead=quality_lead,
+                scribe_user=quality_lead,
+                war_room_location="Main Boardroom & Secure Virtual Room",
+                status="inspection_closed",
+                requests_logged_count=35,
+                requests_fulfilled_count=35,
+                form_483_issued=False,
+                observations_count=1,
+                formal_outcome="certified_unconditional",
+                daily_summary_notes="All technical documentation and PMS data reviewed. Unconditional certificate renewal recommended.",
+                closeout_memo="Closing meeting held 2026-01-20. Formal certificate reissue received.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.11 Audit Management seeded successfully."))
+
 
 
 
