@@ -44,6 +44,10 @@ def out_of_tolerance_investigation_list(request):
     if risk_filter:
         qs = qs.filter(risk_level=risk_filter)
 
+    disposition_filter = request.GET.get("disposition", "").strip() or request.GET.get("product_disposition", "").strip()
+    if disposition_filter:
+        qs = qs.filter(product_disposition=disposition_filter)
+
     kpi_aggregates = quality_scope(OutOfToleranceInvestigation.objects.all(), request).aggregate(
         critical=Count("pk", filter=Q(risk_level="critical")),
         open=Count("pk", filter=Q(status__in=["open", "investigating", "mrb_review", "actions_pending"])),
@@ -62,8 +66,10 @@ def out_of_tolerance_investigation_list(request):
         "search_query": search_query,
         "status_filter": status_filter,
         "risk_filter": risk_filter,
+        "disposition_filter": disposition_filter,
         "status_choices": OutOfToleranceInvestigation.STATUS_CHOICES,
         "risk_choices": OutOfToleranceInvestigation.RISK_LEVEL_CHOICES,
+        "disposition_choices": OutOfToleranceInvestigation.DISPOSITION_CHOICES,
         "total_oots": total_oots,
         "critical_count": critical_count,
         "open_count": open_count,
@@ -82,6 +88,7 @@ def out_of_tolerance_investigation_detail(request, pk):
     )
 
     context = {
+        "investigation": oot,
         "oot_investigation": oot,
         "obj": oot,
     }
@@ -144,6 +151,7 @@ def out_of_tolerance_investigation_create(request):
 
     context = {
         "form": form,
+        "investigation": None,
         "oot_investigation": None,
         "obj": None,
         "is_edit": False,
@@ -166,6 +174,7 @@ def out_of_tolerance_investigation_edit(request, pk):
 
     context = {
         "form": form,
+        "investigation": oot,
         "oot_investigation": oot,
         "obj": oot,
         "is_edit": True,
