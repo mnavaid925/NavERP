@@ -119,9 +119,9 @@
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationVendors.py:18-23`
   - **Fix**: Simplify `Q(roles__role__in=["vendor", "supplier"])` and add explicit `filter=Q(calibrations_performed__tenant=request.tenant)` to `Count`. (fixed — a3ea5770)
 
-- [ ] **[M11] Unrestricted Mass Assignment of `test_points_data` in `CalibrationRecordForm`**:
+- [x] **[M11] Unrestricted Mass Assignment of `test_points_data` in `CalibrationRecordForm`**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py:15-18`
-  - **Fix**: Add `"test_points_data"` to `Meta.exclude`.
+  - **Fix**: Add `"test_points_data"` to `Meta.exclude`. (fixed — d05ab016)
 
 - [ ] **[M12] Detail List Grid Responsiveness on Small Screens**:
   - **Location**: `templates/quality/calibrationanalysis/{calibration_gage,calibration_record,out_of_tolerance_investigation,measurement_system_analysis}/detail.html`
