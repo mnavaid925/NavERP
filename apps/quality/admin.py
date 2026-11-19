@@ -80,6 +80,18 @@ from apps.quality.models.FinalQuality.PackagingLabelVerifications import (
 from apps.quality.models.FinalQuality.QualityReleaseAuthorizations import (
     QualityReleaseAuthorization,
 )
+from apps.quality.models.AuditManagement.AuditPrograms import (
+    AuditProgram,
+)
+from apps.quality.models.AuditManagement.QualityAudits import (
+    QualityAudit,
+)
+from apps.quality.models.AuditManagement.AuditFindings import (
+    AuditFinding,
+)
+from apps.quality.models.AuditManagement.RegulatoryInspectionHosts import (
+    RegulatoryInspectionHost,
+)
 
 
 
@@ -866,6 +878,82 @@ class QualityReleaseAuthorizationAdmin(admin.ModelAdmin):
     list_filter = ("status", "release_disposition", "is_on_hold", "final_inspection_passed", "tenant")
     search_fields = ("number", "title", "customer__name", "shipment_number", "lot_number", "carrier_name")
     list_select_related = ("tenant", "customer", "shipment", "sales_order", "releasing_officer")
+
+
+@admin.register(AuditProgram)
+class AuditProgramAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "program_year",
+        "program_type",
+        "risk_basis",
+        "status",
+        "program_manager",
+        "start_date",
+        "end_date",
+        "tenant",
+    )
+    list_filter = ("program_year", "program_type", "risk_basis", "status", "tenant")
+    search_fields = ("number", "title", "scope_description", "program_manager__username")
+    list_select_related = ("tenant", "program_manager", "approved_by")
+
+
+@admin.register(QualityAudit)
+class QualityAuditAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "audit_type",
+        "audit_method",
+        "standard_framework",
+        "status",
+        "outcome",
+        "lead_auditor",
+        "planned_start_date",
+        "tenant",
+    )
+    list_filter = ("audit_type", "audit_method", "standard_framework", "status", "outcome", "tenant")
+    search_fields = ("number", "title", "scope_objectives", "product_scope", "lead_auditor__username")
+    list_select_related = ("tenant", "program", "target_org_unit", "external_entity", "lead_auditor")
+
+
+@admin.register(AuditFinding)
+class AuditFindingAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "severity",
+        "standard_clause",
+        "status",
+        "assignee",
+        "response_due_date",
+        "audit",
+        "tenant",
+    )
+    list_filter = ("severity", "status", "tenant")
+    search_fields = ("number", "title", "standard_clause", "requirement_statement", "condition_evidence")
+    list_select_related = ("tenant", "audit", "audited_org_unit", "assignee", "linked_capa")
+
+
+@admin.register(RegulatoryInspectionHost)
+class RegulatoryInspectionHostAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "inspection_title",
+        "agency_or_body",
+        "agency_name",
+        "lead_inspector_name",
+        "status",
+        "formal_outcome",
+        "form_483_issued",
+        "scheduled_start_date",
+        "tenant",
+    )
+    list_filter = ("agency_or_body", "inspection_purpose", "status", "formal_outcome", "form_483_issued", "tenant")
+    search_fields = ("number", "inspection_title", "agency_name", "lead_inspector_name", "war_room_location")
+    list_select_related = ("tenant", "audit", "front_room_lead", "back_room_lead", "scribe_user")
+
 
 
 
