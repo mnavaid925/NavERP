@@ -13,7 +13,7 @@ from apps.core.utils import write_audit_log
 from apps.quality.forms.CalibrationAnalysis.MeasurementSystemAnalyses import MeasurementSystemAnalysisForm
 from apps.quality.models.CalibrationAnalysis.CalibrationGages import CalibrationGage
 from apps.quality.models.CalibrationAnalysis.MeasurementSystemAnalyses import MeasurementSystemAnalysis
-from apps.quality.views._common import quality_object, quality_scope
+from apps.quality.views._common import _csv_safe, quality_object, quality_scope
 
 PAGE_SIZE = 15
 
@@ -154,13 +154,16 @@ def measurement_system_analysis_export_csv(request):
     ])
     for m in qs:
         writer.writerow([
-            m.number, m.study_title, m.gage.gage_id,
-            m.get_study_type_display(), m.get_analysis_method_display(),
-            m.characteristic_name,
-            m.study_date.isoformat() if m.study_date else "",
-            str(m.percent_gage_rr_study_variation),
-            str(m.percent_tolerance_pt_ratio),
-            str(m.number_of_distinct_categories_ndc),
-            m.get_study_result_display()
+            _csv_safe(m.number),
+            _csv_safe(m.study_title),
+            _csv_safe(m.gage.gage_id),
+            _csv_safe(m.get_study_type_display()),
+            _csv_safe(m.get_analysis_method_display()),
+            _csv_safe(m.characteristic_name),
+            _csv_safe(m.study_date.isoformat() if m.study_date else ""),
+            _csv_safe(str(m.percent_gage_rr_study_variation)),
+            _csv_safe(str(m.percent_tolerance_pt_ratio)),
+            _csv_safe(str(m.number_of_distinct_categories_ndc)),
+            _csv_safe(m.get_study_result_display()),
         ])
     return response
