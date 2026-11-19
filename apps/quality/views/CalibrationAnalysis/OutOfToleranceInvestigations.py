@@ -92,14 +92,28 @@ def out_of_tolerance_investigation_create(request):
     if cal_pk and cal_pk.isdigit():
         initial["calibration_record"] = cal_pk
         try:
-            record = CalibrationRecord.objects.get(pk=cal_pk, tenant=request.tenant)
+            record = CalibrationRecord.objects.select_related("gage").get(pk=cal_pk, tenant=request.tenant)
             initial["gage"] = record.gage_id
             initial["as_found_error_description"] = (
                 f"As-Found Condition: {record.get_as_found_condition_display()}. "
                 f"Max Error: {record.max_observed_error} vs Tolerance: ±{record.gage.max_permissible_error}"
             )
-            if record.gage.last_calibration_date:
-                initial["suspect_window_start"] = record.gage.last_calibration_date
+            cal_date = record.calibration_date
+            if cal_date:
+                last_pass = (
+                    CalibrationRecord.objects.filter(
+                        tenant=request.tenant,
+                        gage_id=record.gage_id,
+                        overall_result__in=("pass", "pass_with_limitations"),
+                        calibration_date__lt=cal_date,
+                    )
+                    .order_by("-calibration_date")
+                    .first()
+                )
+                if last_pass and last_pass.calibration_date:
+                    initial["suspect_window_start"] = last_pass.calibration_date
+                elif record.gage.last_calibration_date and record.gage.last_calibration_date < cal_date:
+                    initial["suspect_window_start"] = record.gage.last_calibration_date
         except CalibrationRecord.DoesNotExist:
             pass
 
