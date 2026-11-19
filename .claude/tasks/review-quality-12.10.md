@@ -65,10 +65,10 @@
   - **Issue**: Calling `.filter(tenant=request.tenant).first()` on prefetched `record.oot_investigations` issues an extra SQL query.
   - **Fix**: Retrieve from prefetched collection: `next(iter(record.oot_investigations.all()), None)`. (fixed — 2cbe1624)
 
-- [ ] **[I10] Missing `limit_choices_to={"is_reference_standard": True}` on `CalibrationRecord.standards_used`**:
+- [x] **[I10] Missing `limit_choices_to={"is_reference_standard": True}` on `CalibrationRecord.standards_used`**:
   - **Location**: `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py:117-119`
   - **Issue**: Model-level constraint missing on ManyToManyField for standards used.
-  - **Fix**: Add `limit_choices_to={"is_reference_standard": True}` to `standards_used`.
+  - **Fix**: Add `limit_choices_to={"is_reference_standard": True}` to `standards_used`. (fixed — a599eddd, a322ade4)
 
 - [ ] **[I11] Raw Unparsed LaTeX Math Delimiters in UI Markup**:
   - **Location**: `templates/quality/calibrationanalysis/measurement_system_analysis/detail.html:100, 140, 240` and `templates/quality/calibrationanalysis/calibration_record/detail.html:101, 113`
