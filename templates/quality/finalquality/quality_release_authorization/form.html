@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:quality_release_authorization_list' %}" class="hover:underline">Release Authorizations</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="shield-check" class="w-6 h-6 text-blue-600"></i>
+        {{ title }}
+      </h1>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_edit and release %}{% url 'quality:quality_release_authorization_detail' release.pk %}{% else %}{% url 'quality:quality_release_authorization_list' %}{% endif %}" class="btn btn-outline text-sm">
+        Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm space-y-1">
+        {% for error in form.non_field_errors %}
+          <p class="flex items-center gap-1.5"><i data-lucide="alert-circle" class="w-4 h-4"></i> {{ error }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Section 1: Release Profile & Customer -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="building" class="w-4 h-4 text-blue-600"></i>
+          1. Release Header & Destination
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="sm:col-span-2 form-group">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Release Title / Authorization Subject *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Status *</label>
+            {{ form.status }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.release_disposition.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Release Disposition *</label>
+            {{ form.release_disposition }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.customer.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Customer *</label>
+            {{ form.customer }}
+            {% if form.customer.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.customer.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.destination_country.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Destination Country</label>
+            {{ form.destination_country }}
+          </div>
+          <div class="sm:col-span-3 form-group">
+            <label for="{{ form.destination_facility.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Destination Facility / Dock Address</label>
+            {{ form.destination_facility }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Order & Logistics -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="truck" class="w-4 h-4 text-blue-600"></i>
+          2. Order, Shipment & Security Seals
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.shipment.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Shipment</label>
+            {{ form.shipment }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.shipment_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Shipment Number (Manual)</label>
+            {{ form.shipment_number }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.sales_order.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Sales Order</label>
+            {{ form.sales_order }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lot_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Finished Lot Number</label>
+            {{ form.lot_number }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.quantity_authorized.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Authorized Quantity *</label>
+            {{ form.quantity_authorized }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.shipping_container_security_seal.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Container Security Seal #</label>
+            {{ form.shipping_container_security_seal }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.carrier_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Carrier / Forwarder</label>
+            {{ form.carrier_name }}
+          </div>
+          <div class="sm:col-span-2 form-group">
+            <label for="{{ form.tracking_reference.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Tracking Reference # / Waybill</label>
+            {{ form.tracking_reference }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Linked Quality Records -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="link" class="w-4 h-4 text-blue-600"></i>
+          3. Linked Quality Protocols & Certifications
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.inspection_lot.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Final Inspection Lot</label>
+            {{ form.inspection_lot }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.packaging_verification.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Packaging & Label Verification</label>
+            {{ form.packaging_verification }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.certificate_of_conformance.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Certificate of Conformance (CoC)</label>
+            {{ form.certificate_of_conformance }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Multi-Gate Checklist & Hold -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="check-circle-2" class="w-4 h-4 text-blue-600"></i>
+          4. Prerequisite Checklist & Shipping Hold Gate
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="space-y-3 bg-slate-50 p-4 rounded-lg border">
+            <span class="text-xs font-bold text-slate-700 uppercase tracking-wider block">Shipment Gates</span>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.final_inspection_passed }}
+              <span>Final Inspection Protocol Passed</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.no_open_ncrs_or_capas }}
+              <span>Zero Open NCRs / Deviations on this Lot</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.packaging_label_approved }}
+              <span>Packaging & Barcode Grading Approved</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.coc_issued_and_signed }}
+              <span>Certificate of Conformance Signed & Issued</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.export_compliance_verified }}
+              <span>Statutory Export Screening Cleared</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+              {{ form.certificate_of_origin_attached }}
+              <span>Certificate of Origin Attached</span>
+            </label>
+          </div>
+
+          <div class="space-y-3 bg-red-50/50 p-4 rounded-lg border border-red-200">
+            <span class="text-xs font-bold text-red-800 uppercase tracking-wider block">Quality Hold Interlock</span>
+            <label class="flex items-center gap-2 text-sm text-red-900 cursor-pointer">
+              {{ form.is_on_hold }}
+              <span class="font-bold">Place on Active Outbound Shipping Hold</span>
+            </label>
+            <div class="form-group mt-2">
+              <label for="{{ form.hold_reason.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Shipping Hold Reason</label>
+              {{ form.hold_reason }}
+              {% if form.hold_reason.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.hold_reason.errors.0 }}</div>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Sign-off & Concessions -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="signature" class="w-4 h-4 text-blue-600"></i>
+          5. Releasing Officer & Notes
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.releasing_officer.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Releasing Officer</label>
+            {{ form.releasing_officer }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.release_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Release Date</label>
+            {{ form.release_date }}
+          </div>
+          <div></div>
+          <div class="sm:col-span-3 form-group">
+            <label for="{{ form.concession_rationale.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Concession Rationale</label>
+            {{ form.concession_rationale }}
+            <p class="text-xs text-slate-500 mt-0.5">Mandatory if granting a conditional release.</p>
+            {% if form.concession_rationale.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.concession_rationale.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="sm:col-span-3 form-group">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Release Notes / Logistics Instructions</label>
+            {{ form.notes }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 border-t pt-4">
+        <a href="{% if is_edit and release %}{% url 'quality:quality_release_authorization_detail' release.pk %}{% else %}{% url 'quality:quality_release_authorization_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm">
+          <i data-lucide="save" class="w-4 h-4 mr-1"></i>
+          {% if is_edit %}Save Release{% else %}Create Release Authorization{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
