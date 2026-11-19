@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Calibration Event {{ calibration_record.number }}{% else %}Log New Calibration Event{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:calibration_record_list' %}" class="hover:underline">Calibration Records</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ calibration_record.number }}{% else %}Log Event{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="file-check-2" class="w-6 h-6 text-blue-600"></i>
+        <span>{% if is_edit %}Edit Calibration Event: {{ calibration_record.number }}{% else %}Log New Calibration Event{% endif %}</span>
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Capture as-found and as-left conditions, lab environmental parameters, measurement uncertainty, and pass/fail verdict.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Calibration Identification -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-500"></i>
+          Instrument & Event Header
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.gage.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Gage / Instrument <span class="text-red-500">*</span>
+            </label>
+            {{ form.gage }}
+            {% if form.gage.errors %}<div class="text-xs text-red-600 mt-1">{{ form.gage.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.calibration_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Calibration Date <span class="text-red-500">*</span>
+            </label>
+            {{ form.calibration_date }}
+            {% if form.calibration_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.calibration_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.calibration_type.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Calibration Type
+            </label>
+            {{ form.calibration_type }}
+            {% if form.calibration_type.errors %}<div class="text-xs text-red-600 mt-1">{{ form.calibration_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Record Status
+            </label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.overall_result.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Overall Result Verdict
+            </label>
+            {{ form.overall_result }}
+            {% if form.overall_result.errors %}<div class="text-xs text-red-600 mt-1">{{ form.overall_result.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrology Conditions & Results -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-purple-500"></i>
+          As-Found / As-Left Metrology & Uncertainty
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.as_found_condition.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              As-Found Condition (Prior to Adjustment)
+            </label>
+            {{ form.as_found_condition }}
+            {% if form.as_found_condition.errors %}<div class="text-xs text-red-600 mt-1">{{ form.as_found_condition.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.as_left_condition.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              As-Left Condition (Release State)
+            </label>
+            {{ form.as_left_condition }}
+            {% if form.as_left_condition.errors %}<div class="text-xs text-red-600 mt-1">{{ form.as_left_condition.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.max_observed_error.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Max Observed Error
+            </label>
+            {{ form.max_observed_error }}
+            {% if form.max_observed_error.errors %}<div class="text-xs text-red-600 mt-1">{{ form.max_observed_error.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.expanded_uncertainty.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Expanded Uncertainty (U, k=2)
+            </label>
+            {{ form.expanded_uncertainty }}
+            {% if form.expanded_uncertainty.errors %}<div class="text-xs text-red-600 mt-1">{{ form.expanded_uncertainty.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.test_uncertainty_ratio.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Test Uncertainty Ratio (TUR : 1)
+            </label>
+            {{ form.test_uncertainty_ratio }}
+            {% if form.test_uncertainty_ratio.errors %}<div class="text-xs text-red-600 mt-1">{{ form.test_uncertainty_ratio.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group flex items-center pt-6">
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.guardband_applied }}
+              <span class="text-sm font-semibold text-slate-800">Apply ILAC-G8 Guardband Decision Rule</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Environment & Lab Details -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="thermometer" class="w-4 h-4 text-amber-500"></i>
+          Lab Environment & External Certification
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.ambient_temperature_c.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Temperature (°C)
+            </label>
+            {{ form.ambient_temperature_c }}
+            {% if form.ambient_temperature_c.errors %}<div class="text-xs text-red-600 mt-1">{{ form.ambient_temperature_c.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.ambient_relative_humidity.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Relative Humidity (%)
+            </label>
+            {{ form.ambient_relative_humidity }}
+            {% if form.ambient_relative_humidity.errors %}<div class="text-xs text-red-600 mt-1">{{ form.ambient_relative_humidity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.service_vendor.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Accredited Service Vendor / External Lab
+            </label>
+            {{ form.service_vendor }}
+            {% if form.service_vendor.errors %}<div class="text-xs text-red-600 mt-1">{{ form.service_vendor.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.certificate_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Calibration Certificate Number
+            </label>
+            {{ form.certificate_number }}
+            {% if form.certificate_number.errors %}<div class="text-xs text-red-600 mt-1">{{ form.certificate_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.technician_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Technician / Metrologist Name
+            </label>
+            {{ form.technician_name }}
+            {% if form.technician_name.errors %}<div class="text-xs text-red-600 mt-1">{{ form.technician_name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.calibrated_by_user.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Internal User Sign-off
+            </label>
+            {{ form.calibrated_by_user }}
+            {% if form.calibrated_by_user.errors %}<div class="text-xs text-red-600 mt-1">{{ form.calibrated_by_user.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.standards_used.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Reference Standards Used (Select multiple)
+            </label>
+            {{ form.standards_used }}
+            {% if form.standards_used.errors %}<div class="text-xs text-red-600 mt-1">{{ form.standards_used.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.standard_traceability_notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Standards Traceability Notes
+            </label>
+            {{ form.standard_traceability_notes }}
+            {% if form.standard_traceability_notes.errors %}<div class="text-xs text-red-600 mt-1">{{ form.standard_traceability_notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+          General Notes & Remarks
+        </label>
+        {{ form.notes }}
+        {% if form.notes.errors %}<div class="text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <a href="{% if is_edit %}{% url 'quality:calibration_record_detail' calibration_record.pk %}{% else %}{% url 'quality:calibration_record_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm px-6">
+          {% if is_edit %}Update Record{% else %}Save Calibration Event{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
