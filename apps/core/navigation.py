@@ -3440,6 +3440,13 @@ LIVE_LINKS = {
         "Work Instruction Adherence": "quality:spc_dashboard",
         "Process Audit & Layered Process Audits (LPA)": "quality:layered_process_audit_list",
     },
+    "12.10": {
+        "Calibration Schedule & Planning": "quality:calibration_gage_list",
+        "Calibration Execution & Records": "quality:calibration_record_list",
+        "Out-of-Tolerance (OOT) Handling": "quality:out_of_tolerance_investigation_list",
+        "Measurement System Analysis (MSA / Gage R&R)": "quality:measurement_system_analysis_list",
+        "Calibration Vendor Management": "quality:calibration_vendor_directory",
+    },
 
 
 
