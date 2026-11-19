@@ -39,6 +39,10 @@ from apps.quality.models import (
     FirstArticleInspection,
     ProcessParameterLog,
     LayeredProcessAudit,
+    FinalInspectionLot,
+    CertificateOfConformance,
+    PackagingLabelVerification,
+    QualityReleaseAuthorization,
 )
 
 
@@ -1325,6 +1329,238 @@ def layered_audit_b(db, tenant_b, admin_b):
         compliance_percentage=Decimal("100.00"),
         auditor=admin_b,
     )
+
+
+# ==============================================================================
+# Sub-module 12.9: Final Quality Control / Outgoing Quality Control (FQC / OQC)
+# ==============================================================================
+
+@pytest.fixture
+def customer_party_a(db, tenant_a):
+    return Party.objects.create(
+        tenant=tenant_a,
+        name="Acme Aerospace Client Ltd",
+    )
+
+
+@pytest.fixture
+def customer_party_b(db, tenant_b):
+    return Party.objects.create(
+        tenant=tenant_b,
+        name="Globex Medical Client LLC",
+    )
+
+
+@pytest.fixture
+def final_lot_a(db, tenant_a, admin_user, customer_party_a):
+    return FinalInspectionLot.objects.create(
+        tenant=tenant_a,
+        title="Final Inspection - Precision Actuators",
+        inspection_stage="post_packaging_oqc",
+        sampling_standard="ansi_asq_z1_4_normal",
+        aql_critical=Decimal("0.00"),
+        aql_major=Decimal("0.65"),
+        aql_minor=Decimal("4.00"),
+        status="completed",
+        usage_decision="accepted",
+        decision_rationale="AQL Level II conforming, 0 defects",
+        item_code="ACT-990",
+        item_name="Precision Flight Actuator",
+        lot_number="LOT-2026-FQC-01",
+        batch_number="BATCH-990-A",
+        serial_number_range="ACT-001 through ACT-100",
+        lot_quantity=100,
+        sample_size_inspected=20,
+        critical_defects_count=0,
+        major_defects_count=0,
+        minor_defects_count=0,
+        units_passed=20,
+        units_rejected=0,
+        visual_inspection_passed=True,
+        dimensional_inspection_passed=True,
+        functional_test_passed=True,
+        packaging_inspection_passed=True,
+        is_on_hold=False,
+        customer=customer_party_a,
+        inspector=admin_user,
+        decision_by=admin_user,
+        inspection_date=timezone.now().date(),
+        decision_date=timezone.now().date(),
+    )
+
+
+@pytest.fixture
+def final_lot_b(db, tenant_b, admin_b, customer_party_b):
+    return FinalInspectionLot.objects.create(
+        tenant=tenant_b,
+        title="Globex OQC Inspection",
+        inspection_stage="finished_goods_dock",
+        sampling_standard="ansi_asq_z1_4_normal",
+        aql_critical=Decimal("0.00"),
+        aql_major=Decimal("1.00"),
+        aql_minor=Decimal("4.00"),
+        status="in_progress",
+        usage_decision="quarantined_hold",
+        decision_rationale="Quarantined on hold",
+        item_code="GLX-VALVE-01",
+        item_name="Globex Safety Valve",
+        lot_number="LOT-GLX-FQC-01",
+        lot_quantity=500,
+        sample_size_inspected=50,
+        critical_defects_count=0,
+        major_defects_count=2,
+        minor_defects_count=1,
+        units_passed=47,
+        units_rejected=3,
+        visual_inspection_passed=False,
+        dimensional_inspection_passed=True,
+        functional_test_passed=True,
+        packaging_inspection_passed=False,
+        is_on_hold=True,
+        hold_reason="Packaging torn during transit",
+        customer=customer_party_b,
+        inspector=admin_b,
+        inspection_date=timezone.now().date(),
+    )
+
+
+@pytest.fixture
+def coc_a(db, tenant_a, admin_user, customer_party_a, final_lot_a):
+    return CertificateOfConformance.objects.create(
+        tenant=tenant_a,
+        title="CoC - Precision Actuators",
+        certificate_type="aerospace_as9100_as9102",
+        status="approved_signed",
+        customer=customer_party_a,
+        customer_po_number="PO-99120",
+        sales_order_number="SO-4401",
+        item_code="ACT-990",
+        item_name="Precision Flight Actuator",
+        revision="Rev D",
+        lot_number="LOT-2026-FQC-01",
+        certified_quantity=100,
+        inspection_lot=final_lot_a,
+        applicable_specifications="AS9100D, MIL-STD-130N",
+        test_results_summary="Tensile 850 MPa, zero pressure leaks.",
+        conformance_statement="Certified conforming in all respects to engineering drawing.",
+        authorized_signatory=admin_user,
+        signatory_title="QA Director",
+        signed_date=timezone.now().date(),
+        digital_signature_hash="sha256-mock-hash-valid",
+    )
+
+
+@pytest.fixture
+def coc_b(db, tenant_b, admin_b, customer_party_b, final_lot_b):
+    return CertificateOfConformance.objects.create(
+        tenant=tenant_b,
+        title="Globex CoC Draft",
+        certificate_type="standard_commercial",
+        status="draft",
+        customer=customer_party_b,
+        item_code="GLX-VALVE-01",
+        item_name="Globex Safety Valve",
+        certified_quantity=500,
+        inspection_lot=final_lot_b,
+    )
+
+
+@pytest.fixture
+def packaging_verification_a(db, tenant_a, admin_user, final_lot_a):
+    return PackagingLabelVerification.objects.create(
+        tenant=tenant_a,
+        title="Packaging Audit - Actuators",
+        status="verified",
+        disposition="pass_released",
+        item_code="ACT-990",
+        item_name="Precision Flight Actuator",
+        lot_number="LOT-2026-FQC-01",
+        carton_count_inspected=10,
+        label_part_number="LBL-ACT-99",
+        label_artwork_revision="Rev 2",
+        barcode_symbology="datamatrix_gs1_2d",
+        scanned_barcode_data="(01)0085009901(10)LOT-2026-FQC-01",
+        iso_iec_print_grade="grade_a_4_0",
+        label_content_accurate=True,
+        regulatory_symbols_present=True,
+        serialization_verified=True,
+        carton_integrity_intact=True,
+        tamper_evident_seal_intact=True,
+        cushioning_dunnage_adequate=True,
+        pallet_stacking_compliant=True,
+        inspection_lot=final_lot_a,
+        verifier=admin_user,
+        verified_date=timezone.now().date(),
+    )
+
+
+@pytest.fixture
+def packaging_verification_b(db, tenant_b, admin_b, final_lot_b):
+    return PackagingLabelVerification.objects.create(
+        tenant=tenant_b,
+        title="Globex Packaging Audit",
+        status="failed",
+        disposition="relabel_required",
+        item_code="GLX-VALVE-01",
+        item_name="Globex Safety Valve",
+        lot_number="LOT-GLX-FQC-01",
+        carton_count_inspected=5,
+        barcode_symbology="code_128_1d",
+        iso_iec_print_grade="grade_d_1_0",
+        label_content_accurate=False,
+        carton_integrity_intact=False,
+        tamper_evident_seal_intact=False,
+        inspection_lot=final_lot_b,
+        verifier=admin_b,
+        verified_date=timezone.now().date(),
+    )
+
+
+@pytest.fixture
+def quality_release_a(db, tenant_a, admin_user, customer_party_a, final_lot_a, coc_a, packaging_verification_a):
+    return QualityReleaseAuthorization.objects.create(
+        tenant=tenant_a,
+        title="Final Outgoing Release - Actuators",
+        status="authorized",
+        release_disposition="released_full",
+        customer=customer_party_a,
+        destination_country="United States",
+        destination_facility="Aero Hub Bay 1",
+        sales_order_number="SO-4401",
+        lot_number="LOT-2026-FQC-01",
+        quantity_authorized=100,
+        inspection_lot=final_lot_a,
+        certificate_of_conformance=coc_a,
+        packaging_verification=packaging_verification_a,
+        is_on_hold=False,
+        final_inspection_passed=True,
+        no_open_ncrs_or_capas=True,
+        packaging_label_approved=True,
+        coc_issued_and_signed=True,
+        export_compliance_verified=True,
+        shipping_container_security_seal="SEAL-44910",
+        carrier_name="FedEx Cargo",
+        releasing_officer=admin_user,
+        release_date=timezone.now().date(),
+    )
+
+
+@pytest.fixture
+def quality_release_b(db, tenant_b, admin_b, customer_party_b, final_lot_b):
+    return QualityReleaseAuthorization.objects.create(
+        tenant=tenant_b,
+        title="Globex Release Quarantine",
+        status="active_hold",
+        release_disposition="quarantined_hold",
+        customer=customer_party_b,
+        lot_number="LOT-GLX-FQC-01",
+        quantity_authorized=500,
+        inspection_lot=final_lot_b,
+        is_on_hold=True,
+        hold_reason="Quarantined on hold",
+        releasing_officer=admin_b,
+    )
+
 
 
 
