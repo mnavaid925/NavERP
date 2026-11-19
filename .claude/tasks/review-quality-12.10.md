@@ -67,3 +67,13 @@
 - **[PR-M5] Minor**: `apps/quality/views/CalibrationAnalysis/CalibrationVendors.py:18-23` Role filter simplification (`role__in=["vendor", "supplier"]`) and explicit tenant filter on count annotation.
 
 ---
+
+## 5. QA Smoke Tester Pass
+- **Reviewer**: `qa-smoke-tester` (Report-only mode)
+- **Status**: Completed (275 checks executed)
+
+### Findings
+- **Runtime Bugs Detected**: None.
+- All 21 endpoints tested across boundary pagination (`page=0`, `-1`, `99999`, `abc`, `NaN`, `None`), search fuzzing/XSS/SQLi strings, empty `{}` and malformed POST requests, cross-tenant IDOR (96 checks, 100% blocked with 404), CSV exports, delete lifecycle + audit log, and comment leak syntax checks. All 275 checks passed.
+
+---
