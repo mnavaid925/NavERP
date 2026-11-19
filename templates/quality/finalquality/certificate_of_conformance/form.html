@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:certificate_of_conformance_list' %}" class="hover:underline">Certificates of Conformance</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="award" class="w-6 h-6 text-blue-600"></i>
+        {{ title }}
+      </h1>
+    </div>
+    <div class="page-actions">
+      <a href="{% if is_edit and certificate %}{% url 'quality:certificate_of_conformance_detail' certificate.pk %}{% else %}{% url 'quality:certificate_of_conformance_list' %}{% endif %}" class="btn btn-outline text-sm">
+        Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm space-y-1">
+        {% for error in form.non_field_errors %}
+          <p class="flex items-center gap-1.5"><i data-lucide="alert-circle" class="w-4 h-4"></i> {{ error }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Section 1: Certificate Header & Customer -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="building" class="w-4 h-4 text-blue-600"></i>
+          1. Certificate Identity & Customer Orders
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="sm:col-span-2 form-group">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Certificate Title / Document Title *</label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.certificate_type.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Specification Format *</label>
+            {{ form.certificate_type }}
+            {% if form.certificate_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.certificate_type.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.customer.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Customer (Recipient) *</label>
+            {{ form.customer }}
+            {% if form.customer.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.customer.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.customer_po_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Customer PO #</label>
+            {{ form.customer_po_number }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Document Status *</label>
+            {{ form.status }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.sales_order.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Sales Order</label>
+            {{ form.sales_order }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.sales_order_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sales Order # (Manual)</label>
+            {{ form.sales_order_number }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.shipment.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Outbound Shipment</label>
+            {{ form.shipment }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Certified Product Accountability -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="package" class="w-4 h-4 text-blue-600"></i>
+          2. Certified Product & Quantities
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Item / Part Code</label>
+            {{ form.item_code }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Item Description</label>
+            {{ form.item_name }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.revision.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Engineering Revision</label>
+            {{ form.revision }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.lot_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lot Number</label>
+            {{ form.lot_number }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.batch_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Batch Number</label>
+            {{ form.batch_number }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.certified_quantity.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Certified Quantity *</label>
+            {{ form.certified_quantity }}
+            {% if form.certified_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.certified_quantity.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.inspection_lot.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Final Inspection Lot</label>
+            {{ form.inspection_lot }}
+          </div>
+          <div class="sm:col-span-2 form-group">
+            <label for="{{ form.serial_numbers_text.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Serial Numbers Covered</label>
+            {{ form.serial_numbers_text }}
+            <p class="text-xs text-slate-500 mt-0.5">Comma-separated or newline-delimited serial numbers.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Legal & Technical Specifications -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="scale" class="w-4 h-4 text-blue-600"></i>
+          3. Conformance Declaration & Test Summary
+        </h2>
+        <div class="space-y-4">
+          <div class="form-group">
+            <label for="{{ form.conformance_statement.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Legal Conformance Statement</label>
+            {{ form.conformance_statement }}
+            <p class="text-xs text-slate-500 mt-0.5">Leave blank to use standard company certification language.</p>
+          </div>
+          <div class="form-group">
+            <label for="{{ form.applicable_specifications.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Applicable Specifications / Standards</label>
+            {{ form.applicable_specifications }}
+            <p class="text-xs text-slate-500 mt-0.5">e.g. ASTM A240, Mil-I-45208, AS9100 Rev D, ISO 13485:2016.</p>
+          </div>
+          <div class="form-group">
+            <label for="{{ form.test_results_summary.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Inspection & Test Results Summary</label>
+            {{ form.test_results_summary }}
+            <p class="text-xs text-slate-500 mt-0.5">Summary of physical, chemical, dimensional, or electrical verification findings.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Signatory & Notes -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="signature" class="w-4 h-4 text-blue-600"></i>
+          4. Quality Signatory & Audit
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.authorized_signatory.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Authorized Signatory</label>
+            {{ form.authorized_signatory }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.signatory_title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Signatory Title</label>
+            {{ form.signatory_title }}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.signed_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Signed Date</label>
+            {{ form.signed_date }}
+          </div>
+          <div class="sm:col-span-3 form-group">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Internal Quality Notes</label>
+            {{ form.notes }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 border-t pt-4">
+        <a href="{% if is_edit and certificate %}{% url 'quality:certificate_of_conformance_detail' certificate.pk %}{% else %}{% url 'quality:certificate_of_conformance_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm">
+          <i data-lucide="save" class="w-4 h-4 mr-1"></i>
+          {% if is_edit %}Save Certificate{% else %}Generate CoC{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
