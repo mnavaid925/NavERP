@@ -50,10 +50,10 @@
   - **Issue**: `--flush` does not delete `MeasurementSystemAnalysis`, `OutOfToleranceInvestigation`, `CalibrationRecord`, and `CalibrationGage`.
   - **Fix**: Add the 4 models to the `--flush` deletion block in reverse foreign key order. (fixed — aa8beaa6)
 
-- [ ] **[I7] Missing Subpackage `__init__.py` Files in `CalibrationAnalysis/` Folders**:
+- [x] **[I7] Missing Subpackage `__init__.py` Files in `CalibrationAnalysis/` Folders**:
   - **Location**: `apps/quality/{models,forms,views,urls}/CalibrationAnalysis/__init__.py`
   - **Issue**: Subpackage directories lack `__init__.py` files with standard explicit `__all__` re-exports.
-  - **Fix**: Create `__init__.py` in each of the 4 directories re-exporting all sub-module entities and routes.
+  - **Fix**: Create `__init__.py` in each of the 4 directories re-exporting all sub-module entities and routes. (fixed — 9a312c4d, 9344f3ec, 9950cb7d, e3da49e8)
 
 - [ ] **[I8] Chained N+1 Query via `CalibrationRecord.__str__` in `OutOfToleranceInvestigationForm`**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/OutOfToleranceInvestigations.py:50-52` and `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py:153-154`
