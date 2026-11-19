@@ -16,9 +16,13 @@ def calibration_vendor_directory(request):
 
     # Vendors that have performed calibrations or are accredited labs
     vendors_qs = Party.objects.filter(tenant=request.tenant).filter(
-        Q(roles__role="vendor") | Q(roles__role="supplier") | Q(calibrations_performed__isnull=False)
+        Q(roles__role__in=["vendor", "supplier"]) | Q(calibrations_performed__isnull=False)
     ).distinct().annotate(
-        calibration_events_count=Count("calibrations_performed", distinct=True)
+        calibration_events_count=Count(
+            "calibrations_performed",
+            filter=Q(calibrations_performed__tenant=request.tenant),
+            distinct=True,
+        )
     ).order_by("-calibration_events_count", "name")
 
     if search_query:
@@ -27,10 +31,10 @@ def calibration_vendor_directory(request):
             | Q(tax_id__icontains=search_query)
         )
 
-    total_vendors = vendors_qs.count()
     paginator = Paginator(vendors_qs, PAGE_SIZE)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    total_vendors = page_obj.paginator.count
 
     context = {
         "vendors": page_obj,
