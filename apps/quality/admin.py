@@ -56,6 +56,18 @@ from apps.quality.models.InProcessQuality.LayeredProcessAudits import (
 from apps.quality.models.InProcessQuality.ProcessParameterLogs import (
     ProcessParameterLog,
 )
+from apps.quality.models.CalibrationAnalysis.CalibrationGages import (
+    CalibrationGage,
+)
+from apps.quality.models.CalibrationAnalysis.CalibrationRecords import (
+    CalibrationRecord,
+)
+from apps.quality.models.CalibrationAnalysis.OutOfToleranceInvestigations import (
+    OutOfToleranceInvestigation,
+)
+from apps.quality.models.CalibrationAnalysis.MeasurementSystemAnalyses import (
+    MeasurementSystemAnalysis,
+)
 
 
 
@@ -685,6 +697,84 @@ class LayeredProcessAuditAdmin(admin.ModelAdmin):
     list_filter = ("audit_layer", "focus_area", "status", "tenant")
     search_fields = ("number", "title", "work_center_code", "shift")
     list_select_related = ("tenant", "auditor")
+
+
+@admin.register(CalibrationGage)
+class CalibrationGageAdmin(admin.ModelAdmin):
+    list_display = (
+        "gage_id",
+        "name",
+        "gage_type",
+        "criticality",
+        "status",
+        "max_permissible_error",
+        "engineering_unit",
+        "is_reference_standard",
+        "next_calibration_due",
+        "tenant",
+    )
+    list_filter = ("gage_type", "criticality", "status", "is_reference_standard", "tenant")
+    search_fields = ("gage_id", "number", "name", "serial_number", "manufacturer")
+    list_select_related = ("tenant", "custodian", "department", "work_center")
+
+
+@admin.register(CalibrationRecord)
+class CalibrationRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "gage",
+        "calibration_date",
+        "calibration_type",
+        "as_found_condition",
+        "as_left_condition",
+        "overall_result",
+        "expanded_uncertainty",
+        "status",
+        "tenant",
+    )
+    list_filter = ("calibration_type", "overall_result", "as_found_condition", "status", "tenant")
+    search_fields = ("number", "gage__gage_id", "gage__name", "certificate_number", "technician_name")
+    list_select_related = ("tenant", "gage", "service_vendor", "calibrated_by_user", "approved_by")
+
+
+@admin.register(OutOfToleranceInvestigation)
+class OutOfToleranceInvestigationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "gage",
+        "discovery_date",
+        "risk_level",
+        "status",
+        "product_disposition",
+        "suspect_lots_count",
+        "product_recall_required",
+        "tenant",
+    )
+    list_filter = ("risk_level", "status", "product_disposition", "product_recall_required", "tenant")
+    search_fields = ("number", "title", "gage__gage_id", "products_affected")
+    list_select_related = ("tenant", "gage", "calibration_record", "investigator", "quality_approver")
+
+
+@admin.register(MeasurementSystemAnalysis)
+class MeasurementSystemAnalysisAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "study_title",
+        "gage",
+        "study_type",
+        "analysis_method",
+        "percent_gage_rr_study_variation",
+        "percent_tolerance_pt_ratio",
+        "number_of_distinct_categories_ndc",
+        "study_result",
+        "status",
+        "tenant",
+    )
+    list_filter = ("study_type", "analysis_method", "study_result", "status", "tenant")
+    search_fields = ("number", "study_title", "gage__gage_id", "characteristic_name")
+    list_select_related = ("tenant", "gage", "study_lead", "approved_by")
+
 
 
 
