@@ -67,6 +67,18 @@ from apps.quality.models.CalibrationAnalysis.OutOfToleranceInvestigations import
 from apps.quality.models.CalibrationAnalysis.MeasurementSystemAnalyses import (
     MeasurementSystemAnalysis,
 )
+from apps.quality.models.FinalQuality.CertificatesOfConformance import (
+    CertificateOfConformance,
+)
+from apps.quality.models.FinalQuality.FinalInspectionLots import (
+    FinalInspectionLot,
+)
+from apps.quality.models.FinalQuality.PackagingLabelVerifications import (
+    PackagingLabelVerification,
+)
+from apps.quality.models.FinalQuality.QualityReleaseAuthorizations import (
+    QualityReleaseAuthorization,
+)
 
 __all__ = [
     "TenantOwned",
@@ -107,5 +119,9 @@ __all__ = [
     "CalibrationRecord",
     "OutOfToleranceInvestigation",
     "MeasurementSystemAnalysis",
+    "FinalInspectionLot",
+    "CertificateOfConformance",
+    "PackagingLabelVerification",
+    "QualityReleaseAuthorization",
 ]
 
