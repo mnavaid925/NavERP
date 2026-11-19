@@ -3440,6 +3440,13 @@ LIVE_LINKS = {
         "Work Instruction Adherence": "quality:spc_dashboard",
         "Process Audit & Layered Process Audits (LPA)": "quality:layered_process_audit_list",
     },
+    "12.9": {
+        "Final Inspection Protocols": "quality:final_inspection_lot_list",
+        "Lot Sampling & Acceptance Testing": "quality:oqc_hold_board",
+        "Certificate of Conformance (CoC)": "quality:certificate_of_conformance_list",
+        "Packaging & Labeling Verification": "quality:packaging_label_verification_list",
+        "Shipment Release & Traceability": "quality:quality_release_authorization_list",
+    },
     "12.10": {
         "Calibration Schedule & Planning": "quality:calibration_gage_list",
         "Calibration Execution & Records": "quality:calibration_record_list",
