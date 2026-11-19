@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Quality Audit: {{ quality_audit.number }}{% else %}Schedule Quality Audit{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Audits</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ quality_audit.number }}{% else %}Schedule Audit{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Quality Audit: {{ quality_audit.number }}{% else %}Schedule Quality Audit{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="card-body space-y-6">
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Audit Title <span class="text-danger">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.program.id_for_label }}" class="form-label">Governing Program</label>
+                        {{ form.program }}
+                        {% if form.program.errors %}<div class="form-error">{{ form.program.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.audit_type.id_for_label }}" class="form-label">Audit Classification <span class="text-danger">*</span></label>
+                        {{ form.audit_type }}
+                        {% if form.audit_type.errors %}<div class="form-error">{{ form.audit_type.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.audit_method.id_for_label }}" class="form-label">Methodology <span class="text-danger">*</span></label>
+                        {{ form.audit_method }}
+                        {% if form.audit_method.errors %}<div class="form-error">{{ form.audit_method.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.standard_framework.id_for_label }}" class="form-label">Standard Framework <span class="text-danger">*</span></label>
+                        {{ form.standard_framework }}
+                        {% if form.standard_framework.errors %}<div class="form-error">{{ form.standard_framework.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.target_org_unit.id_for_label }}" class="form-label">Audited Internal Department / Facility</label>
+                        {{ form.target_org_unit }}
+                        {% if form.target_org_unit.errors %}<div class="form-error">{{ form.target_org_unit.errors.0 }}</div>{% endif %}
+                        <span class="text-xs text-muted">For internal system or process audits.</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.external_entity.id_for_label }}" class="form-label">External Organization / Entity</label>
+                        {{ form.external_entity }}
+                        {% if form.external_entity.errors %}<div class="form-error">{{ form.external_entity.errors.0 }}</div>{% endif %}
+                        <span class="text-xs text-muted">For supplier audits, customer audits, or regulatory bodies.</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.lead_auditor.id_for_label }}" class="form-label">Lead Auditor <span class="text-danger">*</span></label>
+                        {{ form.lead_auditor }}
+                        {% if form.lead_auditor.errors %}<div class="form-error">{{ form.lead_auditor.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.auditee_lead.id_for_label }}" class="form-label">Auditee Representative</label>
+                        {{ form.auditee_lead }}
+                        {% if form.auditee_lead.errors %}<div class="form-error">{{ form.auditee_lead.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.audit_checklist_sop.id_for_label }}" class="form-label">Governing Checklist / SOP</label>
+                        {{ form.audit_checklist_sop }}
+                        {% if form.audit_checklist_sop.errors %}<div class="form-error">{{ form.audit_checklist_sop.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 space-y-3">
+                        <h4 class="text-xs font-semibold text-muted uppercase tracking-wider">Planned Schedule</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="form-group">
+                                <label for="{{ form.planned_start_date.id_for_label }}" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                {{ form.planned_start_date }}
+                                {% if form.planned_start_date.errors %}<div class="form-error">{{ form.planned_start_date.errors.0 }}</div>{% endif %}
+                            </div>
+                            <div class="form-group">
+                                <label for="{{ form.planned_end_date.id_for_label }}" class="form-label">End Date <span class="text-danger">*</span></label>
+                                {{ form.planned_end_date }}
+                                {% if form.planned_end_date.errors %}<div class="form-error">{{ form.planned_end_date.errors.0 }}</div>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 space-y-3">
+                        <h4 class="text-xs font-semibold text-muted uppercase tracking-wider">Actual Fieldwork Window</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="form-group">
+                                <label for="{{ form.actual_start_date.id_for_label }}" class="form-label">Actual Start</label>
+                                {{ form.actual_start_date }}
+                                {% if form.actual_start_date.errors %}<div class="form-error">{{ form.actual_start_date.errors.0 }}</div>{% endif %}
+                            </div>
+                            <div class="form-group">
+                                <label for="{{ form.actual_end_date.id_for_label }}" class="form-label">Actual End</label>
+                                {{ form.actual_end_date }}
+                                {% if form.actual_end_date.errors %}<div class="form-error">{{ form.actual_end_date.errors.0 }}</div>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.product_scope.id_for_label }}" class="form-label">Sampled Product Scope</label>
+                        {{ form.product_scope }}
+                        {% if form.product_scope.errors %}<div class="form-error">{{ form.product_scope.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.lot_number_sampled.id_for_label }}" class="form-label">Sampled Lot / Batch Number</label>
+                        {{ form.lot_number_sampled }}
+                        {% if form.lot_number_sampled.errors %}<div class="form-error">{{ form.lot_number_sampled.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.scope_objectives.id_for_label }}" class="form-label">Audit Scope, Criteria & Objectives <span class="text-danger">*</span></label>
+                    {{ form.scope_objectives }}
+                    {% if form.scope_objectives.errors %}<div class="form-error">{{ form.scope_objectives.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Status <span class="text-danger">*</span></label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.outcome.id_for_label }}" class="form-label">Audit Outcome Verdict <span class="text-danger">*</span></label>
+                        {{ form.outcome }}
+                        {% if form.outcome.errors %}<div class="form-error">{{ form.outcome.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.executive_summary.id_for_label }}" class="form-label">Executive Summary</label>
+                    {{ form.executive_summary }}
+                    {% if form.executive_summary.errors %}<div class="form-error">{{ form.executive_summary.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.notes.id_for_label }}" class="form-label">Internal Coordination Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="card-footer flex justify-between items-center bg-slate-50 border-t border-slate-200 px-6 py-4">
+                <a href="{% if is_edit %}{% url 'quality:quality_audit_detail' quality_audit.pk %}{% else %}{% url 'quality:quality_audit_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Schedule Audit{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
