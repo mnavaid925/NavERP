@@ -130,6 +130,21 @@ from apps.quality.urls.CalibrationAnalysis.MeasurementSystemAnalyses import (
 from apps.quality.urls.CalibrationAnalysis.CalibrationVendors import (
     urlpatterns as calibration_vendors_urls,
 )
+from apps.quality.urls.FinalQuality.CertificatesOfConformance import (
+    urlpatterns as certificates_of_conformance_urls,
+)
+from apps.quality.urls.FinalQuality.FinalInspectionLots import (
+    urlpatterns as final_inspection_lots_urls,
+)
+from apps.quality.urls.FinalQuality.OqcHoldBoard import (
+    urlpatterns as oqc_hold_board_urls,
+)
+from apps.quality.urls.FinalQuality.PackagingLabelVerifications import (
+    urlpatterns as packaging_label_verifications_urls,
+)
+from apps.quality.urls.FinalQuality.QualityReleaseAuthorizations import (
+    urlpatterns as quality_release_authorizations_urls,
+)
 
 app_name = "quality"
 
@@ -178,5 +193,10 @@ urlpatterns = (
     + oot_investigations_urls
     + msa_studies_urls
     + calibration_vendors_urls
+    + final_inspection_lots_urls
+    + certificates_of_conformance_urls
+    + packaging_label_verifications_urls
+    + quality_release_authorizations_urls
+    + oqc_hold_board_urls
 )
 
