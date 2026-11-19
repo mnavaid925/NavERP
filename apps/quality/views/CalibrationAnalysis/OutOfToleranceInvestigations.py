@@ -14,7 +14,7 @@ from apps.quality.forms.CalibrationAnalysis.OutOfToleranceInvestigations import 
 from apps.quality.models.CalibrationAnalysis.CalibrationGages import CalibrationGage
 from apps.quality.models.CalibrationAnalysis.CalibrationRecords import CalibrationRecord
 from apps.quality.models.CalibrationAnalysis.OutOfToleranceInvestigations import OutOfToleranceInvestigation
-from apps.quality.views._common import quality_object, quality_scope
+from apps.quality.views._common import _csv_safe, quality_object, quality_scope
 
 PAGE_SIZE = 15
 
@@ -182,12 +182,14 @@ def out_of_tolerance_investigation_export_csv(request):
     ])
     for oot in qs:
         writer.writerow([
-            oot.number, oot.title, oot.gage.gage_id,
-            oot.discovery_date.isoformat() if oot.discovery_date else "",
-            oot.get_risk_level_display(),
-            oot.get_status_display(),
-            oot.get_product_disposition_display(),
-            oot.suspect_lots_count,
-            "Yes" if oot.product_recall_required else "No"
+            _csv_safe(oot.number),
+            _csv_safe(oot.title),
+            _csv_safe(oot.gage.gage_id),
+            _csv_safe(oot.discovery_date.isoformat() if oot.discovery_date else ""),
+            _csv_safe(oot.get_risk_level_display()),
+            _csv_safe(oot.get_status_display()),
+            _csv_safe(oot.get_product_disposition_display()),
+            _csv_safe(oot.suspect_lots_count),
+            _csv_safe("Yes" if oot.product_recall_required else "No"),
         ])
     return response
