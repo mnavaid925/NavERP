@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit OOT Investigation {{ oot_investigation.number }}{% else %}Log OOT Investigation{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:out_of_tolerance_investigation_list' %}" class="hover:underline">OOT Investigations</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ oot_investigation.number }}{% else %}New Investigation{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600"></i>
+        <span>{% if is_edit %}Edit OOT Investigation: {{ oot_investigation.number }}{% else %}Log Out-of-Tolerance (OOT) Investigation{% endif %}</span>
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Reverse-trace affected production batches, evaluate measurement uncertainty risk, and establish containment.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Header & Discovery -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-red-500"></i>
+          Investigation Header & Event Linkage
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Investigation Title <span class="text-red-500">*</span>
+            </label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.discovery_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Discovery Date <span class="text-red-500">*</span>
+            </label>
+            {{ form.discovery_date }}
+            {% if form.discovery_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.discovery_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.gage.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Gage / Instrument <span class="text-red-500">*</span>
+            </label>
+            {{ form.gage }}
+            {% if form.gage.errors %}<div class="text-xs text-red-600 mt-1">{{ form.gage.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.calibration_record.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Triggering Calibration Record <span class="text-red-500">*</span>
+            </label>
+            {{ form.calibration_record }}
+            {% if form.calibration_record.errors %}<div class="text-xs text-red-600 mt-1">{{ form.calibration_record.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Investigation Status
+            </label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label for="{{ form.as_found_error_description.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              As-Found Metrology Deviation Description <span class="text-red-500">*</span>
+            </label>
+            {{ form.as_found_error_description }}
+            {% if form.as_found_error_description.errors %}<div class="text-xs text-red-600 mt-1">{{ form.as_found_error_description.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Suspect Window & Tracing -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="history" class="w-4 h-4 text-amber-500"></i>
+          Suspect Manufacturing Window & Reverse Tracing
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.suspect_window_start.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Suspect Window Start <span class="text-red-500">*</span>
+            </label>
+            {{ form.suspect_window_start }}
+            {% if form.suspect_window_start.errors %}<div class="text-xs text-red-600 mt-1">{{ form.suspect_window_start.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.suspect_window_end.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Suspect Window End <span class="text-red-500">*</span>
+            </label>
+            {{ form.suspect_window_end }}
+            {% if form.suspect_window_end.errors %}<div class="text-xs text-red-600 mt-1">{{ form.suspect_window_end.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.suspect_work_center.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Suspect Work Center
+            </label>
+            {{ form.suspect_work_center }}
+            {% if form.suspect_work_center.errors %}<div class="text-xs text-red-600 mt-1">{{ form.suspect_work_center.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.suspect_lots_count.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Suspect Lots / Batches Count
+            </label>
+            {{ form.suspect_lots_count }}
+            {% if form.suspect_lots_count.errors %}<div class="text-xs text-red-600 mt-1">{{ form.suspect_lots_count.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.products_affected.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Affected Products / Part Numbers
+            </label>
+            {{ form.products_affected }}
+            {% if form.products_affected.errors %}<div class="text-xs text-red-600 mt-1">{{ form.products_affected.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label for="{{ form.suspect_production_orders.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Identified Work Orders / Production Batches
+            </label>
+            {{ form.suspect_production_orders }}
+            {% if form.suspect_production_orders.errors %}<div class="text-xs text-red-600 mt-1">{{ form.suspect_production_orders.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk Assessment & Containment -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="shield-alert" class="w-4 h-4 text-purple-500"></i>
+          Risk Evaluation & MRB Disposition
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.risk_level.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Risk Severity</label>
+            {{ form.risk_level }}
+            {% if form.risk_level.errors %}<div class="text-xs text-red-600 mt-1">{{ form.risk_level.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.consumer_risk_rating.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Consumer Risk (1-5)</label>
+            {{ form.consumer_risk_rating }}
+            {% if form.consumer_risk_rating.errors %}<div class="text-xs text-red-600 mt-1">{{ form.consumer_risk_rating.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.producer_risk_rating.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Producer Risk (1-5)</label>
+            {{ form.producer_risk_rating }}
+            {% if form.producer_risk_rating.errors %}<div class="text-xs text-red-600 mt-1">{{ form.producer_risk_rating.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.product_disposition.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">MRB Product Disposition</label>
+            {{ form.product_disposition }}
+            {% if form.product_disposition.errors %}<div class="text-xs text-red-600 mt-1">{{ form.product_disposition.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group flex flex-col justify-center space-y-2 pt-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.customer_notification_required }}
+              <span class="text-xs font-semibold text-slate-800">Customer Notification Required</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.product_recall_required }}
+              <span class="text-xs font-bold text-red-600">Product Recall Action Required</span>
+            </label>
+          </div>
+          <div class="form-group md:col-span-3">
+            <label for="{{ form.containment_actions_taken.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Containment Actions Taken</label>
+            {{ form.containment_actions_taken }}
+            {% if form.containment_actions_taken.errors %}<div class="text-xs text-red-600 mt-1">{{ form.containment_actions_taken.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Regulatory & Sign-Off -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="check-square" class="w-4 h-4 text-green-500"></i>
+          Regulatory Links & Sign-Off
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.linked_ncr.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Link Non-Conformance Report (NCR)</label>
+            {{ form.linked_ncr }}
+            {% if form.linked_ncr.errors %}<div class="text-xs text-red-600 mt-1">{{ form.linked_ncr.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.linked_capa.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Link Enterprise CAPA</label>
+            {{ form.linked_capa }}
+            {% if form.linked_capa.errors %}<div class="text-xs text-red-600 mt-1">{{ form.linked_capa.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.investigator.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Lead Investigator</label>
+            {{ form.investigator }}
+            {% if form.investigator.errors %}<div class="text-xs text-red-600 mt-1">{{ form.investigator.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.quality_approver.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Quality Approver</label>
+            {{ form.quality_approver }}
+            {% if form.quality_approver.errors %}<div class="text-xs text-red-600 mt-1">{{ form.quality_approver.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.closure_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Closure Date</label>
+            {{ form.closure_date }}
+            {% if form.closure_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.closure_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-2">
+            <label for="{{ form.conclusion_summary.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Conclusion Summary</label>
+            {{ form.conclusion_summary }}
+            {% if form.conclusion_summary.errors %}<div class="text-xs text-red-600 mt-1">{{ form.conclusion_summary.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <a href="{% if is_edit %}{% url 'quality:out_of_tolerance_investigation_detail' oot_investigation.pk %}{% else %}{% url 'quality:out_of_tolerance_investigation_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary bg-red-600 hover:bg-red-700 text-sm px-6">
+          {% if is_edit %}Update Investigation{% else %}Log OOT Investigation{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
