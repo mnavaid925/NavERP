@@ -14,7 +14,7 @@ from apps.core.utils import write_audit_log
 from apps.quality.forms.CalibrationAnalysis.CalibrationRecords import CalibrationRecordForm
 from apps.quality.models.CalibrationAnalysis.CalibrationGages import CalibrationGage
 from apps.quality.models.CalibrationAnalysis.CalibrationRecords import CalibrationRecord
-from apps.quality.views._common import quality_object, quality_scope
+from apps.quality.views._common import _csv_safe, quality_object, quality_scope
 
 PAGE_SIZE = 15
 
@@ -182,14 +182,16 @@ def calibration_record_export_csv(request):
     ])
     for r in qs:
         writer.writerow([
-            r.number, r.gage.gage_id, r.gage.name,
-            r.calibration_date.isoformat() if r.calibration_date else "",
-            r.get_calibration_type_display(),
-            r.get_as_found_condition_display(),
-            r.get_as_left_condition_display(),
-            r.get_overall_result_display(),
-            str(r.expanded_uncertainty),
-            str(r.test_uncertainty_ratio),
-            r.certificate_number
+            _csv_safe(r.number),
+            _csv_safe(r.gage.gage_id),
+            _csv_safe(r.gage.name),
+            _csv_safe(r.calibration_date.isoformat() if r.calibration_date else ""),
+            _csv_safe(r.get_calibration_type_display()),
+            _csv_safe(r.get_as_found_condition_display()),
+            _csv_safe(r.get_as_left_condition_display()),
+            _csv_safe(r.get_overall_result_display()),
+            _csv_safe(str(r.expanded_uncertainty)),
+            _csv_safe(str(r.test_uncertainty_ratio)),
+            _csv_safe(r.certificate_number),
         ])
     return response
