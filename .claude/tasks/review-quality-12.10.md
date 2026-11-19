@@ -95,9 +95,9 @@
   - **Location**: `templates/quality/calibrationanalysis/calibration_vendor_directory.html:82-84`
   - **Fix**: Remove dead conditional check for `v.legal_name`. (fixed — 324e4f5c)
 
-- [ ] **[M5] `CalibrationRecordAdmin` Missing `filter_horizontal` for `standards_used`**:
+- [x] **[M5] `CalibrationRecordAdmin` Missing `filter_horizontal` for `standards_used`**:
   - **Location**: `apps/quality/admin.py:734-750`
-  - **Fix**: Add `filter_horizontal = ("standards_used",)`.
+  - **Fix**: Add `filter_horizontal = ("standards_used",)`. (fixed — a767c0e9)
 
 - [ ] **[M6] Missing `select_related("asset_link")` on `calibration_gage_list`**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationGages.py:23-25`
