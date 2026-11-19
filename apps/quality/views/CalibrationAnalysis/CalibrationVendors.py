@@ -24,7 +24,6 @@ def calibration_vendor_directory(request):
     if search_query:
         vendors_qs = vendors_qs.filter(
             Q(name__icontains=search_query)
-            | Q(legal_name__icontains=search_query)
             | Q(tax_id__icontains=search_query)
         )
 
