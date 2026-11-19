@@ -1,0 +1,1138 @@
+"""Unit and invariant tests for Module 12.10 Calibration & Measurement System Analysis (MSA) models.
+
+Covers:
+- CalibrationGage (QGAG-)
+- CalibrationRecord (QCAL-)
+- OutOfToleranceInvestigation (QOOT-)
+- MeasurementSystemAnalysis (QMSA-)
+"""
+from datetime import timedelta
+from decimal import Decimal
+import uuid
+
+import pytest
+from django.db import IntegrityError, transaction
+from django.utils import timezone
+
+from apps.core.models import OrgUnit, Party, PartyRole
+from apps.quality.forms.CalibrationAnalysis.CalibrationGages import CalibrationGageForm
+from apps.quality.models import (
+    CapaInvestigation,
+    CalibrationGage,
+    CalibrationRecord,
+    ControlledDocument,
+    NonConformanceReport,
+    MeasurementSystemAnalysis,
+    OutOfToleranceInvestigation,
+)
+from apps.scm.models.AssetManagement.Assets import Asset
+from apps.scm.models.Manufacturing.WorkCenters import WorkCenter
+
+pytestmark = pytest.mark.django_db
+
+
+# =============================================================================
+# Helper Utilities (all prefixed `_calibrationanalysis_*`)
+# =============================================================================
+
+def _calibrationanalysis_sample_date(days_offset=0):
+    """Return a date relative to today."""
+    return timezone.now().date() + timedelta(days=days_offset)
+
+
+def _calibrationanalysis_create_gage(tenant, **kwargs):
+    """Helper to create a CalibrationGage instance with deterministic defaults."""
+    uid = uuid.uuid4().hex[:6]
+    defaults = {
+        "tenant": tenant,
+        "gage_id": f"GAG-TEST-{uid}",
+        "name": f"Test Gage {uid}",
+        "gage_type": "caliper_micrometer",
+        "criticality": "major",
+        "status": "active_in_service",
+        "manufacturer": "Mitutoyo",
+        "model_number": "500-196-30",
+        "serial_number": f"SN-{uid}",
+        "measurement_range": "0 - 150 mm",
+        "resolution": "0.01 mm",
+        "accuracy_spec": "+/- 0.02 mm",
+        "max_permissible_error": Decimal("0.0200"),
+        "engineering_unit": "mm",
+        "calibration_interval_days": 365,
+    }
+    defaults.update(kwargs)
+    return CalibrationGage.objects.create(**defaults)
+
+
+def _calibrationanalysis_create_record(tenant, gage, **kwargs):
+    """Helper to create a CalibrationRecord instance with deterministic defaults."""
+    defaults = {
+        "tenant": tenant,
+        "gage": gage,
+        "calibration_date": _calibrationanalysis_sample_date(-5),
+        "calibration_type": "internal_metrology",
+        "status": "completed",
+        "as_found_condition": "in_tolerance",
+        "as_left_condition": "in_tolerance",
+        "overall_result": "pass",
+        "ambient_temperature_c": Decimal("20.00"),
+        "ambient_relative_humidity": Decimal("45.00"),
+        "expanded_uncertainty": Decimal("0.0020"),
+        "test_uncertainty_ratio": Decimal("4.00"),
+        "max_observed_error": Decimal("0.0050"),
+        "guardband_applied": True,
+        "technician_name": "Test Technician",
+    }
+    defaults.update(kwargs)
+    return CalibrationRecord.objects.create(**defaults)
+
+
+def _calibrationanalysis_create_oot(tenant, record, gage, **kwargs):
+    """Helper to create an OutOfToleranceInvestigation instance with defaults."""
+    uid = uuid.uuid4().hex[:6]
+    defaults = {
+        "tenant": tenant,
+        "calibration_record": record,
+        "gage": gage,
+        "title": f"OOT Investigation {uid}",
+        "status": "open",
+        "risk_level": "major",
+        "as_found_error_description": "Excessive measurement drift observed during calibration.",
+        "suspect_window_start": _calibrationanalysis_sample_date(-60),
+        "suspect_window_end": _calibrationanalysis_sample_date(-5),
+        "suspect_lots_count": 5,
+        "consumer_risk_rating": 3,
+        "producer_risk_rating": 3,
+    }
+    defaults.update(kwargs)
+    return OutOfToleranceInvestigation.objects.create(**defaults)
+
+
+def _calibrationanalysis_create_msa(tenant, gage, **kwargs):
+    """Helper to create a MeasurementSystemAnalysis instance with defaults."""
+    uid = uuid.uuid4().hex[:6]
+    defaults = {
+        "tenant": tenant,
+        "gage": gage,
+        "study_title": f"Gage R&R Study {uid}",
+        "study_type": "gage_rr_crossed",
+        "analysis_method": "anova",
+        "status": "draft",
+        "characteristic_name": "Outer Diameter",
+        "study_date": _calibrationanalysis_sample_date(-2),
+        "number_of_operators": 3,
+        "number_of_parts": 10,
+        "number_of_trials": 3,
+        "specification_tolerance": Decimal("0.1000"),
+    }
+    defaults.update(kwargs)
+    return MeasurementSystemAnalysis.objects.create(**defaults)
+
+
+# =============================================================================
+# 1. CalibrationGage Model Tests
+# =============================================================================
+
+def test_calibrationanalysis_models_gage_creation_defaults_and_prefix(tenant_a, cal_gage_a):
+    """Verify CalibrationGage prefix, autogenerated number, and default fields."""
+    assert cal_gage_a.pk is not None
+    assert cal_gage_a.NUMBER_PREFIX == "QGAG"
+    assert cal_gage_a.number.startswith("QGAG-")
+    assert cal_gage_a.gage_id == "GAG-DIG-002"
+    assert cal_gage_a.name == "Digital Outside Micrometer 0-25mm"
+    assert cal_gage_a.gage_type == "caliper_micrometer"
+    assert cal_gage_a.criticality == "critical"
+    assert cal_gage_a.status == "active_in_service"
+    assert cal_gage_a.is_reference_standard is False
+    assert cal_gage_a.reference_standard_parent is not None
+
+    # Minimal instance testing default fields
+    gage_min = CalibrationGage.objects.create(
+        tenant=tenant_a,
+        gage_id="GAG-MIN-001",
+        name="Minimal Digital Caliper",
+    )
+    assert gage_min.pk is not None
+    assert gage_min.number.startswith("QGAG-")
+    assert gage_min.gage_type == "caliper_micrometer"
+    assert gage_min.criticality == "major"
+    assert gage_min.status == "active_in_service"
+    assert gage_min.max_permissible_error == Decimal("0.0200")
+    assert gage_min.engineering_unit == "mm"
+    assert gage_min.is_reference_standard is False
+    assert gage_min.nist_traceability_number == ""
+    assert gage_min.reference_standard_parent is None
+    assert gage_min.calibration_interval_days == 365
+    assert gage_min.last_calibration_date is None
+    assert gage_min.next_calibration_due is None
+    assert gage_min.last_calibration_result == ""
+    assert gage_min.notes == ""
+
+
+def test_calibrationanalysis_models_gage_str_formatting(tenant_a):
+    """Verify CalibrationGage __str__ format: f'{gage_id} — {name} ({status_display})'."""
+    gage = _calibrationanalysis_create_gage(
+        tenant_a,
+        gage_id="GAG-STR-01",
+        name="Dial Indicator 0-10mm",
+        status="active_in_service",
+    )
+    expected = f"{gage.gage_id} — {gage.name} ({gage.get_status_display()})"
+    assert str(gage) == expected
+    assert "Active / In-Service" in str(gage)
+
+    gage.status = "past_due"
+    assert "Past Due / Overdue" in str(gage)
+
+
+def test_calibrationanalysis_models_gage_status_choices_and_css(tenant_a):
+    """Verify CalibrationGage status choices and status_css property mapping."""
+    valid_statuses = [code for code, _ in CalibrationGage.STATUS_CHOICES]
+    assert valid_statuses == [
+        "active_in_service",
+        "in_calibration",
+        "pending_calibration",
+        "past_due",
+        "quarantined_oot",
+        "out_of_service",
+        "retired",
+    ]
+
+    expected_css_map = {
+        "active_in_service": "badge-green",
+        "in_calibration": "badge-info",
+        "pending_calibration": "badge-amber",
+        "past_due": "badge-red",
+        "quarantined_oot": "badge-red",
+        "out_of_service": "badge-muted",
+        "retired": "badge-slate",
+    }
+
+    gage = _calibrationanalysis_create_gage(tenant_a)
+    for st, expected_badge in expected_css_map.items():
+        gage.status = st
+        assert gage.status_css == expected_badge
+
+    gage.status = "invalid_status_code"
+    assert gage.status_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_gage_type_choices_and_css(tenant_a):
+    """Verify CalibrationGage gage type choices and gage_type_css property mapping."""
+    valid_types = [code for code, _ in CalibrationGage.GAGE_TYPE_CHOICES]
+    assert "caliper_micrometer" in valid_types
+    assert "pressure_vacuum" in valid_types
+    assert "temperature_humidity" in valid_types
+    assert "electrical_multimeter" in valid_types
+    assert "torque_force" in valid_types
+    assert "optical_comparator" in valid_types
+    assert "cmm_coordinate" in valid_types
+    assert "gauge_block_pin" in valid_types
+    assert "mass_balance" in valid_types
+    assert "flow_level" in valid_types
+    assert "other_instrument" in valid_types
+
+    expected_css = {
+        "caliper_micrometer": "badge-info",
+        "pressure_vacuum": "badge-slate",
+        "temperature_humidity": "badge-amber",
+        "electrical_multimeter": "badge-info",
+        "torque_force": "badge-slate",
+        "optical_comparator": "badge-slate",
+        "cmm_coordinate": "badge-info",
+        "gauge_block_pin": "badge-slate",
+        "mass_balance": "badge-info",
+        "flow_level": "badge-slate",
+        "other_instrument": "badge-muted",
+    }
+
+    gage = _calibrationanalysis_create_gage(tenant_a)
+    for gtype, expected_badge in expected_css.items():
+        gage.gage_type = gtype
+        assert gage.gage_type_css == expected_badge
+
+    gage.gage_type = "unknown_type"
+    assert gage.gage_type_css == "badge-info"
+
+
+def test_calibrationanalysis_models_gage_criticality_choices_and_css(tenant_a):
+    """Verify CalibrationGage criticality choices and criticality_css badge mapping."""
+    valid_criticalities = [code for code, _ in CalibrationGage.CRITICALITY_CHOICES]
+    assert valid_criticalities == ["critical", "major", "minor"]
+
+    expected_css = {
+        "critical": "badge-red",
+        "major": "badge-amber",
+        "minor": "badge-muted",
+    }
+
+    gage = _calibrationanalysis_create_gage(tenant_a)
+    for crit, expected_badge in expected_css.items():
+        gage.criticality = crit
+        assert gage.criticality_css == expected_badge
+
+    gage.criticality = "unknown_crit"
+    assert gage.criticality_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_gage_reference_standard_and_traceability(tenant_a, cal_standard_a):
+    """Verify reference standard flag, NIST traceability, and high precision specs."""
+    assert cal_standard_a.is_reference_standard is True
+    assert cal_standard_a.nist_traceability_number == "NIST-MET-2026-8810"
+    assert cal_standard_a.gage_type == "gauge_block_pin"
+    assert cal_standard_a.max_permissible_error == Decimal("0.00012")
+    assert cal_standard_a.resolution == "0.0001 mm"
+    assert cal_standard_a.accuracy_spec == "Grade 0 ISO 3650"
+    assert cal_standard_a.engineering_unit == "mm"
+
+
+def test_calibrationanalysis_models_gage_hierarchy_traversal(tenant_a, cal_standard_a, cal_gage_a):
+    """Verify parent-child reference standard hierarchy and bidirectional traversal."""
+    assert cal_gage_a.reference_standard_parent == cal_standard_a
+
+    # Child -> Parent traversal
+    parent = cal_gage_a.reference_standard_parent
+    assert parent.is_reference_standard is True
+    assert parent.gage_id == "GAG-REF-001"
+
+    # Parent -> Subordinates reverse traversal
+    subordinates = list(cal_standard_a.subordinate_gages.all())
+    assert cal_gage_a in subordinates
+
+    # Multi-tier hierarchy: Master Standard -> Working Standard -> Field Gage
+    field_gage = _calibrationanalysis_create_gage(
+        tenant_a,
+        gage_id="GAG-FIELD-01",
+        name="Production Vernier Height Gage",
+        reference_standard_parent=cal_gage_a,
+    )
+    assert field_gage.reference_standard_parent == cal_gage_a
+    assert field_gage.reference_standard_parent.reference_standard_parent == cal_standard_a
+    assert field_gage in cal_gage_a.subordinate_gages.all()
+
+
+def test_calibrationanalysis_models_gage_self_parenting_prevention_at_form(tenant_a, cal_gage_a):
+    """Verify CalibrationGageForm prevents self-parenting: instance excluded from parent queryset and rejected on submission."""
+    # Instance cannot be selected as parent - excluded in queryset
+    form = CalibrationGageForm(instance=cal_gage_a, tenant=tenant_a)
+    parent_choices_ids = [c[0] for c in form.fields["reference_standard_parent"].choices if c[0]]
+    assert cal_gage_a.pk not in parent_choices_ids
+
+    # Submitting self as parent is rejected
+    form_data = {
+        "gage_id": cal_gage_a.gage_id,
+        "name": cal_gage_a.name,
+        "gage_type": cal_gage_a.gage_type,
+        "criticality": cal_gage_a.criticality,
+        "status": cal_gage_a.status,
+        "reference_standard_parent": cal_gage_a.pk,  # Invalid: self as parent
+        "max_permissible_error": "0.0200",
+        "engineering_unit": "mm",
+        "calibration_interval_days": 365,
+    }
+    bound_form = CalibrationGageForm(data=form_data, instance=cal_gage_a, tenant=tenant_a)
+    assert bound_form.is_valid() is False
+    assert "reference_standard_parent" in bound_form.errors
+
+
+def test_calibrationanalysis_models_gage_unique_constraints(tenant_a):
+    """Verify UniqueConstraint on (tenant, number) and (tenant, gage_id)."""
+    gage1 = _calibrationanalysis_create_gage(tenant_a, gage_id="GAG-UNIQ-001")
+
+    # Duplicate gage_id within same tenant must raise IntegrityError
+    with transaction.atomic():
+        with pytest.raises(IntegrityError):
+            _calibrationanalysis_create_gage(tenant_a, gage_id="GAG-UNIQ-001")
+
+    # Duplicate number within same tenant must raise IntegrityError
+    with transaction.atomic():
+        with pytest.raises(IntegrityError):
+            CalibrationGage.objects.create(
+                tenant=tenant_a,
+                number=gage1.number,
+                gage_id="GAG-UNIQ-002",
+                name="Colliding Number Gage",
+            )
+
+
+def test_calibrationanalysis_models_gage_multi_tenant_isolation(tenant_a, tenant_b):
+    """Verify gages with same gage_id can exist across different tenants with full isolation."""
+    gage_a = _calibrationanalysis_create_gage(tenant_a, gage_id="GAG-SHARED-ID")
+    gage_b = _calibrationanalysis_create_gage(tenant_b, gage_id="GAG-SHARED-ID")
+
+    assert gage_a.pk != gage_b.pk
+    assert gage_a.tenant == tenant_a
+    assert gage_b.tenant == tenant_b
+
+    # Tenant-filtered queries must only return the tenant's own gages
+    qs_a = CalibrationGage.objects.filter(tenant=tenant_a, gage_id="GAG-SHARED-ID")
+    qs_b = CalibrationGage.objects.filter(tenant=tenant_b, gage_id="GAG-SHARED-ID")
+    assert qs_a.count() == 1
+    assert qs_a.first() == gage_a
+    assert qs_b.count() == 1
+    assert qs_b.first() == gage_b
+
+
+def test_calibrationanalysis_models_gage_optional_foreign_keys(tenant_a, admin_user, quality_department, quality_doc_draft):
+    """Verify nullable foreign keys and SET_NULL behavior on delete."""
+    gage = _calibrationanalysis_create_gage(
+        tenant_a,
+        department=quality_department,
+        custodian=admin_user,
+        sop_document=quality_doc_draft,
+    )
+
+    assert gage.department == quality_department
+    assert gage.custodian == admin_user
+    assert gage.sop_document == quality_doc_draft
+
+    # Delete SOP document -> gage.sop_document set to null
+    quality_doc_draft.delete()
+    gage.refresh_from_db()
+    assert gage.sop_document is None
+
+
+# =============================================================================
+# 2. CalibrationRecord Model Tests
+# =============================================================================
+
+def test_calibrationanalysis_models_record_creation_defaults_and_prefix(tenant_a, cal_gage_a, cal_record_a):
+    """Verify CalibrationRecord prefix, autogenerated number, and defaults."""
+    assert cal_record_a.pk is not None
+    assert cal_record_a.NUMBER_PREFIX == "QCAL"
+    assert cal_record_a.number.startswith("QCAL-")
+    assert cal_record_a.gage == cal_gage_a
+    assert cal_record_a.calibration_type == "external_accredited"
+    assert cal_record_a.status == "completed"
+    assert cal_record_a.overall_result == "pass"
+    assert cal_record_a.ambient_temperature_c == Decimal("20.10")
+    assert cal_record_a.ambient_relative_humidity == Decimal("45.00")
+    assert cal_record_a.guardband_applied is True
+
+    # Minimal record testing default fields
+    record_min = CalibrationRecord.objects.create(
+        tenant=tenant_a,
+        gage=cal_gage_a,
+    )
+    assert record_min.pk is not None
+    assert record_min.number.startswith("QCAL-")
+    assert record_min.calibration_type == "internal_metrology"
+    assert record_min.status == "completed"
+    assert record_min.as_found_condition == "in_tolerance"
+    assert record_min.as_left_condition == "in_tolerance"
+    assert record_min.overall_result == "pass"
+    assert record_min.ambient_temperature_c == Decimal("20.00")
+    assert record_min.ambient_relative_humidity == Decimal("45.00")
+    assert record_min.expanded_uncertainty == Decimal("0.0020")
+    assert record_min.test_uncertainty_ratio == Decimal("4.00")
+    assert record_min.max_observed_error == Decimal("0.0050")
+    assert record_min.guardband_applied is True
+    assert record_min.test_points_data == []
+    assert record_min.service_vendor is None
+    assert record_min.certificate_number == ""
+    assert record_min.calibrated_by_user is None
+    assert record_min.approved_by is None
+    assert record_min.approved_at is None
+    assert record_min.notes == ""
+
+
+def test_calibrationanalysis_models_record_str_formatting(tenant_a, cal_gage_a):
+    """Verify CalibrationRecord __str__ formatting with cached and non-cached gage."""
+    record = _calibrationanalysis_create_record(
+        tenant_a,
+        cal_gage_a,
+        overall_result="pass",
+    )
+    expected = f"{record.number} — {cal_gage_a.gage_id} ({record.get_overall_result_display()})"
+    assert str(record) == expected
+    assert "Pass (Fully Conforming)" in str(record)
+
+    record.overall_result = "fail_out_of_tolerance"
+    assert "Fail (Out-of-Tolerance)" in str(record)
+
+
+def test_calibrationanalysis_models_record_calibration_type_choices_and_css(tenant_a, cal_gage_a):
+    """Verify CalibrationRecord calibration type choices and calibration_type_css."""
+    valid_types = [code for code, _ in CalibrationRecord.CALIBRATION_TYPE_CHOICES]
+    assert valid_types == [
+        "internal_metrology",
+        "external_accredited",
+        "oem_factory",
+        "on_site_field",
+    ]
+
+    expected_css = {
+        "internal_metrology": "badge-info",
+        "external_accredited": "badge-slate",
+        "oem_factory": "badge-slate",
+        "on_site_field": "badge-info",
+    }
+
+    record = _calibrationanalysis_create_record(tenant_a, cal_gage_a)
+    for ctype, expected_badge in expected_css.items():
+        record.calibration_type = ctype
+        assert record.calibration_type_css == expected_badge
+
+    record.calibration_type = "invalid_type"
+    assert record.calibration_type_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_record_overall_result_choices_and_css(tenant_a, cal_gage_a):
+    """Verify CalibrationRecord overall result choices and result_css badge mapping."""
+    valid_results = [code for code, _ in CalibrationRecord.OVERALL_RESULT_CHOICES]
+    assert valid_results == [
+        "pass",
+        "pass_with_limitations",
+        "fail_out_of_tolerance",
+        "fail_unrepairable",
+    ]
+
+    expected_css = {
+        "pass": "badge-green",
+        "pass_with_limitations": "badge-amber",
+        "fail_out_of_tolerance": "badge-red",
+        "fail_unrepairable": "badge-red",
+    }
+
+    record = _calibrationanalysis_create_record(tenant_a, cal_gage_a)
+    for res, expected_badge in expected_css.items():
+        record.overall_result = res
+        assert record.result_css == expected_badge
+
+    record.overall_result = "unknown_result"
+    assert record.result_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_record_status_choices_and_css(tenant_a, cal_gage_a):
+    """Verify CalibrationRecord status choices and status_css badge mapping."""
+    valid_statuses = [code for code, _ in CalibrationRecord.STATUS_CHOICES]
+    assert valid_statuses == ["draft", "in_progress", "completed", "rejected"]
+
+    expected_css = {
+        "draft": "badge-slate",
+        "in_progress": "badge-amber",
+        "completed": "badge-green",
+        "rejected": "badge-red",
+    }
+
+    record = _calibrationanalysis_create_record(tenant_a, cal_gage_a)
+    for st, expected_badge in expected_css.items():
+        record.status = st
+        assert record.status_css == expected_badge
+
+    record.status = "unknown_status"
+    assert record.status_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_record_metrological_fields(tenant_a, cal_gage_a):
+    """Verify metrological fields: temperature, humidity, uncertainty, TUR, guardbanding."""
+    record = _calibrationanalysis_create_record(
+        tenant_a,
+        cal_gage_a,
+        ambient_temperature_c=Decimal("20.15"),
+        ambient_relative_humidity=Decimal("42.50"),
+        expanded_uncertainty=Decimal("0.00045"),
+        test_uncertainty_ratio=Decimal("4.44"),
+        max_observed_error=Decimal("0.0012"),
+        guardband_applied=True,
+    )
+    assert record.ambient_temperature_c == Decimal("20.15")
+    assert record.ambient_relative_humidity == Decimal("42.50")
+    assert record.expanded_uncertainty == Decimal("0.00045")
+    assert record.test_uncertainty_ratio == Decimal("4.44")
+    assert record.max_observed_error == Decimal("0.0012")
+    assert record.guardband_applied is True
+
+
+def test_calibrationanalysis_models_record_standards_used_m2m(tenant_a, cal_gage_a, cal_standard_a):
+    """Verify ManyToManyField standards_used with limit_choices_to and reverse relations."""
+    record = _calibrationanalysis_create_record(tenant_a, cal_gage_a)
+    record.standards_used.add(cal_standard_a)
+
+    assert cal_standard_a in record.standards_used.all()
+    assert record in cal_standard_a.calibrations_verified.all()
+
+    # Create another reference standard and link
+    std2 = _calibrationanalysis_create_gage(
+        tenant_a,
+        gage_id="GAG-REF-002",
+        name="Optical Flat 50mm",
+        is_reference_standard=True,
+    )
+    record.standards_used.add(std2)
+    assert record.standards_used.count() == 2
+
+    # Check limit_choices_to definition
+    limit = CalibrationRecord._meta.get_field("standards_used").get_limit_choices_to()
+    assert limit == {"is_reference_standard": True}
+
+
+def test_calibrationanalysis_models_record_test_points_json_data(tenant_a, cal_gage_a):
+    """Verify JSONField test_points_data stores and retrieves calibration point arrays."""
+    points = [
+        {"nominal": 0.0, "as_found": 0.0002, "error": 0.0002, "as_left": 0.0001, "limit": 0.0020},
+        {"nominal": 5.0, "as_found": 5.0005, "error": 0.0005, "as_left": 0.0002, "limit": 0.0020},
+        {"nominal": 15.0, "as_found": 15.0012, "error": 0.0012, "as_left": 0.0004, "limit": 0.0020},
+        {"nominal": 25.0, "as_found": 25.0019, "error": 0.0019, "as_left": 0.0006, "limit": 0.0020},
+    ]
+    record = _calibrationanalysis_create_record(tenant_a, cal_gage_a, test_points_data=points)
+    record.refresh_from_db()
+    assert len(record.test_points_data) == 4
+    assert record.test_points_data[1]["nominal"] == 5.0
+    assert record.test_points_data[3]["error"] == 0.0019
+
+
+def test_calibrationanalysis_models_record_nullable_foreign_keys(tenant_a, cal_gage_a, cal_vendor_a, admin_user):
+    """Verify service_vendor, calibrated_by_user, and approved_by relations and SET_NULL."""
+    record = _calibrationanalysis_create_record(
+        tenant_a,
+        cal_gage_a,
+        service_vendor=cal_vendor_a,
+        calibrated_by_user=admin_user,
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+    )
+    assert record.service_vendor == cal_vendor_a
+    assert record.calibrated_by_user == admin_user
+    assert record.approved_by == admin_user
+
+    # Vendor reverse relation
+    assert record in cal_vendor_a.calibrations_performed.all()
+
+
+def test_calibrationanalysis_models_record_cascade_on_gage_delete(tenant_a):
+    """Verify deleting a CalibrationGage cascades and deletes its calibration records."""
+    gage = _calibrationanalysis_create_gage(tenant_a)
+    rec1 = _calibrationanalysis_create_record(tenant_a, gage)
+    rec2 = _calibrationanalysis_create_record(tenant_a, gage)
+
+    assert CalibrationRecord.objects.filter(gage=gage).count() == 2
+    gage.delete()
+    assert CalibrationRecord.objects.filter(pk__in=[rec1.pk, rec2.pk]).count() == 0
+
+
+def test_calibrationanalysis_models_record_unique_and_tenant_isolation(tenant_a, tenant_b, cal_gage_a, cal_gage_b):
+    """Verify UniqueConstraint on (tenant, number) and tenant isolation for records."""
+    rec_a = _calibrationanalysis_create_record(tenant_a, cal_gage_a)
+    rec_b = _calibrationanalysis_create_record(tenant_b, cal_gage_b)
+
+    assert rec_a.tenant == tenant_a
+    assert rec_b.tenant == tenant_b
+
+    # Colliding number on same tenant raises IntegrityError
+    with transaction.atomic():
+        with pytest.raises(IntegrityError):
+            CalibrationRecord.objects.create(
+                tenant=tenant_a,
+                gage=cal_gage_a,
+                number=rec_a.number,
+            )
+
+    # Filter by tenant isolates records
+    assert CalibrationRecord.objects.filter(tenant=tenant_a).count() >= 1
+    assert rec_b not in CalibrationRecord.objects.filter(tenant=tenant_a)
+
+
+# =============================================================================
+# 3. OutOfToleranceInvestigation Model Tests
+# =============================================================================
+
+def test_calibrationanalysis_models_oot_creation_defaults_and_prefix(tenant_a, cal_gage_a, cal_record_oot_a, cal_oot_a):
+    """Verify OutOfToleranceInvestigation prefix, autogenerated number, and defaults."""
+    assert cal_oot_a.pk is not None
+    assert cal_oot_a.NUMBER_PREFIX == "QOOT"
+    assert cal_oot_a.number.startswith("QOOT-")
+    assert cal_oot_a.gage == cal_gage_a
+    assert cal_oot_a.calibration_record == cal_record_oot_a
+    assert cal_oot_a.status == "investigating"
+    assert cal_oot_a.risk_level == "critical"
+    assert cal_oot_a.suspect_lots_count == 150
+    assert cal_oot_a.consumer_risk_rating == 4
+    assert cal_oot_a.producer_risk_rating == 3
+    assert cal_oot_a.product_recall_required is False
+
+    # Minimal OOT instance testing defaults
+    oot_min = OutOfToleranceInvestigation.objects.create(
+        tenant=tenant_a,
+        calibration_record=cal_record_oot_a,
+        gage=cal_gage_a,
+        title="Minimal OOT Record",
+        as_found_error_description="Deviation detected.",
+        suspect_window_start=_calibrationanalysis_sample_date(-30),
+    )
+    assert oot_min.pk is not None
+    assert oot_min.number.startswith("QOOT-")
+    assert oot_min.status == "open"
+    assert oot_min.risk_level == "major"
+    assert oot_min.product_disposition == "pending_review"
+    assert oot_min.consumer_risk_rating == 3
+    assert oot_min.producer_risk_rating == 3
+    assert oot_min.suspect_lots_count == 0
+    assert oot_min.suspect_production_orders == ""
+    assert oot_min.products_affected == ""
+    assert oot_min.containment_actions_taken == ""
+    assert oot_min.customer_notification_required is False
+    assert oot_min.product_recall_required is False
+    assert oot_min.linked_ncr is None
+    assert oot_min.linked_capa is None
+    assert oot_min.investigator is None
+    assert oot_min.quality_approver is None
+    assert oot_min.closure_date is None
+    assert oot_min.conclusion_summary == ""
+
+
+def test_calibrationanalysis_models_oot_str_formatting(tenant_a, cal_gage_a, cal_record_oot_a):
+    """Verify OutOfToleranceInvestigation __str__ format: f'{number} — {title} ({risk_level_display})'."""
+    oot = _calibrationanalysis_create_oot(
+        tenant_a,
+        cal_record_oot_a,
+        cal_gage_a,
+        title="Torque Wrench Out of Spec",
+        risk_level="critical",
+    )
+    expected = f"{oot.number} — Torque Wrench Out of Spec ({oot.get_risk_level_display()})"
+    assert str(oot) == expected
+    assert "Critical" in str(oot)
+
+
+def test_calibrationanalysis_models_oot_risk_level_choices_and_css(tenant_a, cal_gage_a, cal_record_oot_a):
+    """Verify OutOfToleranceInvestigation risk level choices and risk_css badge mapping."""
+    valid_risks = [code for code, _ in OutOfToleranceInvestigation.RISK_LEVEL_CHOICES]
+    assert valid_risks == ["critical", "major", "minor", "no_impact"]
+
+    expected_css = {
+        "critical": "badge-red",
+        "major": "badge-amber",
+        "minor": "badge-info",
+        "no_impact": "badge-green",
+    }
+
+    oot = _calibrationanalysis_create_oot(tenant_a, cal_record_oot_a, cal_gage_a)
+    for risk, expected_badge in expected_css.items():
+        oot.risk_level = risk
+        assert oot.risk_css == expected_badge
+
+    oot.risk_level = "unknown_risk"
+    assert oot.risk_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_oot_status_choices_and_css(tenant_a, cal_gage_a, cal_record_oot_a):
+    """Verify OutOfToleranceInvestigation status choices and status_css badge mapping."""
+    valid_statuses = [code for code, _ in OutOfToleranceInvestigation.STATUS_CHOICES]
+    assert valid_statuses == ["open", "investigating", "mrb_review", "actions_pending", "closed"]
+
+    expected_css = {
+        "open": "badge-red",
+        "investigating": "badge-amber",
+        "mrb_review": "badge-info",
+        "actions_pending": "badge-amber",
+        "closed": "badge-green",
+    }
+
+    oot = _calibrationanalysis_create_oot(tenant_a, cal_record_oot_a, cal_gage_a)
+    for st, expected_badge in expected_css.items():
+        oot.status = st
+        assert oot.status_css == expected_badge
+
+    oot.status = "unknown_status"
+    assert oot.status_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_oot_disposition_choices_and_css(tenant_a, cal_gage_a, cal_record_oot_a):
+    """Verify OutOfToleranceInvestigation disposition choices and disposition_css."""
+    valid_dispositions = [code for code, _ in OutOfToleranceInvestigation.DISPOSITION_CHOICES]
+    assert valid_dispositions == [
+        "pending_review",
+        "use_as_is",
+        "re_inspect_inventory",
+        "customer_notification",
+        "quarantine_scrap",
+        "product_recall",
+    ]
+
+    expected_css = {
+        "pending_review": "badge-slate",
+        "use_as_is": "badge-info",
+        "re_inspect_inventory": "badge-amber",
+        "customer_notification": "badge-red",
+        "quarantine_scrap": "badge-red",
+        "product_recall": "badge-red",
+    }
+
+    oot = _calibrationanalysis_create_oot(tenant_a, cal_record_oot_a, cal_gage_a)
+    for disp, expected_badge in expected_css.items():
+        oot.product_disposition = disp
+        assert oot.disposition_css == expected_badge
+
+    oot.product_disposition = "unknown_disp"
+    assert oot.disposition_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_oot_suspect_window_and_metrics(tenant_a, cal_gage_a, cal_record_oot_a):
+    """Verify reverse-tracing window start/end, lots count, orders, and risk ratings."""
+    start = _calibrationanalysis_sample_date(-90)
+    end = _calibrationanalysis_sample_date(-5)
+    oot = _calibrationanalysis_create_oot(
+        tenant_a,
+        cal_record_oot_a,
+        cal_gage_a,
+        suspect_window_start=start,
+        suspect_window_end=end,
+        suspect_lots_count=12,
+        suspect_production_orders="WO-1001, WO-1002, WO-1005",
+        products_affected="Actuator Spool Valve 25mm",
+        consumer_risk_rating=5,
+        producer_risk_rating=4,
+    )
+    assert oot.suspect_window_start == start
+    assert oot.suspect_window_end == end
+    assert oot.suspect_lots_count == 12
+    assert "WO-1001" in oot.suspect_production_orders
+    assert oot.products_affected == "Actuator Spool Valve 25mm"
+    assert oot.consumer_risk_rating == 5
+    assert oot.producer_risk_rating == 4
+
+
+def test_calibrationanalysis_models_oot_containment_and_recall_flags(tenant_a, cal_gage_a, cal_record_oot_a):
+    """Verify containment actions, customer notification, and product recall flags."""
+    oot = _calibrationanalysis_create_oot(
+        tenant_a,
+        cal_record_oot_a,
+        cal_gage_a,
+        containment_actions_taken="Quarantined finished goods warehouse bay C-12",
+        customer_notification_required=True,
+        product_recall_required=True,
+        product_disposition="product_recall",
+    )
+    assert oot.customer_notification_required is True
+    assert oot.product_recall_required is True
+    assert oot.product_disposition == "product_recall"
+    assert "Quarantined" in oot.containment_actions_taken
+
+
+def test_calibrationanalysis_models_oot_links_to_ncr_and_capa(tenant_a, cal_gage_a, cal_record_oot_a, ncr_a, capa_investigation_a):
+    """Verify linking OutOfToleranceInvestigation to NCR and CAPA investigations."""
+    oot = _calibrationanalysis_create_oot(
+        tenant_a,
+        cal_record_oot_a,
+        cal_gage_a,
+        linked_ncr=ncr_a,
+        linked_capa=capa_investigation_a,
+    )
+
+    assert oot.linked_ncr == ncr_a
+    assert oot.linked_capa == capa_investigation_a
+    assert oot in ncr_a.oot_investigations.all()
+    assert oot in capa_investigation_a.oot_investigations.all()
+
+    # Verify SET_NULL on delete
+    ncr_a.delete()
+    oot.refresh_from_db()
+    assert oot.linked_ncr is None
+
+
+def test_calibrationanalysis_models_oot_cascade_on_gage_and_record_delete(tenant_a):
+    """Verify deleting the CalibrationGage or CalibrationRecord cascades to OOT."""
+    gage = _calibrationanalysis_create_gage(tenant_a)
+    record = _calibrationanalysis_create_record(tenant_a, gage)
+    oot = _calibrationanalysis_create_oot(tenant_a, record, gage)
+
+    assert OutOfToleranceInvestigation.objects.filter(pk=oot.pk).exists()
+    record.delete()
+    assert not OutOfToleranceInvestigation.objects.filter(pk=oot.pk).exists()
+
+
+def test_calibrationanalysis_models_oot_unique_and_tenant_isolation(tenant_a, tenant_b, cal_gage_a, cal_record_oot_a, cal_gage_b, cal_record_b):
+    """Verify UniqueConstraint on (tenant, number) and tenant isolation for OOT."""
+    oot_a = _calibrationanalysis_create_oot(tenant_a, cal_record_oot_a, cal_gage_a)
+    oot_b = _calibrationanalysis_create_oot(tenant_b, cal_record_b, cal_gage_b)
+
+    assert oot_a.tenant == tenant_a
+    assert oot_b.tenant == tenant_b
+
+    with transaction.atomic():
+        with pytest.raises(IntegrityError):
+            OutOfToleranceInvestigation.objects.create(
+                tenant=tenant_a,
+                number=oot_a.number,
+                calibration_record=cal_record_oot_a,
+                gage=cal_gage_a,
+                title="Duplicate Number OOT",
+                as_found_error_description="Error description",
+                suspect_window_start=_calibrationanalysis_sample_date(-10),
+            )
+
+    assert oot_b not in OutOfToleranceInvestigation.objects.filter(tenant=tenant_a)
+
+
+# =============================================================================
+# 4. MeasurementSystemAnalysis Model Tests
+# =============================================================================
+
+def test_calibrationanalysis_models_msa_creation_defaults_and_prefix(tenant_a, cal_gage_a, cal_msa_a):
+    """Verify MeasurementSystemAnalysis prefix, autogenerated number, and defaults."""
+    assert cal_msa_a.pk is not None
+    assert cal_msa_a.NUMBER_PREFIX == "QMSA"
+    assert cal_msa_a.number.startswith("QMSA-")
+    assert cal_msa_a.gage == cal_gage_a
+    assert cal_msa_a.study_title == "Machining Cell 1 Spool Diameter Gage R&R Study"
+    assert cal_msa_a.study_type == "gage_rr_crossed"
+    assert cal_msa_a.analysis_method == "anova"
+    assert cal_msa_a.status == "approved"
+    assert cal_msa_a.number_of_operators == 3
+    assert cal_msa_a.number_of_parts == 10
+    assert cal_msa_a.number_of_trials == 3
+    assert cal_msa_a.specification_tolerance == Decimal("0.0500")
+
+    # Minimal MSA instance testing default fields
+    msa_min = MeasurementSystemAnalysis.objects.create(
+        tenant=tenant_a,
+        gage=cal_gage_a,
+        study_title="Minimal MSA Study",
+        characteristic_name="Shaft OD",
+    )
+    assert msa_min.pk is not None
+    assert msa_min.number.startswith("QMSA-")
+    assert msa_min.study_type == "gage_rr_crossed"
+    assert msa_min.analysis_method == "anova"
+    assert msa_min.status == "draft"
+    assert msa_min.study_result == "acceptable"
+    assert msa_min.number_of_operators == 3
+    assert msa_min.number_of_parts == 10
+    assert msa_min.number_of_trials == 3
+    assert msa_min.specification_tolerance == Decimal("0.1000")
+    assert msa_min.repeatability_ev == Decimal("0.0000")
+    assert msa_min.reproducibility_av == Decimal("0.0000")
+    assert msa_min.gage_rr_grr == Decimal("0.0000")
+    assert msa_min.part_variation_pv == Decimal("0.0000")
+    assert msa_min.total_variation_tv == Decimal("0.0000")
+    assert msa_min.percent_gage_rr_study_variation == Decimal("0.00")
+    assert msa_min.percent_tolerance_pt_ratio == Decimal("0.00")
+    assert msa_min.number_of_distinct_categories_ndc == Decimal("0.00")
+    assert msa_min.bias_value is None
+    assert msa_min.bias_percentage is None
+    assert msa_min.linearity_slope is None
+    assert msa_min.linearity_r_squared is None
+    assert msa_min.raw_study_data == {}
+    assert msa_min.study_protocol_doc is None
+    assert msa_min.study_lead is None
+    assert msa_min.approved_by is None
+    assert msa_min.approved_at is None
+    assert msa_min.conclusion == ""
+    assert msa_min.notes == ""
+
+
+def test_calibrationanalysis_models_msa_str_formatting(tenant_a, cal_gage_a):
+    """Verify MeasurementSystemAnalysis __str__ format: f'{number} — {study_title} ({study_result_display})'."""
+    msa = _calibrationanalysis_create_msa(
+        tenant_a,
+        cal_gage_a,
+        study_title="Pin Diameter Gage R&R",
+        study_result="acceptable",
+    )
+    expected = f"{msa.number} — Pin Diameter Gage R&R ({msa.get_study_result_display()})"
+    assert str(msa) == expected
+    assert "Acceptable" in str(msa)
+
+
+def test_calibrationanalysis_models_msa_study_type_choices_and_css(tenant_a, cal_gage_a):
+    """Verify MeasurementSystemAnalysis study type choices and study_type_css."""
+    valid_types = [code for code, _ in MeasurementSystemAnalysis.STUDY_TYPE_CHOICES]
+    assert valid_types == [
+        "gage_rr_crossed",
+        "gage_rr_nested",
+        "linearity_and_bias",
+        "stability_study",
+        "attribute_agreement",
+        "type_1_gage_study",
+    ]
+
+    expected_css = {
+        "gage_rr_crossed": "badge-info",
+        "gage_rr_nested": "badge-slate",
+        "linearity_and_bias": "badge-amber",
+        "stability_study": "badge-slate",
+        "attribute_agreement": "badge-info",
+        "type_1_gage_study": "badge-info",
+    }
+
+    msa = _calibrationanalysis_create_msa(tenant_a, cal_gage_a)
+    for stype, expected_badge in expected_css.items():
+        msa.study_type = stype
+        assert msa.study_type_css == expected_badge
+
+    msa.study_type = "invalid_stype"
+    assert msa.study_type_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_msa_analysis_method_choices(tenant_a, cal_gage_a):
+    """Verify MeasurementSystemAnalysis analysis method choices (ANOVA vs Xbar-R)."""
+    valid_methods = [code for code, _ in MeasurementSystemAnalysis.ANALYSIS_METHOD_CHOICES]
+    assert valid_methods == ["anova", "average_and_range_xbar_r"]
+
+    msa = _calibrationanalysis_create_msa(tenant_a, cal_gage_a, analysis_method="anova")
+    assert msa.analysis_method == "anova"
+
+    msa.analysis_method = "average_and_range_xbar_r"
+    assert msa.get_analysis_method_display() == "Average & Range (X-bar & R) Method"
+
+
+def test_calibrationanalysis_models_msa_status_choices_and_css(tenant_a, cal_gage_a):
+    """Verify MeasurementSystemAnalysis status choices and status_css badge mapping."""
+    valid_statuses = [code for code, _ in MeasurementSystemAnalysis.STATUS_CHOICES]
+    assert valid_statuses == ["draft", "data_collection", "analyzed", "approved", "rejected"]
+
+    expected_css = {
+        "draft": "badge-slate",
+        "data_collection": "badge-amber",
+        "analyzed": "badge-info",
+        "approved": "badge-green",
+        "rejected": "badge-red",
+    }
+
+    msa = _calibrationanalysis_create_msa(tenant_a, cal_gage_a)
+    for st, expected_badge in expected_css.items():
+        msa.status = st
+        assert msa.status_css == expected_badge
+
+    msa.status = "invalid_status"
+    assert msa.status_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_msa_result_choices_and_css(tenant_a, cal_gage_a):
+    """Verify MeasurementSystemAnalysis study result choices and result_css badge mapping."""
+    valid_results = [code for code, _ in MeasurementSystemAnalysis.RESULT_CHOICES]
+    assert valid_results == ["acceptable", "marginal_conditional", "unacceptable"]
+
+    expected_css = {
+        "acceptable": "badge-green",
+        "marginal_conditional": "badge-amber",
+        "unacceptable": "badge-red",
+    }
+
+    msa = _calibrationanalysis_create_msa(tenant_a, cal_gage_a)
+    for res, expected_badge in expected_css.items():
+        msa.study_result = res
+        assert msa.result_css == expected_badge
+
+    msa.study_result = "invalid_result"
+    assert msa.result_css == "badge-slate"
+
+
+def test_calibrationanalysis_models_msa_anova_metrics(tenant_a, cal_gage_a):
+    """Verify ANOVA variance components: repeatability_ev, reproducibility_av, gage_rr_grr, part_variation_pv, total_variation_tv."""
+    msa = _calibrationanalysis_create_msa(
+        tenant_a,
+        cal_gage_a,
+        repeatability_ev=Decimal("0.00185"),
+        reproducibility_av=Decimal("0.00112"),
+        gage_rr_grr=Decimal("0.00216"),
+        part_variation_pv=Decimal("0.01520"),
+        total_variation_tv=Decimal("0.01535"),
+    )
+    assert msa.repeatability_ev == Decimal("0.00185")
+    assert msa.reproducibility_av == Decimal("0.00112")
+    assert msa.gage_rr_grr == Decimal("0.00216")
+    assert msa.part_variation_pv == Decimal("0.01520")
+    assert msa.total_variation_tv == Decimal("0.01535")
+
+
+def test_calibrationanalysis_models_msa_acceptance_criteria_metrics(tenant_a, cal_gage_a):
+    """Verify %GRR study variation, %Tolerance P/T ratio, and NDC distinct categories."""
+    msa = _calibrationanalysis_create_msa(
+        tenant_a,
+        cal_gage_a,
+        percent_gage_rr_study_variation=Decimal("14.07"),
+        percent_tolerance_pt_ratio=Decimal("25.92"),
+        number_of_distinct_categories_ndc=Decimal("9.00"),
+        study_result="marginal_conditional",
+    )
+    assert msa.percent_gage_rr_study_variation == Decimal("14.07")
+    assert msa.percent_tolerance_pt_ratio == Decimal("25.92")
+    assert msa.number_of_distinct_categories_ndc == Decimal("9.00")
+    assert msa.study_result == "marginal_conditional"
+
+
+def test_calibrationanalysis_models_msa_linearity_and_bias_metrics(tenant_a, cal_gage_a):
+    """Verify linearity and bias metrics: bias_value, percentage, linearity_slope, linearity_r_squared."""
+    msa = _calibrationanalysis_create_msa(
+        tenant_a,
+        cal_gage_a,
+        study_type="linearity_and_bias",
+        reference_master_value=Decimal("25.0000"),
+        bias_value=Decimal("0.00020"),
+        bias_percentage=Decimal("0.40"),
+        linearity_slope=Decimal("0.00100"),
+        linearity_r_squared=Decimal("0.9850"),
+    )
+    assert msa.reference_master_value == Decimal("25.0000")
+    assert msa.bias_value == Decimal("0.00020")
+    assert msa.bias_percentage == Decimal("0.40")
+    assert msa.linearity_slope == Decimal("0.00100")
+    assert msa.linearity_r_squared == Decimal("0.9850")
+
+
+def test_calibrationanalysis_models_msa_raw_study_data_json(tenant_a, cal_gage_a):
+    """Verify raw_study_data JSONField storage of trial measurements."""
+    raw_data = {
+        "operators": ["Alice", "Bob", "Charlie"],
+        "parts": list(range(1, 11)),
+        "trials": 3,
+        "measurements": [
+            {"operator": "Alice", "part": 1, "trial": 1, "value": 25.002},
+            {"operator": "Alice", "part": 1, "trial": 2, "value": 25.001},
+            {"operator": "Alice", "part": 1, "trial": 3, "value": 25.003},
+        ],
+    }
+    msa = _calibrationanalysis_create_msa(tenant_a, cal_gage_a, raw_study_data=raw_data)
+    msa.refresh_from_db()
+    assert msa.raw_study_data["trials"] == 3
+    assert len(msa.raw_study_data["measurements"]) == 3
+    assert msa.raw_study_data["operators"][0] == "Alice"
+
+
+def test_calibrationanalysis_models_msa_cascade_and_relationships(tenant_a, admin_user, quality_doc_draft):
+    """Verify deleting CalibrationGage cascades to MSA studies, while user fields SET_NULL."""
+    gage = _calibrationanalysis_create_gage(tenant_a)
+    msa = _calibrationanalysis_create_msa(
+        tenant_a,
+        gage,
+        study_protocol_doc=quality_doc_draft,
+        study_lead=admin_user,
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+    )
+
+    assert msa.study_protocol_doc == quality_doc_draft
+    assert msa.study_lead == admin_user
+    assert msa.approved_by == admin_user
+
+    # Protocol doc deletion -> SET_NULL
+    quality_doc_draft.delete()
+    msa.refresh_from_db()
+    assert msa.study_protocol_doc is None
+
+    # Gage deletion -> CASCADE
+    gage.delete()
+    assert not MeasurementSystemAnalysis.objects.filter(pk=msa.pk).exists()
+
+
+def test_calibrationanalysis_models_msa_unique_and_tenant_isolation(tenant_a, tenant_b, cal_gage_a, cal_gage_b):
+    """Verify UniqueConstraint on (tenant, number) and tenant isolation for MSA studies."""
+    msa_a = _calibrationanalysis_create_msa(tenant_a, cal_gage_a)
+    msa_b = _calibrationanalysis_create_msa(tenant_b, cal_gage_b)
+
+    assert msa_a.tenant == tenant_a
+    assert msa_b.tenant == tenant_b
+
+    with transaction.atomic():
+        with pytest.raises(IntegrityError):
+            MeasurementSystemAnalysis.objects.create(
+                tenant=tenant_a,
+                number=msa_a.number,
+                gage=cal_gage_a,
+                study_title="Colliding MSA Number",
+                characteristic_name="Diameter",
+            )
+
+    assert msa_b not in MeasurementSystemAnalysis.objects.filter(tenant=tenant_a)
