@@ -48,7 +48,6 @@ def calibration_record_list(request):
     if status_filter:
         qs = qs.filter(status=status_filter)
 
-    total_calibrations = qs.count()
     oot_count = quality_scope(CalibrationRecord.objects.all(), request).filter(
         overall_result="fail_out_of_tolerance"
     ).count()
@@ -56,6 +55,7 @@ def calibration_record_list(request):
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    total_calibrations = page_obj.paginator.count
 
     context = {
         "calibration_records": page_obj,
