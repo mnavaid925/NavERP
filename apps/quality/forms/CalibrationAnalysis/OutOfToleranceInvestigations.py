@@ -62,6 +62,11 @@ class OutOfToleranceInvestigationForm(TenantUniqueMixin, TenantModelForm):
             self, cleaned,
             ["calibration_record", "gage", "suspect_work_center", "linked_ncr", "linked_capa", "investigator", "quality_approver"]
         )
+        cal_rec = cleaned.get("calibration_record")
+        gage = cleaned.get("gage")
+        if cal_rec and gage and cal_rec.gage_id != gage.pk:
+            self.add_error("calibration_record", "Calibration record does not belong to the selected gage.")
+
         start = cleaned.get("suspect_window_start")
         end = cleaned.get("suspect_window_end")
         if start and end and start > end:
