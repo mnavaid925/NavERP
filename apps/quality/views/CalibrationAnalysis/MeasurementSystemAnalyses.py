@@ -42,13 +42,13 @@ def measurement_system_analysis_list(request):
     if result_filter:
         qs = qs.filter(study_result=result_filter)
 
-    total_studies = qs.count()
     base_qs = quality_scope(MeasurementSystemAnalysis.objects.all(), request)
     acceptable_count = base_qs.filter(study_result="acceptable").count()
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    total_studies = page_obj.paginator.count
 
     context = {
         "msa_studies": page_obj,
