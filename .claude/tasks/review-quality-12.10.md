@@ -30,10 +30,10 @@
   - **Issue**: `calibration_record_create` sets `gage.status = "active_in_service"`, updates `last_calibration_date`, and advances `next_calibration_due` regardless of whether `record.status` is `"completed"`.
   - **Fix**: Gate status advancement and next due date updates strictly on `record.status == "completed"`. If `overall_result == "fail_out_of_tolerance"`, set `gage.status = "quarantined_oot"`. Mirror logic in `calibration_record_edit`. (fixed — fadef000)
 
-- [ ] **[I3] Cross-Record Consistency Check in OutOfToleranceInvestigationForm**:
+- [x] **[I3] Cross-Record Consistency Check in OutOfToleranceInvestigationForm**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/OutOfToleranceInvestigations.py:59-69`
   - **Issue**: Form accepts `calibration_record` and `gage` independently without verifying `calibration_record.gage_id == gage.pk`. Also misses validating `suspect_window_start <= suspect_window_end`.
-  - **Fix**: In `clean()`, validate that `cal_rec.gage_id == gage.pk`, and validate `suspect_window_start <= suspect_window_end`.
+  - **Fix**: In `clean()`, validate that `cal_rec.gage_id == gage.pk`, and validate `suspect_window_start <= suspect_window_end`. (fixed — bc8eb10d)
 
 - [ ] **[I4] Future Date Validation Omission in CalibrationRecordForm**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py:52-58`
