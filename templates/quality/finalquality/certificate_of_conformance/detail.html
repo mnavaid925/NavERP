@@ -183,7 +183,7 @@
         <div class="text-right border-t sm:border-t-0 sm:border-l sm:pl-6 border-slate-200">
           <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Authorized QA Signatory</div>
           <div class="text-base font-bold text-slate-900 mt-1">
-            {{ certificate.authorized_signatory.get_full_name|default:certificate.authorized_signatory.username|default:"Unsigned" }}
+            {% if certificate.authorized_signatory %}{{ certificate.authorized_signatory.get_full_name|default:certificate.authorized_signatory.username }}{% else %}Unsigned{% endif %}
           </div>
           <div class="text-xs text-slate-600">{{ certificate.signatory_title|default:"Director of Quality Assurance" }}</div>
           <div class="text-xs text-slate-500 mt-1">{{ certificate.signed_date|default:"" }}</div>
