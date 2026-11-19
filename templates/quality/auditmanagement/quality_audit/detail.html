@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+
+{% block title %}{{ quality_audit.number }} — Quality Audit — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Audits</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ quality_audit.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ quality_audit.title }}</h1>
+            {% if quality_audit.status == 'closed' %}
+            <span class="badge badge-green">{{ quality_audit.get_status_display }}</span>
+            {% elif quality_audit.status == 'in_progress' or quality_audit.status == 'capa_pending' %}
+            <span class="badge badge-amber">{{ quality_audit.get_status_display }}</span>
+            {% elif quality_audit.status == 'cancelled' %}
+            <span class="badge badge-red">{{ quality_audit.get_status_display }}</span>
+            {% else %}
+            <span class="badge badge-info">{{ quality_audit.get_status_display }}</span>
+            {% endif %}
+
+            {% if quality_audit.outcome == 'conforming' or quality_audit.outcome == 'passed' %}
+            <span class="badge badge-green">{{ quality_audit.get_outcome_display }}</span>
+            {% elif quality_audit.outcome == 'minor_findings' or quality_audit.outcome == 'conditional_pass' %}
+            <span class="badge badge-amber">{{ quality_audit.get_outcome_display }}</span>
+            {% elif quality_audit.outcome == 'major_findings' or quality_audit.outcome == 'critical_non_conformance' or quality_audit.outcome == 'failed' %}
+            <span class="badge badge-red">{{ quality_audit.get_outcome_display }}</span>
+            {% else %}
+            <span class="badge badge-muted">{{ quality_audit.get_outcome_display }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:audit_finding_create' %}?audit={{ quality_audit.pk }}" class="btn btn-primary">
+            <i data-lucide="alert-triangle"></i> Log Finding
+        </a>
+        {% if not quality_audit.report_published_date %}
+        <form method="post" action="{% url 'quality:quality_audit_publish_report' quality_audit.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="file-text"></i> Publish Report
+            </button>
+        </form>
+        {% endif %}
+        {% if quality_audit.status != 'closed' %}
+        <form method="post" action="{% url 'quality:quality_audit_close' quality_audit.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700">
+                <i data-lucide="check-circle-2"></i> Close Audit
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'quality:quality_audit_edit' quality_audit.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form method="post" action="{% url 'quality:quality_audit_delete' quality_audit.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Audit {{ quality_audit.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Audit Protocol & Parameters</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Audit Number</dt>
+                        <dd class="font-mono font-semibold">{{ quality_audit.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Governing Program</dt>
+                        <dd>
+                            {% if quality_audit.program %}
+                            <a href="{% url 'quality:audit_program_detail' quality_audit.program.pk %}" class="text-primary hover:underline">
+                                {{ quality_audit.program.number }} - {{ quality_audit.program.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">Ad-hoc / Unscheduled Audit</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Audit Classification</dt>
+                        <dd>
+                            {% if quality_audit.audit_type == 'regulatory_fda' or quality_audit.audit_type == 'special_for_cause' %}
+                            <span class="badge badge-red">{{ quality_audit.get_audit_type_display }}</span>
+                            {% elif quality_audit.audit_type == 'certification_notified_body' %}
+                            <span class="badge badge-amber">{{ quality_audit.get_audit_type_display }}</span>
+                            {% else %}
+                            <span class="badge badge-info">{{ quality_audit.get_audit_type_display }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Methodology</dt>
+                        <dd><span class="badge badge-slate">{{ quality_audit.get_audit_method_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Standard Framework</dt>
+                        <dd class="font-medium">{{ quality_audit.get_standard_framework_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Audited Entity / Unit</dt>
+                        <dd>
+                            {% if quality_audit.target_org_unit %}
+                            <span class="font-medium">{{ quality_audit.target_org_unit.name }}</span>
+                            <span class="text-xs text-muted">({{ quality_audit.target_org_unit.unit_type }})</span>
+                            {% elif quality_audit.external_entity %}
+                            <span class="font-medium">{{ quality_audit.external_entity.legal_name }}</span>
+                            <span class="text-xs text-muted">(External Body / Supplier)</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Lead Auditor</dt>
+                        <dd>
+                            {% if quality_audit.lead_auditor %}
+                            {{ quality_audit.lead_auditor.get_full_name|default:quality_audit.lead_auditor.username }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Auditee Representative</dt>
+                        <dd>
+                            {% if quality_audit.auditee_lead %}
+                            {{ quality_audit.auditee_lead.get_full_name|default:quality_audit.auditee_lead.username }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Checklist SOP / Protocol</dt>
+                        <dd>
+                            {% if quality_audit.audit_checklist_sop %}
+                            <a href="{% url 'quality:controlled_document_detail' quality_audit.audit_checklist_sop.pk %}" class="text-primary hover:underline">
+                                {{ quality_audit.audit_checklist_sop.number }} (Rev {{ quality_audit.audit_checklist_sop.revision_number }})
+                            </a>
+                            {% else %}
+                            <span class="text-muted">Standard protocol</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Planned Schedule Window</dt>
+                        <dd>{{ quality_audit.planned_start_date }} to {{ quality_audit.planned_end_date }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Actual Fieldwork Dates</dt>
+                        <dd>
+                            {% if quality_audit.actual_start_date %}
+                            {{ quality_audit.actual_start_date }} to {{ quality_audit.actual_end_date|default:"Ongoing" }}
+                            {% else %}
+                            <span class="text-muted">Fieldwork not yet started</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Report Published Date</dt>
+                        <dd>{{ quality_audit.report_published_date|default:"Unpublished" }}</dd>
+                    </div>
+                    {% if quality_audit.product_scope or quality_audit.lot_number_sampled %}
+                    <div class="detail-item">
+                        <dt>Product Scope & Sampled Lot</dt>
+                        <dd>
+                            {{ quality_audit.product_scope|default:"—" }}
+                            {% if quality_audit.lot_number_sampled %}
+                            <span class="text-xs text-muted font-mono">(Lot: {{ quality_audit.lot_number_sampled }})</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Scope, Objectives & Executive Summary</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Scope & Evaluation Objectives</h4>
+                    <div class="bg-slate-50 p-4 rounded-md text-sm text-slate-800 whitespace-pre-wrap leading-relaxed border border-slate-200">
+                        {{ quality_audit.scope_objectives|default:"No specific objectives recorded." }}
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Lead Auditor Executive Summary</h4>
+                    <div class="bg-slate-50 p-4 rounded-md text-sm text-slate-800 whitespace-pre-wrap leading-relaxed border border-slate-200">
+                        {{ quality_audit.executive_summary|default:"Executive summary pending completion of audit evaluation." }}
+                    </div>
+                </div>
+
+                {% if quality_audit.notes %}
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Internal Notes</h4>
+                    <div class="bg-slate-50 p-4 rounded-md text-sm text-slate-800 whitespace-pre-wrap leading-relaxed border border-slate-200">
+                        {{ quality_audit.notes }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Findings Breakdown</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-sm font-medium">Total Findings</span>
+                    <span class="text-base font-bold">{{ quality_audit.total_findings_count }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-sm text-danger flex items-center gap-1.5"><i data-lucide="alert-octagon" class="w-4 h-4"></i> Critical</span>
+                    <span class="font-bold text-danger">{{ quality_audit.critical_findings_count }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-sm text-amber-700 flex items-center gap-1.5"><i data-lucide="alert-triangle" class="w-4 h-4"></i> Major</span>
+                    <span class="font-bold text-amber-700">{{ quality_audit.major_findings_count }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-sm text-slate-600 flex items-center gap-1.5"><i data-lucide="info" class="w-4 h-4"></i> Minor</span>
+                    <span class="font-bold">{{ quality_audit.minor_findings_count }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-sm text-muted flex items-center gap-1.5"><i data-lucide="help-circle" class="w-4 h-4"></i> Observation (OFI)</span>
+                    <span class="font-bold text-muted">{{ quality_audit.ofi_findings_count }}</span>
+                </div>
+
+                <div class="pt-3">
+                    <a href="{% url 'quality:audit_finding_create' %}?audit={{ quality_audit.pk }}" class="btn btn-primary w-full">
+                        <i data-lucide="plus"></i> Add Finding
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Audit Lifecycle & Aging</h3>
+            </div>
+            <div class="card-body space-y-2 text-sm">
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                    <span class="text-muted">Lifecycle Status</span>
+                    <span class="font-medium">{{ quality_audit.get_status_display }}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                    <span class="text-muted">Working Age</span>
+                    <span class="font-medium">{{ days_open }} days</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                    <span class="text-muted">Overdue Status</span>
+                    {% if is_overdue %}
+                    <span class="badge badge-red">Overdue</span>
+                    {% else %}
+                    <span class="badge badge-green">On Schedule</span>
+                    {% endif %}
+                </div>
+                <div class="flex justify-between py-1">
+                    <span class="text-muted">Open Findings</span>
+                    <span class="font-bold text-slate-800">{{ quality_audit.open_findings_count }} open</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Observations & Audit Findings</h3>
+        <a href="{% url 'quality:audit_finding_create' %}?audit={{ quality_audit.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i> Log Finding
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Finding #</th>
+                    <th>Severity</th>
+                    <th>Standard & Clause</th>
+                    <th>Title & Summary</th>
+                    <th>Assignee</th>
+                    <th>Response Due</th>
+                    <th>Status</th>
+                    <th>CAPA Link</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fnd in findings %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:audit_finding_detail' fnd.pk %}" class="font-semibold text-primary hover:underline">
+                            {{ fnd.number }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if fnd.severity == 'critical' or fnd.severity == 'major' %}
+                        <span class="badge badge-red">{{ fnd.get_severity_display }}</span>
+                        {% elif fnd.severity == 'minor' %}
+                        <span class="badge badge-amber">{{ fnd.get_severity_display }}</span>
+                        {% elif fnd.severity == 'commendation' %}
+                        <span class="badge badge-green">{{ fnd.get_severity_display }}</span>
+                        {% else %}
+                        <span class="badge badge-info">{{ fnd.get_severity_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="font-mono text-xs">{{ fnd.standard_clause }}</span></td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ fnd.title }}</div>
+                    </td>
+                    <td>
+                        {% if fnd.assignee %}
+                        <span class="text-xs">{{ fnd.assignee.get_full_name|default:fnd.assignee.username }}</span>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs {% if fnd.is_overdue %}text-danger font-semibold{% endif %}">
+                            {{ fnd.response_due_date }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if fnd.status == 'closed' %}
+                        <span class="badge badge-green">{{ fnd.get_status_display }}</span>
+                        {% elif fnd.status == 'issued' or fnd.status == 'capa_in_progress' %}
+                        <span class="badge badge-amber">{{ fnd.get_status_display }}</span>
+                        {% elif fnd.status == 'escalated' %}
+                        <span class="badge badge-red">{{ fnd.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-info">{{ fnd.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if fnd.linked_capa %}
+                        <a href="{% url 'quality:capa_investigation_detail' fnd.linked_capa.pk %}" class="badge badge-amber hover:underline">
+                            {{ fnd.linked_capa.number }}
+                        </a>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'quality:audit_finding_detail' fnd.pk %}" class="btn btn-icon" title="View Finding">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:audit_finding_edit' fnd.pk %}" class="btn btn-icon" title="Edit Finding">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-6 text-muted">
+                        No non-conformances or observations logged for this audit.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if regulatory_hosts %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Linked Regulatory / External Inspection Hosting</h3>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Host #</th>
+                    <th>Inspection Title</th>
+                    <th>Agency / Body</th>
+                    <th>Lead Inspector</th>
+                    <th>Dates</th>
+                    <th>Status</th>
+                    <th>Outcome</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for host in regulatory_hosts %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:regulatory_inspection_host_detail' host.pk %}" class="font-semibold text-primary hover:underline">
+                            {{ host.number }}
+                        </a>
+                    </td>
+                    <td>{{ host.inspection_title }}</td>
+                    <td><span class="badge badge-red">{{ host.get_agency_or_body_display }}</span></td>
+                    <td>{{ host.lead_inspector_name }}</td>
+                    <td>{{ host.scheduled_start_date }} to {{ host.scheduled_end_date }}</td>
+                    <td><span class="badge badge-info">{{ host.get_status_display }}</span></td>
+                    <td><span class="badge badge-slate">{{ host.get_formal_outcome_display }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
