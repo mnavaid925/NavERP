@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Finding: {{ audit_finding.number }}{% else %}Log Audit Finding{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:audit_finding_list' %}">Findings</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ audit_finding.number }}{% else %}Log Finding{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Finding: {{ audit_finding.number }}{% else %}Log Audit Finding / Observation{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="card-body space-y-6">
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.audit.id_for_label }}" class="form-label">Governing Audit <span class="text-danger">*</span></label>
+                        {{ form.audit }}
+                        {% if form.audit.errors %}<div class="form-error">{{ form.audit.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.finding_number_in_audit.id_for_label }}" class="form-label">Finding Index #</label>
+                        {{ form.finding_number_in_audit }}
+                        {% if form.finding_number_in_audit.errors %}<div class="form-error">{{ form.finding_number_in_audit.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.title.id_for_label }}" class="form-label">Observation Headline / Title <span class="text-danger">*</span></label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.severity.id_for_label }}" class="form-label">Observation Severity Classification <span class="text-danger">*</span></label>
+                        {{ form.severity }}
+                        {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.standard_clause.id_for_label }}" class="form-label">Standard & Clause Cited <span class="text-danger">*</span></label>
+                        {{ form.standard_clause }}
+                        {% if form.standard_clause.errors %}<div class="form-error">{{ form.standard_clause.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.requirement_statement.id_for_label }}" class="form-label">Specified Requirement Statement <span class="text-danger">*</span></label>
+                        {{ form.requirement_statement }}
+                        {% if form.requirement_statement.errors %}<div class="form-error">{{ form.requirement_statement.errors.0 }}</div>{% endif %}
+                        <span class="text-xs text-muted">What the SOP, standard, or regulation requires.</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.condition_evidence.id_for_label }}" class="form-label">Objective Evidence Observed <span class="text-danger">*</span></label>
+                        {{ form.condition_evidence }}
+                        {% if form.condition_evidence.errors %}<div class="form-error">{{ form.condition_evidence.errors.0 }}</div>{% endif %}
+                        <span class="text-xs text-muted">Objective facts, batch numbers, records, or interview findings.</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.audited_org_unit.id_for_label }}" class="form-label">Audited Department</label>
+                        {{ form.audited_org_unit }}
+                        {% if form.audited_org_unit.errors %}<div class="form-error">{{ form.audited_org_unit.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.assignee.id_for_label }}" class="form-label">Remediation Assignee <span class="text-danger">*</span></label>
+                        {{ form.assignee }}
+                        {% if form.assignee.errors %}<div class="form-error">{{ form.assignee.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.response_due_date.id_for_label }}" class="form-label">Response Due Date <span class="text-danger">*</span></label>
+                        {{ form.response_due_date }}
+                        {% if form.response_due_date.errors %}<div class="form-error">{{ form.response_due_date.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded border border-slate-200 space-y-4">
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider">Auditee Remediation Response (Optional at Initiation)</h4>
+                    <div class="form-group">
+                        <label for="{{ form.containment_action.id_for_label }}" class="form-label">Immediate Containment Action</label>
+                        {{ form.containment_action }}
+                        {% if form.containment_action.errors %}<div class="form-error">{{ form.containment_action.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.root_cause_summary.id_for_label }}" class="form-label">Root Cause Summary</label>
+                        {{ form.root_cause_summary }}
+                        {% if form.root_cause_summary.errors %}<div class="form-error">{{ form.root_cause_summary.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.corrective_action_plan.id_for_label }}" class="form-label">Corrective Action Plan</label>
+                        {{ form.corrective_action_plan }}
+                        {% if form.corrective_action_plan.errors %}<div class="form-error">{{ form.corrective_action_plan.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.linked_capa.id_for_label }}" class="form-label">Linked CAPA</label>
+                        {{ form.linked_capa }}
+                        {% if form.linked_capa.errors %}<div class="form-error">{{ form.linked_capa.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.linked_ncr.id_for_label }}" class="form-label">Linked NCR</label>
+                        {{ form.linked_ncr }}
+                        {% if form.linked_ncr.errors %}<div class="form-error">{{ form.linked_ncr.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Finding Status <span class="text-danger">*</span></label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.closure_notes.id_for_label }}" class="form-label">Auditor Closure Verification Notes</label>
+                    {{ form.closure_notes }}
+                    {% if form.closure_notes.errors %}<div class="form-error">{{ form.closure_notes.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="card-footer flex justify-between items-center bg-slate-50 border-t border-slate-200 px-6 py-4">
+                <a href="{% if is_edit %}{% url 'quality:audit_finding_detail' audit_finding.pk %}{% else %}{% url 'quality:audit_finding_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Log Finding{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
