@@ -4,7 +4,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -46,16 +46,17 @@ def calibration_gage_list(request):
     if criticality_filter:
         qs = qs.filter(criticality=criticality_filter)
 
-    total_gages = qs.count()
-    base_qs = quality_scope(CalibrationGage.objects.all(), request)
-    past_due_count = base_qs.filter(
-        Q(status="past_due") | Q(next_calibration_due__lt=date.today(), status="active_in_service")
-    ).count()
-    in_service_count = base_qs.filter(status="active_in_service").count()
+    kpi_aggregates = quality_scope(CalibrationGage.objects.all(), request).aggregate(
+        past_due=Count("pk", filter=Q(status="past_due") | Q(next_calibration_due__lt=date.today(), status="active_in_service")),
+        in_service=Count("pk", filter=Q(status="active_in_service")),
+    )
+    past_due_count = kpi_aggregates["past_due"]
+    in_service_count = kpi_aggregates["in_service"]
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    total_gages = page_obj.paginator.count
 
     context = {
         "gages": page_obj,
