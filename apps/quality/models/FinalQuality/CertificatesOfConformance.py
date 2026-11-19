@@ -147,7 +147,13 @@ class CertificateOfConformance(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} — {self.title} ({self.customer.name})"
+        cust_name = "No Customer"
+        try:
+            if getattr(self, "customer_id", None) and self.customer:
+                cust_name = self.customer.name
+        except Exception:
+            pass
+        return f"{self.number} — {self.title} ({cust_name})"
 
     def save(self, *args, **kwargs):
         if not self.qr_verification_code:
