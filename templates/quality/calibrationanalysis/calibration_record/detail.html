@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Calibration Record {{ calibration_record.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Breadcrumb & Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:calibration_record_list' %}" class="hover:underline">Calibration Records</a>
+        <span class="mx-1">/</span>
+        <span class="font-mono text-slate-700">{{ calibration_record.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="file-check-2" class="w-6 h-6 text-blue-600"></i>
+          <span>Calibration Record: {{ calibration_record.number }}</span>
+        </h1>
+        <span class="badge {{ calibration_record.result_css }} text-xs">{{ calibration_record.get_overall_result_display }}</span>
+        <span class="badge {{ calibration_record.status_css }} text-xs">{{ calibration_record.get_status_display }}</span>
+      </div>
+      <p class="text-xs text-slate-500 mt-1 font-mono">
+        Instrument: <a href="{% url 'quality:calibration_gage_detail' calibration_record.gage.pk %}" class="text-blue-600 hover:underline">{{ calibration_record.gage.gage_id }} — {{ calibration_record.gage.name }}</a>
+        | Date: {{ calibration_record.calibration_date|date:"Y-m-d" }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2 flex-wrap">
+      {% if calibration_record.overall_result == "fail_out_of_tolerance" and not oot_investigation %}
+        <a href="{% url 'quality:out_of_tolerance_investigation_create' %}?calibration_record={{ calibration_record.pk }}&gage={{ calibration_record.gage.pk }}" class="btn btn-primary bg-red-600 hover:bg-red-700 flex items-center gap-1.5 text-sm">
+          <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+          <span>Initiate OOT Investigation</span>
+        </a>
+      {% endif %}
+      <a href="{% url 'quality:calibration_record_edit' calibration_record.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Record</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Out-of-Tolerance Banner if Linked -->
+  {% if oot_investigation %}
+    <div class="card p-4 bg-red-50 border-red-200 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-red-100 rounded-lg text-red-600">
+          <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <div class="text-sm font-bold text-red-900">Out-of-Tolerance (OOT) Investigation Active</div>
+          <div class="text-xs text-red-700">
+            Linked to investigation <a href="{% url 'quality:out_of_tolerance_investigation_detail' oot_investigation.pk %}" class="font-mono font-bold underline">{{ oot_investigation.number }}</a>
+            — Risk: {{ oot_investigation.get_risk_level_display }} | Status: {{ oot_investigation.get_status_display }}
+          </div>
+        </div>
+      </div>
+      <a href="{% url 'quality:out_of_tolerance_investigation_detail' oot_investigation.pk %}" class="btn btn-outline border-red-300 text-red-700 bg-white text-xs">
+        View Investigation
+      </a>
+    </div>
+  {% endif %}
+
+  <!-- Metrology & Environment Overview Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Metrology Results & Uncertainty -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+        <i data-lucide="activity" class="w-4 h-4 text-blue-500"></i>
+        Metrology Data & Measurement Uncertainty
+      </h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-slate-400">Calibration Event Type</dt>
+          <dd class="font-medium text-slate-800">{{ calibration_record.get_calibration_type_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Overall Outcome</dt>
+          <dd class="font-bold text-slate-900">{{ calibration_record.get_overall_result_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">As-Found Condition</dt>
+          <dd class="font-medium text-slate-800">{{ calibration_record.get_as_found_condition_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">As-Left Condition</dt>
+          <dd class="font-medium text-slate-800">{{ calibration_record.get_as_left_condition_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Max Observed Error</dt>
+          <dd class="font-mono font-bold text-slate-800">{{ calibration_record.max_observed_error }} {{ calibration_record.gage.engineering_unit }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Gage Tolerance (MPE)</dt>
+          <dd class="font-mono text-slate-600">±{{ calibration_record.gage.max_permissible_error }} {{ calibration_record.gage.engineering_unit }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Expanded Uncertainty ($U$, k=2)</dt>
+          <dd class="font-mono font-bold text-blue-600">±{{ calibration_record.expanded_uncertainty }} {{ calibration_record.gage.engineering_unit }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Test Uncertainty Ratio (TUR)</dt>
+          <dd class="font-mono font-bold text-green-600">{{ calibration_record.test_uncertainty_ratio }}:1</dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs text-slate-400">Guardband Decision Rule Applied</dt>
+          <dd class="font-medium text-slate-800">
+            {% if calibration_record.guardband_applied %}
+              <span class="text-green-600 flex items-center gap-1 font-semibold">
+                <i data-lucide="shield-check" class="w-4 h-4"></i> ILAC-G8 Guardband Applied (Tolerance reduced by expanded uncertainty $U$)
+              </span>
+            {% else %}
+              <span class="text-slate-500">Simple Acceptance (No Guardband)</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Environmental & Traceability Conditions -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+        <i data-lucide="thermometer" class="w-4 h-4 text-amber-500"></i>
+        Lab Environment & Audit Sign-Off
+      </h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-slate-400">Ambient Temperature</dt>
+          <dd class="font-mono font-medium text-slate-800">{{ calibration_record.ambient_temperature_c }} °C</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Relative Humidity</dt>
+          <dd class="font-mono font-medium text-slate-800">{{ calibration_record.ambient_relative_humidity }} %</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Accredited Service Vendor</dt>
+          <dd class="font-medium text-slate-800">
+            {% if calibration_record.service_vendor %}
+              {{ calibration_record.service_vendor.name }}
+            {% else %}
+              <span class="text-slate-400">Internal Metrology Lab</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Calibration Certificate #</dt>
+          <dd class="font-mono font-bold text-slate-800">{{ calibration_record.certificate_number|default:"Internal Metrology" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Technician / Metrologist</dt>
+          <dd class="font-medium text-slate-800">{{ calibration_record.technician_name|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Logged By (User)</dt>
+          <dd class="font-medium text-slate-800">
+            {% if calibration_record.calibrated_by_user %}
+              {{ calibration_record.calibrated_by_user.get_full_name|default:calibration_record.calibrated_by_user.username }}
+            {% else %}
+              <span class="text-slate-400">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Approved By</dt>
+          <dd class="font-medium text-slate-800">
+            {% if calibration_record.approved_by %}
+              {{ calibration_record.approved_by.get_full_name|default:calibration_record.approved_by.username }}
+            {% else %}
+              <span class="text-slate-400">Pending Approval</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Approved At</dt>
+          <dd class="font-mono text-slate-600">{{ calibration_record.approved_at|date:"Y-m-d H:i"|default:"—" }}</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <!-- Reference Standards Traceability Section -->
+  <div class="card overflow-hidden">
+    <div class="card-header bg-slate-50 px-4 py-3 border-b border-slate-200">
+      <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+        <i data-lucide="link" class="w-4 h-4 text-blue-600"></i>
+        <span>Reference Standards Used for Calibration</span>
+      </h2>
+    </div>
+    <div class="table-wrap">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 text-xs font-semibold uppercase border-b border-slate-200">
+            <th class="py-2.5 px-4">Standard Tag / ID</th>
+            <th class="py-2.5 px-4">Standard Name</th>
+            <th class="py-2.5 px-4">Type</th>
+            <th class="py-2.5 px-4">NIST Traceability #</th>
+            <th class="py-2.5 px-4">MPE Accuracy</th>
+            <th class="py-2.5 px-4">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for std in standards_list %}
+            <tr class="hover:bg-slate-50">
+              <td class="py-2.5 px-4 font-mono font-medium text-blue-600">
+                <a href="{% url 'quality:calibration_gage_detail' std.pk %}" class="hover:underline">{{ std.gage_id }}</a>
+              </td>
+              <td class="py-2.5 px-4 font-medium text-slate-900">{{ std.name }}</td>
+              <td class="py-2.5 px-4 text-xs">{{ std.get_gage_type_display }}</td>
+              <td class="py-2.5 px-4 font-mono text-xs">{{ std.nist_traceability_number|default:"—" }}</td>
+              <td class="py-2.5 px-4 font-mono text-xs">±{{ std.max_permissible_error }} {{ std.engineering_unit }}</td>
+              <td class="py-2.5 px-4">
+                <span class="badge {{ std.status_css }} text-xs">{{ std.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6" class="py-4 text-center text-slate-400 text-xs">
+                No internal master standards specifically attached. Traceability documented via external vendor cert.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if calibration_record.standard_traceability_notes %}
+      <div class="p-4 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
+        <span class="font-bold text-slate-700">Traceability Notes:</span> {{ calibration_record.standard_traceability_notes }}
+      </div>
+    {% endif %}
+  </div>
+
+  {% if calibration_record.notes %}
+    <div class="card p-4">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Technician Observations & Calibration Notes</h3>
+      <div class="text-sm text-slate-700 whitespace-pre-line">{{ calibration_record.notes }}</div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
