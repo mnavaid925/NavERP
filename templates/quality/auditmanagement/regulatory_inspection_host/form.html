@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Inspection Record: {{ regulatory_inspection_host.number }}{% else %}New Regulatory Inspection Host Record{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:regulatory_inspection_host_list' %}">Regulatory Inspections</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ regulatory_inspection_host.number }}{% else %}New Record{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Inspection Record: {{ regulatory_inspection_host.number }}{% else %}New Regulatory Inspection Host Record{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="card-body space-y-6">
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.inspection_title.id_for_label }}" class="form-label">Inspection Title <span class="text-danger">*</span></label>
+                        {{ form.inspection_title }}
+                        {% if form.inspection_title.errors %}<div class="form-error">{{ form.inspection_title.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.audit.id_for_label }}" class="form-label">Linked Quality Audit</label>
+                        {{ form.audit }}
+                        {% if form.audit.errors %}<div class="form-error">{{ form.audit.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.agency_or_body.id_for_label }}" class="form-label">Agency / Authority <span class="text-danger">*</span></label>
+                        {{ form.agency_or_body }}
+                        {% if form.agency_or_body.errors %}<div class="form-error">{{ form.agency_or_body.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.agency_name.id_for_label }}" class="form-label">Agency / Notified Body Name <span class="text-danger">*</span></label>
+                        {{ form.agency_name }}
+                        {% if form.agency_name.errors %}<div class="form-error">{{ form.agency_name.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.lead_inspector_name.id_for_label }}" class="form-label">Lead Inspector Name <span class="text-danger">*</span></label>
+                        {{ form.lead_inspector_name }}
+                        {% if form.lead_inspector_name.errors %}<div class="form-error">{{ form.lead_inspector_name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.inspector_credentials.id_for_label }}" class="form-label">Inspector Credentials / Badge #</label>
+                        {{ form.inspector_credentials }}
+                        {% if form.inspector_credentials.errors %}<div class="form-error">{{ form.inspector_credentials.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.inspection_purpose.id_for_label }}" class="form-label">Inspection Purpose <span class="text-danger">*</span></label>
+                        {{ form.inspection_purpose }}
+                        {% if form.inspection_purpose.errors %}<div class="form-error">{{ form.inspection_purpose.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.announcement_status.id_for_label }}" class="form-label">Announcement Notice <span class="text-danger">*</span></label>
+                        {{ form.announcement_status }}
+                        {% if form.announcement_status.errors %}<div class="form-error">{{ form.announcement_status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 space-y-3">
+                        <h4 class="text-xs font-semibold text-muted uppercase tracking-wider">Scheduled Window</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="form-group">
+                                <label for="{{ form.scheduled_start_date.id_for_label }}" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                {{ form.scheduled_start_date }}
+                                {% if form.scheduled_start_date.errors %}<div class="form-error">{{ form.scheduled_start_date.errors.0 }}</div>{% endif %}
+                            </div>
+                            <div class="form-group">
+                                <label for="{{ form.scheduled_end_date.id_for_label }}" class="form-label">End Date <span class="text-danger">*</span></label>
+                                {{ form.scheduled_end_date }}
+                                {% if form.scheduled_end_date.errors %}<div class="form-error">{{ form.scheduled_end_date.errors.0 }}</div>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 space-y-3">
+                        <h4 class="text-xs font-semibold text-muted uppercase tracking-wider">Actual Inspection Period</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="form-group">
+                                <label for="{{ form.actual_start_date.id_for_label }}" class="form-label">Actual Start</label>
+                                {{ form.actual_start_date }}
+                                {% if form.actual_start_date.errors %}<div class="form-error">{{ form.actual_start_date.errors.0 }}</div>{% endif %}
+                            </div>
+                            <div class="form-group">
+                                <label for="{{ form.actual_end_date.id_for_label }}" class="form-label">Actual End</label>
+                                {{ form.actual_end_date }}
+                                {% if form.actual_end_date.errors %}<div class="form-error">{{ form.actual_end_date.errors.0 }}</div>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.front_room_lead.id_for_label }}" class="form-label">Front Room Lead <span class="text-danger">*</span></label>
+                        {{ form.front_room_lead }}
+                        {% if form.front_room_lead.errors %}<div class="form-error">{{ form.front_room_lead.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.back_room_lead.id_for_label }}" class="form-label">Back Room Lead <span class="text-danger">*</span></label>
+                        {{ form.back_room_lead }}
+                        {% if form.back_room_lead.errors %}<div class="form-error">{{ form.back_room_lead.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.scribe_user.id_for_label }}" class="form-label">Inspection Scribe</label>
+                        {{ form.scribe_user }}
+                        {% if form.scribe_user.errors %}<div class="form-error">{{ form.scribe_user.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.war_room_location.id_for_label }}" class="form-label">War Room Staging Location <span class="text-danger">*</span></label>
+                    {{ form.war_room_location }}
+                    {% if form.war_room_location.errors %}<div class="form-error">{{ form.war_room_location.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Hosting Status <span class="text-danger">*</span></label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.formal_outcome.id_for_label }}" class="form-label">Formal Agency Outcome <span class="text-danger">*</span></label>
+                        {{ form.formal_outcome }}
+                        {% if form.formal_outcome.errors %}<div class="form-error">{{ form.formal_outcome.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.observations_count.id_for_label }}" class="form-label">Observations Count</label>
+                        {{ form.observations_count }}
+                        {% if form.observations_count.errors %}<div class="form-error">{{ form.observations_count.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group flex items-center gap-2 pt-2">
+                    {{ form.form_483_issued }}
+                    <label for="{{ form.form_483_issued.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                        FDA Form 483 / Official Inspectional Observations Notice Issued
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.daily_summary_notes.id_for_label }}" class="form-label">Daily Debrief Log & Inspector Queries</label>
+                    {{ form.daily_summary_notes }}
+                    {% if form.daily_summary_notes.errors %}<div class="form-error">{{ form.daily_summary_notes.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.closeout_memo.id_for_label }}" class="form-label">Exit Conference Debrief & Executive Action Plan</label>
+                    {{ form.closeout_memo }}
+                    {% if form.closeout_memo.errors %}<div class="form-error">{{ form.closeout_memo.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="card-footer flex justify-between items-center bg-slate-50 border-t border-slate-200 px-6 py-4">
+                <a href="{% if is_edit %}{% url 'quality:regulatory_inspection_host_detail' regulatory_inspection_host.pk %}{% else %}{% url 'quality:regulatory_inspection_host_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Initialize Host Record{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
