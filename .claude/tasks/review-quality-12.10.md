@@ -25,10 +25,10 @@
   - **Issue**: User-controlled text fields exported to CSV lack formula injection neutralization (`_csv_safe`).
   - **Fix**: Define `_csv_safe(val)` in `apps/quality/views/_common.py` (prefix with `'` if starting with `=`, `+`, `-`, `@`, `\t`, `\r`) and wrap all text cells across the 4 export views. (fixed — 1615c765, 2df06fc8, 84327980, e3b3280f, ca2ceee4)
 
-- [ ] **[I2] Premature Gage State Synchronization on Draft Calibration Records**:
+- [x] **[I2] Premature Gage State Synchronization on Draft Calibration Records**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py:109-121`
   - **Issue**: `calibration_record_create` sets `gage.status = "active_in_service"`, updates `last_calibration_date`, and advances `next_calibration_due` regardless of whether `record.status` is `"completed"`.
-  - **Fix**: Gate status advancement and next due date updates strictly on `record.status == "completed"`. If `overall_result == "fail_out_of_tolerance"`, set `gage.status = "quarantined_oot"`. Mirror logic in `calibration_record_edit`.
+  - **Fix**: Gate status advancement and next due date updates strictly on `record.status == "completed"`. If `overall_result == "fail_out_of_tolerance"`, set `gage.status = "quarantined_oot"`. Mirror logic in `calibration_record_edit`. (fixed — fadef000)
 
 - [ ] **[I3] Cross-Record Consistency Check in OutOfToleranceInvestigationForm**:
   - **Location**: `apps/quality/forms/CalibrationAnalysis/OutOfToleranceInvestigations.py:59-69`
