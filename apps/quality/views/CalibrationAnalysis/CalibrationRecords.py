@@ -84,9 +84,11 @@ def calibration_record_detail(request, pk):
     oot_investigation = next(iter(record.oot_investigations.all()), None)
 
     context = {
+        "record": record,
         "calibration_record": record,
         "obj": record,
         "standards_list": standards_list,
+        "standards_used": standards_list,
         "oot_investigation": oot_investigation,
     }
     return render(request, "quality/calibrationanalysis/calibration_record/detail.html", context)
@@ -135,6 +137,7 @@ def calibration_record_create(request):
 
     context = {
         "form": form,
+        "record": None,
         "calibration_record": None,
         "obj": None,
         "is_edit": False,
@@ -158,6 +161,7 @@ def calibration_record_edit(request, pk):
 
     context = {
         "form": form,
+        "record": record,
         "calibration_record": record,
         "obj": record,
         "is_edit": True,
