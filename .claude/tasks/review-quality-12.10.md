@@ -99,9 +99,9 @@
   - **Location**: `apps/quality/admin.py:734-750`
   - **Fix**: Add `filter_horizontal = ("standards_used",)`. (fixed — a767c0e9)
 
-- [ ] **[M6] Missing `select_related("asset_link")` on `calibration_gage_list`**:
+- [x] **[M6] Missing `select_related("asset_link")` on `calibration_gage_list`**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationGages.py:23-25`
-  - **Fix**: Add `"asset_link"` to `select_related`.
+  - **Fix**: Add `"asset_link"` to `select_related`. (fixed — d751a5bd)
 
 - [ ] **[M7] Extra Query in `out_of_tolerance_investigation_create` Initial Lookup**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py:95-103`
