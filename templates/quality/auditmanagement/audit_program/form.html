@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Audit Program: {{ audit_program.number }}{% else %}New Quality Audit Program{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:audit_program_list' %}">Audit Programs</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ audit_program.number }}{% else %}New Program{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Audit Program: {{ audit_program.number }}{% else %}New Quality Audit Program{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="card-body space-y-6">
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Program Title <span class="text-danger">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.program_year.id_for_label }}" class="form-label">Operating Year <span class="text-danger">*</span></label>
+                        {{ form.program_year }}
+                        {% if form.program_year.errors %}<div class="form-error">{{ form.program_year.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.program_type.id_for_label }}" class="form-label">Program Type <span class="text-danger">*</span></label>
+                        {{ form.program_type }}
+                        {% if form.program_type.errors %}<div class="form-error">{{ form.program_type.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.risk_basis.id_for_label }}" class="form-label">Risk Basis & Frequency <span class="text-danger">*</span></label>
+                        {{ form.risk_basis }}
+                        {% if form.risk_basis.errors %}<div class="form-error">{{ form.risk_basis.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.start_date.id_for_label }}" class="form-label">Start Date <span class="text-danger">*</span></label>
+                        {{ form.start_date }}
+                        {% if form.start_date.errors %}<div class="form-error">{{ form.start_date.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.end_date.id_for_label }}" class="form-label">End Date <span class="text-danger">*</span></label>
+                        {{ form.end_date }}
+                        {% if form.end_date.errors %}<div class="form-error">{{ form.end_date.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.allocated_budget_hours.id_for_label }}" class="form-label">Budgeted Auditor Hours</label>
+                        {{ form.allocated_budget_hours }}
+                        {% if form.allocated_budget_hours.errors %}<div class="form-error">{{ form.allocated_budget_hours.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.program_manager.id_for_label }}" class="form-label">Program Manager <span class="text-danger">*</span></label>
+                        {{ form.program_manager }}
+                        {% if form.program_manager.errors %}<div class="form-error">{{ form.program_manager.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Status <span class="text-danger">*</span></label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.scope_description.id_for_label }}" class="form-label">Audit Universe Scope & Strategic Objectives <span class="text-danger">*</span></label>
+                    {{ form.scope_description }}
+                    {% if form.scope_description.errors %}<div class="form-error">{{ form.scope_description.errors.0 }}</div>{% endif %}
+                    <span class="text-xs text-muted">Detail all auditable business processes, facilities, cleanrooms, and ISO/FDA standards covered.</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.notes.id_for_label }}" class="form-label">Administrative Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="card-footer flex justify-between items-center bg-slate-50 border-t border-slate-200 px-6 py-4">
+                <a href="{% if is_edit %}{% url 'quality:audit_program_detail' audit_program.pk %}{% else %}{% url 'quality:audit_program_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Create Program{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
