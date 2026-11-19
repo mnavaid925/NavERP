@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Packaging Verification: {{ verification.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:packaging_label_verification_list' %}" class="hover:underline">Packaging & Labeling</a>
+        <span class="mx-1">/</span>
+        <span>{{ verification.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="barcode" class="w-6 h-6 text-blue-600"></i>
+          {{ verification.number }}
+        </h1>
+        <span class="badge {{ verification.disposition_css }} text-xs">
+          {{ verification.get_disposition_display }}
+        </span>
+        <span class="badge {{ verification.grade_css }} text-xs font-mono">
+          {{ verification.get_iso_iec_print_grade_display }}
+        </span>
+      </div>
+      <p class="text-sm text-slate-500 mt-1">{{ verification.title }}</p>
+    </div>
+
+    <!-- Actions -->
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:packaging_label_verification_list' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+      <a href="{% url 'quality:packaging_label_verification_edit' verification.pk %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Verification</span>
+      </a>
+      {% if user.is_staff or user.is_superuser %}
+      <form method="post" action="{% url 'quality:packaging_label_verification_delete' verification.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete verification {{ verification.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Section 1: Barcode Grading & Scanned Data -->
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="scan-line" class="w-4 h-4 text-blue-600"></i>
+          Barcode Verification & ISO/IEC Print Quality
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 text-sm">
+          <div>
+            <dt class="text-xs text-slate-500">Symbology</dt>
+            <dd class="font-medium text-slate-800 mt-0.5">
+              <span class="badge {{ verification.barcode_css }} text-xs">
+                {{ verification.get_barcode_symbology_display }}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">ISO/IEC Print Grade</dt>
+            <dd class="font-bold text-slate-900 mt-0.5">
+              <span class="badge {{ verification.grade_css }} text-xs font-mono">
+                {{ verification.get_iso_iec_print_grade_display }}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Cartons Inspected</dt>
+            <dd class="font-bold text-slate-800 mt-0.5">{{ verification.carton_count_inspected }} shipping cartons</dd>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+          <div class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Decoded Scanned Barcode String</div>
+          <div class="font-mono text-sm text-slate-800 bg-white p-3 rounded border border-slate-200 select-all break-all">
+            {{ verification.scanned_barcode_data|default:"No scanned data captured" }}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm border-t pt-4 mt-4">
+          <div>
+            <dt class="text-xs text-slate-500">Label Part Number</dt>
+            <dd class="font-mono text-slate-800">{{ verification.label_part_number|default:"—" }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Artwork Revision</dt>
+            <dd class="font-mono text-slate-800">{{ verification.label_artwork_revision|default:"Rev 1" }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Artwork Master Specification</dt>
+            <dd class="text-slate-800">
+              {% if verification.artwork_master %}
+                <span class="text-blue-600 font-medium">{{ verification.artwork_master.title }}</span>
+              {% else %}
+                —
+              {% endif %}
+            </dd>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Physical & Packaging Checkpoints -->
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="check-circle" class="w-4 h-4 text-blue-600"></i>
+          Packaging & Labeling Protocol Checkpoints
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if verification.label_content_accurate %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">Label Content Accuracy</span>
+              <span class="text-xs text-slate-500">Part, lot, quantity & date match</span>
+            </div>
+            {% if verification.label_content_accurate %}<span class="badge badge-green text-xs">Pass</span>{% else %}<span class="badge badge-red text-xs">Fail</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if verification.regulatory_symbols_present %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">Regulatory Symbols</span>
+              <span class="text-xs text-slate-500">CE, UL, RoHS, FDA, Origin legible</span>
+            </div>
+            {% if verification.regulatory_symbols_present %}<span class="badge badge-green text-xs">Pass</span>{% else %}<span class="badge badge-red text-xs">Fail</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if verification.serialization_verified %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">Serialization Verification</span>
+              <span class="text-xs text-slate-500">Zero duplicates, sequence valid</span>
+            </div>
+            {% if verification.serialization_verified %}<span class="badge badge-green text-xs">Pass</span>{% else %}<span class="badge badge-red text-xs">Fail</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if verification.carton_integrity_intact %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">Carton Physical Integrity</span>
+              <span class="text-xs text-slate-500">Free of tears, crush, or moisture</span>
+            </div>
+            {% if verification.carton_integrity_intact %}<span class="badge badge-green text-xs">Pass</span>{% else %}<span class="badge badge-red text-xs">Fail</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if verification.tamper_evident_seal_intact %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">Tamper-Evident Seals</span>
+              <span class="text-xs text-slate-500">Security tape / shrink band intact</span>
+            </div>
+            {% if verification.tamper_evident_seal_intact %}<span class="badge badge-green text-xs">Pass</span>{% else %}<span class="badge badge-red text-xs">Fail</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if verification.cushioning_dunnage_adequate %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">Dunnage & ESD Protection</span>
+              <span class="text-xs text-slate-500">Internal cushioning adequate</span>
+            </div>
+            {% if verification.cushioning_dunnage_adequate %}<span class="badge badge-green text-xs">Pass</span>{% else %}<span class="badge badge-red text-xs">Fail</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between sm:col-span-2 {% if verification.pallet_stacking_compliant %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">Pallet Stacking & Stretch Wrap</span>
+              <span class="text-xs text-slate-500">Pattern, strapping, and edge-board protection compliant</span>
+            </div>
+            {% if verification.pallet_stacking_compliant %}<span class="badge badge-green text-xs">Pass</span>{% else %}<span class="badge badge-red text-xs">Fail</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Discrepancy & Notes -->
+      {% if verification.discrepancy_details or verification.notes %}
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="alert-octagon" class="w-4 h-4 text-amber-600"></i>
+          Discrepancies & Quality Observations
+        </h2>
+        {% if verification.discrepancy_details %}
+        <div class="mb-3">
+          <span class="text-xs font-bold text-red-700 uppercase tracking-wider block">Discrepancy Details</span>
+          <p class="text-sm text-red-900 mt-1 whitespace-pre-line bg-red-50 p-3 rounded border border-red-200">{{ verification.discrepancy_details }}</p>
+        </div>
+        {% endif %}
+        {% if verification.notes %}
+        <div>
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block">Auditor Notes</span>
+          <p class="text-sm text-slate-800 mt-1 whitespace-pre-line">{{ verification.notes }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Sidebar Right Column -->
+    <div class="space-y-6">
+      <!-- Item & Order Traceability -->
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          Product & Batch Traceability
+        </h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs text-slate-500">Item</dt>
+            <dd class="font-semibold text-slate-800">{{ verification.item_name|default:verification.item_code|default:"—" }}</dd>
+            {% if verification.item_code and verification.item_name %}
+              <dd class="text-xs text-slate-500 font-mono">{{ verification.item_code }}</dd>
+            {% endif %}
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Lot Number</dt>
+            <dd class="font-mono text-slate-800">{{ verification.lot_number|default:"—" }}</dd>
+          </div>
+          {% if verification.inspection_lot %}
+          <div>
+            <dt class="text-xs text-slate-500">Linked Final Inspection Lot</dt>
+            <dd>
+              <a href="{% url 'quality:final_inspection_lot_detail' verification.inspection_lot.pk %}" class="font-mono font-semibold text-blue-600 hover:underline">
+                {{ verification.inspection_lot.number }}
+              </a>
+            </dd>
+          </div>
+          {% endif %}
+          {% if verification.shipment %}
+          <div>
+            <dt class="text-xs text-slate-500">Linked Outbound Shipment</dt>
+            <dd class="font-semibold text-slate-800">{{ verification.shipment }}</dd>
+          </div>
+          {% endif %}
+        </dl>
+      </div>
+
+      <!-- Auditor & Audit Trail -->
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="user-check" class="w-4 h-4 text-blue-600"></i>
+          Audit Information
+        </h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs text-slate-500">Verified By</dt>
+            <dd class="text-slate-800 font-medium">{{ verification.verifier.get_full_name|default:verification.verifier.username|default:"Unassigned" }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Verified Date</dt>
+            <dd class="text-slate-800">{{ verification.verified_date|default:"Date not set" }}</dd>
+          </div>
+          <div class="border-t pt-2">
+            <dt class="text-xs text-slate-500">Created At</dt>
+            <dd class="text-xs text-slate-600">{{ verification.created_at|date:"Y-m-d H:i" }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
