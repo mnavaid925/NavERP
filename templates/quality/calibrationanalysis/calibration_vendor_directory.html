@@ -79,9 +79,6 @@
             <tr class="hover:bg-slate-50 transition-colors">
               <td class="py-3 px-4">
                 <div class="font-bold text-slate-900">{{ v.name }}</div>
-                {% if v.legal_name and v.legal_name != v.name %}
-                  <div class="text-xs text-slate-500">{{ v.legal_name }}</div>
-                {% endif %}
               </td>
               <td class="py-3 px-4">
                 <div class="flex items-center gap-1.5 flex-wrap">
