@@ -79,9 +79,9 @@
 
 ### Minor (12)
 
-- [ ] **[M1] `calibration_record_list` Search Omits `service_vendor__name`**:
+- [x] **[M1] `calibration_record_list` Search Omits `service_vendor__name`**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py:28-36`
-  - **Fix**: Add `| Q(service_vendor__name__icontains=search_query)`.
+  - **Fix**: Add `| Q(service_vendor__name__icontains=search_query)`. (fixed — be4c6840)
 
 - [ ] **[M2] `calibration_gage_list` Search Omits System Number (`number__icontains`)**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationGages.py:27-34`
