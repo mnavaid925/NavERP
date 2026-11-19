@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Release: {{ release.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:quality_release_authorization_list' %}" class="hover:underline">Release Authorizations</a>
+        <span class="mx-1">/</span>
+        <span>{{ release.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-6 h-6 text-blue-600"></i>
+          {{ release.number }}
+        </h1>
+        <span class="badge {{ release.disposition_css }} text-xs">
+          {{ release.get_release_disposition_display }}
+        </span>
+        {% if release.is_on_hold %}
+          <span class="badge badge-red text-xs flex items-center gap-1">
+            <i data-lucide="lock" class="w-3 h-3"></i> SHIPPING HOLD
+          </span>
+        {% elif release.is_cleared_to_ship %}
+          <span class="badge badge-green text-xs flex items-center gap-1">
+            <i data-lucide="check" class="w-3 h-3"></i> CLEARED TO SHIP
+          </span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">{{ release.title }}</p>
+    </div>
+
+    <!-- Actions -->
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:quality_release_authorization_list' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to List</span>
+      </a>
+
+      <!-- Hold / Release Toggle Form -->
+      <form method="post" action="{% url 'quality:quality_release_authorization_toggle_hold' release.pk %}" class="inline">
+        {% csrf_token %}
+        {% if release.is_on_hold %}
+          <button type="submit" class="btn btn-outline text-green-700 hover:bg-green-50 flex items-center gap-1.5 text-sm" onclick="return confirm('Release this shipment from quality hold?');">
+            <i data-lucide="unlock" class="w-4 h-4"></i>
+            <span>Remove Shipping Hold</span>
+          </button>
+        {% else %}
+          <button type="submit" class="btn btn-outline text-amber-700 hover:bg-amber-50 flex items-center gap-1.5 text-sm" onclick="return confirm('Place this shipment on quality hold?');">
+            <i data-lucide="lock" class="w-4 h-4"></i>
+            <span>Place on Hold</span>
+          </button>
+        {% endif %}
+      </form>
+
+      <a href="{% url 'quality:quality_release_authorization_edit' release.pk %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Release</span>
+      </a>
+      {% if user.is_staff or user.is_superuser %}
+      <form method="post" action="{% url 'quality:quality_release_authorization_delete' release.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete release {{ release.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Hold Alert Banner -->
+  {% if release.is_on_hold %}
+  <div class="card p-4 border-l-4 border-red-500 bg-red-50/50 flex items-start gap-3">
+    <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600 mt-0.5 shrink-0"></i>
+    <div>
+      <h3 class="text-sm font-bold text-red-900">Active Outbound Shipping Hold</h3>
+      <p class="text-xs text-red-700 mt-0.5">
+        {{ release.hold_reason|default:"This shipment is quarantined on quality hold. Warehouse shipping and carrier tender are strictly blocked." }}
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Overview Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Multi-Gate Prerequisites -->
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="list-checks" class="w-4 h-4 text-blue-600"></i>
+          Multi-Gate Quality Release Prerequisites
+        </h2>
+        <div class="space-y-3">
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if release.final_inspection_passed %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">1. Final Inspection Lot Passed</span>
+              <span class="text-xs text-slate-500">
+                {% if release.inspection_lot %}
+                  Linked: <a href="{% url 'quality:final_inspection_lot_detail' release.inspection_lot.pk %}" class="text-blue-600 font-mono underline">{{ release.inspection_lot.number }}</a>
+                  ({{ release.inspection_lot.get_usage_decision_display }})
+                {% else %}
+                  Standalone Lot Inspection Verified
+                {% endif %}
+              </span>
+            </div>
+            {% if release.final_inspection_passed %}<span class="badge badge-green text-xs">Cleared</span>{% else %}<span class="badge badge-red text-xs">Incomplete</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if release.no_open_ncrs_or_capas %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">2. Zero Open Non-Conformances & Blocking CAPAs</span>
+              <span class="text-xs text-slate-500">Finished goods batch checked against open NCR and deviation registries</span>
+            </div>
+            {% if release.no_open_ncrs_or_capas %}<span class="badge badge-green text-xs">Cleared</span>{% else %}<span class="badge badge-red text-xs">Blocked</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if release.packaging_label_approved %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">3. Packaging & Barcode Verification Passed</span>
+              <span class="text-xs text-slate-500">
+                {% if release.packaging_verification %}
+                  Linked: <a href="{% url 'quality:packaging_label_verification_detail' release.packaging_verification.pk %}" class="text-blue-600 font-mono underline">{{ release.packaging_verification.number }}</a>
+                  (Grade: {{ release.packaging_verification.get_iso_iec_print_grade_display|slice:":7" }})
+                {% else %}
+                  Carton integrity & barcode scan approved
+                {% endif %}
+              </span>
+            </div>
+            {% if release.packaging_label_approved %}<span class="badge badge-green text-xs">Cleared</span>{% else %}<span class="badge badge-red text-xs">Incomplete</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if release.coc_issued_and_signed %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">4. Certificate of Conformance Signed & Issued</span>
+              <span class="text-xs text-slate-500">
+                {% if release.certificate_of_conformance %}
+                  Linked: <a href="{% url 'quality:certificate_of_conformance_detail' release.certificate_of_conformance.pk %}" class="text-blue-600 font-mono underline">{{ release.certificate_of_conformance.number }}</a>
+                  ({{ release.certificate_of_conformance.get_status_display }})
+                {% else %}
+                  Customer CoC compliance declaration verified
+                {% endif %}
+              </span>
+            </div>
+            {% if release.coc_issued_and_signed %}<span class="badge badge-green text-xs">Cleared</span>{% else %}<span class="badge badge-red text-xs">Incomplete</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if release.export_compliance_verified %}bg-green-50/40 border-green-200{% else %}bg-red-50/40 border-red-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">5. Statutory Export Compliance & Screening</span>
+              <span class="text-xs text-slate-500">Destination: {{ release.destination_country|default:"Domestic" }} (Restricted party and dual-use classification verified)</span>
+            </div>
+            {% if release.export_compliance_verified %}<span class="badge badge-green text-xs">Cleared</span>{% else %}<span class="badge badge-red text-xs">Flagged</span>{% endif %}
+          </div>
+
+          <div class="p-3 rounded-lg border flex items-center justify-between {% if release.certificate_of_origin_attached %}bg-green-50/40 border-green-200{% else %}bg-slate-50/40 border-slate-200{% endif %}">
+            <div>
+              <span class="font-medium text-slate-800 block">6. Certificate of Origin (Customs)</span>
+              <span class="text-xs text-slate-500">Mandatory for international bonded customs entry</span>
+            </div>
+            {% if release.certificate_of_origin_attached %}<span class="badge badge-green text-xs">Attached</span>{% else %}<span class="badge badge-muted text-xs">Not Required</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Logistics & Seal Security -->
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="truck" class="w-4 h-4 text-blue-600"></i>
+          Logistics, Tamper Seals & Custody
+        </h2>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt class="text-xs text-slate-500">Authorized Quantity</dt>
+            <dd class="text-base font-bold text-slate-900">{{ release.quantity_authorized }} units</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Shipping Container Security Seal #</dt>
+            <dd class="font-mono text-base font-bold text-blue-700">{{ release.shipping_container_security_seal|default:"Seal not logged" }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Carrier / Freight Partner</dt>
+            <dd class="font-semibold text-slate-800">{{ release.carrier_name|default:"Carrier TBD" }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Tracking Reference #</dt>
+            <dd class="font-mono text-slate-800">{{ release.tracking_reference|default:"—" }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Notes / Concession -->
+      {% if release.concession_rationale or release.notes %}
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+          Concessions & Authorization Notes
+        </h2>
+        {% if release.concession_rationale %}
+        <div class="mb-3">
+          <span class="text-xs font-bold text-amber-800 uppercase tracking-wider block">Conditional Release Concession Rationale</span>
+          <p class="text-sm text-amber-900 mt-1 whitespace-pre-line bg-amber-50 p-3 rounded border border-amber-200">{{ release.concession_rationale }}</p>
+        </div>
+        {% endif %}
+        {% if release.notes %}
+        <div>
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block">Release Notes</span>
+          <p class="text-sm text-slate-800 mt-1 whitespace-pre-line">{{ release.notes }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Sidebar Right Column -->
+    <div class="space-y-6">
+      <!-- Order & Destination -->
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="building" class="w-4 h-4 text-blue-600"></i>
+          Customer & Destination
+        </h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs text-slate-500">Customer</dt>
+            <dd class="font-bold text-slate-900">{{ release.customer.name }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Destination Country</dt>
+            <dd class="text-slate-800">{{ release.destination_country|default:"Domestic" }}</dd>
+          </div>
+          {% if release.destination_facility %}
+          <div>
+            <dt class="text-xs text-slate-500">Destination Facility</dt>
+            <dd class="text-slate-800">{{ release.destination_facility }}</dd>
+          </div>
+          {% endif %}
+          <div>
+            <dt class="text-xs text-slate-500">Outbound Shipment #</dt>
+            <dd class="font-mono text-slate-800 font-semibold">{{ release.shipment_number|default:release.shipment|default:"—" }}</dd>
+          </div>
+          {% if release.sales_order_number or release.sales_order %}
+          <div>
+            <dt class="text-xs text-slate-500">Sales Order #</dt>
+            <dd class="font-mono text-slate-800">{{ release.sales_order_number|default:release.sales_order }}</dd>
+          </div>
+          {% endif %}
+          {% if release.lot_number %}
+          <div>
+            <dt class="text-xs text-slate-500">Lot Number</dt>
+            <dd class="font-mono text-slate-800">{{ release.lot_number }}</dd>
+          </div>
+          {% endif %}
+        </dl>
+      </div>
+
+      <!-- Release Officer -->
+      <div class="card p-5">
+        <h2 class="text-base font-bold text-slate-800 mb-3 flex items-center gap-2 border-b pb-2">
+          <i data-lucide="signature" class="w-4 h-4 text-blue-600"></i>
+          Releasing Authority
+        </h2>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs text-slate-500">Releasing Officer</dt>
+            <dd class="font-bold text-slate-900">{{ release.releasing_officer.get_full_name|default:release.releasing_officer.username|default:"Pending Officer Sign-off" }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Release Date</dt>
+            <dd class="text-slate-800">{{ release.release_date|default:"Date not set" }}</dd>
+          </div>
+          <div class="border-t pt-2">
+            <dt class="text-xs text-slate-500">Created At</dt>
+            <dd class="text-xs text-slate-600">{{ release.created_at|date:"Y-m-d H:i" }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
