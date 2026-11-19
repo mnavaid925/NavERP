@@ -30,9 +30,7 @@ def _csv_safe(val):
 
 @login_required
 def certificate_of_conformance_list(request):
-    qs = CertificateOfConformance.objects.filter(tenant=request.tenant).select_related(
-        "customer", "sales_order", "shipment", "inspection_lot", "authorized_signatory"
-    )
+    qs = CertificateOfConformance.objects.filter(tenant=request.tenant).select_related("customer")
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -139,6 +137,9 @@ def certificate_of_conformance_create(request):
 @login_required
 def certificate_of_conformance_edit(request, pk):
     certificate = get_object_or_404(CertificateOfConformance, pk=pk, tenant=request.tenant)
+    if certificate.status in ("approved_signed", "revoked"):
+        messages.error(request, f"Certificate {certificate.number} is locked ({certificate.get_status_display()}) and cannot be edited.")
+        return redirect("quality:certificate_of_conformance_detail", pk=certificate.pk)
     if request.method == "POST":
         form = CertificateOfConformanceForm(request.POST, instance=certificate, tenant=request.tenant)
         if form.is_valid():
@@ -163,6 +164,9 @@ def certificate_of_conformance_edit(request, pk):
 @tenant_admin_required
 def certificate_of_conformance_delete(request, pk):
     certificate = get_object_or_404(CertificateOfConformance, pk=pk, tenant=request.tenant)
+    if certificate.status == "approved_signed":
+        messages.error(request, f"Signed Certificate {certificate.number} cannot be deleted. Revoke the certificate first to preserve audit records.")
+        return redirect("quality:certificate_of_conformance_detail", pk=certificate.pk)
     number = certificate.number
     write_audit_log(request.user, certificate, "delete", tenant=request.tenant)
     certificate.delete()
@@ -201,7 +205,7 @@ def certificate_of_conformance_sign(request, pk):
 @login_required
 def certificate_of_conformance_export(request):
     write_audit_log(request.user, None, "export", changes={"model": "CertificateOfConformance"}, tenant=request.tenant)
-    qs = CertificateOfConformance.objects.filter(tenant=request.tenant).order_by("-created_at")
+    qs = CertificateOfConformance.objects.filter(tenant=request.tenant).select_related("customer", "authorized_signatory").order_by("-created_at")
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="certificates_of_conformance.csv"'
