@@ -98,7 +98,7 @@
           <dd class="font-mono text-slate-600">±{{ calibration_record.gage.max_permissible_error }} {{ calibration_record.gage.engineering_unit }}</dd>
         </div>
         <div>
-          <dt class="text-xs text-slate-400">Expanded Uncertainty ($U$, k=2)</dt>
+          <dt class="text-xs text-slate-400">Expanded Uncertainty (U, k=2)</dt>
           <dd class="font-mono font-bold text-blue-600">±{{ calibration_record.expanded_uncertainty }} {{ calibration_record.gage.engineering_unit }}</dd>
         </div>
         <div>
@@ -110,7 +110,7 @@
           <dd class="font-medium text-slate-800">
             {% if calibration_record.guardband_applied %}
               <span class="text-green-600 flex items-center gap-1 font-semibold">
-                <i data-lucide="shield-check" class="w-4 h-4"></i> ILAC-G8 Guardband Applied (Tolerance reduced by expanded uncertainty $U$)
+                <i data-lucide="shield-check" class="w-4 h-4"></i> ILAC-G8 Guardband Applied (Tolerance reduced by expanded uncertainty U)
               </span>
             {% else %}
               <span class="text-slate-500">Simple Acceptance (No Guardband)</span>
