@@ -72,7 +72,7 @@
         <i data-lucide="activity" class="w-4 h-4 text-blue-500"></i>
         Metrology Data & Measurement Uncertainty
       </h2>
-      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
         <div>
           <dt class="text-xs text-slate-400">Calibration Event Type</dt>
           <dd class="font-medium text-slate-800">{{ calibration_record.get_calibration_type_display }}</dd>
@@ -126,7 +126,7 @@
         <i data-lucide="thermometer" class="w-4 h-4 text-amber-500"></i>
         Lab Environment & Audit Sign-Off
       </h2>
-      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
         <div>
           <dt class="text-xs text-slate-400">Ambient Temperature</dt>
           <dd class="font-mono font-medium text-slate-800">{{ calibration_record.ambient_temperature_c }} °C</dd>
