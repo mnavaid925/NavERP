@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Calibration Vendor Directory — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Calibration & MSA</span>
+        <span class="mx-1">/</span>
+        <span>Accredited Vendors</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="building-2" class="w-6 h-6 text-blue-600"></i>
+        Accredited Calibration Laboratories & Vendors
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Qualified ISO/IEC 17025 accredited calibration facilities, OEM service contractors, and lab performance tracking.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:calibration_gage_list' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="gauge" class="w-4 h-4"></i>
+        <span>Gage Registry</span>
+      </a>
+      <a href="{% url 'quality:calibration_record_list' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="file-check-2" class="w-4 h-4"></i>
+        <span>Calibration Records</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Search & Stat Bar -->
+  <div class="card p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="stat-icon blue p-2.5 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="award" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-lg font-bold text-slate-900">{{ total_vendors }} Available Labs</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider">Accredited Calibration Sources</div>
+      </div>
+    </div>
+    <form method="get" class="flex items-center gap-2 w-full md:w-96">
+      <div class="relative flex-1">
+        <input type="text" name="q" value="{{ search_query }}" placeholder="Search lab name or tax ID..." class="form-input text-sm w-full pl-9" />
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+      </div>
+      <button type="submit" class="btn btn-outline text-sm h-10 px-4">Search</button>
+      {% if search_query %}
+        <a href="{% url 'quality:calibration_vendor_directory' %}" class="btn btn-outline text-sm h-10 px-3 text-slate-500" title="Reset">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Vendors Table -->
+  <div class="card overflow-hidden">
+    <div class="table-wrap">
+      <table class="table w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 text-xs font-semibold uppercase border-b border-slate-200">
+            <th class="py-3 px-4">Laboratory / Organization</th>
+            <th class="py-3 px-4">Accreditation Standards</th>
+            <th class="py-3 px-4">Tax ID / Business Ref</th>
+            <th class="py-3 px-4 text-center">Executed Calibrations</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-sm">
+          {% for v in vendors %}
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4">
+                <div class="font-bold text-slate-900">{{ v.name }}</div>
+                {% if v.legal_name and v.legal_name != v.name %}
+                  <div class="text-xs text-slate-500">{{ v.legal_name }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="badge badge-info text-xs">ISO/IEC 17025</span>
+                  <span class="badge badge-slate text-xs">ANSI/NCSL Z540-1</span>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-xs font-mono text-slate-600">
+                {{ v.tax_id|default:"Standard Commercial Vendor" }}
+              </td>
+              <td class="py-3 px-4 text-center font-mono">
+                {% if v.calibration_events_count %}
+                  <span class="badge badge-green text-xs font-bold">{{ v.calibration_events_count }} Events</span>
+                {% else %}
+                  <span class="text-slate-400 text-xs">0 Events</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <a href="{% url 'quality:calibration_record_list' %}?q={{ v.name|urlencode }}" class="btn btn-outline text-xs px-2.5 py-1" title="View Performed Calibrations">
+                  View Calibrations
+                </a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="py-12 text-center text-slate-500">
+                <div class="empty-state flex flex-col items-center justify-center">
+                  <i data-lucide="building-2" class="w-12 h-12 text-slate-300 mb-3"></i>
+                  <div class="text-base font-medium text-slate-700 mb-1">No accredited calibration laboratories found</div>
+                  <p class="text-xs text-slate-400 max-w-sm mb-4">
+                    Vendors registered with party role "vendor" or "supplier" in the unified core spine will appear here.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+      <div class="pagination flex items-center justify-between px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
+        <div>
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} vendors
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-outline px-2 py-1 text-xs">
+              Previous
+            </a>
+          {% else %}
+            <span class="btn btn-outline px-2 py-1 text-xs opacity-50 cursor-not-allowed">Previous</span>
+          {% endif %}
+          <span class="px-2 py-1">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-outline px-2 py-1 text-xs">
+              Next
+            </a>
+          {% else %}
+            <span class="btn btn-outline px-2 py-1 text-xs opacity-50 cursor-not-allowed">Next</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
