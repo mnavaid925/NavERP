@@ -179,7 +179,12 @@ def certificate_of_conformance_sign(request, pk):
         messages.error(request, f"Certificate {certificate.number} is locked and cannot be re-signed.")
         return redirect("quality:certificate_of_conformance_detail", pk=certificate.pk)
     now = timezone.now()
-    raw_stamp = f"{certificate.number}:{certificate.tenant_id}:{request.user.id}:{now.isoformat()}"
+    raw_stamp = (
+        f"{certificate.number}:{certificate.tenant_id}:{request.user.id}:{now.isoformat()}:"
+        f"{certificate.customer_id}:{certificate.item_code}:{certificate.lot_number}:"
+        f"{certificate.certified_quantity}:{certificate.applicable_specifications}:"
+        f"{certificate.test_results_summary}:{certificate.conformance_statement}"
+    )
     digest = hashlib.sha256(raw_stamp.encode("utf-8")).hexdigest()
 
     certificate.authorized_signatory = request.user
