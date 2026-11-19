@@ -199,6 +199,10 @@ class PackagingLabelVerification(TenantNumbered):
         return self.ISO_IEC_GRADE_CSS.get(self.iso_iec_print_grade, "badge-slate")
 
     @property
+    def barcode_css(self):
+        return self.BARCODE_CSS.get(self.barcode_symbology, "badge-slate")
+
+    @property
     def is_passed(self):
         return (
             self.disposition == "pass_released"
