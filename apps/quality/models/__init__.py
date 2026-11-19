@@ -79,6 +79,18 @@ from apps.quality.models.FinalQuality.PackagingLabelVerifications import (
 from apps.quality.models.FinalQuality.QualityReleaseAuthorizations import (
     QualityReleaseAuthorization,
 )
+from apps.quality.models.AuditManagement.AuditPrograms import (
+    AuditProgram,
+)
+from apps.quality.models.AuditManagement.QualityAudits import (
+    QualityAudit,
+)
+from apps.quality.models.AuditManagement.AuditFindings import (
+    AuditFinding,
+)
+from apps.quality.models.AuditManagement.RegulatoryInspectionHosts import (
+    RegulatoryInspectionHost,
+)
 
 __all__ = [
     "TenantOwned",
@@ -123,5 +135,9 @@ __all__ = [
     "CertificateOfConformance",
     "PackagingLabelVerification",
     "QualityReleaseAuthorization",
+    "AuditProgram",
+    "QualityAudit",
+    "AuditFinding",
+    "RegulatoryInspectionHost",
 ]
 
