@@ -271,7 +271,7 @@
         <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-xs text-slate-500">Releasing Officer</dt>
-            <dd class="font-bold text-slate-900">{{ release.releasing_officer.get_full_name|default:release.releasing_officer.username|default:"Pending Officer Sign-off" }}</dd>
+            <dd class="font-bold text-slate-900">{% if release.releasing_officer %}{{ release.releasing_officer.get_full_name|default:release.releasing_officer.username }}{% else %}Pending Officer Sign-off{% endif %}</dd>
           </div>
           <div>
             <dt class="text-xs text-slate-500">Release Date</dt>
