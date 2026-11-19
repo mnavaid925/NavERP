@@ -1,0 +1,67 @@
+from apps.quality.views.FinalQuality.CertificatesOfConformance import (
+    certificate_of_conformance_create,
+    certificate_of_conformance_delete,
+    certificate_of_conformance_detail,
+    certificate_of_conformance_edit,
+    certificate_of_conformance_export,
+    certificate_of_conformance_list,
+    certificate_of_conformance_sign,
+)
+from apps.quality.views.FinalQuality.FinalInspectionLots import (
+    final_inspection_lot_create,
+    final_inspection_lot_delete,
+    final_inspection_lot_detail,
+    final_inspection_lot_edit,
+    final_inspection_lot_export,
+    final_inspection_lot_list,
+    final_inspection_lot_toggle_hold,
+)
+from apps.quality.views.FinalQuality.OqcHoldBoard import oqc_hold_board
+from apps.quality.views.FinalQuality.PackagingLabelVerifications import (
+    packaging_label_verification_create,
+    packaging_label_verification_delete,
+    packaging_label_verification_detail,
+    packaging_label_verification_edit,
+    packaging_label_verification_export,
+    packaging_label_verification_list,
+)
+from apps.quality.views.FinalQuality.QualityReleaseAuthorizations import (
+    quality_release_authorization_create,
+    quality_release_authorization_delete,
+    quality_release_authorization_detail,
+    quality_release_authorization_edit,
+    quality_release_authorization_export,
+    quality_release_authorization_list,
+    quality_release_authorization_toggle_hold,
+)
+
+__all__ = [
+    "final_inspection_lot_list",
+    "final_inspection_lot_detail",
+    "final_inspection_lot_create",
+    "final_inspection_lot_edit",
+    "final_inspection_lot_delete",
+    "final_inspection_lot_toggle_hold",
+    "final_inspection_lot_export",
+    "certificate_of_conformance_list",
+    "certificate_of_conformance_detail",
+    "certificate_of_conformance_create",
+    "certificate_of_conformance_edit",
+    "certificate_of_conformance_delete",
+    "certificate_of_conformance_sign",
+    "certificate_of_conformance_export",
+    "packaging_label_verification_list",
+    "packaging_label_verification_detail",
+    "packaging_label_verification_create",
+    "packaging_label_verification_edit",
+    "packaging_label_verification_delete",
+    "packaging_label_verification_export",
+    "quality_release_authorization_list",
+    "quality_release_authorization_detail",
+    "quality_release_authorization_create",
+    "quality_release_authorization_edit",
+    "quality_release_authorization_delete",
+    "quality_release_authorization_toggle_hold",
+    "quality_release_authorization_export",
+    "oqc_hold_board",
+]
