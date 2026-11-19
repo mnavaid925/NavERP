@@ -34290,3 +34290,324 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Review notes
 (filled in at the end)
+
+
+---
+
+# Sub-module 12.10: Calibration & Measurement System Analysis (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.10.md` (2026-11-19)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), 12.5 (Non-Conformance), 12.6 (Supplier Quality), 12.7 (Incoming Quality Control), and 12.8 (In-Process Quality & SPC).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0015_inprocessinspection_idx_qipq_ten_defect_and_more.py` (claims next incremental migration `0016_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QGAG`** (`CalibrationGage`), **`QCAL`** (`CalibrationRecord`), **`QOOT`** (`OutOfToleranceInvestigation`), **`QMSA`** (`MeasurementSystemAnalysis`).
+> Plan written from `.claude/tasks/research-quality-12.10.md` (Phase 1) and `NavERP.md` (`### 12.10 Calibration & Measurement System Analysis`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/CalibrationAnalysis/<Entity>.py` (`CalibrationGages.py`, `CalibrationRecords.py`, `OutOfToleranceInvestigations.py`, `MeasurementSystemAnalyses.py`, plus dedicated `CalibrationVendorDirectory.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/calibrationanalysis/{calibration_gage,calibration_record,out_of_tolerance_investigation,measurement_system_analysis}/{list,detail,form}.html` + `templates/quality/calibrationanalysis/calibration_vendor_directory.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QGAG`** (`CalibrationGage`), **`QCAL`** (`CalibrationRecord`), **`QOOT`** (`OutOfToleranceInvestigation`), **`QMSA`** (`MeasurementSystemAnalysis`), all 4 model classes, and all URL stems (`calibration_gage_*`, `calibration_record_*`, `out_of_tolerance_investigation_*`, `measurement_system_analysis_*`, `calibration_vendor_directory`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.Party` (`apps/core/models/Party.py`, role="vendor" for calibration vendors/labs and manufacturers).
+  - Module 12 siblings (12.1, 12.4, 12.5): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.NonConformanceReport` (`apps/quality/models/NonConformance/NonConformanceReports.py`), `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`).
+  - SCM cross-module: `scm.Asset` (`apps/scm/models/AssetManagement/Assets.py`), `scm.WorkCenter` (`apps/scm/models/Manufacturing/WorkCenters.py`), `scm.WorkOrder` (`apps/scm/models/Manufacturing/WorkOrders.py`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`, `UOM`): Text fields `item_code`, `lot_number`, `serial_number`, `unit_of_measure` with future migration path.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `quality.ControlledDocument`, `quality.NonConformanceReport`, `quality.CapaInvestigation`, `scm.Asset`, `scm.WorkCenter`, `core.OrgUnit`, `core.Party`, `quality.CalibrationGage`, `quality.CalibrationRecord`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Metrology and Quality Regulatory Standards (ISO/IEC 17025:2017, ISO 9001:2015 §7.1.5, IATF 16949 / AIAG MSA 4th Edition, ANSI/NCSL Z540.3, ILAC-G8:09/2019, FDA 21 CFR 820.72)**:
+  - Full cradle-to-grave gage inventory management with NIST/NMI traceability chains and calibration interval forecasting.
+  - Dual "As-Found" and "As-Left" condition tracking with environmental temperature/humidity capture and Expanded Uncertainty ($U, k=2$) calculation.
+  - Decision rules conformance documentation (Simple Acceptance, ILAC-G8 Binary Guardbanding, Non-Binary Guardbanding) to prevent false acceptance near tolerance limits.
+  - Immediate automated Out-of-Tolerance (OOT) containment, suspect window reverse-tracing (querying affected work orders/lots), Consumer's vs. Producer's risk evaluation, and closed-loop escalation to `NonConformanceReport` (`QNCR-`) and `CapaInvestigation` (`QCAP-`).
+  - Full AIAG MSA 4th Edition Gage R&R analysis: Crossed ANOVA & Xbar-R methods, Nested Gage R&R, Linearity & Bias, Stability studies, and calculation of $\%GRR$, $P/T$ ratio, and Number of Distinct Categories ($NDC \ge 5$).
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `approved_at`, `signoff_date`), auto-numbers (`number`), and computed metrics MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed helper properties (`is_overdue`, `days_until_due`, `is_oot_failure`, `msa_status_badge`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `CalibrationGage` (`QGAG-`)
+- [ ] **File**: `apps/quality/models/CalibrationAnalysis/CalibrationGages.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QGAG"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `gage_id_tag`: `CharField(max_length=64, help_text="Unique asset/gage tag e.g. GAG-2026-0042")`
+  - `name`: `CharField(max_length=200, help_text="Tool/instrument name e.g. Mitutoyo Digital Caliper 0-150mm")`
+  - `gage_type`: `CharField(max_length=32, choices=GAGE_TYPE_CHOICES, default="caliper", db_index=True)` — `"caliper"` (7), `"micrometer"` (10), `"dial_indicator"` (14), `"pressure_gage"` (13), `"temperature_probe"` (17), `"torque_wrench"` (13), `"multimeter"` (10), `"scale_balance"` (13), `"cmm"` (3), `"optical_comparator"` (18), `"height_gage"` (11), `"plug_ring_gage"` (14), `"reference_standard"` (18), `"other"` (5) (longest: 18 <= 32)
+  - `classification`: `CharField(max_length=32, choices=CLASSIFICATION_CHOICES, default="standard_inspection", db_index=True)` — `"critical_ctq"` (12), `"standard_inspection"` (19), `"reference_standard"` (18), `"indication_only"` (15) (longest: 19 <= 32)
+  - `status`: `CharField(max_length=32, choices=STATUS_CHOICES, default="active_in_service", db_index=True)` — `"active_in_service"` (17), `"calibration_due"` (15), `"out_of_service"` (14), `"quarantined_oot"` (15), `"in_calibration"` (14), `"retired"` (7) (longest: 17 <= 32)
+  - `model_number`: `CharField(max_length=100, blank=True)`
+  - `serial_number`: `CharField(max_length=100, blank=True)`
+  - `manufacturer`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_manufactured_gages")`
+  - `preferred_vendor`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_serviced_gages", help_text="Calibration lab service provider")`
+  - `asset`: `ForeignKey("scm.Asset", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_calibration_gages")`
+  - `work_center`: `ForeignKey("scm.WorkCenter", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_calibration_gages")`
+  - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_calibration_gages")`
+  - `custodian`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_custody_gages")`
+  - `location_storage`: `CharField(max_length=150, blank=True, help_text="Tool crib, shelf, cabinet, or inspection room")`
+  - `measurement_range_min`: `DecimalField(max_digits=12, decimal_places=4, default=Decimal("0.0000"))`
+  - `measurement_range_max`: `DecimalField(max_digits=12, decimal_places=4, default=Decimal("150.0000"))`
+  - `resolution`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0100"))`
+  - `unit_of_measure`: `CharField(max_length=32, default="mm", help_text="e.g. mm, in, bar, °C, Nm, V, kg")`
+  - `tolerance_upper`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0200"))`
+  - `tolerance_lower`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("-0.0200"))`
+  - `interval_months`: `PositiveIntegerField(default=12, help_text="Calibration interval cadence in months")`
+  - `last_calibration_date`: `DateField(null=True, blank=True)`
+  - `next_calibration_due`: `DateField(null=True, blank=True, db_index=True)`
+  - `is_reference_standard`: `BooleanField(default=False)`
+  - `nist_traceability_number`: `CharField(max_length=100, blank=True, help_text="NIST or National Metrology Institute test/trace report #")`
+  - `calibration_procedure_doc`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="calibrated_gages", help_text="Calibration SOP or work instruction")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qgag_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qgag_ten_status")` (19)
+  - `Index(fields=["tenant", "gage_type"], name="idx_qgag_ten_type")` (17)
+  - `Index(fields=["tenant", "classification"], name="idx_qgag_ten_class")` (18)
+  - `Index(fields=["tenant", "next_calibration_due"], name="idx_qgag_ten_due")` (16)
+  - `Index(fields=["tenant", "work_center"], name="idx_qgag_ten_wc")` (15)
+  - `Index(fields=["tenant", "custodian"], name="idx_qgag_ten_cust")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qgag_ten_created")` (20)
+
+### 2. `CalibrationRecord` (`QCAL-`)
+- [ ] **File**: `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCAL"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `gage`: `ForeignKey("quality.CalibrationGage", on_delete=models.CASCADE, related_name="calibration_records")`
+  - `calibration_date`: `DateField(default=timezone.now, db_index=True)`
+  - `calibration_type`: `CharField(max_length=32, choices=CALIBRATION_TYPE_CHOICES, default="internal_lab", db_index=True)` — `"internal_lab"` (12), `"external_accredited_lab"` (23), `"on_site_vendor"` (14), `"field_verification"` (18) (longest: 23 <= 32)
+  - `calibration_vendor`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="executed_calibrations")`
+  - `reference_standard_used`: `ForeignKey("quality.CalibrationGage", on_delete=models.SET_NULL, null=True, blank=True, related_name="used_as_standard_records")`
+  - `procedure_followed`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="calibration_records_followed")`
+  - `as_found_condition`: `CharField(max_length=32, choices=AS_FOUND_CHOICES, default="in_tolerance", db_index=True)` — `"in_tolerance"` (12), `"out_of_tolerance"` (16), `"damaged_inoperable"` (18), `"nominal_good"` (12) (longest: 18 <= 32)
+  - `as_left_condition`: `CharField(max_length=32, choices=AS_LEFT_CHOICES, default="returned_to_tolerance", db_index=True)` — `"returned_to_tolerance"` (21), `"adjusted_calibrated"` (19), `"limited_calibration"` (19), `"failed_decommissioned"` (21), `"unadjusted_pass"` (15) (longest: 21 <= 32)
+  - `result_status`: `CharField(max_length=32, choices=RESULT_STATUS_CHOICES, default="passed", db_index=True)` — `"passed"` (6), `"passed_with_adjustments"` (23), `"conditional_pass_guardband"` (26), `"failed_out_of_tolerance"` (24), `"canceled"` (8) (longest: 26 <= 32)
+  - `environmental_temperature_c`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("20.00"), help_text="Ambient temp in °C at calibration")`
+  - `environmental_humidity_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("45.00"), help_text="Relative humidity %")`
+  - `expanded_uncertainty`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0000"), help_text="Expanded measurement uncertainty U (k=2, 95% confidence)")`
+  - `test_uncertainty_ratio`: `DecimalField(max_digits=8, decimal_places=2, default=Decimal("4.00"), help_text="TUR ratio e.g. 4.0 for 4:1")`
+  - `decision_rule`: `CharField(max_length=32, choices=DECISION_RULE_CHOICES, default="simple_acceptance", db_index=True)` — `"simple_acceptance"` (17), `"binary_guardbanding_ilac_g8"` (27), `"non_binary_guardbanding"` (23), `"not_applicable"` (14) (longest: 27 <= 32)
+  - `certificate_number`: `CharField(max_length=100, blank=True)`
+  - `certificate_issue_date`: `DateField(null=True, blank=True)`
+  - `certificate_accreditation`: `CharField(max_length=32, choices=ACCREDITATION_CHOICES, default="iso_17025_accredited", db_index=True)` — `"iso_17025_accredited"` (20), `"nist_traceable"` (14), `"ansi_z540"` (9), `"manufacturer_cert"` (17), `"internal_verification"` (21) (longest: 21 <= 32)
+  - `calibrated_interval_override_months`: `PositiveIntegerField(null=True, blank=True, help_text="Override next interval based on drift history")`
+  - `performed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="conducted_calibrations")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_calibrations")`
+  - `approved_at`: `DateTimeField(null=True, blank=True)`
+  - `test_points_data`: `JSONField(default=list, blank=True, help_text="Array of test points: nominal, as-found, error, as-left, tolerance")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `approved_at`, `test_points_data`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcal_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "result_status"], name="idx_qcal_ten_result")` (19)
+  - `Index(fields=["tenant", "as_found_condition"], name="idx_qcal_ten_as_found")` (21)
+  - `Index(fields=["tenant", "as_left_condition"], name="idx_qcal_ten_as_left")` (20)
+  - `Index(fields=["tenant", "gage"], name="idx_qcal_ten_gage")` (17)
+  - `Index(fields=["tenant", "calibration_date"], name="idx_qcal_ten_date")` (17)
+  - `Index(fields=["tenant", "calibration_type"], name="idx_qcal_ten_type")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcal_ten_created")` (20)
+
+### 3. `OutOfToleranceInvestigation` (`QOOT-`)
+- [ ] **File**: `apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QOOT"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `calibration_record`: `ForeignKey("quality.CalibrationRecord", on_delete=models.CASCADE, related_name="oot_investigations")`
+  - `gage`: `ForeignKey("quality.CalibrationGage", on_delete=models.CASCADE, related_name="oot_investigations")`
+  - `status`: `CharField(max_length=32, choices=STATUS_CHOICES, default="open_containment", db_index=True)` — `"open_containment"` (16), `"impact_analysis_in_progress"` (27), `"mrb_review"` (10), `"capa_pending"` (12), `"closed_no_impact"` (16), `"closed_product_recalled"` (23) (longest: 27 <= 32)
+  - `risk_severity`: `CharField(max_length=32, choices=RISK_SEVERITY_CHOICES, default="moderate_risk", db_index=True)` — `"critical_high_risk"` (18), `"moderate_risk"` (13), `"low_negligible_risk"` (19) (longest: 19 <= 32)
+  - `magnitude_of_oot`: `CharField(max_length=150, help_text="e.g. +0.035 mm exceeding +/- 0.010 mm tolerance limit")`
+  - `suspect_usage_window_start`: `DateField(help_text="Date of last known conforming calibration")`
+  - `suspect_usage_window_end`: `DateField(help_text="Date OOT was discovered")`
+  - `suspect_work_center`: `ForeignKey("scm.WorkCenter", on_delete=models.SET_NULL, null=True, blank=True, related_name="oot_suspect_events")`
+  - `suspect_work_orders_count`: `PositiveIntegerField(default=0, help_text="Number of production work orders during suspect window")`
+  - `suspect_lots_inspected`: `PositiveIntegerField(default=0, help_text="Number of production lots/batches inspected with gage")`
+  - `consumer_risk_level`: `CharField(max_length=32, choices=RISK_LEVEL_CHOICES, default="low", db_index=True)` — `"high"` (4), `"medium"` (6), `"low"` (3), `"negligible"` (10) (longest: 10 <= 32)
+  - `producer_risk_level`: `CharField(max_length=32, choices=RISK_LEVEL_CHOICES, default="low", db_index=True)` — `"high"` (4), `"medium"` (6), `"low"` (3), `"negligible"` (10) (longest: 10 <= 32)
+  - `impact_assessment_summary`: `TextField(blank=True, help_text="Evaluation of part tolerances vs instrument error")`
+  - `immediate_containment_action`: `CharField(max_length=32, choices=CONTAINMENT_ACTION_CHOICES, default="gage_quarantined", db_index=True)` — `"gage_quarantined"` (16), `"wip_quarantined"` (15), `"finished_goods_held"` (19), `"customer_alert_issued"` (21), `"none_risk_absorbed"` (18) (longest: 21 <= 32)
+  - `containment_notes`: `TextField(blank=True)`
+  - `product_disposition`: `CharField(max_length=32, choices=DISPOSITION_CHOICES, default="pending_review", db_index=True)` — `"pending_review"` (14), `"no_action_tolerances_adequate"` (30), `"re_inspect_inventory"` (20), `"customer_quarantine_alert"` (25), `"formal_recall"` (13), `"scrap_wip"` (9) (longest: 30 <= 32)
+  - `mrb_review_notes`: `TextField(blank=True)`
+  - `root_cause_category`: `CharField(max_length=32, choices=ROOT_CAUSE_CHOICES, default="normal_wear", db_index=True)` — `"normal_wear"` (11), `"handling_drop_impact"` (20), `"environmental_exposure"` (22), `"operator_misuse"` (15), `"component_drift"` (15), `"unknown"` (7) (longest: 22 <= 32)
+  - `corrective_preventive_actions`: `TextField(blank=True)`
+  - `non_conformance_report`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="oot_investigations")`
+  - `capa_investigation`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="oot_investigations")`
+  - `investigator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="investigated_oots")`
+  - `quality_manager_signoff`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_oots")`
+  - `signoff_date`: `DateField(null=True, blank=True)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qoot_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qoot_ten_status")` (19)
+  - `Index(fields=["tenant", "risk_severity"], name="idx_qoot_ten_risk")` (17)
+  - `Index(fields=["tenant", "product_disposition"], name="idx_qoot_ten_disp")` (17)
+  - `Index(fields=["tenant", "gage"], name="idx_qoot_ten_gage")` (17)
+  - `Index(fields=["tenant", "calibration_record"], name="idx_qoot_ten_cal")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qoot_ten_created")` (20)
+
+### 4. `MeasurementSystemAnalysis` (`QMSA-`)
+- [ ] **File**: `apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMSA"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `gage`: `ForeignKey("quality.CalibrationGage", on_delete=models.CASCADE, related_name="msa_studies")`
+  - `study_type`: `CharField(max_length=32, choices=STUDY_TYPE_CHOICES, default="gage_rr_crossed", db_index=True)` — `"gage_rr_crossed"` (15), `"gage_rr_nested"` (14), `"linearity_and_bias"` (18), `"stability_study"` (15), `"attribute_agreement"` (19), `"type_1_gage_study"` (17) (longest: 19 <= 32)
+  - `analysis_method`: `CharField(max_length=32, choices=ANALYSIS_METHOD_CHOICES, default="anova", db_index=True)` — `"anova"` (5), `"average_and_range_xbar_r"` (24) (longest: 24 <= 32)
+  - `status`: `CharField(max_length=32, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"data_collection"` (15), `"analyzed"` (8), `"approved"` (8), `"rejected"` (8) (longest: 15 <= 32)
+  - `characteristic_name`: `CharField(max_length=150, help_text="Dimension or feature being measured e.g. Outer Diameter")`
+  - `study_date`: `DateField(default=timezone.now)`
+  - `number_of_operators`: `PositiveIntegerField(default=3)`
+  - `number_of_parts`: `PositiveIntegerField(default=10)`
+  - `number_of_trials`: `PositiveIntegerField(default=3)`
+  - `specification_tolerance`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.1000"), help_text="Total process or product tolerance (USL - LSL)")`
+  - `reference_master_value`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="Certified value for bias/linearity")`
+  - `repeatability_ev`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0000"), help_text="EV - Equipment Variation")`
+  - `reproducibility_av`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0000"), help_text="AV - Appraiser Variation")`
+  - `gage_rr_grr`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0000"), help_text="GRR - Combined Gage R&R")`
+  - `part_variation_pv`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0000"), help_text="PV - Part-to-part variation")`
+  - `total_variation_tv`: `DecimalField(max_digits=10, decimal_places=4, default=Decimal("0.0000"), help_text="TV - Total study variation")`
+  - `percent_gage_rr_study_variation`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"), help_text="%GRR of Study Variation (<10% Acceptable, 10-30% Marginal, >30% Unacceptable)")`
+  - `percent_tolerance_pt_ratio`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"), help_text="P/T ratio (% of Tolerance)")`
+  - `number_of_distinct_categories_ndc`: `DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"), help_text="NDC category count (>= 5 acceptable)")`
+  - `bias_value`: `DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)`
+  - `bias_percentage`: `DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)`
+  - `linearity_slope`: `DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)`
+  - `linearity_r_squared`: `DecimalField(max_digits=6, decimal_places=4, null=True, blank=True)`
+  - `study_result`: `CharField(max_length=32, choices=RESULT_CHOICES, default="acceptable", db_index=True)` — `"acceptable"` (10), `"marginal_conditional"` (20), `"unacceptable"` (12) (longest: 20 <= 32)
+  - `raw_study_data`: `JSONField(default=dict, blank=True, help_text="Raw measurement data array (operator, part, trial, value)")`
+  - `study_protocol_doc`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="msa_studies")`
+  - `study_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="led_msa_studies")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_msa_studies")`
+  - `approved_at`: `DateTimeField(null=True, blank=True)`
+  - `conclusion`: `TextField(blank=True)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `raw_study_data`, `approved_at`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qmsa_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "study_type"], name="idx_qmsa_ten_type")` (17)
+  - `Index(fields=["tenant", "study_result"], name="idx_qmsa_ten_res")` (16)
+  - `Index(fields=["tenant", "status"], name="idx_qmsa_ten_status")` (19)
+  - `Index(fields=["tenant", "gage"], name="idx_qmsa_ten_gage")` (17)
+  - `Index(fields=["tenant", "study_date"], name="idx_qmsa_ten_date")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qmsa_ten_created")` (20)
+
+---
+
+## Backend (`apps/quality/{models,forms,views,urls}/CalibrationAnalysis/`)
+
+- [ ] **Shared Helpers**:
+  - `apps/quality/models/CalibrationAnalysis/_validators.py`: Custom validators for range checks, uncertainty ratio calculations, and guardbanding rules
+  - `apps/quality/views/CalibrationAnalysis/_helpers.py`: Helper functions for query param parsing (`.isdigit()`), choice filters, tenant scoping, CSV export with formula neutralization, and audit logging
+- [ ] **Entity 1: CalibrationGage (`QGAG-`)**:
+  - `apps/quality/models/CalibrationAnalysis/CalibrationGages.py`
+  - `apps/quality/forms/CalibrationAnalysis/CalibrationGages.py` (`CalibrationGageForm`)
+  - `apps/quality/views/CalibrationAnalysis/CalibrationGages.py` (`calibration_gage_list`, `calibration_gage_detail`, `calibration_gage_create`, `calibration_gage_edit`, `calibration_gage_delete`, `calibration_gage_export_csv`, `calibration_gage_schedule_action`)
+  - `apps/quality/urls/CalibrationAnalysis/CalibrationGages.py` (literal routes before `<int:pk>/`)
+- [ ] **Entity 2: CalibrationRecord (`QCAL-`)**:
+  - `apps/quality/models/CalibrationAnalysis/CalibrationRecords.py`
+  - `apps/quality/forms/CalibrationAnalysis/CalibrationRecords.py` (`CalibrationRecordForm`)
+  - `apps/quality/views/CalibrationAnalysis/CalibrationRecords.py` (`calibration_record_list`, `calibration_record_detail`, `calibration_record_create`, `calibration_record_edit`, `calibration_record_delete`, `calibration_record_export_csv`, `calibration_record_approve`)
+  - `apps/quality/urls/CalibrationAnalysis/CalibrationRecords.py` (literal routes before `<int:pk>/`)
+- [ ] **Entity 3: OutOfToleranceInvestigation (`QOOT-`)**:
+  - `apps/quality/models/CalibrationAnalysis/OutOfToleranceInvestigations.py`
+  - `apps/quality/forms/CalibrationAnalysis/OutOfToleranceInvestigations.py` (`OutOfToleranceInvestigationForm`)
+  - `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py` (`out_of_tolerance_investigation_list`, `out_of_tolerance_investigation_detail`, `out_of_tolerance_investigation_create`, `out_of_tolerance_investigation_edit`, `out_of_tolerance_investigation_delete`, `out_of_tolerance_investigation_export_csv`, `out_of_tolerance_investigation_contain_action`, `out_of_tolerance_investigation_close_action`)
+  - `apps/quality/urls/CalibrationAnalysis/OutOfToleranceInvestigations.py` (literal routes before `<int:pk>/`)
+- [ ] **Entity 4: MeasurementSystemAnalysis (`QMSA-`)**:
+  - `apps/quality/models/CalibrationAnalysis/MeasurementSystemAnalyses.py`
+  - `apps/quality/forms/CalibrationAnalysis/MeasurementSystemAnalyses.py` (`MeasurementSystemAnalysisForm`)
+  - `apps/quality/views/CalibrationAnalysis/MeasurementSystemAnalyses.py` (`measurement_system_analysis_list`, `measurement_system_analysis_detail`, `measurement_system_analysis_create`, `measurement_system_analysis_edit`, `measurement_system_analysis_delete`, `measurement_system_analysis_export_csv`, `measurement_system_analysis_calculate`)
+  - `apps/quality/urls/CalibrationAnalysis/MeasurementSystemAnalyses.py` (literal routes before `<int:pk>/`)
+- [ ] **Accredited Calibration Lab Directory**:
+  - `apps/quality/views/CalibrationAnalysis/CalibrationVendorDirectory.py` (`calibration_vendor_directory`)
+  - `apps/quality/urls/CalibrationAnalysis/CalibrationVendorDirectory.py` (`calibration-vendors/` -> `quality:calibration_vendor_directory`)
+- [ ] **Package Re-exports**:
+  - `apps/quality/models/CalibrationAnalysis/__init__.py` & `apps/quality/models/__init__.py` re-exports
+  - `apps/quality/forms/CalibrationAnalysis/__init__.py` & `apps/quality/forms/__init__.py` re-exports
+  - `apps/quality/views/CalibrationAnalysis/__init__.py` & `apps/quality/views/__init__.py` re-exports
+  - `apps/quality/urls/CalibrationAnalysis/__init__.py` & `apps/quality/urls/__init__.py` url patterns concatenation
+- [ ] **Admin & Seeder Integration**:
+  - Register `CalibrationGage`, `CalibrationRecord`, `OutOfToleranceInvestigation`, `MeasurementSystemAnalysis` in `apps/quality/admin.py`
+  - Extend `apps/quality/management/commands/seed_quality.py` with idempotent `_seed_submodule_12_10` creating realistic test data (Acme calibrated gages across machining cells, certified reference standards, passing/adjusted calibration records, active OOT investigation with suspect work order reverse-tracing, and completed AIAG Crossed Gage R&R study)
+
+---
+
+## Wire-up
+
+- [ ] Add `LIVE_LINKS["12.10"]` in `apps/core/navigation.py` mapping the exact 5 `NavERP.md` feature bullets:
+  ```python
+  "12.10": {
+      "Calibration Schedule & Planning": "quality:calibration_gage_list",
+      "Calibration Execution & Records": "quality:calibration_record_list",
+      "Out-of-Tolerance (OOT) Handling": "quality:out_of_tolerance_investigation_list",
+      "Measurement System Analysis (MSA / Gage R&R)": "quality:measurement_system_analysis_list",
+      "Calibration Vendor Management": "quality:calibration_vendor_directory",
+  },
+  ```
+
+---
+
+## Templates (`templates/quality/calibrationanalysis/`)
+
+- [ ] **Calibration Gage** (`templates/quality/calibrationanalysis/calibration_gage/`):
+  - `list.html`: Gage register, asset tag, tool type, classification, calibration status badge, next due date, location, filter bar, CSV export
+  - `detail.html`: Gage specifications, measurement range, resolution, tolerances, custodian, maintenance history tab, linked calibration records, linked MSA studies
+  - `form.html`: Create/edit form with interval settings, asset/work center selectors, document linkage, and tolerance configurations
+- [ ] **Calibration Record** (`templates/quality/calibrationanalysis/calibration_record/`):
+  - `list.html`: Calibration events, gage tag, date, type, as-found/as-left condition, overall result badge, certificate number, filter bar, CSV export
+  - `detail.html`: Test points matrix (nominal vs found vs error vs left), expanded uncertainty ($U$), TUR ratio, guardband decision rule, technician/approver sign-offs, linked OOT button
+  - `form.html`: Calibration execution form with ambient conditions (°C, % humidity), as-found/as-left dropdowns, vendor selector, and test points entry
+- [ ] **Out-of-Tolerance Investigation** (`templates/quality/calibrationanalysis/out_of_tolerance_investigation/`):
+  - `list.html`: OOT events register, risk severity badge, status, suspect window dates, suspect work order counts, product disposition, filter bar, CSV export
+  - `detail.html`: Impact assessment breakdown, Consumer vs Producer risk scores, reverse-tracing production scope, containment actions, MRB sign-off, direct links to NCR/CAPA
+  - `form.html`: OOT investigation form with suspect dates, work center selector, risk ratings, containment actions, and disposition selections
+- [ ] **Measurement System Analysis** (`templates/quality/calibrationanalysis/measurement_system_analysis/`):
+  - `list.html`: MSA study registry, study type (Crossed/Nested/Bias/Linearity), analysis method (ANOVA/Xbar-R), %GRR, NDC, study verdict badge, filter bar, CSV export
+  - `detail.html`: AIAG summary scorecard (%GRR, EV, AV, PV, TV, P/T Ratio, NDC), variance component breakdown, linearity/bias regression stats, study conclusion, approval state
+  - `form.html`: Study setup form with operators/parts/trials counts, specification tolerance, reference master value, and protocol document selector
+- [ ] **Calibration Vendor Directory** (`templates/quality/calibrationanalysis/calibration_vendor_directory.html`):
+  - Dedicated directory of accredited calibration service laboratories (filtered from `core.Party`), displaying ISO/IEC 17025 accreditation badges, calibration lead times, active service contracts, and quick-link to serviced gages
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations quality` (creates incremental migration `0016_...`)
+- [ ] `python manage.py migrate quality`
+- [ ] `python manage.py seed_quality` **x2** (strictly idempotent, zero duplicate records or errors)
+- [ ] `python manage.py check` (0 issues reported)
+- [ ] Phase 3.5 Smoke (`qa-smoke-tester`): `temp/smoke_12_10.py` as `admin_acme` / `password` + throwaway Beta tenant asserting 200/302 across all 18 views + literal seeded strings/numbers in HTML (L8, L57) + zero `{#` / `{% comment` leaks + filter operations with `|stringformat:"d"` + junk parameter resilience (L11) + page 2 pagination (L9) + workflow POSTs (approvals, containment actions) + cross-tenant IDOR 404 isolation; verify sidebar shows `12.10` Live across all 5 bullets; delete `temp/smoke_12_10.py`
+
+---
+
+## Close-out
+
+- [ ] Phase 4: Run 6 serial review passes (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` report-only -> `security-reviewer`) scoped to `BASE...HEAD` -> consolidate/dedupe sorted `C#`/`I#`/`M#` into `.claude/tasks/review-quality-12.10.md`
+- [ ] Phase 5: Run `code-fixer` agent against `.claude/tasks/review-quality-12.10.md` (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
+- [ ] Phase 6: Pin test contract & append `12.10` fixtures (`cal_*`) in `apps/quality/tests/conftest.py` (L59), then write 4 test modules serially: `test_calibrationanalysis_models.py`, `test_calibrationanalysis_forms.py`, `test_calibrationanalysis_views.py`, `test_calibrationanalysis_security.py` (using `test_calibrationanalysis_*` names), followed by one **unfiltered** `venv\Scripts\python.exe -m pytest -q -W ignore apps/quality/tests/` green pass (L47)
+- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` with Sub-module 12.10 models/routes/templates/seeder, mark 12.10 complete in `README.md`, record any gaps in `.agents/tasks/gaps-quality-12.10.md` (or declare None), and populate `## Review notes` below
+
+---
+
+## Later passes / deferred
+
+1. **Direct Calibrator Hardware Bi-Directional Drivers (GPIB / USB / VISA)** — Automated test script execution communicating with Fluke 5500A/5520A multi-product calibrators or Beamex MC6 documenting calibrators via IEEE 488 / VISA.
+2. **Continuous Environmental Chamber Telemetry (OPC-UA / MQTT)** — Real-time sensor streaming for temperature and humidity logging in metrology cleanrooms.
+3. **OCR Parsing of Vendor PDF Calibration Certificates** — Automated text/table extraction from third-party lab PDF certificates into `CalibrationRecord` test point JSON.
+4. **3D CMM Point-Cloud Mesh Alignment (CAD-to-Part)** — Direct coordinate measuring machine (CMM) DMIS/STEP CAD file inspection data ingestion.
+
+---
+
+## Review notes
+(filled in at the end)
