@@ -191,7 +191,7 @@ def certificate_of_conformance_sign(request, pk):
 
 @login_required
 def certificate_of_conformance_export(request):
-    write_audit_log(request.user, CertificateOfConformance(), "export", tenant=request.tenant)
+    write_audit_log(request.user, None, "export", changes={"model": "CertificateOfConformance"}, tenant=request.tenant)
     qs = CertificateOfConformance.objects.filter(tenant=request.tenant).order_by("-created_at")
 
     response = HttpResponse(content_type="text/csv")
