@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}MSA Study {{ msa_study.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Breadcrumb & Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:measurement_system_analysis_list' %}" class="hover:underline">MSA Studies</a>
+        <span class="mx-1">/</span>
+        <span class="font-mono text-slate-700">{{ msa_study.number }}</span>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="bar-chart-2" class="w-6 h-6 text-purple-600"></i>
+          <span>{{ msa_study.number }} — {{ msa_study.study_title }}</span>
+        </h1>
+        <span class="badge {{ msa_study.result_css }} text-xs">{{ msa_study.get_study_result_display }}</span>
+        <span class="badge {{ msa_study.status_css }} text-xs">{{ msa_study.get_status_display }}</span>
+        <span class="badge {{ msa_study.study_type_css }} text-xs">{{ msa_study.get_study_type_display }}</span>
+      </div>
+      <p class="text-xs text-slate-500 mt-1 font-mono">
+        Target Instrument: <a href="{% url 'quality:calibration_gage_detail' msa_study.gage.pk %}" class="text-blue-600 hover:underline">{{ msa_study.gage.gage_id }} — {{ msa_study.gage.name }}</a>
+        | Characteristic: {{ msa_study.characteristic_name }} | Method: {{ msa_study.get_analysis_method_display }}
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:measurement_system_analysis_edit' msa_study.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Study</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- AIAG MSA Scorecard Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card card p-4">
+      <div class="text-xs text-slate-400 uppercase font-semibold">Total %Gage R&R (%GRR)</div>
+      <div class="text-2xl font-bold font-mono mt-1 {% if msa_study.percent_gage_rr_study_variation > 30 %}text-red-600{% elif msa_study.percent_gage_rr_study_variation > 10 %}text-amber-600{% else %}text-green-600{% endif %}">
+        {{ msa_study.percent_gage_rr_study_variation }}%
+      </div>
+      <div class="text-[11px] text-slate-500 mt-1">
+        {% if msa_study.percent_gage_rr_study_variation < 10 %}
+          <span class="text-green-600 font-semibold">Acceptable (&lt;10%)</span>
+        {% elif msa_study.percent_gage_rr_study_variation <= 30 %}
+          <span class="text-amber-600 font-semibold">Marginal (10-30%)</span>
+        {% else %}
+          <span class="text-red-600 font-semibold">Unacceptable (&gt;30%)</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card card p-4">
+      <div class="text-xs text-slate-400 uppercase font-semibold">Precision / Tolerance (P/T)</div>
+      <div class="text-2xl font-bold font-mono mt-1 text-slate-900">
+        {{ msa_study.percent_tolerance_pt_ratio }}%
+      </div>
+      <div class="text-[11px] text-slate-500 mt-1">Tolerance: {{ msa_study.specification_tolerance }}</div>
+    </div>
+    <div class="stat-card card p-4">
+      <div class="text-xs text-slate-400 uppercase font-semibold">Distinct Categories (ndc)</div>
+      <div class="text-2xl font-bold font-mono mt-1 {% if msa_study.number_of_distinct_categories_ndc < 5 %}text-red-600{% else %}text-green-600{% endif %}">
+        {{ msa_study.number_of_distinct_categories_ndc }}
+      </div>
+      <div class="text-[11px] text-slate-500 mt-1">
+        {% if msa_study.number_of_distinct_categories_ndc >= 5 %}
+          <span class="text-green-600 font-semibold">Adequate (&ge; 5)</span>
+        {% else %}
+          <span class="text-red-600 font-semibold">Inadequate (&lt; 5)</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card card p-4">
+      <div class="text-xs text-slate-400 uppercase font-semibold">Combined GRR Variation</div>
+      <div class="text-2xl font-bold font-mono mt-1 text-blue-600">
+        {{ msa_study.gage_rr_grr }}
+      </div>
+      <div class="text-[11px] text-slate-500 mt-1 font-mono">EV: {{ msa_study.repeatability_ev }} | AV: {{ msa_study.reproducibility_av }}</div>
+    </div>
+  </div>
+
+  <!-- Variance Breakdown Table -->
+  <div class="card overflow-hidden">
+    <div class="card-header bg-slate-50 px-4 py-3 border-b border-slate-200">
+      <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+        <i data-lucide="layers" class="w-4 h-4 text-purple-600"></i>
+        <span>AIAG Variance Component Breakdown (ANOVA / X-bar & R)</span>
+      </h2>
+    </div>
+    <div class="table-wrap">
+      <table class="table w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 text-xs font-semibold uppercase border-b border-slate-200">
+            <th class="py-2.5 px-4">Source of Variation</th>
+            <th class="py-2.5 px-4">Standard Deviation ($\sigma$)</th>
+            <th class="py-2.5 px-4">Study Variation ($6\sigma$)</th>
+            <th class="py-2.5 px-4">% Study Variation (%SV)</th>
+            <th class="py-2.5 px-4">Interpretation</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 font-mono text-xs">
+          <tr class="hover:bg-slate-50">
+            <td class="py-2.5 px-4 font-sans font-medium text-slate-900">Repeatability (Equipment Variation — EV)</td>
+            <td class="py-2.5 px-4">{{ msa_study.repeatability_ev }}</td>
+            <td class="py-2.5 px-4">—</td>
+            <td class="py-2.5 px-4 text-slate-700">Gage inherent precision</td>
+            <td class="py-2.5 px-4 font-sans text-slate-500">Gauge design, thermal drift, fixture wear</td>
+          </tr>
+          <tr class="hover:bg-slate-50">
+            <td class="py-2.5 px-4 font-sans font-medium text-slate-900">Reproducibility (Appraiser Variation — AV)</td>
+            <td class="py-2.5 px-4">{{ msa_study.reproducibility_av }}</td>
+            <td class="py-2.5 px-4">—</td>
+            <td class="py-2.5 px-4 text-slate-700">Operator-to-operator bias</td>
+            <td class="py-2.5 px-4 font-sans text-slate-500">Inspector training, clamping technique, alignment</td>
+          </tr>
+          <tr class="hover:bg-slate-50 bg-slate-50/50 font-bold">
+            <td class="py-2.5 px-4 font-sans text-blue-900">Total Gage R&R (GRR)</td>
+            <td class="py-2.5 px-4 text-blue-900">{{ msa_study.gage_rr_grr }}</td>
+            <td class="py-2.5 px-4 text-blue-900">—</td>
+            <td class="py-2.5 px-4 text-blue-900">{{ msa_study.percent_gage_rr_study_variation }}%</td>
+            <td class="py-2.5 px-4 font-sans text-blue-900">Combined measurement system variation</td>
+          </tr>
+          <tr class="hover:bg-slate-50">
+            <td class="py-2.5 px-4 font-sans font-medium text-slate-900">Part-to-Part Variation (PV)</td>
+            <td class="py-2.5 px-4">{{ msa_study.part_variation_pv }}</td>
+            <td class="py-2.5 px-4">—</td>
+            <td class="py-2.5 px-4 text-slate-700">True process spread</td>
+            <td class="py-2.5 px-4 font-sans text-slate-500">Production process spread across sampled parts</td>
+          </tr>
+          <tr class="hover:bg-slate-50 bg-slate-100 font-bold">
+            <td class="py-2.5 px-4 font-sans text-slate-900">Total Variation (TV)</td>
+            <td class="py-2.5 px-4 text-slate-900">{{ msa_study.total_variation_tv }}</td>
+            <td class="py-2.5 px-4 text-slate-900">—</td>
+            <td class="py-2.5 px-4 text-slate-900">100.00%</td>
+            <td class="py-2.5 px-4 font-sans text-slate-900">Total study envelope ($TV^2 = GRR^2 + PV^2$)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Study Setup Parameters & Bias/Linearity Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Setup Parameters -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+        <i data-lucide="users" class="w-4 h-4 text-blue-500"></i>
+        Study Design & Protocol Parameters
+      </h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-slate-400">Number of Operators</dt>
+          <dd class="font-bold font-mono text-slate-800">{{ msa_study.number_of_operators }} Appraisers</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Number of Sample Parts</dt>
+          <dd class="font-bold font-mono text-slate-800">{{ msa_study.number_of_parts }} Parts</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Number of Replicate Trials</dt>
+          <dd class="font-bold font-mono text-slate-800">{{ msa_study.number_of_trials }} Trials</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Total Data Points</dt>
+          <dd class="font-bold font-mono text-purple-600">
+            {% widthratio msa_study.number_of_operators 1 msa_study.number_of_parts as subtotal %}
+            {% widthratio subtotal 1 msa_study.number_of_trials %} Measurements
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Specification Tolerance</dt>
+          <dd class="font-mono text-slate-800">{{ msa_study.specification_tolerance }} {{ msa_study.gage.engineering_unit }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Execution Date</dt>
+          <dd class="font-mono text-slate-800">{{ msa_study.study_date|date:"Y-m-d" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Study Lead</dt>
+          <dd class="font-medium text-slate-800">
+            {% if msa_study.study_lead %}
+              {{ msa_study.study_lead.get_full_name|default:msa_study.study_lead.username }}
+            {% else %}
+              <span class="text-slate-400">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Quality Approver</dt>
+          <dd class="font-medium text-slate-800">
+            {% if msa_study.approved_by %}
+              {{ msa_study.approved_by.get_full_name|default:msa_study.approved_by.username }}
+            {% else %}
+              <span class="text-slate-400">Pending Approval</span>
+            {% endif %}
+          </dd>
+        </div>
+        {% if msa_study.study_protocol_doc %}
+          <div class="col-span-2">
+            <dt class="text-xs text-slate-400">Governing Study Protocol Document</dt>
+            <dd class="font-medium text-blue-600">
+              <a href="{% url 'quality:controlled_document_detail' msa_study.study_protocol_doc.pk %}" class="hover:underline">
+                {{ msa_study.study_protocol_doc.document_number }} — {{ msa_study.study_protocol_doc.title }}
+              </a>
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- Linearity & Bias Analysis -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+        <i data-lucide="trending-up" class="w-4 h-4 text-green-500"></i>
+        Linearity & Bias Analysis
+      </h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-slate-400">Reference Master Value</dt>
+          <dd class="font-mono text-slate-800">{{ msa_study.reference_master_value|default:"N/A" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Observed Bias</dt>
+          <dd class="font-mono font-bold text-slate-800">{{ msa_study.bias_value|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Bias (% of Tolerance)</dt>
+          <dd class="font-mono font-bold text-slate-800">{{ msa_study.bias_percentage|default:"—" }}%</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Linearity Slope</dt>
+          <dd class="font-mono text-slate-800">{{ msa_study.linearity_slope|default:"—" }}</dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs text-slate-400">Goodness of Fit ($R^2$)</dt>
+          <dd class="font-mono font-bold text-blue-600">{{ msa_study.linearity_r_squared|default:"—" }}</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  {% if msa_study.conclusion %}
+    <div class="card p-4">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Metrologist Conclusion & Recommendations</h3>
+      <div class="text-sm text-slate-700 whitespace-pre-line">{{ msa_study.conclusion }}</div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
