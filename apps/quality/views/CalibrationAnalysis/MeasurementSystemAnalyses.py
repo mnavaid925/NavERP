@@ -38,6 +38,10 @@ def measurement_system_analysis_list(request):
     if study_type_filter:
         qs = qs.filter(study_type=study_type_filter)
 
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
     result_filter = request.GET.get("study_result", "").strip()
     if result_filter:
         qs = qs.filter(study_result=result_filter)
@@ -55,8 +59,10 @@ def measurement_system_analysis_list(request):
         "page_obj": page_obj,
         "search_query": search_query,
         "study_type_filter": study_type_filter,
+        "status_filter": status_filter,
         "result_filter": result_filter,
         "study_type_choices": MeasurementSystemAnalysis.STUDY_TYPE_CHOICES,
+        "status_choices": MeasurementSystemAnalysis.STATUS_CHOICES,
         "result_choices": MeasurementSystemAnalysis.RESULT_CHOICES,
         "total_studies": total_studies,
         "acceptable_count": acceptable_count,
@@ -72,6 +78,8 @@ def measurement_system_analysis_detail(request, pk):
     )
 
     context = {
+        "study": msa,
+        "measurement_system_analysis": msa,
         "msa_study": msa,
         "obj": msa,
     }
@@ -99,6 +107,8 @@ def measurement_system_analysis_create(request):
 
     context = {
         "form": form,
+        "study": None,
+        "measurement_system_analysis": None,
         "msa_study": None,
         "obj": None,
         "is_edit": False,
@@ -121,6 +131,8 @@ def measurement_system_analysis_edit(request, pk):
 
     context = {
         "form": form,
+        "study": msa,
+        "measurement_system_analysis": msa,
         "msa_study": msa,
         "obj": msa,
         "is_edit": True,
