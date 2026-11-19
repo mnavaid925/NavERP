@@ -173,14 +173,14 @@ class FinalInspectionLot(TenantNumbered):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="fqc_inspections_conducted",
+        related_name="fqc_inspections_performed",
     )
     decision_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="fqc_usage_decisions",
+        related_name="fqc_usage_decisions_made",
     )
     inspection_date = models.DateField(null=True, blank=True)
     decision_date = models.DateField(null=True, blank=True)
@@ -195,6 +195,7 @@ class FinalInspectionLot(TenantNumbered):
             models.Index(fields=["tenant", "usage_decision"], name="quality_fqc_tnt_dec_idx"),
             models.Index(fields=["tenant", "lot_number"], name="quality_fqc_tnt_lot_idx"),
             models.Index(fields=["tenant", "is_on_hold"], name="quality_fqc_tnt_hold_idx"),
+            models.Index(fields=["tenant", "inspection_stage"], name="quality_fqc_tnt_stg_idx"),
         ]
 
     def __str__(self):
