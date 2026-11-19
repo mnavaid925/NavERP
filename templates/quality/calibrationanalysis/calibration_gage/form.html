@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Gage {{ gage.gage_id }}{% else %}Register New Gage{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:calibration_gage_list' %}" class="hover:underline">Gages</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ gage.gage_id }}{% else %}New Gage{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="gauge" class="w-6 h-6 text-blue-600"></i>
+        <span>{% if is_edit %}Edit Gage: {{ gage.gage_id }}{% else %}Register New Calibration Gage{% endif %}</span>
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Define metrological parameters, accuracy tolerances, custody assignment, and calibration schedule.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Basic Identification -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-500"></i>
+          Gage Identification & Classification
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.gage_id.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Gage ID / Plant Tool Tag <span class="text-red-500">*</span>
+            </label>
+            {{ form.gage_id }}
+            {% if form.gage_id.errors %}<div class="text-xs text-red-600 mt-1">{{ form.gage_id.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Descriptive Name <span class="text-red-500">*</span>
+            </label>
+            {{ form.name }}
+            {% if form.name.errors %}<div class="text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.gage_type.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Instrument Type
+            </label>
+            {{ form.gage_type }}
+            {% if form.gage_type.errors %}<div class="text-xs text-red-600 mt-1">{{ form.gage_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.criticality.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Process Criticality
+            </label>
+            {{ form.criticality }}
+            {% if form.criticality.errors %}<div class="text-xs text-red-600 mt-1">{{ form.criticality.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Operating Status
+            </label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group flex items-center pt-6">
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.is_reference_standard }}
+              <span class="text-sm font-semibold text-slate-800">Designated Master Reference Standard</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrological Specs -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-purple-500"></i>
+          Technical & Metrology Specifications
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.manufacturer.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Manufacturer</label>
+            {{ form.manufacturer }}
+            {% if form.manufacturer.errors %}<div class="text-xs text-red-600 mt-1">{{ form.manufacturer.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.model_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Model Number</label>
+            {{ form.model_number }}
+            {% if form.model_number.errors %}<div class="text-xs text-red-600 mt-1">{{ form.model_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.serial_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Serial Number</label>
+            {{ form.serial_number }}
+            {% if form.serial_number.errors %}<div class="text-xs text-red-600 mt-1">{{ form.serial_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.measurement_range.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Range</label>
+            {{ form.measurement_range }}
+            {% if form.measurement_range.errors %}<div class="text-xs text-red-600 mt-1">{{ form.measurement_range.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.resolution.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Resolution</label>
+            {{ form.resolution }}
+            {% if form.resolution.errors %}<div class="text-xs text-red-600 mt-1">{{ form.resolution.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.engineering_unit.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Eng. Unit</label>
+            {{ form.engineering_unit }}
+            {% if form.engineering_unit.errors %}<div class="text-xs text-red-600 mt-1">{{ form.engineering_unit.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.accuracy_spec.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Accuracy Spec</label>
+            {{ form.accuracy_spec }}
+            {% if form.accuracy_spec.errors %}<div class="text-xs text-red-600 mt-1">{{ form.accuracy_spec.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.max_permissible_error.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Max Permissible Error (MPE)</label>
+            {{ form.max_permissible_error }}
+            {% if form.max_permissible_error.errors %}<div class="text-xs text-red-600 mt-1">{{ form.max_permissible_error.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.nist_traceability_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">NIST / Standard Ref #</label>
+            {{ form.nist_traceability_number }}
+            {% if form.nist_traceability_number.errors %}<div class="text-xs text-red-600 mt-1">{{ form.nist_traceability_number.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group md:col-span-3">
+            <label for="{{ form.reference_standard_parent.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Calibrated Against Master Reference Standard</label>
+            {{ form.reference_standard_parent }}
+            {% if form.reference_standard_parent.errors %}<div class="text-xs text-red-600 mt-1">{{ form.reference_standard_parent.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Location, Custody & Scheduling -->
+      <div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 pb-1 border-b border-slate-100 flex items-center gap-2">
+          <i data-lucide="map-pin" class="w-4 h-4 text-green-500"></i>
+          Crib Custody & Recalibration Intervals
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.calibration_interval_days.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">
+              Interval (Days) <span class="text-red-500">*</span>
+            </label>
+            {{ form.calibration_interval_days }}
+            {% if form.calibration_interval_days.errors %}<div class="text-xs text-red-600 mt-1">{{ form.calibration_interval_days.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.last_calibration_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Last Calibration Date</label>
+            {{ form.last_calibration_date }}
+            {% if form.last_calibration_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.last_calibration_date.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.next_calibration_due.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Next Calibration Due</label>
+            {{ form.next_calibration_due }}
+            {% if form.next_calibration_due.errors %}<div class="text-xs text-red-600 mt-1">{{ form.next_calibration_due.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.storage_location.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Storage Location</label>
+            {{ form.storage_location }}
+            {% if form.storage_location.errors %}<div class="text-xs text-red-600 mt-1">{{ form.storage_location.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.custodian.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Custodian</label>
+            {{ form.custodian }}
+            {% if form.custodian.errors %}<div class="text-xs text-red-600 mt-1">{{ form.custodian.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.department.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Department</label>
+            {{ form.department }}
+            {% if form.department.errors %}<div class="text-xs text-red-600 mt-1">{{ form.department.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.work_center.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Assigned Work Center</label>
+            {{ form.work_center }}
+            {% if form.work_center.errors %}<div class="text-xs text-red-600 mt-1">{{ form.work_center.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.asset_link.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Linked SCM Asset</label>
+            {{ form.asset_link }}
+            {% if form.asset_link.errors %}<div class="text-xs text-red-600 mt-1">{{ form.asset_link.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.sop_document.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Calibration Procedure (SOP)</label>
+            {{ form.sop_document }}
+            {% if form.sop_document.errors %}<div class="text-xs text-red-600 mt-1">{{ form.sop_document.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700 uppercase mb-1 block">Notes & Handling Guidelines</label>
+        {{ form.notes }}
+        {% if form.notes.errors %}<div class="text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <a href="{% if is_edit %}{% url 'quality:calibration_gage_detail' gage.pk %}{% else %}{% url 'quality:calibration_gage_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm px-6">
+          {% if is_edit %}Save Changes{% else %}Create Gage{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
