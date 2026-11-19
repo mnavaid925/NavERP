@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}OOT Investigation {{ oot_investigation.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Breadcrumb & Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:out_of_tolerance_investigation_list' %}" class="hover:underline">OOT Investigations</a>
+        <span class="mx-1">/</span>
+        <span class="font-mono text-slate-700">{{ oot_investigation.number }}</span>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600"></i>
+          <span>{{ oot_investigation.number }} — {{ oot_investigation.title }}</span>
+        </h1>
+        <span class="badge {{ oot_investigation.risk_css }} text-xs">{{ oot_investigation.get_risk_level_display }}</span>
+        <span class="badge {{ oot_investigation.status_css }} text-xs">{{ oot_investigation.get_status_display }}</span>
+        <span class="badge {{ oot_investigation.disposition_css }} text-xs">{{ oot_investigation.get_product_disposition_display }}</span>
+      </div>
+      <p class="text-xs text-slate-500 mt-1 font-mono">
+        Instrument: <a href="{% url 'quality:calibration_gage_detail' oot_investigation.gage.pk %}" class="text-blue-600 hover:underline">{{ oot_investigation.gage.gage_id }} — {{ oot_investigation.gage.name }}</a>
+        | Triggering Calibration: <a href="{% url 'quality:calibration_record_detail' oot_investigation.calibration_record.pk %}" class="text-blue-600 hover:underline">{{ oot_investigation.calibration_record.number }}</a>
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:out_of_tolerance_investigation_edit' oot_investigation.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Investigation</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Recall & Customer Risk Warning Banner -->
+  {% if oot_investigation.product_recall_required or oot_investigation.customer_notification_required %}
+    <div class="card p-4 bg-red-50 border-red-300 space-y-2">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-red-100 rounded-lg text-red-700">
+          <i data-lucide="shield-alert" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <div class="text-base font-bold text-red-900">
+            {% if oot_investigation.product_recall_required %}MANDATORY FIELD SAFETY / RECALL ESCALATION{% else %}CUSTOMER CONCESSION / NOTIFICATION REQUIRED{% endif %}
+          </div>
+          <div class="text-xs text-red-700">
+            Measurement uncertainty exceeds consumer risk thresholds. Formal escalation to quality executive leadership and regulatory affairs required.
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Reverse-Tracing & Scope Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Suspect Manufacturing Window -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+        <i data-lucide="history" class="w-4 h-4 text-amber-500"></i>
+        Suspect Manufacturing Window & Production Scope
+      </h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-slate-400">Suspect Window Start</dt>
+          <dd class="font-mono font-medium text-slate-800">{{ oot_investigation.suspect_window_start|date:"Y-m-d" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Suspect Window End</dt>
+          <dd class="font-mono font-medium text-slate-800">{{ oot_investigation.suspect_window_end|date:"Y-m-d" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Suspect Batches / Lots Count</dt>
+          <dd class="font-bold text-red-600 font-mono text-base">{{ oot_investigation.suspect_lots_count }} Lots</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Affected Products</dt>
+          <dd class="font-medium text-slate-800">{{ oot_investigation.products_affected|default:"—" }}</dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs text-slate-400">Suspect Work Center / Line</dt>
+          <dd class="font-medium text-slate-800">
+            {% if oot_investigation.suspect_work_center %}
+              {{ oot_investigation.suspect_work_center.code }} — {{ oot_investigation.suspect_work_center.name }}
+            {% else %}
+              <span class="text-slate-400">General Facility / Multiple Lines</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs text-slate-400">Identified Work Orders / Batches</dt>
+          <dd class="font-mono text-xs text-slate-700 bg-slate-50 p-2.5 rounded border border-slate-200 mt-1 whitespace-pre-line">
+            {{ oot_investigation.suspect_production_orders|default:"Zero specific production orders cataloged." }}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Metrological Risk Evaluation -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+        <i data-lucide="scale" class="w-4 h-4 text-purple-500"></i>
+        Metrological Risk & Product Disposition
+      </h2>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt class="text-xs text-slate-400">Consumer Risk Rating (Beta)</dt>
+          <dd class="font-bold font-mono text-red-600">{{ oot_investigation.consumer_risk_rating }} / 5</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Producer Risk Rating (Alpha)</dt>
+          <dd class="font-bold font-mono text-amber-600">{{ oot_investigation.producer_risk_rating }} / 5</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">MRB Product Disposition</dt>
+          <dd class="font-bold text-slate-800">{{ oot_investigation.get_product_disposition_display }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Discovery Date</dt>
+          <dd class="font-mono text-slate-700">{{ oot_investigation.discovery_date|date:"Y-m-d" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Customer Notification</dt>
+          <dd class="font-medium text-slate-800">
+            {% if oot_investigation.customer_notification_required %}
+              <span class="text-red-600 font-bold">YES</span>
+            {% else %}
+              <span class="text-slate-500">NO</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Field Recall Action</dt>
+          <dd class="font-medium text-slate-800">
+            {% if oot_investigation.product_recall_required %}
+              <span class="text-red-600 font-bold">YES — MANDATORY</span>
+            {% else %}
+              <span class="text-slate-500">NO</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Lead Investigator</dt>
+          <dd class="font-medium text-slate-800">
+            {% if oot_investigation.investigator %}
+              {{ oot_investigation.investigator.get_full_name|default:oot_investigation.investigator.username }}
+            {% else %}
+              <span class="text-slate-400">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-400">Quality Approver</dt>
+          <dd class="font-medium text-slate-800">
+            {% if oot_investigation.quality_approver %}
+              {{ oot_investigation.quality_approver.get_full_name|default:oot_investigation.quality_approver.username }}
+            {% else %}
+              <span class="text-slate-400">Pending Sign-off</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <!-- Metrology Deviation Finding & Containment Actions -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card p-5 space-y-2">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">As-Found Metrology Deviation Finding</h3>
+      <div class="text-sm text-slate-800 whitespace-pre-line">{{ oot_investigation.as_found_error_description }}</div>
+    </div>
+    <div class="card p-5 space-y-2">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Containment & Quarantine Actions Taken</h3>
+      <div class="text-sm text-slate-800 whitespace-pre-line">{{ oot_investigation.containment_actions_taken|default:"Zero physical containment logged." }}</div>
+    </div>
+  </div>
+
+  <!-- Closed-Loop NCR & CAPA Linkage Card -->
+  <div class="card p-5 space-y-4">
+    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-2">
+      <i data-lucide="link" class="w-4 h-4 text-blue-500"></i>
+      Closed-Loop Regulatory & Non-Conformance Escalations
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
+        <div>
+          <div class="text-xs text-slate-400 uppercase font-semibold">Linked Non-Conformance Report</div>
+          <div class="text-sm font-bold text-slate-900 mt-1">
+            {% if oot_investigation.linked_ncr %}
+              <a href="{% url 'quality:non_conformance_report_detail' oot_investigation.linked_ncr.pk %}" class="text-blue-600 hover:underline">
+                {{ oot_investigation.linked_ncr.number }} — {{ oot_investigation.linked_ncr.title }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">No NCR formally linked</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
+        <div>
+          <div class="text-xs text-slate-400 uppercase font-semibold">Linked Enterprise CAPA</div>
+          <div class="text-sm font-bold text-slate-900 mt-1">
+            {% if oot_investigation.linked_capa %}
+              <a href="{% url 'quality:capa_investigation_detail' oot_investigation.linked_capa.pk %}" class="text-blue-600 hover:underline">
+                {{ oot_investigation.linked_capa.number }} — {{ oot_investigation.linked_capa.title }}
+              </a>
+            {% else %}
+              <span class="text-slate-400">No CAPA investigation linked</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if oot_investigation.conclusion_summary %}
+    <div class="card p-4">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Final Quality Conclusion & Closure Summary</h3>
+      <div class="text-sm text-slate-700 whitespace-pre-line">{{ oot_investigation.conclusion_summary }}</div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
