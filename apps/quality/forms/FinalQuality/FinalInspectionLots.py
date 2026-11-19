@@ -130,7 +130,7 @@ class FinalInspectionLotForm(TenantUniqueMixin, TenantModelForm):
 
             try:
                 SalesOrder = apps.get_model("scm", "SalesOrder")
-                self.fields["sales_order"].queryset = SalesOrder.objects.filter(tenant=self.tenant).order_by("-created_at")
+                self.fields["sales_order"].queryset = SalesOrder.objects.filter(tenant=self.tenant).select_related("customer").order_by("-created_at")
             except LookupError:
                 pass
 
