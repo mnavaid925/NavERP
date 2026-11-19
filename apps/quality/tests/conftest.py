@@ -43,6 +43,10 @@ from apps.quality.models import (
     CertificateOfConformance,
     PackagingLabelVerification,
     QualityReleaseAuthorization,
+    CalibrationGage,
+    CalibrationRecord,
+    OutOfToleranceInvestigation,
+    MeasurementSystemAnalysis,
 )
 
 
@@ -1560,6 +1564,297 @@ def quality_release_b(db, tenant_b, admin_b, customer_party_b, final_lot_b):
         hold_reason="Quarantined on hold",
         releasing_officer=admin_b,
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 12.10 Fixtures: Calibration & Measurement System Analysis
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cal_vendor_a(db, tenant_a):
+    vendor = Party.objects.create(
+        tenant=tenant_a,
+        name="Precision Standards Metrology Lab LLC",
+        party_type="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_a,
+        party=vendor,
+        role_type="vendor",
+    )
+    return vendor
+
+
+@pytest.fixture
+def cal_vendor_b(db, tenant_b):
+    vendor = Party.objects.create(
+        tenant=tenant_b,
+        name="Globex Calibration Services Ltd",
+        party_type="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_b,
+        party=vendor,
+        role_type="vendor",
+    )
+    return vendor
+
+
+@pytest.fixture
+def cal_standard_a(db, tenant_a, quality_department):
+    return CalibrationGage.objects.create(
+        tenant=tenant_a,
+        gage_id="GAG-REF-001",
+        name="Ceramic Master Gauge Block Set Grade 0",
+        gage_type="gage_block_master",
+        status="active_in_service",
+        criticality="safety_critical",
+        manufacturer="Mitutoyo",
+        model_number="516-902",
+        serial_number="MB-99201",
+        is_reference_standard=True,
+        nist_traceability_number="NIST-MET-2026-8810",
+        iso_iec_17025_accredited=True,
+        measurement_range="0.5mm to 100mm",
+        resolution_or_discrimination="0.0001 mm",
+        accuracy_rating="Grade 0 ISO 3650",
+        max_permissible_error=Decimal("0.00012"),
+        unit_of_measure="mm",
+        calibration_interval_days=365,
+        last_calibration_date=timezone.now().date() - timedelta(days=60),
+        next_calibration_due=timezone.now().date() + timedelta(days=305),
+        department=quality_department,
+    )
+
+
+@pytest.fixture
+def cal_standard_b(db, tenant_b, quality_department_b):
+    return CalibrationGage.objects.create(
+        tenant=tenant_b,
+        gage_id="GAG-REF-GLX-01",
+        name="Globex Reference Length Standard",
+        gage_type="gage_block_master",
+        status="active_in_service",
+        criticality="quality_critical",
+        manufacturer="Starrett",
+        model_number="ST-500",
+        serial_number="GLX-REF-880",
+        is_reference_standard=True,
+        nist_traceability_number="NIST-GLX-2026-001",
+        measurement_range="0 to 500mm",
+        unit_of_measure="mm",
+        calibration_interval_days=365,
+        last_calibration_date=timezone.now().date() - timedelta(days=30),
+        next_calibration_due=timezone.now().date() + timedelta(days=335),
+        department=quality_department_b,
+    )
+
+
+@pytest.fixture
+def cal_gage_a(db, tenant_a, quality_department, cal_standard_a):
+    return CalibrationGage.objects.create(
+        tenant=tenant_a,
+        gage_id="GAG-DIG-002",
+        name="Digital Outside Micrometer 0-25mm",
+        gage_type="digital_micrometer",
+        status="active_in_service",
+        criticality="quality_critical",
+        manufacturer="Mitutoyo",
+        model_number="293-240-30",
+        serial_number="MIC-40912",
+        is_reference_standard=False,
+        reference_standard_parent=cal_standard_a,
+        nist_traceability_number="NIST-CAL-2026-0044",
+        measurement_range="0 - 25 mm",
+        resolution_or_discrimination="0.001 mm",
+        accuracy_rating="+/- 0.001 mm",
+        max_permissible_error=Decimal("0.00200"),
+        unit_of_measure="mm",
+        calibration_interval_days=180,
+        last_calibration_date=timezone.now().date() - timedelta(days=30),
+        next_calibration_due=timezone.now().date() + timedelta(days=150),
+        department=quality_department,
+    )
+
+
+@pytest.fixture
+def cal_gage_b(db, tenant_b, quality_department_b, cal_standard_b):
+    return CalibrationGage.objects.create(
+        tenant=tenant_b,
+        gage_id="GAG-DIG-GLX-02",
+        name="Globex Digital Caliper 150mm",
+        gage_type="vernier_digital_caliper",
+        status="active_in_service",
+        criticality="standard_commercial",
+        manufacturer="Mitutoyo",
+        model_number="500-196-30",
+        serial_number="GLX-CAL-1002",
+        is_reference_standard=False,
+        reference_standard_parent=cal_standard_b,
+        measurement_range="0 - 150 mm",
+        unit_of_measure="mm",
+        calibration_interval_days=180,
+        last_calibration_date=timezone.now().date() - timedelta(days=20),
+        next_calibration_due=timezone.now().date() + timedelta(days=160),
+        department=quality_department_b,
+    )
+
+
+@pytest.fixture
+def cal_record_a(db, tenant_a, cal_gage_a, cal_standard_a, cal_vendor_a, admin_user):
+    record = CalibrationRecord.objects.create(
+        tenant=tenant_a,
+        gage=cal_gage_a,
+        calibration_date=timezone.now().date() - timedelta(days=30),
+        status="completed",
+        calibration_type="external_accredited_lab",
+        service_vendor=cal_vendor_a,
+        certificate_number="CERT-CAL-2026-0819",
+        overall_result="pass",
+        temperature_celsius=Decimal("20.1"),
+        humidity_percent=Decimal("45.0"),
+        expanded_uncertainty_u=Decimal("0.00045"),
+        coverage_factor_k=Decimal("2.000"),
+        test_uncertainty_ratio_tur=Decimal("4.44"),
+        decision_rule="binary_guardbanded_ilac_g8",
+        guardband_applied=True,
+        calibrated_by_user=admin_user,
+        technician_name="Sarah Connor, Metrologist",
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+    )
+    record.standards_used.add(cal_standard_a)
+    return record
+
+
+@pytest.fixture
+def cal_record_oot_a(db, tenant_a, cal_gage_a, cal_standard_a, admin_user):
+    record = CalibrationRecord.objects.create(
+        tenant=tenant_a,
+        gage=cal_gage_a,
+        calibration_date=timezone.now().date() - timedelta(days=10),
+        status="completed",
+        calibration_type="internal_metrology",
+        certificate_number="CERT-INT-2026-OOT-01",
+        overall_result="fail_out_of_tolerance",
+        temperature_celsius=Decimal("20.0"),
+        humidity_percent=Decimal("46.0"),
+        expanded_uncertainty_u=Decimal("0.00050"),
+        coverage_factor_k=Decimal("2.000"),
+        test_uncertainty_ratio_tur=Decimal("2.10"),
+        decision_rule="binary_shared_risk_simple",
+        calibrated_by_user=admin_user,
+        technician_name="John Doe, Cal Tech",
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+    )
+    record.standards_used.add(cal_standard_a)
+    return record
+
+
+@pytest.fixture
+def cal_record_b(db, tenant_b, cal_gage_b, cal_standard_b, cal_vendor_b, admin_b):
+    record = CalibrationRecord.objects.create(
+        tenant=tenant_b,
+        gage=cal_gage_b,
+        calibration_date=timezone.now().date() - timedelta(days=20),
+        status="completed",
+        calibration_type="external_accredited_lab",
+        service_vendor=cal_vendor_b,
+        certificate_number="GLX-CERT-2026-001",
+        overall_result="pass",
+        calibrated_by_user=admin_b,
+        technician_name="Globex Metrology Tech",
+    )
+    record.standards_used.add(cal_standard_b)
+    return record
+
+
+@pytest.fixture
+def cal_oot_a(db, tenant_a, cal_gage_a, cal_record_oot_a, admin_user):
+    return OutOfToleranceInvestigation.objects.create(
+        tenant=tenant_a,
+        calibration_record=cal_record_oot_a,
+        gage=cal_gage_a,
+        title="Torque & Measurement OOT Investigation 2026-01",
+        status="under_investigation",
+        risk_level="high",
+        suspect_window_start=timezone.now().date() - timedelta(days=90),
+        suspect_window_end=timezone.now().date() - timedelta(days=10),
+        suspect_units_produced=150,
+        mpe_exceeded_by_percent=Decimal("18.50"),
+        consumer_risk_level="high",
+        producer_risk_level="medium",
+        product_recall_required=False,
+        containment_action="Hold placed on production lot LOT-ACTUATOR-904",
+        investigator=admin_user,
+        assigned_date=timezone.now().date() - timedelta(days=9),
+    )
+
+
+@pytest.fixture
+def cal_oot_b(db, tenant_b, cal_gage_b, cal_record_b, admin_b):
+    return OutOfToleranceInvestigation.objects.create(
+        tenant=tenant_b,
+        calibration_record=cal_record_b,
+        gage=cal_gage_b,
+        title="Globex OOT Investigation",
+        status="reported",
+        risk_level="low",
+        suspect_window_start=timezone.now().date() - timedelta(days=30),
+        suspect_window_end=timezone.now().date() - timedelta(days=20),
+        suspect_units_produced=10,
+        investigator=admin_b,
+    )
+
+
+@pytest.fixture
+def cal_msa_a(db, tenant_a, cal_gage_a, admin_user):
+    return MeasurementSystemAnalysis.objects.create(
+        tenant=tenant_a,
+        gage=cal_gage_a,
+        title="Machining Cell 1 Spool Diameter Gage R&R Study",
+        study_type="grr_crossed_anova",
+        status="accepted",
+        analysis_method="aiag_anova",
+        characteristic_name="Outer Spool Diameter",
+        specification_tolerance=Decimal("0.05000"),
+        number_of_appraisers=3,
+        number_of_parts=10,
+        number_of_trials=3,
+        repeatability_ev=Decimal("0.00185"),
+        reproducibility_av=Decimal("0.00112"),
+        gage_rr_standard_dev=Decimal("0.00216"),
+        part_to_part_variation_pv=Decimal("0.01520"),
+        total_variation_tv=Decimal("0.01535"),
+        percent_grr_of_study_variation=Decimal("14.07"),
+        percent_grr_of_tolerance=Decimal("25.92"),
+        number_of_distinct_categories_ndc=9,
+        bias_estimate=Decimal("0.00020"),
+        linearity_slope=Decimal("0.00100"),
+        goodness_of_fit_r2=Decimal("0.9850"),
+        study_conductor=admin_user,
+        conducted_date=timezone.now().date() - timedelta(days=15),
+        quality_approver=admin_user,
+        approved_at=timezone.now(),
+    )
+
+
+@pytest.fixture
+def cal_msa_b(db, tenant_b, cal_gage_b, admin_b):
+    return MeasurementSystemAnalysis.objects.create(
+        tenant=tenant_b,
+        gage=cal_gage_b,
+        title="Globex Valve Gage R&R Study",
+        study_type="linearity_bias",
+        status="in_progress",
+        analysis_method="aiag_anova",
+        characteristic_name="Globex Valve Diameter",
+        study_conductor=admin_b,
+        conducted_date=timezone.now().date(),
+    )
+
 
 
 
