@@ -115,6 +115,21 @@ from apps.quality.urls.InProcessQuality.ProcessParameterLogs import (
 from apps.quality.urls.InProcessQuality.SpcDashboard import (
     urlpatterns as ipqc_spc_dashboard_urls,
 )
+from apps.quality.urls.CalibrationAnalysis.CalibrationGages import (
+    urlpatterns as calibration_gages_urls,
+)
+from apps.quality.urls.CalibrationAnalysis.CalibrationRecords import (
+    urlpatterns as calibration_records_urls,
+)
+from apps.quality.urls.CalibrationAnalysis.OutOfToleranceInvestigations import (
+    urlpatterns as oot_investigations_urls,
+)
+from apps.quality.urls.CalibrationAnalysis.MeasurementSystemAnalyses import (
+    urlpatterns as msa_studies_urls,
+)
+from apps.quality.urls.CalibrationAnalysis.CalibrationVendors import (
+    urlpatterns as calibration_vendors_urls,
+)
 
 app_name = "quality"
 
@@ -158,5 +173,10 @@ urlpatterns = (
     + process_parameter_logs_urls
     + layered_process_audits_urls
     + ipqc_spc_dashboard_urls
+    + calibration_gages_urls
+    + calibration_records_urls
+    + oot_investigations_urls
+    + msa_studies_urls
+    + calibration_vendors_urls
 )
 
