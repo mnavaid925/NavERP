@@ -113,7 +113,7 @@
                 </a>
                 <span class="badge badge-red text-xs">LOT HOLD</span>
               </div>
-              <div class="text-xs text-slate-700 font-medium mt-0.5">{{ lot.item_name|default:lot.item_code }} (Lot: {{ lot.lot_number }})</div>
+              <div class="text-xs text-slate-700 font-medium mt-0.5">{{ lot.item_name|default:lot.item_code }} (Lot: {{ lot.lot_number|default:"—" }})</div>
               <p class="text-xs text-red-800 mt-1 italic">"{{ lot.hold_reason|default:"Reason not specified" }}"</p>
             </div>
             <a href="{% url 'quality:final_inspection_lot_detail' lot.pk %}" class="btn btn-outline text-xs bg-white text-slate-700 shrink-0">
@@ -134,7 +134,7 @@
                 </a>
                 <span class="badge badge-red text-xs">SHIPPING HOLD</span>
               </div>
-              <div class="text-xs text-slate-700 font-medium mt-0.5">Customer: {{ rel.customer.name }} · Shipment: {{ rel.shipment_number|default:rel.shipment }}</div>
+              <div class="text-xs text-slate-700 font-medium mt-0.5">Customer: {{ rel.customer.name }} · Shipment: {{ rel.shipment_number|default:rel.shipment|default:"—" }}</div>
               <p class="text-xs text-red-800 mt-1 italic">"{{ rel.hold_reason|default:"Shipping gate blocked by quality order" }}"</p>
             </div>
             <a href="{% url 'quality:quality_release_authorization_detail' rel.pk %}" class="btn btn-outline text-xs bg-white text-slate-700 shrink-0">
