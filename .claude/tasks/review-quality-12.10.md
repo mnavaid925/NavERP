@@ -103,9 +103,9 @@
   - **Location**: `apps/quality/views/CalibrationAnalysis/CalibrationGages.py:23-25`
   - **Fix**: Add `"asset_link"` to `select_related`. (fixed — d751a5bd)
 
-- [ ] **[M7] Extra Query in `out_of_tolerance_investigation_create` Initial Lookup**:
+- [x] **[M7] Extra Query in `out_of_tolerance_investigation_create` Initial Lookup**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/OutOfToleranceInvestigations.py:95-103`
-  - **Fix**: Add `select_related("gage")` to `record` lookup.
+  - **Fix**: Add `select_related("gage")` to `record` lookup. (fixed — a6528663)
 
 - [ ] **[M8] Duplicate `COUNT(*)` Queries on List Views**:
   - **Location**: `apps/quality/views/CalibrationAnalysis/{CalibrationGages,CalibrationRecords,OutOfToleranceInvestigations,MeasurementSystemAnalyses,CalibrationVendors}.py`
