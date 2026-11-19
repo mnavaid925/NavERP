@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}{{ audit_program.number }} — Quality Audit Program — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:quality_audit_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:audit_program_list' %}">Audit Programs</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ audit_program.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ audit_program.title }}</h1>
+            {% if audit_program.status == 'approved' or audit_program.status == 'active' %}
+            <span class="badge badge-green">{{ audit_program.get_status_display }}</span>
+            {% elif audit_program.status == 'submitted' %}
+            <span class="badge badge-info">{{ audit_program.get_status_display }}</span>
+            {% elif audit_program.status == 'cancelled' %}
+            <span class="badge badge-red">{{ audit_program.get_status_display }}</span>
+            {% elif audit_program.status == 'completed' %}
+            <span class="badge badge-muted">{{ audit_program.get_status_display }}</span>
+            {% else %}
+            <span class="badge badge-slate">{{ audit_program.get_status_display }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if audit_program.status == 'draft' or audit_program.status == 'submitted' %}
+        <form method="post" action="{% url 'quality:audit_program_approve' audit_program.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700">
+                <i data-lucide="check"></i> Approve Program
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'quality:quality_audit_create' %}?program={{ audit_program.pk }}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Add Audit
+        </a>
+        <a href="{% url 'quality:audit_program_edit' audit_program.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form method="post" action="{% url 'quality:audit_program_delete' audit_program.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Audit Program {{ audit_program.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Program Specifications</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Program Number</dt>
+                        <dd class="font-mono font-semibold">{{ audit_program.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Operating Fiscal Year</dt>
+                        <dd>{{ audit_program.program_year }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Program Type</dt>
+                        <dd>
+                            {% if audit_program.program_type == 'internal_qms' %}
+                            <span class="badge badge-info">{{ audit_program.get_program_type_display }}</span>
+                            {% elif audit_program.program_type == 'supplier_external' %}
+                            <span class="badge badge-slate">{{ audit_program.get_program_type_display }}</span>
+                            {% elif audit_program.program_type == 'regulatory_certification' %}
+                            <span class="badge badge-amber">{{ audit_program.get_program_type_display }}</span>
+                            {% else %}
+                            <span class="badge badge-green">{{ audit_program.get_program_type_display }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Risk Basis</dt>
+                        <dd>
+                            {% if audit_program.risk_basis == 'high_risk_semi_annual' %}
+                            <span class="badge badge-red">{{ audit_program.get_risk_basis_display }}</span>
+                            {% elif audit_program.risk_basis == 'medium_risk_biennial' %}
+                            <span class="badge badge-info">{{ audit_program.get_risk_basis_display }}</span>
+                            {% elif audit_program.risk_basis == 'for_cause_triggered' %}
+                            <span class="badge badge-amber">{{ audit_program.get_risk_basis_display }}</span>
+                            {% else %}
+                            <span class="badge badge-muted">{{ audit_program.get_risk_basis_display }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Validity Period</dt>
+                        <dd>{{ audit_program.start_date }} to {{ audit_program.end_date }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Allocated Budget Hours</dt>
+                        <dd>{{ audit_program.allocated_budget_hours }} person-hours</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Program Manager</dt>
+                        <dd>
+                            {% if audit_program.program_manager %}
+                            {{ audit_program.program_manager.get_full_name|default:audit_program.program_manager.username }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Approved By & Date</dt>
+                        <dd>
+                            {% if audit_program.approved_by %}
+                            {{ audit_program.approved_by.get_full_name|default:audit_program.approved_by.username }}
+                            <span class="text-xs text-muted">({{ audit_program.approval_date }})</span>
+                            {% else %}
+                            <span class="text-muted">Pending approval</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Scope Boundaries & Audit Universe Coverage</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Strategic Scope Description</h4>
+                    <div class="bg-slate-50 p-4 rounded-md text-sm text-slate-800 whitespace-pre-wrap leading-relaxed border border-slate-200">
+                        {{ audit_program.scope_description|default:"No detailed scope description provided." }}
+                    </div>
+                </div>
+
+                {% if audit_program.notes %}
+                <div>
+                    <h4 class="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Governance Notes</h4>
+                    <div class="bg-slate-50 p-4 rounded-md text-sm text-slate-800 whitespace-pre-wrap leading-relaxed border border-slate-200">
+                        {{ audit_program.notes }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Execution Tracking</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium">Program Completion</span>
+                        <span class="text-sm font-bold text-primary">{{ completion_rate }}%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2.5">
+                        <div class="bg-primary h-2.5 rounded-full transition-all" style="width: {{ completion_rate }}%"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-2xl font-bold text-slate-800">{{ audit_program.total_audits_count }}</div>
+                        <div class="text-xs text-muted">Total Audits</div>
+                    </div>
+                    <div class="p-3 bg-green-50 rounded border border-green-200 text-center">
+                        <div class="text-2xl font-bold text-green-700">{{ audit_program.completed_audits_count }}</div>
+                        <div class="text-xs text-green-700">Completed</div>
+                    </div>
+                </div>
+                <div class="p-3 bg-amber-50 rounded border border-amber-200 text-center">
+                    <div class="text-2xl font-bold text-amber-700">{{ audit_program.open_audits_count }}</div>
+                    <div class="text-xs text-amber-700">Open / In-Progress</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Scheduled Audits Under This Program</h3>
+        <a href="{% url 'quality:quality_audit_create' %}?program={{ audit_program.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i> Add Audit
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Audit #</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Framework</th>
+                    <th>Audited Unit / Entity</th>
+                    <th>Lead Auditor</th>
+                    <th>Planned Window</th>
+                    <th>Status</th>
+                    <th>Outcome</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for aud in audits %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:quality_audit_detail' aud.pk %}" class="font-semibold text-primary hover:underline">
+                            {{ aud.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ aud.title }}</div>
+                    </td>
+                    <td><span class="badge badge-info">{{ aud.get_audit_type_display }}</span></td>
+                    <td><span class="text-xs text-muted">{{ aud.get_standard_framework_display }}</span></td>
+                    <td>
+                        {% if aud.target_org_unit %}
+                        {{ aud.target_org_unit.name }}
+                        {% elif aud.external_entity %}
+                        {{ aud.external_entity.legal_name }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if aud.lead_auditor %}
+                        {{ aud.lead_auditor.get_full_name|default:aud.lead_auditor.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs">{{ aud.planned_start_date }} to {{ aud.planned_end_date }}</span></td>
+                    <td>
+                        {% if aud.status == 'closed' %}
+                        <span class="badge badge-green">{{ aud.get_status_display }}</span>
+                        {% elif aud.status == 'in_progress' %}
+                        <span class="badge badge-amber">{{ aud.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ aud.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if aud.outcome == 'conforming' or aud.outcome == 'passed' %}
+                        <span class="badge badge-green">{{ aud.get_outcome_display }}</span>
+                        {% elif aud.outcome == 'minor_findings' or aud.outcome == 'conditional_pass' %}
+                        <span class="badge badge-amber">{{ aud.get_outcome_display }}</span>
+                        {% elif aud.outcome == 'major_findings' or aud.outcome == 'critical_non_conformance' or aud.outcome == 'failed' %}
+                        <span class="badge badge-red">{{ aud.get_outcome_display }}</span>
+                        {% else %}
+                        <span class="badge badge-muted">{{ aud.get_outcome_display }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-6 text-muted">
+                        No specific audits scheduled under this program yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
