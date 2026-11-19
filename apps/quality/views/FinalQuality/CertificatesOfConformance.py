@@ -172,8 +172,12 @@ def certificate_of_conformance_delete(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def certificate_of_conformance_sign(request, pk):
     certificate = get_object_or_404(CertificateOfConformance, pk=pk, tenant=request.tenant)
+    if certificate.status in ("approved_signed", "revoked"):
+        messages.error(request, f"Certificate {certificate.number} is locked and cannot be re-signed.")
+        return redirect("quality:certificate_of_conformance_detail", pk=certificate.pk)
     now = timezone.now()
     raw_stamp = f"{certificate.number}:{certificate.tenant_id}:{request.user.id}:{now.isoformat()}"
     digest = hashlib.sha256(raw_stamp.encode("utf-8")).hexdigest()
