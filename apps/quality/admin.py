@@ -68,6 +68,18 @@ from apps.quality.models.CalibrationAnalysis.OutOfToleranceInvestigations import
 from apps.quality.models.CalibrationAnalysis.MeasurementSystemAnalyses import (
     MeasurementSystemAnalysis,
 )
+from apps.quality.models.FinalQuality.CertificatesOfConformance import (
+    CertificateOfConformance,
+)
+from apps.quality.models.FinalQuality.FinalInspectionLots import (
+    FinalInspectionLot,
+)
+from apps.quality.models.FinalQuality.PackagingLabelVerifications import (
+    PackagingLabelVerification,
+)
+from apps.quality.models.FinalQuality.QualityReleaseAuthorizations import (
+    QualityReleaseAuthorization,
+)
 
 
 
@@ -774,6 +786,86 @@ class MeasurementSystemAnalysisAdmin(admin.ModelAdmin):
     list_filter = ("study_type", "analysis_method", "study_result", "status", "tenant")
     search_fields = ("number", "study_title", "gage__gage_id", "characteristic_name")
     list_select_related = ("tenant", "gage", "study_lead", "approved_by")
+
+
+@admin.register(FinalInspectionLot)
+class FinalInspectionLotAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "inspection_stage",
+        "status",
+        "usage_decision",
+        "item_code",
+        "lot_number",
+        "lot_quantity",
+        "sample_size_inspected",
+        "units_passed",
+        "units_rejected",
+        "is_on_hold",
+        "tenant",
+    )
+    list_filter = ("inspection_stage", "status", "usage_decision", "is_on_hold", "tenant")
+    search_fields = ("number", "title", "item_code", "item_name", "lot_number", "sales_order_number")
+    list_select_related = ("tenant", "customer", "sales_order", "work_order", "inspector", "decision_by")
+
+
+@admin.register(CertificateOfConformance)
+class CertificateOfConformanceAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "certificate_type",
+        "status",
+        "customer",
+        "item_code",
+        "lot_number",
+        "certified_quantity",
+        "signed_date",
+        "tenant",
+    )
+    list_filter = ("certificate_type", "status", "tenant")
+    search_fields = ("number", "title", "customer__name", "item_code", "lot_number", "customer_po_number")
+    list_select_related = ("tenant", "customer", "sales_order", "shipment", "authorized_signatory")
+
+
+@admin.register(PackagingLabelVerification)
+class PackagingLabelVerificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "status",
+        "disposition",
+        "barcode_symbology",
+        "iso_iec_print_grade",
+        "carton_count_inspected",
+        "label_content_accurate",
+        "carton_integrity_intact",
+        "tenant",
+    )
+    list_filter = ("status", "disposition", "barcode_symbology", "iso_iec_print_grade", "tenant")
+    search_fields = ("number", "title", "item_code", "lot_number", "label_part_number", "scanned_barcode_data")
+    list_select_related = ("tenant", "artwork_master", "inspection_lot", "shipment", "verifier")
+
+
+@admin.register(QualityReleaseAuthorization)
+class QualityReleaseAuthorizationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "status",
+        "release_disposition",
+        "customer",
+        "shipment_number",
+        "quantity_authorized",
+        "is_on_hold",
+        "release_date",
+        "tenant",
+    )
+    list_filter = ("status", "release_disposition", "is_on_hold", "final_inspection_passed", "tenant")
+    search_fields = ("number", "title", "customer__name", "shipment_number", "lot_number", "carrier_name")
+    list_select_related = ("tenant", "customer", "shipment", "sales_order", "releasing_officer")
+
 
 
 
