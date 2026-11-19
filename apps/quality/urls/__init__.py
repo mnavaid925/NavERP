@@ -145,6 +145,9 @@ from apps.quality.urls.FinalQuality.PackagingLabelVerifications import (
 from apps.quality.urls.FinalQuality.QualityReleaseAuthorizations import (
     urlpatterns as quality_release_authorizations_urls,
 )
+from apps.quality.urls.AuditManagement import (
+    urlpatterns as audit_management_urls,
+)
 
 app_name = "quality"
 
@@ -198,5 +201,6 @@ urlpatterns = (
     + packaging_label_verifications_urls
     + quality_release_authorizations_urls
     + oqc_hold_board_urls
+    + audit_management_urls
 )
 
