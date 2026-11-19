@@ -15,7 +15,6 @@ class CertificateOfConformanceForm(TenantUniqueMixin, TenantModelForm):
         fields = [
             "title",
             "certificate_type",
-            "status",
             "customer",
             "customer_po_number",
             "sales_order_number",
@@ -33,15 +32,12 @@ class CertificateOfConformanceForm(TenantUniqueMixin, TenantModelForm):
             "applicable_specifications",
             "test_results_summary",
             "conformance_statement",
-            "authorized_signatory",
             "signatory_title",
-            "signed_date",
             "notes",
         ]
         widgets = {
             "title": forms.TextInput(attrs={"class": "form-input"}),
             "certificate_type": forms.Select(attrs={"class": "form-select"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "customer": forms.Select(attrs={"class": "form-select"}),
             "customer_po_number": forms.TextInput(attrs={"class": "form-input"}),
             "sales_order_number": forms.TextInput(attrs={"class": "form-input"}),
@@ -59,9 +55,7 @@ class CertificateOfConformanceForm(TenantUniqueMixin, TenantModelForm):
             "applicable_specifications": forms.Textarea(attrs={"class": "form-textarea", "rows": 2}),
             "test_results_summary": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
             "conformance_statement": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
-            "authorized_signatory": forms.Select(attrs={"class": "form-select"}),
             "signatory_title": forms.TextInput(attrs={"class": "form-input"}),
-            "signed_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 2}),
         }
 
@@ -74,12 +68,9 @@ class CertificateOfConformanceForm(TenantUniqueMixin, TenantModelForm):
             except LookupError:
                 pass
 
-            users = User.objects.filter(tenant=self.tenant, is_active=True).order_by("first_name", "last_name", "email")
-            self.fields["authorized_signatory"].queryset = users
-
             try:
                 SalesOrder = apps.get_model("scm", "SalesOrder")
-                self.fields["sales_order"].queryset = SalesOrder.objects.filter(tenant=self.tenant).order_by("-created_at")
+                self.fields["sales_order"].queryset = SalesOrder.objects.filter(tenant=self.tenant).select_related("customer").order_by("-created_at")
             except LookupError:
                 pass
 
@@ -98,11 +89,20 @@ class CertificateOfConformanceForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, [
-            "customer", "sales_order", "shipment", "inspection_lot", "authorized_signatory"
+            "customer", "sales_order", "shipment", "inspection_lot"
         ])
 
         qty = cleaned_data.get("certified_quantity") or 0
         if qty <= 0:
             self.add_error("certified_quantity", "Certified quantity must be at least 1 unit.")
+
+        customer = cleaned_data.get("customer")
+        if customer:
+            sales_order = cleaned_data.get("sales_order")
+            if sales_order and getattr(sales_order, "customer_id", None) and sales_order.customer_id != customer.pk:
+                self.add_error("sales_order", "Linked sales order does not belong to the selected customer.")
+            inspection_lot = cleaned_data.get("inspection_lot")
+            if inspection_lot and getattr(inspection_lot, "customer_id", None) and inspection_lot.customer_id != customer.pk:
+                self.add_error("inspection_lot", "Linked inspection lot does not belong to the selected customer.")
 
         return cleaned_data
