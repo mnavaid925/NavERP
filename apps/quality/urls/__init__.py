@@ -154,6 +154,9 @@ from apps.quality.urls.TrainingCompetency import (
 from apps.quality.urls.CustomerComplaints import (
     urlpatterns as customer_complaints_urls,
 )
+from apps.quality.urls.ManagementReview import (
+    urlpatterns as management_review_urls,
+)
 
 app_name = "quality"
 
@@ -210,5 +213,6 @@ urlpatterns = (
     + audit_management_urls
     + training_competency_urls
     + customer_complaints_urls
+    + management_review_urls
 )
 
