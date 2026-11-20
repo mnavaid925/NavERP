@@ -149,16 +149,34 @@ class QualityObjective(TenantNumbered):
     def progress_percent(self):
         if self.current_value is None or self.target_value is None:
             return 0
-        if self.baseline_value is not None:
-            span = abs(self.target_value - self.baseline_value)
-            if span > 0:
-                achieved = abs(self.current_value - self.baseline_value)
-                pct = int((achieved / span) * 100)
+        if self.is_achieved:
+            return 100
+        if self.target_direction == "lower_better":
+            if self.baseline_value is not None and self.baseline_value > self.target_value:
+                span = self.baseline_value - self.target_value
+                progress = self.baseline_value - self.current_value
+                pct = int((progress / span) * 100)
                 return max(0, min(100, pct))
-        if self.target_value != 0:
-            pct = int((self.current_value / self.target_value) * 100)
-            return max(0, min(100, pct))
-        return 100 if self.is_achieved else 0
+            if self.current_value > 0 and self.target_value > 0:
+                pct = int((self.target_value / self.current_value) * 100)
+                return max(0, min(100, pct))
+            return 0
+        elif self.target_direction == "higher_better":
+            if self.baseline_value is not None and self.target_value > self.baseline_value:
+                span = self.target_value - self.baseline_value
+                progress = self.current_value - self.baseline_value
+                pct = int((progress / span) * 100)
+                return max(0, min(100, pct))
+            if self.target_value != 0:
+                pct = int((self.current_value / self.target_value) * 100)
+                return max(0, min(100, pct))
+            return 0
+        else:
+            if self.target_value != 0:
+                diff = abs(self.current_value - self.target_value)
+                pct = int(max(0, 100 - (diff / abs(self.target_value) * 100)))
+                return max(0, min(100, pct))
+            return 100 if self.is_achieved else 0
 
     @property
     def category_badge_class(self):
