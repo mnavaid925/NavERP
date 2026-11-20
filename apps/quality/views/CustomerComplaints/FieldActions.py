@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -57,8 +57,12 @@ def field_action_list(request):
     total_count = qs.count()
 
     base_tenant_qs = FieldAction.objects.filter(tenant=request.tenant)
-    active_recall_count = base_tenant_qs.exclude(status__in=["closed_terminated", "cancelled"]).count()
-    class_i_count = base_tenant_qs.filter(recall_class="class_i_critical").count()
+    stats = base_tenant_qs.aggregate(
+        active_recall_count=Count("id", filter=~Q(status__in=["closed_terminated", "cancelled"])),
+        class_i_count=Count("id", filter=Q(recall_class="class_i_critical")),
+    )
+    active_recall_count = stats["active_recall_count"]
+    class_i_count = stats["class_i_count"]
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
