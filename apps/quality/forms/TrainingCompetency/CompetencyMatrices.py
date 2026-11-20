@@ -22,8 +22,6 @@ class CompetencyMatrixForm(forms.ModelForm):
             "validity_period_months",
             "prerequisite_experience_months",
             "description",
-            "approved_by",
-            "approval_date",
             "notes",
         ]
         widgets = {
@@ -37,8 +35,6 @@ class CompetencyMatrixForm(forms.ModelForm):
             "validity_period_months": forms.NumberInput(attrs={"class": "form-input", "min": 1}),
             "prerequisite_experience_months": forms.NumberInput(attrs={"class": "form-input", "min": 0}),
             "description": forms.Textarea(attrs={"class": "form-textarea", "rows": 4, "placeholder": "Curriculum overview, role competencies, and qualification scope..."}),
-            "approved_by": forms.Select(attrs={"class": "form-select"}),
-            "approval_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Additional regulatory compliance or curriculum notes..."}),
         }
 
@@ -47,9 +43,8 @@ class CompetencyMatrixForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["department"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
-            self.fields["approved_by"].queryset = User.objects.filter(tenant=self.tenant, is_active=True)
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["department", "approved_by"])
+        reject_foreign(self, cleaned_data, ["department"])
         return cleaned_data
