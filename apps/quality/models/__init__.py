@@ -91,6 +91,18 @@ from apps.quality.models.AuditManagement.AuditFindings import (
 from apps.quality.models.AuditManagement.RegulatoryInspectionHosts import (
     RegulatoryInspectionHost,
 )
+from apps.quality.models.TrainingCompetency.CompetencyMatrices import (
+    CompetencyMatrix,
+)
+from apps.quality.models.TrainingCompetency.QualityTrainingCourses import (
+    QualityTrainingCourse,
+)
+from apps.quality.models.TrainingCompetency.TrainingEnrollments import (
+    TrainingEnrollment,
+)
+from apps.quality.models.TrainingCompetency.CompetencyCertifications import (
+    CompetencyCertification,
+)
 
 __all__ = [
     "TenantOwned",
@@ -139,5 +151,9 @@ __all__ = [
     "QualityAudit",
     "AuditFinding",
     "RegulatoryInspectionHost",
+    "CompetencyMatrix",
+    "QualityTrainingCourse",
+    "TrainingEnrollment",
+    "CompetencyCertification",
 ]
 
