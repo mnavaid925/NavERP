@@ -106,3 +106,27 @@
     `style="width: {% widthratio rc.count 20 100 %}%;"` uses a hardcoded maximum of 20 investigations.
   - **Fix:**
     Pass `max_root_cause_count` or calculate width against total investigation count.
+
+---
+
+## 2. Explorer Reviewer Findings
+
+### Important
+- **I5: Filter form drops parent `complaint` filter on child list templates**
+  - **Files:**
+    - `templates/quality/customercomplaints/complaint_investigation/list.html:56-97`
+    - `templates/quality/customercomplaints/regulatory_report/list.html:59-101`
+    - `templates/quality/customercomplaints/field_action/list.html:56-97`
+  - **Problem:**
+    `ComplaintInvestigations.py`, `RegulatoryReports.py`, and `FieldActions.py` support filtering by parent complaint (`request.GET.get('complaint')`). When a user arrives via a deep-link from a complaint detail page and then submits the filter bar (e.g. search or status), the `complaint` query param is silently dropped because there is no `<input type="hidden" name="complaint" value="{{ request.GET.complaint }}">`.
+  - **Fix:**
+    Add `{% if request.GET.complaint %}<input type="hidden" name="complaint" value="{{ request.GET.complaint }}">{% endif %}` to the filter form in all 3 child list templates.
+
+### Minor
+- **M5: Missing `customer__name` in `CustomerComplaintAdmin.search_fields`**
+  - **File:** `apps/quality/admin.py:1076`
+  - **Problem:**
+    `search_fields` covers number, title, item_code, complainant_name, etc., but omits `customer__name`.
+  - **Fix:**
+    Add `"customer__name"` to `CustomerComplaintAdmin.search_fields`.
+
