@@ -22,6 +22,9 @@
         </div>
     </div>
     <div class="page-actions">
+        <a href="{% url 'quality:competency_matrix_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Matrices
+        </a>
         <a href="{% url 'quality:competency_matrix_edit' matrix.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i> Edit
         </a>
