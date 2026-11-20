@@ -33,7 +33,7 @@
             {% elif complaint.status == "pending_regulatory" %}
             <span class="badge badge-red">Regulatory Pending</span>
             {% elif complaint.status == "capa_pending" %}
-            <span class="badge badge-purple">CAPA Pending</span>
+            <span class="badge badge-amber">CAPA Pending</span>
             {% else %}
             <span class="badge badge-info">{{ complaint.get_status_display }}</span>
             {% endif %}
@@ -160,7 +160,7 @@
                                 {% elif inv.status == "rejected_rework" %}
                                 <span class="badge badge-red">Rework</span>
                                 {% elif inv.status == "hhe_review" %}
-                                <span class="badge badge-purple">HHE Review</span>
+                                <span class="badge badge-amber">HHE Review</span>
                                 {% else %}
                                 <span class="badge badge-amber">{{ inv.get_status_display }}</span>
                                 {% endif %}
@@ -233,7 +233,7 @@
                                 {% if rpt.submission_status == "acknowledged" %}
                                 <span class="badge badge-green">Acknowledged</span>
                                 {% elif rpt.submission_status == "submitted" %}
-                                <span class="badge badge-purple">Submitted</span>
+                                <span class="badge badge-info">Submitted</span>
                                 {% elif rpt.submission_status == "ready_to_transmit" %}
                                 <span class="badge badge-info">Ready</span>
                                 {% else %}
