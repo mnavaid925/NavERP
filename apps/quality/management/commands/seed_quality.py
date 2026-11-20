@@ -218,6 +218,7 @@ class Command(BaseCommand):
         employee = EmployeeProfile.objects.filter(tenant=tenant).order_by("pk").first()
 
         today = timezone.now().date()
+        now = timezone.now()
 
         with transaction.atomic():
             # 1. Superseded Predecessor SOP (0.9)
@@ -481,6 +482,7 @@ class Command(BaseCommand):
         doc_sop = ControlledDocument.objects.filter(tenant=tenant, document_type="sop").order_by("pk").first()
 
         today = timezone.now().date()
+        now = timezone.now()
 
         with transaction.atomic():
             # 1. Active Design Project: Smart Infusion Pump System
@@ -701,6 +703,7 @@ class Command(BaseCommand):
             qa_dept = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
 
         today = timezone.now().date()
+        now = timezone.now()
         project_active = DesignProject.objects.filter(tenant=tenant, status="active").first()
         di_safe = DesignInput.objects.filter(tenant=tenant, input_type="safety").first()
         doc_sop = ControlledDocument.objects.filter(tenant=tenant, lifecycle_state="effective").first()
@@ -1028,6 +1031,7 @@ class Command(BaseCommand):
             return
 
         today = timezone.now().date()
+        now = timezone.now()
         dept = OrgUnit.objects.filter(tenant=tenant).first()
         design_prj = DesignProject.objects.filter(tenant=tenant).first()
         risk_asmt = RiskAssessment.objects.filter(tenant=tenant).first()
@@ -1296,6 +1300,7 @@ class Command(BaseCommand):
         capa_ref = CapaInvestigation.objects.filter(tenant=tenant).first()
         doc_ref = ControlledDocument.objects.filter(tenant=tenant).first()
         today = timezone.now().date()
+        now = timezone.now()
 
         with transaction.atomic():
             # 1. Critical NCR: Solder Bridging in Automated PCBA Wave Soldering
@@ -1584,6 +1589,7 @@ class Command(BaseCommand):
             return
 
         today = timezone.now().date()
+        now = timezone.now()
         quality_agreement = ControlledDocument.objects.filter(tenant=tenant).first()
         design_project = DesignProject.objects.filter(tenant=tenant).first()
         capa = CapaInvestigation.objects.filter(tenant=tenant).first()
@@ -1968,6 +1974,7 @@ class Command(BaseCommand):
             return
 
         today = timezone.now().date()
+        now = timezone.now()
         sop_doc = ControlledDocument.objects.filter(tenant=tenant).first()
         ncr = NonConformanceReport.objects.filter(tenant=tenant).first()
         scar = SupplierCorrectiveAction.objects.filter(tenant=tenant).first()
@@ -3777,6 +3784,7 @@ class Command(BaseCommand):
         capa = CapaAction.objects.filter(tenant=tenant).first()
 
         today = timezone.now().date()
+        now = timezone.now()
 
         with transaction.atomic():
             # 1. Competency Matrices
