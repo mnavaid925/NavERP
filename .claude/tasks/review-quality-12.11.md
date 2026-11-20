@@ -69,5 +69,23 @@ Changeset: `e052bfb46552937ccf9713c99c1f4e2d31fca73e...HEAD`
 - [ ] `apps/quality/models/AuditManagement/QualityAudits.py:113` — Missing composite tenant index on `(tenant, standard_framework)`. Fix: Add `models.Index(fields=["tenant", "standard_framework"], name="idx_qaud_ten_framework")`.
 - [ ] `apps/quality/views/AuditManagement/AuditFindings.py:78-80` — Unrestricted column loading for dropdown filter querysets. Fix: Add `.only("id", "number", "title")` to `audits` queryset.
 
+---
+
+## 5. QA Smoke Tester Findings
+
+### Critical
+- [ ] `apps/quality/views/AuditManagement/AuditFindings.py:233-242` — CAPA Initiation 500 Crash: POSTing to `audit_finding_create_capa` raises `TypeError: CapaInvestigation() got unexpected keyword arguments: 'problem_description', 'severity', 'target_completion_date'`, misses required non-nullable `quality_owner` FK and supplies invalid status `"initiated"`. Fix: Map fields to `CapaInvestigation` schema: `issue_summary`, `risk_priority`, `target_closure_date`, `status="draft"`, and provide `quality_owner=finding.audit.lead_auditor or request.user`.
+
+### Important
+- [ ] `apps/quality/views/AuditManagement/AuditPrograms.py:164-175` — Missing authorization on program approval: `audit_program_approve` omits `@tenant_admin_required`, allowing non-admin auditees to approve corporate audit programs. Fix: Decorate with `@tenant_admin_required`.
+- [ ] `apps/quality/views/AuditManagement/AuditFindings.py:210-222` — Auditor independence violation on finding closure: `audit_finding_verify_close` lacks an auditor independence check, permitting the cited auditee `assignee` to verify/close their own non-conformance. Fix: Add view-level guard enforcing `request.user != finding.assignee` and auditor/staff permission.
+- [ ] `apps/quality/views/AuditManagement/AuditFindings.py:194-206` — Closed findings reopened via direct response POST: `audit_finding_submit_response` lacks status guard, allowing closed findings to transition back to `"response_submitted"`. Fix: Add guard `if finding.status not in ("draft", "issued", "response_submitted", "escalated"):`.
+- [ ] `apps/quality/views/AuditManagement/RegulatoryInspectionHosts.py:191,207` — Inspection War Room ejection on request actions: `regulatory_inspection_host_log_request` and `fulfill_request` unconditionally redirect to inspection detail, kicking users out of the active War Room command center. Fix: Check `request.POST.get("source") == "war_room"` or referer and redirect back to `quality:audit_war_room?host={host.pk}`.
+- [ ] `apps/quality/views/AuditManagement/AuditFindings.py:180-190` & `AuditFindings.py:145-148` — Stale finding counters on finding deletion: deleting a finding does not invoke `self.audit.sync_findings_counts()`. Fix: Override `delete()` on `AuditFinding` to call `self.audit.sync_findings_counts()`.
+
+### Minor
+- [ ] `apps/quality/views/AuditManagement/QualityAudits.py:196-217` — Cancelled audit mutation: `quality_audit_publish_report` and `quality_audit_close` lack state checks for `audit.status == "cancelled"`. Fix: Add guard rejecting actions when status is cancelled.
+
+
 
 
