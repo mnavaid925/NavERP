@@ -46,7 +46,7 @@ class ComplaintInvestigation(TenantNumbered):
         "assigned": "badge-info",
         "in_progress": "badge-amber",
         "pending_sample": "badge-slate",
-        "hhe_review": "badge-purple",
+        "hhe_review": "badge-amber",
         "pending_qa_review": "badge-amber",
         "approved": "badge-green",
         "rejected_rework": "badge-red",
