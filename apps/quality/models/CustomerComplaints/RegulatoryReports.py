@@ -62,9 +62,9 @@ class RegulatoryReport(TenantNumbered):
     )
 
     AGENCY_CSS = {
-        "fda_cdrh": "badge-blue",
+        "fda_cdrh": "badge-info",
         "fda_cder": "badge-info",
-        "eu_competent_auth": "badge-purple",
+        "eu_competent_auth": "badge-info",
         "health_canada": "badge-red",
         "pmda_japan": "badge-amber",
         "tga_australia": "badge-green",
@@ -76,7 +76,7 @@ class RegulatoryReport(TenantNumbered):
         "draft": "badge-slate",
         "under_internal_review": "badge-amber",
         "ready_to_transmit": "badge-info",
-        "submitted": "badge-purple",
+        "submitted": "badge-info",
         "acknowledged": "badge-green",
         "rejected_supplement_needed": "badge-red",
         "withdrawn": "badge-muted",
