@@ -201,6 +201,22 @@ def audit_program_export_csv(request):
             | Q(scope_description__icontains=q)
         )
 
+    program_type = request.GET.get("program_type", "").strip()
+    if program_type:
+        qs = qs.filter(program_type=program_type)
+
+    risk_basis = request.GET.get("risk_basis", "").strip()
+    if risk_basis:
+        qs = qs.filter(risk_basis=risk_basis)
+
+    status = request.GET.get("status", "").strip()
+    if status:
+        qs = qs.filter(status=status)
+
+    year = request.GET.get("year", "").strip()
+    if year.isdigit():
+        qs = qs.filter(program_year=int(year))
+
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="audit_programs.csv"'
     response["X-Content-Type-Options"] = "nosniff"
