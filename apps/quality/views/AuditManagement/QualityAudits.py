@@ -119,8 +119,9 @@ def quality_audit_detail(request, pk):
         select_related=("program", "target_org_unit", "external_entity", "lead_auditor", "auditee_lead", "audit_checklist_sop"),
         prefetch_related=("findings", "findings__assignee", "findings__audited_org_unit", "findings__linked_capa", "regulatory_hosts"),
     )
-    findings = audit.findings.all()
-    regulatory_hosts = audit.regulatory_hosts.all()
+    findings = list(audit.findings.all())
+    regulatory_hosts = list(audit.regulatory_hosts.all())
+    audit.annotated_open_findings = sum(1 for f in findings if f.status != "closed")
 
     context = {
         "quality_audit": audit,
