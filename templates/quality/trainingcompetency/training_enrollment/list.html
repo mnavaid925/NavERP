@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}Training Enrollments & Assignments — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_enrollment_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Training Enrollments</span>
+        </div>
+        <h1 class="page-title">Training Enrollments & Assignments</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:training_enrollment_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:training_enrollment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Assignment
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-list"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Assignments</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Overdue Training</div>
+            <div class="stat-value">{{ overdue_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="stat-label">Verified Qualifications</div>
+            <div class="stat-value">{{ verified_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Course, number, trainee..." class="form-input">
+            </div>
+            <div>
+                <label for="course" class="form-label text-xs">Course</label>
+                <select name="course" id="course" class="form-select">
+                    <option value="">All Courses</option>
+                    {% for c in courses %}
+                    <option value="{{ c.pk }}" {% if selected_course == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} - {{ c.title|truncatechars:25 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="trainee" class="form-label text-xs">Trainee</label>
+                <select name="trainee" id="trainee" class="form-select">
+                    <option value="">All Trainees</option>
+                    {% for u in trainees %}
+                    <option value="{{ u.pk }}" {% if selected_trainee == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="assignment_reason" class="form-label text-xs">Reason</label>
+                <select name="assignment_reason" id="assignment_reason" class="form-select">
+                    <option value="">All Reasons</option>
+                    {% for val, label in reason_choices %}
+                    <option value="{{ val }}" {% if selected_reason == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="is_overdue" class="form-label text-xs">Deadline</label>
+                <select name="is_overdue" id="is_overdue" class="form-select">
+                    <option value="">All Deadlines</option>
+                    <option value="1" {% if selected_overdue == "1" %}selected{% endif %}>Overdue Only</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'quality:training_enrollment_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Enrollment Number</th>
+                    <th>Course Title</th>
+                    <th>Trainee</th>
+                    <th>Reason</th>
+                    <th>Assigned Date</th>
+                    <th>Due Date</th>
+                    <th>Score / Result</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in enrollments %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:training_enrollment_detail' e.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ e.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ e.course.title }}</div>
+                        <div class="text-xs text-slate-500">{{ e.course.get_category_display }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ e.trainee.get_full_name|default:e.trainee.username }}</div>
+                        <div class="text-xs text-slate-500">@{{ e.trainee.username }}</div>
+                    </td>
+                    <td><span class="badge {{ e.reason_badge }}">{{ e.get_assignment_reason_display }}</span></td>
+                    <td>{{ e.assigned_date }}</td>
+                    <td>
+                        <span class="{% if e.is_overdue %}text-red-600 font-bold{% endif %}">
+                            {{ e.due_date }}
+                        </span>
+                        {% if e.is_overdue %}
+                        <span class="text-xs text-red-500 block">({{ e.days_remaining|stringformat:"d"|slice:"1:" }}d overdue)</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if e.score is not None %}
+                        <span class="font-semibold {% if e.is_passed %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ e.score }}%
+                        </span>
+                        {% elif e.status == 'waived' %}
+                        <span class="text-slate-400">Exempt</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ e.status_badge }}">{{ e.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'quality:training_enrollment_detail' e.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:training_enrollment_edit' e.pk %}" class="btn btn-icon" title="Edit Assignment">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'quality:training_enrollment_delete' e.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Enrollment {{ e.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600" title="Delete Enrollment">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="clipboard-list" class="empty-icon"></i>
+                            <div class="empty-text">No training enrollments found</div>
+                            <div class="empty-subtext">Assign training courses to employees to begin the competency qualification workflow.</div>
+                            <a href="{% url 'quality:training_enrollment_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> New Assignment
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} enrollments
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_course %}&course={{ selected_course }}{% endif %}{% if selected_trainee %}&trainee={{ selected_trainee }}{% endif %}{% if selected_reason %}&assignment_reason={{ selected_reason }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_overdue %}&is_overdue={{ selected_overdue }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Previous</span>
+            {% endif %}
+
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_course %}&course={{ selected_course }}{% endif %}{% if selected_trainee %}&trainee={{ selected_trainee }}{% endif %}{% if selected_reason %}&assignment_reason={{ selected_reason }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_overdue %}&is_overdue={{ selected_overdue }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
