@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management — Competency Matrices [QMTX-], Quality Training Courses [QCRS-], Training Enrollments [QENR-], Competency Certifications [QCERT-], Training Compliance Dashboard, and Employee Training Dossiers; and 12.13 Customer Complaint Handling). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.13), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; and 12.14 Management Review & Quality Planning — Quality Objectives [QOBJ-], Management Reviews [QMRV-], Review Inputs [QMRI-], Review Actions [QMRA-], Quality Planning Dashboard, and FDA/ISO Audit Dossier). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.14), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -110,6 +110,14 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Field Actions, Recalls & Safety Alerts** [`QFMA-`]: 21 CFR Part 7 and Part 806 compliant market correction and removal governance across action types (`recall_removal`, `fsca_safety_notice`, `field_correction_rework`, `safety_advisory_alert`, `market_withdrawal`), FDA recall classes (`class_i_critical`, `class_ii_moderate`, `class_iii_minor`, `fsca_safety_alert`, `not_classified`), Field Safety Notice (FSN) document linkages (`ControlledDocument`), affected lot scope, consignee notification dispatch tracking, response rate monitoring, unit quarantine/recovery reconciliation progress tracking, regulatory recall numbers, and formal termination justification.
   - **Complaint Intelligence & Trending Command Center**: Post-market surveillance executive dashboard (`complaint_trending_dashboard`) tracking YTD complaints, active investigations, statutory regulatory clocks, active field recalls, average cycle time (days to close), Pareto defect category distributions, severity distribution charts, and recall reconciliation recovery progress.
 
+- **12.14 Management Review & Quality Planning**:
+  - **Quality Objectives & KPI Performance** [`QOBJ-`]: Strategic quality planning conforming to ISO 9001:2015 Clause 6.2 and ISO 13485:2016 Clause 5.4.1 across categories (`product_quality`, `process_performance`, `compliance_regulatory`, `customer_satisfaction`, `supplier_quality`, `safety_environmental`, `continuous_improvement`), cadences (`monthly`, `quarterly`, `semi_annual`, `annual`), measurement baselines, targets, actual current values, target directions (`higher_better`, `lower_better`, `exact`), automated RAG status evaluation (`green`, `amber`, `red`, `neutral`), clamped progress percentages [0, 100], owners (`accounts.User`), organizational departments (`core.OrgUnit`), strategic action plans, and evaluation histories.
+  - **Management Reviews & Governance Cycles** [`QMRV-`]: Executive quality reviews satisfying ISO 13485:2016 §5.6, ISO 9001:2015 §9.3, and FDA 21 CFR § 820.20(c) / QMSR across cadences (`annual`, `semi_annual`, `quarterly`, `monthly`, `event_driven`), executive sponsors, lead facilitators, attendance rosters, quorum verification, meeting lifecycle states (`scheduled` -> `in_preparation` -> `meeting_active` -> `minutes_drafting` -> `pending_approval` -> `approved` / `cancelled`), formal QMS suitability determinations (`suitable_effective`, `minor_improvements`, `systemic_deficiencies`), resource allocation decisions, and 21 CFR Part 11 electronic signature sign-off.
+  - **Review Inputs & Agenda Compilation** [`QMRI-`]: Structured compilation of mandatory management review inputs across the 10 ISO 5.6.2 clauses (`audit_results`, `customer_feedback`, `process_conformity`, `capa_status`, `prior_review_followup`, `changes_affecting_qms`, `supplier_performance`, `resources_training`, `risk_management`, `other_business`), agenda ordering, presenter assignments, and direct linkages to upstream QMS records (`QualityAudit`, `CapaInvestigation`, `CustomerComplaint`, `NonConformanceReport`).
+  - **Management Review Outputs & Decisions (Actions)** [`QMRA-`]: Formal executive decisions and action assignments satisfying ISO 5.6.3 across action types (`qms_improvement`, `product_improvement`, `resource_allocation`, `capa_initiation`, `procedure_revision`, `training_competency`, `regulatory_filing`), priorities (`critical`, `high`, `medium`, `low`), assignees, due dates, non-negative days open tracking, lifecycle state progression (`open` -> `in_progress` -> `pending_verification` -> `completed` / `cancelled`), independent QA verification with separation of duties enforcement, and direct escalation to formal systemic `CapaInvestigation` (`QCAP-`).
+  - **Quality Planning & Continuous Improvement Command Center**: High-level executive dashboard (`quality_planning_dashboard`) monitoring overall objective achievement rates, active reviews, action closure rates, RAG status distributions, category allocations, upcoming review schedules, and overdue action items.
+  - **Printable FDA/ISO Management Review Audit Dossier**: Audit-ready inspection dossier ([dossier.html]) compiling executive summaries, attendance rosters, quorum checks, input summaries, output decisions, suitability conclusions, and 21 CFR Part 11 electronic signature certificates.
+
 ---
 
 ## App Layout & Architecture
@@ -185,6 +193,11 @@ apps/quality/
       ComplaintInvestigations.py              <- ComplaintInvestigation [QCIN-]
       RegulatoryReports.py                    <- RegulatoryReport [QRPT-]
       FieldActions.py                         <- FieldAction [QFMA-]
+    ManagementReview/                         <- Sub-module 12.14 models
+      QualityObjectives.py                    <- QualityObjective [QOBJ-]
+      ManagementReviews.py                    <- ManagementReview [QMRV-]
+      ManagementReviewInputs.py               <- ManagementReviewInput [QMRI-]
+      ManagementReviewActions.py              <- ManagementReviewAction [QMRA-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -253,6 +266,11 @@ apps/quality/
       ComplaintInvestigations.py              <- ComplaintInvestigationForm
       RegulatoryReports.py                    <- RegulatoryReportForm
       FieldActions.py                         <- FieldActionForm
+    ManagementReview/                         <- Sub-module 12.14 forms
+      QualityObjectives.py                    <- QualityObjectiveForm, QualityObjectiveEvaluateForm
+      ManagementReviews.py                    <- ManagementReviewForm, ManagementReviewMinutesForm, ManagementReviewApproveForm
+      ManagementReviewInputs.py               <- ManagementReviewInputForm
+      ManagementReviewActions.py              <- ManagementReviewActionForm, ManagementReviewActionCompleteForm, ManagementReviewActionVerifyForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -333,6 +351,12 @@ apps/quality/
       RegulatoryReports.py                    <- List, Detail, Create, Edit, Delete, Submit, Acknowledge, Export
       FieldActions.py                         <- List, Detail, Create, Edit, Delete, Close, Export
       ComplaintTrendingDashboard.py           <- Quality Executive Complaint Intelligence & Post-Market Surveillance Dashboard
+    ManagementReview/                         <- Sub-module 12.14 views
+      QualityObjectives.py                    <- List, Detail, Create, Edit, Delete, Evaluate, Export
+      ManagementReviews.py                    <- List, Detail, Create, Edit, Delete, Start, Minutes, Approve, Cancel, Dossier, Export
+      ManagementReviewInputs.py               <- List, Detail, Create, Edit, Delete, Present, Accept, Export
+      ManagementReviewActions.py              <- List, Detail, Create, Edit, Delete, Start, Complete, Verify, Escalate CAPA, Export
+      QualityPlanningDashboard.py             <- Quality Planning & Continuous Improvement Command Center
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -412,12 +436,22 @@ apps/quality/
       RegulatoryReports.py
       FieldActions.py
       ComplaintTrendingDashboard.py
+    ManagementReview/                         <- Sub-module 12.14 URLs
+      QualityObjectives.py
+      ManagementReviews.py
+      ManagementReviewInputs.py
+      ManagementReviewActions.py
+      QualityPlanningDashboard.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.13)
-  tests/                                      <- Pytest test suite (100% green, 2,153+ passing tests)
-    conftest.py                               <- Shared 12.1 through 12.13 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.14)
+  tests/                                      <- Pytest test suite (100% green, 2,316+ passing tests)
+    conftest.py                               <- Shared 12.1 through 12.14 fixtures
+    test_managementreview_models.py           <- Sub-module 12.14 model tests (32 tests)
+    test_managementreview_forms.py            <- Sub-module 12.14 form tests (45 tests)
+    test_managementreview_views.py            <- Sub-module 12.14 view tests (57 tests)
+    test_managementreview_security.py         <- Sub-module 12.14 security tests (29 tests)
     test_trainingcompetency_models.py         <- Sub-module 12.12 model tests (28 tests)
     test_trainingcompetency_forms.py          <- Sub-module 12.12 form tests (44 tests)
     test_trainingcompetency_views.py          <- Sub-module 12.12 view tests (40 tests)
@@ -703,6 +737,32 @@ apps/quality/
 - **Key Fields:** `number`, `enrollment` (`TrainingEnrollment`), `trainee` (`accounts.User`), `course` (`QualityTrainingCourse`), `competency_matrix` (`CompetencyMatrix`), `qualification_title`, `qualification_level` (`level_1_novice`, `level_2_qualified`, `level_3_senior_specialist`, `level_4_trainer_assessor`), `certificate_hash` (CharField 64, SHA-256 fingerprint), `issue_date`, `valid_until`, `renewal_interval_months` (int, default 12), `status` (`active`, `expiring_soon`, `expired`, `suspended`, `revoked`, `superseded`), `authorized_work_centers`, `certified_by` (`accounts.User`), `electronic_signature` (`ElectronicSignatureRecord`), `suspension_reason`, `notes`.
 - **Properties & Methods:** `is_valid`, `days_until_expiration`, `is_expiring_soon`, `is_expired`, `generate_certificate_hash()`, `level_badge`, `status_badge`.
 - **Compound Indexes:** `idx_qcert_ten_status` on `(tenant, status)`, `idx_qcert_ten_trainee` on `(tenant, trainee)`, `idx_qcert_ten_course` on `(tenant, course)`, `idx_qcert_ten_valid` on `(tenant, valid_until)`, `idx_qcert_ten_level` on `(tenant, qualification_level)`, `idx_qcert_ten_hash` on `(tenant, certificate_hash)`, `idx_qcert_ten_issue_ord` on `(tenant, -issue_date, -created_at)`, `idx_qcert_ten_stat_valid` on `(tenant, status, valid_until)`.
+
+### Sub-module 12.14 Entities
+
+#### 37. `QualityObjective` (Prefix: `QOBJ-`)
+- **Table:** `quality_quality_objective`
+- **Key Fields:** `number`, `title`, `description`, `category` (`product_quality`, `process_performance`, `compliance_regulatory`, `customer_satisfaction`, `supplier_quality`, `safety_environmental`, `continuous_improvement`), `period_year` (int), `cadence` (`monthly`, `quarterly`, `semi_annual`, `annual`), `metric_unit`, `baseline_value` (Decimal), `target_value` (Decimal), `current_value` (Decimal), `target_direction` (`higher_better`, `lower_better`, `exact`), `status` (`draft`, `active`, `on_track`, `at_risk`, `behind`, `achieved`, `abandoned`), `rag_status` (`green`, `amber`, `red`, `neutral`), `last_evaluated_date`, `owner` (`accounts.User`), `org_unit` (`core.OrgUnit`), `target_date`, `action_plan_summary`, `notes`.
+- **Properties & Methods:** `variance`, `is_achieved`, `progress_percent` (clamped [0, 100]), `category_badge_class`, `status_badge_class`, `rag_badge_class`, `evaluate_performance()`.
+- **Compound Indexes:** `idx_qobj_ten_cat` on `(tenant, category)`, `idx_qobj_ten_status` on `(tenant, status)`, `idx_qobj_ten_rag` on `(tenant, rag_status)`, `idx_qobj_ten_year` on `(tenant, period_year)`, `idx_qobj_ten_target_date` on `(tenant, target_date)`, `idx_qobj_ten_created` on `(tenant, -created_at)`, `idx_qobj_ten_yr_crd` on `(tenant, -period_year, -created_at)`.
+
+#### 38. `ManagementReview` (Prefix: `QMRV-`)
+- **Table:** `quality_management_review`
+- **Key Fields:** `number`, `title`, `description`, `cadence` (`annual`, `semi_annual`, `quarterly`, `monthly`, `event_driven`), `period_year` (int), `period_quarter` (`Q1`, `Q2`, `Q3`, `Q4`), `period_start`, `period_end`, `scheduled_date`, `actual_meeting_date`, `executive_sponsor` (`accounts.User`), `lead_facilitator` (`accounts.User`), `org_unit` (`core.OrgUnit`), `attendees_roster`, `quorum_met` (bool, default True), `status` (`scheduled`, `in_preparation`, `meeting_active`, `minutes_drafting`, `pending_approval`, `approved`, `cancelled`), `qms_suitability_conclusion` (`pending`, `suitable_effective`, `minor_improvements`, `systemic_deficiencies`), `executive_summary`, `minutes_discussion`, `resource_decisions`, `electronic_signature` (`ElectronicSignatureRecord`), `approved_by` (`accounts.User`), `approved_at`, `notes`.
+- **Properties & Methods:** `total_inputs_count`, `total_actions_count`, `open_actions_count`, `is_overdue`, `cadence_badge_class`, `status_badge_class`, `suitability_badge_class`.
+- **Compound Indexes:** `idx_qmrv_ten_status` on `(tenant, status)`, `idx_qmrv_ten_cad` on `(tenant, cadence)`, `idx_qmrv_ten_schdate` on `(tenant, scheduled_date)`, `idx_qmrv_ten_suit` on `(tenant, qms_suitability_conclusion)`, `idx_qmrv_ten_created` on `(tenant, -created_at)`, `idx_qmrv_ten_date_crd` on `(tenant, -scheduled_date, -created_at)`.
+
+#### 39. `ManagementReviewInput` (Prefix: `QMRI-`)
+- **Table:** `quality_management_review_input`
+- **Key Fields:** `number`, `management_review` (`ManagementReview`), `category` (10 ISO 5.6.2 clauses: `audit_results`, `customer_feedback`, `process_conformity`, `capa_status`, `prior_review_followup`, `changes_affecting_qms`, `supplier_performance`, `resources_training`, `risk_management`, `other_business`), `title`, `agenda_order` (int, default 1), `presenter` (`accounts.User`), `data_summary`, `key_metrics_table`, `status` (`draft`, `compiled`, `presented`, `accepted`), `linked_audit` (`QualityAudit`), `linked_capa` (`CapaInvestigation`), `linked_complaint` (`CustomerComplaint`), `linked_ncr` (`NonConformanceReport`), `attachments_summary`, `notes`.
+- **Properties & Methods:** `category_badge_class`, `status_badge_class`.
+- **Compound Indexes:** `idx_qmri_ten_mrv` on `(tenant, management_review)`, `idx_qmri_ten_cat` on `(tenant, category)`, `idx_qmri_ten_status` on `(tenant, status)`, `idx_qmri_ten_created` on `(tenant, -created_at)`.
+
+#### 40. `ManagementReviewAction` (Prefix: `QMRA-`)
+- **Table:** `quality_management_review_action`
+- **Key Fields:** `number`, `management_review` (`ManagementReview`), `title`, `description`, `action_type` (`qms_improvement`, `product_improvement`, `resource_allocation`, `capa_initiation`, `procedure_revision`, `training_competency`, `regulatory_filing`), `priority` (`critical`, `high`, `medium`, `low`), `assignee` (`accounts.User`), `due_date`, `status` (`open`, `in_progress`, `pending_verification`, `completed`, `cancelled`), `completion_date`, `resolution_summary`, `spawned_capa` (`CapaInvestigation`), `spawned_change_order` (`DocumentChangeOrder`), `verified_by` (`accounts.User`), `verification_notes`, `notes`.
+- **Properties & Methods:** `is_overdue`, `days_open` (clamped >= 0), `action_type_badge_class`, `priority_badge_class`, `status_badge_class`.
+- **Compound Indexes:** `idx_qmra_ten_mrv` on `(tenant, management_review)`, `idx_qmra_ten_status` on `(tenant, status)`, `idx_qmra_ten_pri` on `(tenant, priority)`, `idx_qmra_ten_duedate` on `(tenant, due_date)`, `idx_qmra_ten_created` on `(tenant, -created_at)`, `idx_qmra_ten_stat_due` on `(tenant, status, due_date)`.
 
 
 ---
@@ -1031,6 +1091,47 @@ All routes use the `quality:` namespace:
 | `/quality/field-actions/export/csv/` | `field_action_export_csv` | CSV export of field actions |
 | `/quality/trending/` | `complaint_trending_dashboard` | Executive complaint intelligence command center with cycle time and Pareto charts |
 
+### Sub-module 12.14 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/planning/dashboard/` | `quality_planning_dashboard` | Quality Planning & Continuous Improvement Command Center |
+| `/quality/objectives/` | `quality_objective_list` | Quality objectives register with category, status, and RAG filters |
+| `/quality/objectives/create/` | `quality_objective_create` | Define strategic quality objective and performance metric |
+| `/quality/objectives/<pk>/` | `quality_objective_detail` | Detailed objective scorecard with KPI progress bar and evaluation history |
+| `/quality/objectives/<pk>/edit/` | `quality_objective_edit` | Edit objective target parameters and action plan |
+| `/quality/objectives/<pk>/evaluate/` | `quality_objective_evaluate` | POST-only metric evaluation, recalculating RAG status |
+| `/quality/objectives/<pk>/delete/` | `quality_objective_delete` | POST-only delete (guarded against active evaluations) |
+| `/quality/objectives/export/csv/` | `quality_objective_export_csv` | CSV export of quality objectives with formula sanitization |
+| `/quality/reviews/` | `management_review_list` | Executive management reviews calendar with cadence, status, and suitability filters |
+| `/quality/reviews/create/` | `management_review_create` | Schedule formal management review meeting |
+| `/quality/reviews/<pk>/` | `management_review_detail` | Comprehensive review dossier with agenda inputs, outputs/actions, and approval gate |
+| `/quality/reviews/<pk>/edit/` | `management_review_edit` | Edit review schedule and logistics (locked when approved) |
+| `/quality/reviews/<pk>/start/` | `management_review_start` | POST-only transition advancing scheduled review to active meeting |
+| `/quality/reviews/<pk>/draft-minutes/` | `management_review_draft_minutes` | Draft proceedings, attendance roster, quorum check, and suitability determination |
+| `/quality/reviews/<pk>/approve/` | `management_review_approve` | Executive Sponsor formal sign-off with 21 CFR Part 11 Electronic Signature |
+| `/quality/reviews/<pk>/cancel/` | `management_review_cancel` | POST-only cancellation with quality justification |
+| `/quality/reviews/<pk>/delete/` | `management_review_delete` | POST-only delete (restricted to empty scheduled reviews) |
+| `/quality/reviews/<pk>/dossier/` | `management_review_export_pdf` | Audit-ready printable HTML dossier conforming to FDA/ISO standards |
+| `/quality/reviews/export/csv/` | `management_review_export_csv` | CSV export of management reviews |
+| `/quality/inputs/` | `management_review_input_list` | Agenda input compilation registry across 10 ISO 5.6.2 clauses |
+| `/quality/inputs/create/` | `management_review_input_create` | Compile mandatory input topic with linked QMS records |
+| `/quality/inputs/<pk>/` | `management_review_input_detail` | Input topic detail view with linked audit, CAPA, NCR, and complaint records |
+| `/quality/inputs/<pk>/edit/` | `management_review_input_edit` | Edit input findings summary (locked when parent review is approved) |
+| `/quality/inputs/<pk>/present/` | `management_review_input_present` | POST-only transition marking input topic presented |
+| `/quality/inputs/<pk>/accept/` | `management_review_input_accept` | POST-only transition recording management acceptance |
+| `/quality/inputs/<pk>/delete/` | `management_review_input_delete` | POST-only delete (locked when parent review is approved) |
+| `/quality/inputs/export/csv/` | `management_review_input_export_csv` | CSV export of review input topics |
+| `/quality/actions/` | `management_review_action_list` | Review output action register with type, priority, and status filters |
+| `/quality/actions/create/` | `management_review_action_create` | Log executive decision action item under management review |
+| `/quality/actions/<pk>/` | `management_review_action_detail` | Action item detail with lifecycle progression, completion, and QA verification |
+| `/quality/actions/<pk>/edit/` | `management_review_action_edit` | Edit action parameters and target due dates |
+| `/quality/actions/<pk>/start/` | `management_review_action_start` | POST-only transition advancing action to in-progress |
+| `/quality/actions/<pk>/complete/` | `management_review_action_complete` | POST-only resolution recording, submitting for QA verification |
+| `/quality/actions/<pk>/verify/` | `management_review_action_verify` | Independent QA verification and closure (separation of duties enforced) |
+| `/quality/actions/<pk>/escalate-capa/` | `management_review_action_escalate_capa` | Directly spawn formal systemic CAPA investigation (`QCAP-`) |
+| `/quality/actions/<pk>/delete/` | `management_review_action_delete` | POST-only delete (locked when review is approved or action is completed) |
+| `/quality/actions/export/csv/` | `management_review_action_export_csv` | CSV export of review action items |
+
 ---
 
 ## Seeder (`seed_quality`)
@@ -1155,6 +1256,12 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
   - 2 Regulatory Reports (FDA 3500A MedWatch / EU MIR) with statutory timeline clocks.
   - 2 Field Actions & Recalls with consignee notification and unit recovery tracking.
 
+- **12.14 Data**:
+  - 4 Quality Objectives per tenant (`Customer RMA Reduction`, `Process Yield Optimization`, `Regulatory Audit Compliance`, `Customer Complaint Resolution SLA`) across higher_better, lower_better, and exact target directions with baseline, target, and current values.
+  - 2 Management Reviews per tenant (one approved historic review with signed minutes, attendee roster, and suitability conclusion; one upcoming scheduled review).
+  - 4 Management Review Inputs per tenant covering mandatory ISO 5.6.2 topics linked to real upstream QMS records (`QualityAudit`, `CapaInvestigation`, `CustomerComplaint`, `NonConformanceReport`).
+  - 4 Management Review Actions per tenant spanning resource allocation, procedure revisions, training, and systemic CAPA escalation.
+
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
 ---
@@ -1239,6 +1346,14 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - Multi-Gate Practical Course Auto-Issuance: For courses requiring practical OJT assessment (`assessment_method in ("practical_ojt", "both_exam_and_ojt")`), completing the exam advances the enrollment to `completed` (pending practical verification). Only upon independent supervisor practical evaluation with a passing rating does the enrollment transition to `verified` and auto-issue a `CompetencyCertification`. Non-practical courses auto-issue upon exam pass.
     - Cryptographic SHA-256 Digital Fingerprints: Every `CompetencyCertification` computes a tamper-evident SHA-256 hash digest derived from `tenant_id:number:trainee_id:course_id:issue_date:SECRET_KEY`. When renewed via `competency_certification_renew`, the validity window is extended by `renewal_interval_months` and a fresh verification hash is generated.
     - Optimized 1-Query Compliance Dashboard: The department compliance breakdown aggregates all enrolled and qualified personnel using a single SQL query with conditional aggregations (`Count('id')`, `Count('id', filter=Q(status='verified'))`) on `TrainingEnrollment`, eliminating N+1 query loops.
+19. **Management Review & Quality Planning Invariants (ISO 13485:2016 §5.6 / ISO 9001:2015 §9.3 / 21 CFR § 820.20(c)):**
+    - **Frozen Record Governance**: Once a `ManagementReview` achieves `approved` status, all child `ManagementReviewInput` and `ManagementReviewAction` records are locked against deletion, mutation, or new item creation to preserve top management audit trails.
+    - **Top Management Executive Authority**: Formally closing and signing off on a management review (`management_review_approve`) is restricted exclusively to the designated `executive_sponsor` or tenant administrator. Approval is blocked until a formal QMS suitability determination (`suitable_effective`, `minor_improvements`, or `systemic_deficiencies`) is documented.
+    - **21 CFR Part 11 Electronic Signature Integration**: Executive review approval generates a tamper-evident `ElectronicSignatureRecord` binding the executive's identity, meaning (`management_approval`), and cryptographic SHA-256 digest, linking directly to the review header.
+    - **Segregation of Duties (SoD) on Action Item Verification**: Under 21 CFR § 820.100, an assignee (`action_item.assignee`) is strictly prohibited from verifying their own action implementation unless overridden by a tenant administrator. Verification requires independent quality assurance notes.
+    - **Closed-Loop Systemic Escalation**: Executive action items demanding systemic intervention support direct escalation to `CapaInvestigation` (`QCAP-`) via `management_review_action_escalate_capa`, with concurrency locking (`select_for_update`), duplicate escalation protection, and bi-directional record linking.
+    - **KPI Variance and Clamped Progress**: `QualityObjective.progress_percent` property clamps progress scores between $0\%$ and $100\%$ across higher-is-better, lower-is-better, and exact target directions, eliminating negative or inverted variance percentages.
+    - **Optimized Dashboard Aggregation**: `quality_planning_dashboard` consolidates 23 separate database queries into 6 high-performance SQL queries using conditional `.aggregate()` filtering and category `GROUP BY` annotations.
 
 ---
 
@@ -1339,6 +1454,13 @@ LIVE_LINKS = {
         "Regulatory Reporting & Vigilance": "quality:regulatory_report_list",
         "Field Action & Recall Management": "quality:field_action_list",
         "Complaint Trending & Closure": "quality:complaint_trending_dashboard",
+    },
+    "12.14": {
+        "Management Review Scheduling": "quality:management_review_list",
+        "Quality Objectives & KPIs": "quality:quality_objective_list",
+        "Review Inputs & Data Compilation": "quality:management_review_input_list",
+        "Management Review Outputs & Decisions": "quality:management_review_action_list",
+        "Quality Planning & Continuous Improvement": "quality:quality_planning_dashboard",
     },
 }
 ```
