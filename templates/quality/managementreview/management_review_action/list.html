@@ -111,7 +111,7 @@
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if q or selected_type or selected_priority or selected_status or selected_review or selected_assignee %}
-                <a href="{% url 'quality:management_review_action_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters">
+                <a href="{% url 'quality:management_review_action_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -182,16 +182,16 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'quality:management_review_action_detail' act.pk %}" class="btn btn-icon btn-outline" title="View Action">
+                            <a href="{% url 'quality:management_review_action_detail' act.pk %}" class="btn btn-icon btn-outline" title="View Action" aria-label="View Action">
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if act.status != 'completed' and act.status != 'cancelled' %}
-                            <a href="{% url 'quality:management_review_action_edit' act.pk %}" class="btn btn-icon btn-outline" title="Edit Action">
+                            <a href="{% url 'quality:management_review_action_edit' act.pk %}" class="btn btn-icon btn-outline" title="Edit Action" aria-label="Edit Action">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'quality:management_review_action_delete' act.pk %}" class="inline" onsubmit="return confirm('Delete action item {{ act.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Action">
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Action" aria-label="Delete Action">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
