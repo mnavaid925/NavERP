@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}{{ enrollment.number }} — Training Assignment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_enrollment_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_enrollment_list' %}">Training Enrollments</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ enrollment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ enrollment.course.title }}</h1>
+            <span class="badge {{ enrollment.status_badge }}">{{ enrollment.get_status_display }}</span>
+            <span class="badge {{ enrollment.reason_badge }}">{{ enrollment.get_assignment_reason_display }}</span>
+            {% if enrollment.is_overdue %}
+            <span class="badge badge-red">Overdue</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:training_enrollment_edit' enrollment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        {% if request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'quality:training_enrollment_delete' enrollment.pk %}" class="inline" onsubmit="return confirm('Delete this enrollment record permanently?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2">
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Enrollment Details</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Enrollment Number</dt>
+                        <dd class="font-semibold">{{ enrollment.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Trainee</dt>
+                        <dd class="font-semibold text-slate-900">
+                            {{ enrollment.trainee.get_full_name|default:enrollment.trainee.username }}
+                            <span class="text-xs text-slate-500 font-normal">(@{{ enrollment.trainee.username }})</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Course</dt>
+                        <dd>
+                            <a href="{% url 'quality:training_course_detail' enrollment.course.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ enrollment.course.number }} — {{ enrollment.course.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Assignment Reason</dt>
+                        <dd><span class="badge {{ enrollment.reason_badge }}">{{ enrollment.get_assignment_reason_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Assigned Date</dt>
+                        <dd>{{ enrollment.assigned_date }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Due Date</dt>
+                        <dd class="{% if enrollment.is_overdue %}text-red-600 font-bold{% endif %}">
+                            {{ enrollment.due_date }}
+                            {% if enrollment.is_overdue %}
+                            <span class="text-xs text-red-500 font-normal">({{ enrollment.days_remaining|stringformat:"d"|slice:"1:" }} days overdue)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Completion Date</dt>
+                        <dd>{{ enrollment.completion_date|default:"Pending completion" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Exam Score Achieved</dt>
+                        <dd>
+                            {% if enrollment.score is not None %}
+                            <span class="font-bold {% if enrollment.is_passed %}text-green-600{% else %}text-red-600{% endif %}">
+                                {{ enrollment.score }}%
+                            </span>
+                            <span class="text-xs text-slate-500"> (Required: {{ enrollment.course.passing_score }}%)</span>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Self-Certification Sign-Off</dt>
+                        <dd>
+                            {% if enrollment.self_certified %}
+                            <span class="badge badge-green">Signed {{ enrollment.self_certified_at|date:"Y-m-d H:i" }}</span>
+                            {% else %}
+                            <span class="badge badge-slate">Pending Sign-Off</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Triggering Document Change (DCO)</dt>
+                        <dd>
+                            {% if enrollment.document_change_order %}
+                            <a href="{% url 'quality:document_change_order_detail' enrollment.document_change_order.pk %}" class="text-blue-600 hover:underline">
+                                {{ enrollment.document_change_order.number }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Triggering CAPA Action</dt>
+                        <dd>
+                            {% if enrollment.capa_action %}
+                            <a href="{% url 'quality:capa_action_detail' enrollment.capa_action.pk %}" class="text-blue-600 hover:underline">
+                                {{ enrollment.capa_action.number }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Status</dt>
+                        <dd><span class="badge {{ enrollment.status_badge }}">{{ enrollment.get_status_display }}</span></dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        {% if enrollment.status == 'assigned' or enrollment.status == 'in_progress' or enrollment.status == 'overdue' %}
+        <div class="card mb-6 border-blue-200 bg-blue-50/20">
+            <div class="card-header bg-blue-50/50">
+                <h2 class="card-title text-blue-900 flex items-center gap-2">
+                    <i data-lucide="check-square" class="w-5 h-5 text-blue-600"></i>
+                    Step 1: Trainee Completion Sign-Off & Exam Score
+                </h2>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:training_enrollment_complete' enrollment.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label for="{{ completion_form.score.id_for_label }}" class="form-label">
+                            Exam / Evaluation Score (%)
+                        </label>
+                        {{ completion_form.score }}
+                        <span class="text-xs text-slate-500">Leave blank if course assessment is attendance-only or OJT practical demonstration.</span>
+                    </div>
+                    <div>
+                        <label for="{{ completion_form.notes.id_for_label }}" class="form-label">
+                            Completion Remarks
+                        </label>
+                        {{ completion_form.notes }}
+                    </div>
+                    <div class="flex items-center justify-between pt-2">
+                        <span class="text-xs text-slate-500">By submitting, the trainee certifies completion of all learning materials.</span>
+                        <button type="submit" class="btn btn-primary">
+                            <i data-lucide="check"></i> Sign & Complete Training
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title text-slate-700">Grant Formal Training Waiver / Exemption</h2>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:training_enrollment_waive' enrollment.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label for="{{ waiver_form.waiver_reason.id_for_label }}" class="form-label">
+                            Regulatory Justification for Waiver <span class="text-red-500">*</span>
+                        </label>
+                        {{ waiver_form.waiver_reason }}
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="submit" class="btn btn-outline text-amber-700 hover:bg-amber-50">
+                            <i data-lucide="shield-off"></i> Grant Compliance Waiver
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if enrollment.status == 'completed' and enrollment.course.assessment_method != 'attendance_only' %}
+        <div class="card mb-6 border-amber-200 bg-amber-50/20">
+            <div class="card-header bg-amber-50/50">
+                <h2 class="card-title text-amber-900 flex items-center gap-2">
+                    <i data-lucide="user-check" class="w-5 h-5 text-amber-600"></i>
+                    Step 2: Supervisor Practical OJT Demonstration Verification
+                </h2>
+            </div>
+            <div class="card-body">
+                {% if enrollment.course.ojt_checklist_criteria %}
+                <div class="p-3 mb-4 rounded bg-white border border-amber-200 text-sm text-slate-700">
+                    <div class="font-semibold text-slate-900 mb-1">Observation Criteria Checklist:</div>
+                    {{ enrollment.course.ojt_checklist_criteria|linebreaks }}
+                </div>
+                {% endif %}
+                <form method="post" action="{% url 'quality:training_enrollment_verify' enrollment.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label for="{{ verification_form.practical_rating.id_for_label }}" class="form-label">
+                            Practical Proficiency Rating <span class="text-red-500">*</span>
+                        </label>
+                        {{ verification_form.practical_rating }}
+                    </div>
+                    <div>
+                        <label for="{{ verification_form.practical_evaluation_notes.id_for_label }}" class="form-label">
+                            Supervisor Observations & Evaluation Notes <span class="text-red-500">*</span>
+                        </label>
+                        {{ verification_form.practical_evaluation_notes }}
+                    </div>
+                    <div class="flex items-center justify-between pt-2">
+                        <span class="text-xs text-slate-500">Upon approval, a formal Competency Certification will be issued automatically.</span>
+                        <button type="submit" class="btn btn-primary">
+                            <i data-lucide="award"></i> Verify & Issue Certification
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if enrollment.status == 'verified' %}
+        <div class="card mb-6 border-green-200 bg-green-50/30">
+            <div class="card-header bg-green-50/50">
+                <h2 class="card-title text-green-900 flex items-center gap-2">
+                    <i data-lucide="award" class="w-5 h-5 text-green-600"></i>
+                    Qualification Verified & Certified
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-semibold text-slate-900">Personnel Qualification Active</div>
+                        <div class="text-sm text-slate-600">
+                            Practical Rating: <span class="badge {{ enrollment.practical_rating_badge }}">{{ enrollment.get_practical_rating_display }}</span>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-1">
+                            Verified by: {{ enrollment.practical_verified_by.get_full_name|default:enrollment.practical_verified_by.username }}
+                            on {{ enrollment.practical_verified_at|date:"Y-m-d H:i" }}
+                        </div>
+                    </div>
+                    {% if certification %}
+                    <a href="{% url 'quality:competency_certification_detail' certification.pk %}" class="btn btn-primary">
+                        <i data-lucide="file-check"></i> View Certificate ({{ certification.number }})
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if enrollment.status == 'waived' %}
+        <div class="card mb-6 border-slate-200 bg-slate-50/50">
+            <div class="card-header">
+                <h2 class="card-title text-slate-700">Waiver & Exemption Rationale</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-slate-800">{{ enrollment.waiver_reason|linebreaks }}</p>
+                <div class="text-xs text-slate-500 mt-2">
+                    Exemption authorized by: {{ enrollment.waived_by.get_full_name|default:enrollment.waived_by.username }}
+                    on {{ enrollment.waived_at|date:"Y-m-d H:i" }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div>
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Bound Course Summary</h2>
+            </div>
+            <div class="card-body">
+                <div class="font-medium text-slate-900">{{ enrollment.course.title }}</div>
+                <div class="text-xs text-slate-500 mb-4">{{ enrollment.course.number }}</div>
+
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Category:</span>
+                        <span class="font-medium">{{ enrollment.course.get_category_display }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Delivery:</span>
+                        <span class="font-medium">{{ enrollment.course.get_delivery_method_display }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Assessment:</span>
+                        <span class="font-medium">{{ enrollment.course.get_assessment_method_display }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Duration:</span>
+                        <span class="font-medium">{{ enrollment.course.duration_hours }} Hours</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Passing Score:</span>
+                        <span class="font-medium text-blue-600">{{ enrollment.course.passing_score }}%</span>
+                    </div>
+                </div>
+
+                {% if enrollment.course.controlled_document %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Standard Operating Procedure</div>
+                    <a href="{% url 'quality:controlled_document_detail' enrollment.course.controlled_document.pk %}" class="text-sm font-medium text-blue-600 hover:underline">
+                        {{ enrollment.course.controlled_document.number }}
+                    </a>
+                    <div class="text-xs text-slate-500">{{ enrollment.course.controlled_document.title }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if enrollment.notes %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Administrative Notes</h2>
+            </div>
+            <div class="card-body text-sm text-slate-700">
+                {{ enrollment.notes|linebreaks }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
