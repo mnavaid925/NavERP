@@ -168,6 +168,7 @@ def audit_program_delete(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def audit_program_approve(request, pk):
     program = quality_object(request, AuditProgram, pk)
     if program.status in ("draft", "submitted"):
