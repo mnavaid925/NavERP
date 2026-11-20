@@ -87,6 +87,10 @@ from apps.quality.models.TrainingCompetency.CompetencyCertifications import Comp
 from apps.quality.models.TrainingCompetency.CompetencyMatrices import CompetencyMatrix
 from apps.quality.models.TrainingCompetency.QualityTrainingCourses import QualityTrainingCourse
 from apps.quality.models.TrainingCompetency.TrainingEnrollments import TrainingEnrollment
+from apps.quality.models.CustomerComplaints.CustomerComplaints import CustomerComplaint
+from apps.quality.models.CustomerComplaints.ComplaintInvestigations import ComplaintInvestigation
+from apps.quality.models.CustomerComplaints.RegulatoryReports import RegulatoryReport
+from apps.quality.models.CustomerComplaints.FieldActions import FieldAction
 
 
 User = get_user_model()
@@ -4045,6 +4049,232 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.12 Training & Competency Management seeded successfully."))
+
+        # ---------------------------------------------------------------------
+        # 12.13 Customer Complaint Handling
+        # ---------------------------------------------------------------------
+        if not CustomerComplaint.objects.filter(tenant=tenant).exists():
+            customer_party = Party.objects.filter(tenant=tenant).first()
+
+            cmp1 = CustomerComplaint.objects.create(
+                tenant=tenant,
+                title="Infusion Pump Display Freeze During Chemotherapy Delivery",
+                intake_channel="phone",
+                customer=customer_party,
+                complainant_name="Dr. Eleanor Vance",
+                complainant_organization="St. Jude Oncology Center",
+                complainant_email="e.vance@stjude-oncology.org",
+                complainant_phone="+1-555-839-2041",
+                item_code="MED-PUMP-4000",
+                item_name="Infusion Pro Plus 4000",
+                lot_number="LOT-2026-X1",
+                serial_number="SN-40991",
+                udi_di_number="(01)00849204018291(11)260115(21)40991",
+                date_received=today - datetime.timedelta(days=12),
+                date_of_occurrence=today - datetime.timedelta(days=13),
+                problem_description="Infusion pump LCD display became completely blank and unresponsive during active cytarabine infusion administration at bedside. Clinician was required to manually clamp the line and transition patient to secondary pump.",
+                patient_involved=True,
+                adverse_event_alleged=True,
+                severity="critical_safety",
+                status="under_investigation",
+                validity="valid_complaint",
+                reportability="reportable_event",
+                complaint_category="Display / UI Hardware Malfunction",
+                sample_return_status="sample_received",
+                sample_tracking_number="FEDEX-774920194821",
+                sample_received_date=today - datetime.timedelta(days=9),
+                triage_notes="Direct patient impact during hazardous oncology drug infusion. Elevated immediately to Critical severity. Statutory FDA 30-day MDR clock started on date received. Full physical diagnostic requested.",
+                triaged_by=quality_lead,
+                triaged_at=now - datetime.timedelta(days=11),
+                investigation_required=True,
+                assigned_to=quality_lead,
+            )
+
+            cmp2 = CustomerComplaint.objects.create(
+                tenant=tenant,
+                title="Blood Glucose Monitor Inconsistent Strip Calibration Codes",
+                intake_channel="email",
+                customer=customer_party,
+                complainant_name="Marcus Aurelius",
+                complainant_organization="Metro Health Outpatient Clinic",
+                complainant_email="m.aurelius@metrohealth.net",
+                complainant_phone="+1-555-392-1940",
+                item_code="GLUCO-STRIP-100",
+                item_name="AccuCheck Reagent Test Strips (100pk)",
+                lot_number="LOT-2026-B8",
+                udi_di_number="(01)00849204019402(11)260201",
+                date_received=today - datetime.timedelta(days=25),
+                date_of_occurrence=today - datetime.timedelta(days=26),
+                problem_description="Clinic reported error code 'E-03' on multiple test strip vials when attempting patient morning fasting blood sugar screenings.",
+                patient_involved=False,
+                adverse_event_alleged=False,
+                severity="major_malfunction",
+                status="resolved",
+                validity="valid_complaint",
+                reportability="non_reportable",
+                non_reportable_justification="Technical investigation confirmed vial packaging desiccant was unsealed at clinic storage room with 85% relative humidity. Product retained samples passed all lot release specs. No patient misdiagnosis or adverse consequence.",
+                complaint_category="Calibration & Reagent Drift",
+                sample_return_status="not_requested",
+                triage_notes="No patient adverse outcome. QA review confirms non-reportable per 21 CFR 820.198.",
+                triaged_by=admin_user,
+                triaged_at=now - datetime.timedelta(days=24),
+                investigation_required=True,
+                resolution_summary="Customer contacted with educational memo regarding clinical storage guidelines (storage under 30C and <50% humidity). Replacement vials dispatched under customer goodwill policy.",
+                customer_letter_sent=True,
+                customer_letter_date=today - datetime.timedelta(days=5),
+                assigned_to=admin_user,
+            )
+
+            cmp3 = CustomerComplaint.objects.create(
+                tenant=tenant,
+                title="Crushed Outer Shipper Cartons During Transit",
+                intake_channel="web_portal",
+                customer=customer_party,
+                complainant_name="Jennifer Lopez",
+                complainant_organization="Central Regional Medical Supply",
+                complainant_email="jlopez@crmedical.com",
+                item_code="KIT-DIAG-01",
+                item_name="Rapid Antigen Diagnostic Test 25pk",
+                lot_number="LOT-2026-T4",
+                date_received=today - datetime.timedelta(days=45),
+                date_of_occurrence=today - datetime.timedelta(days=46),
+                problem_description="Consignee reported 4 of 20 corrugated outer master shippers arrived with crushed corner cartons. Inner foil pouches were inspected and intact.",
+                patient_involved=False,
+                adverse_event_alleged=False,
+                severity="minor_cosmetic",
+                status="closed",
+                validity="valid_complaint",
+                reportability="exempt",
+                complaint_category="Packaging & Transit Damage",
+                sample_return_status="not_requested",
+                investigation_required=False,
+                no_investigation_rationale="Outer cosmetic transit damage only. Inner sterile barrier integrity 100% verified by receiving clinic inspection. Carrier freight claim initiated.",
+                resolution_summary="Credit memo issued for damaged outer cartons. Carrier feedback logged.",
+                customer_letter_sent=True,
+                customer_letter_date=today - datetime.timedelta(days=40),
+                closed_by=admin_user,
+                closed_at=now - datetime.timedelta(days=40),
+                assigned_to=admin_user,
+            )
+
+            cmp4 = CustomerComplaint.objects.create(
+                tenant=tenant,
+                title="Customer Pricing Tier and Invoice Credit Dispute",
+                intake_channel="sales_rep",
+                customer=customer_party,
+                complainant_name="Robert Smith",
+                complainant_organization="Apex Diagnostics",
+                item_code="MED-PUMP-4000",
+                item_name="Infusion Pro Plus 4000",
+                date_received=today - datetime.timedelta(days=5),
+                problem_description="Customer contacted QA hotline alleging product overcharge relative to regional group purchasing contract.",
+                patient_involved=False,
+                adverse_event_alleged=False,
+                severity="service_inconvenience",
+                status="closed",
+                validity="commercial_inquiry",
+                reportability="exempt",
+                investigation_required=False,
+                no_investigation_rationale="Inquiry is strictly commercial / contract pricing dispute. Transferred to Commercial Operations and Sales Finance.",
+                resolution_summary="Transferred to regional sales director. Closed in QMS.",
+                closed_by=admin_user,
+                closed_at=now - datetime.timedelta(days=4),
+                assigned_to=admin_user,
+            )
+
+            # Investigations
+            inv1 = ComplaintInvestigation.objects.create(
+                tenant=tenant,
+                complaint=cmp1,
+                lead_investigator=quality_lead,
+                target_completion_date=today + datetime.timedelta(days=10),
+                status="in_progress",
+                dhr_reviewed=True,
+                dhr_lot_number="LOT-2026-X1",
+                dhr_quantity_produced=500,
+                dhr_anomalies_identified=False,
+                dhr_review_summary="DHR for LOT-2026-X1 reviewed: All in-process assembly records, torque verifications, and burn-in tests met specification with zero non-conformances logged during manufacturing.",
+                physical_sample_examined=True,
+                analytical_method="electrical_functional",
+                sample_testing_findings="Sample SN-40991 received in lab. High-resolution microscope and thermal imaging revealed an intermittent cold solder joint at pin 14 of display ribbon connector J4. Display freeze was replicated when subjected to 1.2G vibration.",
+                failure_reproduced=True,
+                hhe_required=True,
+                health_hazard_evaluation="Medical assessment: Undetected infusion display freeze creates potential for infusion over-delivery or delay in therapy for critical oncology medications. Clinical risk determined as moderate-to-severe.",
+                risk_exceeds_threshold=True,
+                root_cause_category="component_defect",
+                root_cause_narrative="5 Whys: Display froze because ribbon cable pin 14 disconnected intermittently -> cold solder joint formed during surface mount assembly -> PCB reflow profile thermal soak was 4C below supplier recommendation on manufacturing line #2.",
+                capa_required=True,
+                investigation_conclusion="Investigation confirmed hardware defect in surface-mount display connector. SMT reflow profile requires revision. Escalated to CAPA and potential field action.",
+            )
+
+            # Regulatory Reports
+            rpt1 = RegulatoryReport.objects.create(
+                tenant=tenant,
+                complaint=cmp1,
+                agency="fda_cdrh",
+                report_type="initial_report",
+                adverse_event_class="serious_injury",
+                timeline_category="30_day_standard_mdr",
+                statutory_due_date=today + datetime.timedelta(days=18),
+                submission_status="submitted",
+                submission_format="fda_emdr_xml",
+                submission_date=today - datetime.timedelta(days=2),
+                agency_report_identifier="MDR-2026-00812",
+                agency_acknowledgement_number="FDA-ESG-ACK-8839201",
+                agency_acknowledgement_date=today - datetime.timedelta(days=1),
+                event_summary="Infusion pump display froze during oncology chemotherapy delivery. Device stopped responding to keypad input. Patient treatment delayed by 35 minutes while backup pump was deployed. No permanent injury sustained.",
+                device_operator="Healthcare Professional (Oncology RN)",
+                patient_remedial_action="Patient vitals monitored continuously; therapy resumed on secondary pump with no adverse clinical outcome.",
+                prepared_by=quality_lead,
+                reviewed_by=admin_user,
+                notes="Initial 30-day MDR submitted via FDA eSubmitter AS2 gateway.",
+            )
+
+            rpt2 = RegulatoryReport.objects.create(
+                tenant=tenant,
+                complaint=cmp1,
+                agency="eu_competent_auth",
+                report_type="initial_report",
+                adverse_event_class="malfunction_recurrent",
+                timeline_category="15_day_serious_incident",
+                statutory_due_date=today + datetime.timedelta(days=3),
+                submission_status="under_internal_review",
+                submission_format="eu_mir_xml",
+                event_summary="Manufacturer Incident Report (MIR) drafted for EU Competent Authority notification under EU MDR 2017/745 Article 87.",
+                device_operator="Healthcare Professional",
+                prepared_by=quality_lead,
+                notes="Statutory clock: 15-day EU MIR deadline expires in 3 days. High priority.",
+            )
+
+            # Field Action / Recall
+            fa1 = FieldAction.objects.create(
+                tenant=tenant,
+                title="Class II Recall: Infusion Pro Plus 4000 Display PCB Solder Conformance",
+                action_type="recall_removal",
+                recall_class="class_ii_moderate",
+                initiating_complaint=cmp1,
+                coordinator=quality_lead,
+                initiation_date=today - datetime.timedelta(days=8),
+                status="quarantine_in_progress",
+                affected_product_code="MED-PUMP-4000",
+                affected_product_name="Infusion Pro Plus 4000",
+                affected_lot_numbers="LOT-2026-X1, LOT-2026-X2",
+                distribution_start_date=today - datetime.timedelta(days=180),
+                distribution_end_date=today - datetime.timedelta(days=30),
+                reason_for_action="Potential for display ribbon connector cold solder joint leading to display blanking during active clinical infusion.",
+                hhe_summary="Clinical Health Hazard Evaluation concluded risk of temporary, reversible delay in therapy. No permanent health consequences expected when clinical staff follows alarm protocol.",
+                total_units_distributed=500,
+                consignees_targeted=45,
+                consignees_notified=45,
+                consignees_responded=38,
+                units_quarantined_field=120,
+                units_recovered_destroyed=185,
+                regulatory_agency_notified="FDA CDRH Recall Operations",
+                regulatory_recall_number="Z-1049-2026",
+                agency_notification_date=today - datetime.timedelta(days=7),
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.13 Customer Complaint Handling seeded successfully."))
 
 
 
