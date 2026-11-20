@@ -87,7 +87,7 @@
 <!-- Section 1: Active Competency Certifications Portfolio -->
 <div class="card mb-6">
     <div class="card-header flex justify-between items-center">
-        <h2 class="card-title">1. Competency Certifications Portfolio ({{ certifications.count }})</h2>
+        <h2 class="card-title">1. Competency Certifications Portfolio ({{ certifications|length }})</h2>
         <a href="{% url 'quality:competency_certification_create' %}?trainee={{ trainee.pk }}" class="btn btn-outline btn-sm">
             <i data-lucide="award"></i> Issue Certification
         </a>
@@ -151,7 +151,7 @@
 <!-- Section 2: Completed Training History -->
 <div class="card mb-6">
     <div class="card-header">
-        <h2 class="card-title">2. Completed Training & Competency Verification History ({{ completed_enrollments.count }})</h2>
+        <h2 class="card-title">2. Completed Training & Competency Verification History ({{ completed_enrollments|length }})</h2>
     </div>
     <div class="table-wrap">
         <table class="table">
@@ -218,7 +218,7 @@
 <!-- Section 3: Pending & Overdue Assignments -->
 <div class="card">
     <div class="card-header">
-        <h2 class="card-title">3. Pending Training & Re-Qualification Assignments ({{ pending_enrollments.count }})</h2>
+        <h2 class="card-title">3. Pending Training & Re-Qualification Assignments ({{ pending_enrollments|length }})</h2>
     </div>
     <div class="table-wrap">
         <table class="table">
