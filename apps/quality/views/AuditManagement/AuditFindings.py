@@ -80,7 +80,7 @@ def audit_finding_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    audits = QualityAudit.objects.filter(tenant=request.tenant)
+    audits = QualityAudit.objects.filter(tenant=request.tenant).only("id", "number", "title")
     org_units = OrgUnit.objects.filter(tenant=request.tenant)
     assignees = User.objects.filter(tenant=request.tenant)
 
