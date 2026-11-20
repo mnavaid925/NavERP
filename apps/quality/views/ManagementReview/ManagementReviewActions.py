@@ -148,14 +148,20 @@ def management_review_action_create(request):
     parent_review = None
     if review_id and review_id.isdigit():
         parent_review = quality_object(request, ManagementReview, int(review_id))
+        if parent_review.status in ["approved", "cancelled"]:
+            messages.error(request, f"Cannot create action items under a {parent_review.get_status_display().lower()} management review.")
+            return redirect("quality:management_review_detail", pk=parent_review.pk)
         initial["management_review"] = parent_review.pk
         initial["due_date"] = timezone.now().date() + timezone.timedelta(days=30)
 
     if request.method == "POST":
         form = ManagementReviewActionForm(request.POST, tenant=request.tenant)
         if form.is_valid():
+            obj = form.save(commit=False)
+            if obj.management_review.status in ["approved", "cancelled"]:
+                messages.error(request, f"Cannot create action items under a {obj.management_review.get_status_display().lower()} management review.")
+                return redirect("quality:management_review_detail", pk=obj.management_review.pk)
             with transaction.atomic():
-                obj = form.save(commit=False)
                 obj.tenant = request.tenant
                 obj.status = "open"
                 obj.save()
@@ -184,8 +190,12 @@ def management_review_action_edit(request, pk):
     if request.method == "POST":
         form = ManagementReviewActionForm(request.POST, instance=action_item, tenant=request.tenant)
         if form.is_valid():
+            obj = form.save(commit=False)
+            if obj.management_review.status in ["approved", "cancelled"] and obj.management_review_id != action_item.management_review_id:
+                messages.error(request, f"Cannot reassign action items to a {obj.management_review.get_status_display().lower()} management review.")
+                return redirect("quality:management_review_action_detail", pk=action_item.pk)
             with transaction.atomic():
-                obj = form.save()
+                obj.save()
                 write_audit_log(request.user, obj, "update", tenant=request.tenant)
             messages.success(request, f"Review action {obj.number} updated successfully.")
             return redirect("quality:management_review_action_detail", pk=obj.pk)
@@ -204,7 +214,11 @@ def management_review_action_edit(request, pk):
 @login_required
 @require_POST
 def management_review_action_delete(request, pk):
-    action_item = quality_object(request, ManagementReviewAction, pk)
+    action_item = quality_object(request, ManagementReviewAction, pk, select_related=("management_review",))
+    if action_item.management_review.status in ["approved", "cancelled"]:
+        messages.error(request, f"Action items belonging to a {action_item.management_review.get_status_display().lower()} management review cannot be deleted.")
+        return redirect("quality:management_review_action_detail", pk=action_item.pk)
+
     if action_item.status == "completed":
         messages.error(request, "Closed review action items cannot be deleted.")
         return redirect("quality:management_review_action_detail", pk=action_item.pk)
