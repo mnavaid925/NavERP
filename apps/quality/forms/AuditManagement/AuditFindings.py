@@ -30,8 +30,6 @@ class AuditFindingForm(forms.ModelForm):
             "corrective_action_plan",
             "linked_capa",
             "linked_ncr",
-            "status",
-            "closure_notes",
         ]
         widgets = {
             "audit": forms.Select(attrs={"class": "form-select"}),
@@ -49,8 +47,6 @@ class AuditFindingForm(forms.ModelForm):
             "corrective_action_plan": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Proposed corrective and preventive actions..."}),
             "linked_capa": forms.Select(attrs={"class": "form-select"}),
             "linked_ncr": forms.Select(attrs={"class": "form-select"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
-            "closure_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Auditor verification rationale for closure..."}),
         }
 
     def __init__(self, *args, tenant=None, **kwargs):
