@@ -65,7 +65,7 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <div>
                 <label for="q" class="form-label text-xs">Search</label>
                 <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Title, clause, evidence, owner..." class="form-input">
@@ -94,6 +94,24 @@
                     <option value="">All Audits</option>
                     {% for a in audits %}
                     <option value="{{ a.pk }}" {% if selected_audit == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.number }} - {{ a.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="org_unit" class="form-label text-xs">Audited Unit</label>
+                <select name="org_unit" id="org_unit" class="form-select">
+                    <option value="">All Units</option>
+                    {% for u in org_units %}
+                    <option value="{{ u.pk }}" {% if selected_org_unit == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="assignee" class="form-label text-xs">Assignee</label>
+                <select name="assignee" id="assignee" class="form-select">
+                    <option value="">All Assignees</option>
+                    {% for usr in assignees %}
+                    <option value="{{ usr.pk }}" {% if selected_assignee == usr.pk|stringformat:"d" %}selected{% endif %}>{{ usr.get_full_name|default:usr.username }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -228,13 +246,13 @@
         </div>
         <div class="pagination flex gap-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_audit %}&audit={{ selected_audit }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_audit %}&audit={{ selected_audit }}{% endif %}{% if selected_org_unit %}&org_unit={{ selected_org_unit }}{% endif %}{% if selected_assignee %}&assignee={{ selected_assignee }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
             {% endif %}
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_audit %}&audit={{ selected_audit }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_audit %}&audit={{ selected_audit }}{% endif %}{% if selected_org_unit %}&org_unit={{ selected_org_unit }}{% endif %}{% if selected_assignee %}&assignee={{ selected_assignee }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
             {% endif %}
