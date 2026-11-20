@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}{{ matrix.number }} — {{ matrix.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:competency_matrix_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:competency_matrix_list' %}">Competency Matrices</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ matrix.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ matrix.title }}</h1>
+            <span class="badge {{ matrix.status_badge }}">{{ matrix.get_status_display }}</span>
+            <span class="badge {{ matrix.tier_badge }}">{{ matrix.get_qualification_tier_display }}</span>
+            <span class="badge {{ matrix.criticality_badge }}">{{ matrix.get_criticality_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:competency_matrix_edit' matrix.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        {% if matrix.status == 'draft' %}
+        <form method="post" action="{% url 'quality:competency_matrix_approve' matrix.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle-2"></i> Approve Matrix
+            </button>
+        </form>
+        {% endif %}
+        {% if matrix.status != 'retired' %}
+        <form method="post" action="{% url 'quality:competency_matrix_retire' matrix.pk %}" class="inline" onsubmit="return confirm('Retire this competency matrix?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600">
+                <i data-lucide="archive"></i> Retire
+            </button>
+        </form>
+        {% endif %}
+        {% if request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'quality:competency_matrix_delete' matrix.pk %}" class="inline" onsubmit="return confirm('Delete this matrix permanently?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2">
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Matrix Overview</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Matrix Number</dt>
+                        <dd class="font-semibold">{{ matrix.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Revision</dt>
+                        <dd>v{{ matrix.revision }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Role Title</dt>
+                        <dd class="font-medium">{{ matrix.role_title }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Department</dt>
+                        <dd>
+                            {% if matrix.department %}
+                            {{ matrix.department.name }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Qualification Tier</dt>
+                        <dd>
+                            <span class="badge {{ matrix.tier_badge }}">{{ matrix.get_qualification_tier_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Criticality</dt>
+                        <dd>
+                            <span class="badge {{ matrix.criticality_badge }}">{{ matrix.get_criticality_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Minimum Passing Score</dt>
+                        <dd class="font-semibold text-blue-600">{{ matrix.minimum_passing_score }}%</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Re-qualification Cycle</dt>
+                        <dd>{{ matrix.validity_period_months }} Months</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Prerequisite Experience</dt>
+                        <dd>{{ matrix.prerequisite_experience_months }} Months</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Approved By</dt>
+                        <dd>
+                            {% if matrix.approved_by %}
+                            {{ matrix.approved_by.get_full_name|default:matrix.approved_by.username }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Approval Date</dt>
+                        <dd>{{ matrix.approval_date|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created Date</dt>
+                        <dd>{{ matrix.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        {% if matrix.description %}
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Curriculum Scope & Competencies</h2>
+            </div>
+            <div class="card-body prose max-w-none text-slate-700">
+                {{ matrix.description|linebreaks }}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card mb-6">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Required Training Courses ({{ courses.count }})</h2>
+                <a href="{% url 'quality:training_course_create' %}?competency_matrix={{ matrix.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i> Add Course
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Course Number</th>
+                            <th>Title</th>
+                            <th>Category</th>
+                            <th>Delivery Method</th>
+                            <th>Assessment Method</th>
+                            <th>Duration</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in courses %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'quality:training_course_detail' c.pk %}" class="font-medium text-blue-600 hover:underline">
+                                    {{ c.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium">{{ c.title }}</div>
+                                {% if c.course_code %}<div class="text-xs text-slate-500">{{ c.course_code }}</div>{% endif %}
+                            </td>
+                            <td><span class="badge {{ c.category_badge }}">{{ c.get_category_display }}</span></td>
+                            <td><span class="badge {{ c.delivery_badge }}">{{ c.get_delivery_method_display }}</span></td>
+                            <td><span class="badge {{ c.assessment_badge }}">{{ c.get_assessment_method_display }}</span></td>
+                            <td>{{ c.duration_hours }}h</td>
+                            <td><span class="badge {{ c.status_badge }}">{{ c.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-slate-500">
+                                No courses assigned to this matrix yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Active Qualified Personnel</h2>
+            </div>
+            <div class="card-body">
+                {% if certifications %}
+                <ul class="divide-y divide-slate-100">
+                    {% for cert in certifications %}
+                    <li class="py-3 flex items-center justify-between">
+                        <div>
+                            <div class="font-medium text-slate-900">
+                                {{ cert.trainee.get_full_name|default:cert.trainee.username }}
+                            </div>
+                            <div class="text-xs text-slate-500">
+                                Cert: {{ cert.number }} • Valid until {{ cert.valid_until|default:"Permanent" }}
+                            </div>
+                        </div>
+                        <span class="badge {{ cert.level_badge }}">{{ cert.get_qualification_level_display }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-sm text-slate-500">No active certifications recorded for this matrix role.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if matrix.notes %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Administrative Notes</h2>
+            </div>
+            <div class="card-body text-sm text-slate-700">
+                {{ matrix.notes|linebreaks }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
