@@ -90,7 +90,7 @@ class QualityObjective(TenantNumbered):
     target_direction = models.CharField(max_length=20, choices=DIRECTION_CHOICES, default="higher_better")
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft", db_index=True)
-    rag_status = models.CharField(max_length=10, choices=RAG_STATUS_CHOICES, default="neutral", db_index=True)
+    rag_status = models.CharField(max_length=16, choices=RAG_STATUS_CHOICES, default="neutral", db_index=True)
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
