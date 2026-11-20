@@ -2,7 +2,7 @@
 
 **Changeset**: `BASE` (`ed5bf098c22bd035a09707951ecc3e17152533ad`) to `HEAD`  
 **Target**: `apps/quality/` (Sub-module 12.14)  
-**Status**: Review in progress (Reviewer 1 of 6 completed)
+**Status**: Review in progress (Reviewer 2 of 6 completed)
 
 ---
 
@@ -55,3 +55,46 @@
   - **File**: `apps/quality/models/ManagementReview/ManagementReviewActions.py:131-134`
   - **Details**: If `completion_date` precedes `created_at.date()`, `days_open` can be negative.
   - **Impact**: Clamping with `max(0, ...)` needed.
+
+
+---
+
+## 2. Architectural Explorer Pass (`explorer`)
+
+### Critical
+- **C1 (duplicate/confirmed)**: Runtime crash in `management_review_action_escalate_capa` due to `CapaInvestigation` field mismatches.
+  - **File**: `apps/quality/views/ManagementReview/ManagementReviewActions.py:278-286`
+  - **Details**: Same as Code Reviewer C1 (`description` vs `issue_summary`, `containment_action` vs `containment_actions`, missing `quality_owner`, `status="investigation"` vs `"under_investigation"`).
+
+- **C2 (duplicate/confirmed)**: Silent failure of `ElectronicSignatureRecord` creation in `management_review_approve`.
+  - **File**: `apps/quality/views/ManagementReview/ManagementReviews.py:276-286`
+  - **Details**: Same as Code Reviewer C2 (missing non-nullable `document` and `document_revision`, wrong param names `meaning` and `comment`).
+
+### Important
+- **I5**: Missing submodule package `__init__.py` files.
+  - **Files**:
+    - `apps/quality/models/ManagementReview/__init__.py`
+    - `apps/quality/forms/ManagementReview/__init__.py`
+    - `apps/quality/views/ManagementReview/__init__.py`
+  - **Details**: Sibling submodules (`CustomerComplaints`, `AuditManagement`, `TrainingCompetency`) each have package `__init__.py` files re-exporting entity modules and declaring `__all__`. While `urls/ManagementReview/__init__.py` exists, `models`, `forms`, and `views` sub-packages lack `__init__.py` files.
+  - **Impact**: Incomplete package layout; importing from `apps.quality.models.ManagementReview` fails.
+
+- **I6 (confirmed I2)**: Contract context key mismatch in `quality_planning_dashboard` (`objectives_by_category` vs `category_counts`).
+  - **File**: `apps/quality/views/ManagementReview/QualityPlanningDashboard.py:85`
+  - **Details**: Passes `category_counts` instead of contract key `objectives_by_category`.
+
+- **I7 (confirmed I3)**: Missing `sponsors` in `management_review_list` context.
+  - **File**: `apps/quality/views/ManagementReview/ManagementReviews.py:82-101`
+  - **Details**: Contract Section 3.2 specifies `sponsors: User.objects.filter(tenant=request.tenant, is_active=True)`. View omits it.
+
+- **I8 (confirmed M1)**: Contract context key mismatch in input and action create/edit forms (`parent_review` vs `review`).
+  - **Files**: `apps/quality/views/ManagementReview/ManagementReviewInputs.py:148,172` and `ManagementReviewActions.py:172,199`
+  - **Details**: Context passes `parent_review` instead of contract-specified `review`.
+
+### Minor
+- **M4**: Filter form missing Assignee `<select>` dropdown in `templates/quality/managementreview/management_review_action/list.html:113`.
+  - **Details**: View supports filtering by `assignee` and provides `assignees` and `selected_assignee`, and line 113 checks `selected_assignee` for the reset pill, but there is no `<select name="assignee">` input in the template.
+
+- **M5**: Slicing divergence in `urgent_actions` on dashboard (`[:6]` vs `[:5]`).
+  - **File**: `apps/quality/views/ManagementReview/QualityPlanningDashboard.py:74`
+  - **Details**: Contract specifies `urgent_actions: top 5 open actions ordered by due date`; view slices `[:6]`.
