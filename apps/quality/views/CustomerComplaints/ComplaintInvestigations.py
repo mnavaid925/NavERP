@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -57,8 +57,12 @@ def complaint_investigation_list(request):
     total_count = qs.count()
 
     base_tenant_qs = ComplaintInvestigation.objects.filter(tenant=request.tenant)
-    in_progress_count = base_tenant_qs.filter(status__in=["in_progress", "hhe_review", "pending_qa_review"]).count()
-    capa_triggered_count = base_tenant_qs.filter(capa_required=True).count()
+    stats = base_tenant_qs.aggregate(
+        in_progress_count=Count("id", filter=Q(status__in=["in_progress", "hhe_review", "pending_qa_review"])),
+        capa_triggered_count=Count("id", filter=Q(capa_required=True)),
+    )
+    in_progress_count = stats["in_progress_count"]
+    capa_triggered_count = stats["capa_triggered_count"]
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
