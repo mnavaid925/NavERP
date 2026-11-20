@@ -92,6 +92,18 @@ from apps.quality.models.AuditManagement.AuditFindings import (
 from apps.quality.models.AuditManagement.RegulatoryInspectionHosts import (
     RegulatoryInspectionHost,
 )
+from apps.quality.models.TrainingCompetency.CompetencyMatrices import (
+    CompetencyMatrix,
+)
+from apps.quality.models.TrainingCompetency.QualityTrainingCourses import (
+    QualityTrainingCourse,
+)
+from apps.quality.models.TrainingCompetency.TrainingEnrollments import (
+    TrainingEnrollment,
+)
+from apps.quality.models.TrainingCompetency.CompetencyCertifications import (
+    CompetencyCertification,
+)
 
 
 
@@ -953,6 +965,85 @@ class RegulatoryInspectionHostAdmin(admin.ModelAdmin):
     list_filter = ("agency_or_body", "inspection_purpose", "status", "formal_outcome", "form_483_issued", "tenant")
     search_fields = ("number", "inspection_title", "agency_name", "lead_inspector_name", "war_room_location")
     list_select_related = ("tenant", "audit", "front_room_lead", "back_room_lead", "scribe_user")
+
+
+@admin.register(CompetencyMatrix)
+class CompetencyMatrixAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "role_title",
+        "qualification_tier",
+        "department",
+        "criticality",
+        "revision",
+        "status",
+        "minimum_passing_score",
+        "validity_period_months",
+        "tenant",
+    )
+    list_filter = ("qualification_tier", "criticality", "status", "tenant")
+    search_fields = ("number", "title", "role_title", "description")
+    list_select_related = ("tenant", "department", "approved_by")
+
+
+@admin.register(QualityTrainingCourse)
+class QualityTrainingCourseAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "course_code",
+        "category",
+        "delivery_method",
+        "assessment_method",
+        "duration_hours",
+        "passing_score",
+        "status",
+        "retrain_on_revision",
+        "tenant",
+    )
+    list_filter = ("category", "delivery_method", "assessment_method", "status", "retrain_on_revision", "tenant")
+    search_fields = ("number", "title", "course_code", "syllabus_summary")
+    list_select_related = ("tenant", "competency_matrix", "controlled_document", "external_provider", "instructor")
+
+
+@admin.register(TrainingEnrollment)
+class TrainingEnrollmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "course",
+        "trainee",
+        "assignment_reason",
+        "assigned_date",
+        "due_date",
+        "status",
+        "is_passed",
+        "score",
+        "tenant",
+    )
+    list_filter = ("assignment_reason", "status", "is_passed", "tenant")
+    search_fields = ("number", "course__title", "trainee__username", "trainee__first_name", "trainee__last_name")
+    list_select_related = ("tenant", "course", "trainee", "document_change_order", "capa_action", "practical_verified_by")
+
+
+@admin.register(CompetencyCertification)
+class CompetencyCertificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "qualification_title",
+        "trainee",
+        "qualification_level",
+        "course",
+        "issue_date",
+        "valid_until",
+        "status",
+        "certified_by",
+        "tenant",
+    )
+    list_filter = ("qualification_level", "status", "tenant")
+    search_fields = ("number", "qualification_title", "trainee__username", "certificate_hash")
+    list_select_related = ("tenant", "trainee", "course", "competency_matrix", "certified_by", "enrollment")
+
 
 
 
