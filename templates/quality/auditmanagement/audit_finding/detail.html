@@ -208,15 +208,15 @@
                     <form method="post" action="{% url 'quality:audit_finding_submit_response' audit_finding.pk %}" class="space-y-4">
                         {% csrf_token %}
                         <div class="form-group">
-                            <label class="form-label">Immediate Containment Action</label>
+                            <label class="form-label" for="{{ response_form.containment_action.id_for_label }}">Immediate Containment Action</label>
                             {{ response_form.containment_action }}
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Root Cause Summary</label>
+                            <label class="form-label" for="{{ response_form.root_cause_summary.id_for_label }}">Root Cause Summary</label>
                             {{ response_form.root_cause_summary }}
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Corrective Action Plan</label>
+                            <label class="form-label" for="{{ response_form.corrective_action_plan.id_for_label }}">Corrective Action Plan</label>
                             {{ response_form.corrective_action_plan }}
                         </div>
                         <button type="submit" class="btn btn-primary">
