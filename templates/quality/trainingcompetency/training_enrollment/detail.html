@@ -24,6 +24,9 @@
         </div>
     </div>
     <div class="page-actions">
+        <a href="{% url 'quality:training_enrollment_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Enrollments
+        </a>
         <a href="{% url 'quality:training_enrollment_edit' enrollment.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i> Edit
         </a>
