@@ -96,7 +96,11 @@
                             <span class="font-bold {% if enrollment.is_passed %}text-green-600{% else %}text-red-600{% endif %}">
                                 {{ enrollment.score }}%
                             </span>
+                            {% if enrollment.course.passing_score %}
                             <span class="text-xs text-slate-500"> (Required: {{ enrollment.course.passing_score }}%)</span>
+                            {% else %}
+                            <span class="text-xs text-slate-500"> (No minimum score threshold)</span>
+                            {% endif %}
                             {% else %}
                             <span class="text-slate-400">—</span>
                             {% endif %}
@@ -323,7 +327,7 @@
                     </div>
                     <div class="flex justify-between">
                         <span class="text-slate-600">Passing Score:</span>
-                        <span class="font-medium text-blue-600">{{ enrollment.course.passing_score }}%</span>
+                        <span class="font-medium text-blue-600">{% if enrollment.course.passing_score %}{{ enrollment.course.passing_score }}%{% else %}N/A{% endif %}</span>
                     </div>
                 </div>
 
