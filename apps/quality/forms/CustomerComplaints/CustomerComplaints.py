@@ -51,6 +51,15 @@ class CustomerComplaintForm(TenantUniqueMixin, TenantModelForm):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["customer", "sales_order", "return_authorization", "assigned_to"])
 
+        from django.utils import timezone
+        today = timezone.now().date()
+        date_received = cleaned_data.get("date_received")
+        date_of_occurrence = cleaned_data.get("date_of_occurrence")
+        if date_received and date_received > today:
+            self.add_error("date_received", "Date received cannot be in the future.")
+        if date_of_occurrence and date_received and date_of_occurrence > date_received:
+            self.add_error("date_of_occurrence", "Date of occurrence cannot be after the date complaint was received.")
+
         reportability = cleaned_data.get("reportability")
         justification = cleaned_data.get("non_reportable_justification")
         if reportability == "non_reportable" and not (justification and justification.strip()):
