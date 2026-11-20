@@ -136,7 +136,7 @@ class ComplaintInvestigation(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} - {self.complaint.number} Investigation"
+        return f"{self.number} - Complaint Investigation"
 
     @property
     def is_overdue(self):
