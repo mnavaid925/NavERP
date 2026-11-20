@@ -157,6 +157,7 @@ def audit_program_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def audit_program_delete(request, pk):
     program = quality_object(request, AuditProgram, pk)
     number = program.number
