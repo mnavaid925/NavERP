@@ -62,8 +62,6 @@ def management_review_list(request):
     if sponsor_filter and sponsor_filter.isdigit():
         qs = qs.filter(executive_sponsor_id=int(sponsor_filter))
 
-    total_count = qs.count()
-
     base_tenant_qs = ManagementReview.objects.filter(tenant=request.tenant)
     stats = base_tenant_qs.aggregate(
         scheduled_count=Count("id", filter=Q(status="scheduled")),
@@ -75,6 +73,7 @@ def management_review_list(request):
     approved_count = stats["approved_count"]
 
     paginator = Paginator(qs, PAGE_SIZE)
+    total_count = paginator.count
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
