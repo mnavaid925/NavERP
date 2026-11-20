@@ -260,6 +260,28 @@ def regulatory_report_export_csv(request):
         "complaint", "prepared_by"
     )
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(complaint__number__icontains=q)
+            | Q(agency_report_identifier__icontains=q)
+            | Q(agency_acknowledgement_number__icontains=q)
+            | Q(event_summary__icontains=q)
+        )
+    agency_filter = request.GET.get("agency", "").strip()
+    if agency_filter:
+        qs = qs.filter(agency=agency_filter)
+    status_filter = request.GET.get("submission_status", "").strip()
+    if status_filter:
+        qs = qs.filter(submission_status=status_filter)
+    report_type_filter = request.GET.get("report_type", "").strip()
+    if report_type_filter:
+        qs = qs.filter(report_type=report_type_filter)
+    complaint_filter = request.GET.get("complaint", "").strip()
+    if complaint_filter and complaint_filter.isdigit():
+        qs = qs.filter(complaint_id=int(complaint_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="regulatory_vigilance_reports.csv"'
     response["X-Content-Type-Options"] = "nosniff"
