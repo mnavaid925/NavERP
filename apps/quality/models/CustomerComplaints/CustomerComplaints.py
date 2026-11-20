@@ -73,7 +73,7 @@ class CustomerComplaint(TenantNumbered):
         "under_triage": "badge-amber",
         "under_investigation": "badge-amber",
         "pending_regulatory": "badge-red",
-        "capa_pending": "badge-purple",
+        "capa_pending": "badge-amber",
         "resolved": "badge-green",
         "closed": "badge-muted",
         "cancelled": "badge-slate",
