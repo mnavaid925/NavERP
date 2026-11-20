@@ -111,7 +111,7 @@
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if q or selected_category or selected_status or selected_rag or selected_org_unit %}
-                <a href="{% url 'quality:quality_objective_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters">
+                <a href="{% url 'quality:quality_objective_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -191,15 +191,15 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'quality:quality_objective_detail' obj.pk %}" class="btn btn-icon btn-outline" title="View Objective">
+                            <a href="{% url 'quality:quality_objective_detail' obj.pk %}" class="btn btn-icon btn-outline" title="View Objective" aria-label="View Objective">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'quality:quality_objective_edit' obj.pk %}" class="btn btn-icon btn-outline" title="Edit Objective">
+                            <a href="{% url 'quality:quality_objective_edit' obj.pk %}" class="btn btn-icon btn-outline" title="Edit Objective" aria-label="Edit Objective">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'quality:quality_objective_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Quality Objective {{ obj.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Objective">
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Objective" aria-label="Delete Objective">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
