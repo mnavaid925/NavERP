@@ -36408,9 +36408,9 @@ apps/quality/
 ## Models (from research — 4)
 
 ### 1. `QualityObjective` (`QOBJ-`)
-- [ ] **File**: `apps/quality/models/ManagementReview/QualityObjectives.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QOBJ"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/ManagementReview/QualityObjectives.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QOBJ"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Concise objective statement e.g. Maintain First Pass Yield >= 98.5%")`
   - `description`: `TextField(help_text="Detailed objective rationale, calculation methodology, and operational context")`
   - `category`: `CharField(max_length=32, choices=CATEGORY_CHOICES, default="product_quality", db_index=True)` — `"product_quality"` (15), `"process_performance"` (19), `"compliance_regulatory"` (21), `"customer_satisfaction"` (21), `"supplier_quality"` (16), `"safety_environmental"` (20), `"continuous_improvement"` (22) (longest: 22 <= 32)
@@ -36429,16 +36429,16 @@ apps/quality/
   - `last_evaluated_date`: `DateField(null=True, blank=True, help_text="Date current value was last updated")`
   - `action_plan_summary`: `TextField(blank=True, help_text="Operational initiative, milestone roadmap, or CAPA linkage to achieve target")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `draft`: `badge-slate`, `active`: `badge-info`, `on_track`: `badge-green`, `at_risk`: `badge-amber`, `behind`: `badge-red`, `achieved`: `badge-green`, `abandoned`: `badge-muted`
   - `RAG_CSS`: `green`: `badge-green`, `amber`: `badge-amber`, `red`: `badge-red`, `neutral`: `badge-slate`
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `variance`: Difference between `current_value` and `target_value` (`current - target`).
   - `is_achieved`: Boolean evaluating achievement based on `target_direction` and current value.
   - `achievement_percentage`: Calculated completion percentage against target.
   - `status_css`: CSS badge class for status.
   - `rag_css`: CSS badge class for RAG status.
-- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+- [x] **Constraints & Indexes (L65 <= 30 chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qobj_ten_num_uniq")` (26 chars)
   - `Index(fields=["tenant", "status"], name="idx_qobj_ten_status")` (18 chars)
   - `Index(fields=["tenant", "category"], name="idx_qobj_ten_cat")` (15 chars)
@@ -36447,9 +36447,9 @@ apps/quality/
   - `Index(fields=["tenant", "-created_at"], name="idx_qobj_ten_created")` (19 chars)
 
 ### 2. `ManagementReview` (`QMRV-`)
-- [ ] **File**: `apps/quality/models/ManagementReview/ManagementReviews.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMRV"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/ManagementReview/ManagementReviews.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMRV"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Review title e.g. Q1 2026 Executive Management Review")`
   - `cadence`: `CharField(max_length=20, choices=CADENCE_CHOICES, default="quarterly", db_index=True)` — `"annual"` (6), `"semi_annual"` (11), `"quarterly"` (9), `"monthly"` (7), `"event_driven"` (12) (longest: 12 <= 20)
   - `period_start`: `DateField(help_text="Start date of review performance window")`
@@ -36471,17 +36471,17 @@ apps/quality/
   - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_management_reviews", help_text="Executive approving review minutes and conclusions")`
   - `approved_at`: `DateTimeField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `scheduled`: `badge-info`, `in_preparation`: `badge-slate`, `meeting_active`: `badge-amber`, `minutes_drafting`: `badge-amber`, `pending_approval`: `badge-amber`, `approved`: `badge-green`, `cancelled`: `badge-muted`
   - `SUITABILITY_CSS`: `pending`: `badge-slate`, `suitable_effective`: `badge-green`, `minor_improvements`: `badge-amber`, `systemic_deficiencies`: `badge-red`
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `total_inputs_count`: Number of compiled input topics.
   - `total_actions_count`: Number of spawned action items.
   - `open_actions_count`: Number of unresolved action items.
   - `is_overdue`: Boolean indicating whether scheduled meeting date has passed without approval.
   - `status_css`: CSS badge class for status.
   - `suitability_css`: CSS badge class for suitability conclusion.
-- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+- [x] **Constraints & Indexes (L65 <= 30 chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qmrv_ten_num_uniq")` (26 chars)
   - `Index(fields=["tenant", "status"], name="idx_qmrv_ten_status")` (18 chars)
   - `Index(fields=["tenant", "cadence"], name="idx_qmrv_ten_cad")` (15 chars)
@@ -36490,9 +36490,9 @@ apps/quality/
   - `Index(fields=["tenant", "-created_at"], name="idx_qmrv_ten_created")` (19 chars)
 
 ### 3. `ManagementReviewInput` (`QMRI-`)
-- [ ] **File**: `apps/quality/models/ManagementReview/ManagementReviewInputs.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMRI"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/ManagementReview/ManagementReviewInputs.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMRI"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `management_review`: `ForeignKey("quality.ManagementReview", on_delete=models.CASCADE, related_name="inputs", help_text="Governing management review cycle")`
   - `agenda_order`: `PositiveIntegerField(default=1, help_text="Agenda presentation sequence number")`
   - `title`: `CharField(max_length=255, help_text="Agenda topic title e.g. Q1 Audit Results & Regulatory Inspections")`
@@ -36507,12 +36507,12 @@ apps/quality/
   - `linked_ncr`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="review_inputs", help_text="Linked major non-conformance or scrap trend")`
   - `attachments_summary`: `CharField(max_length=255, blank=True, help_text="Reference to slide decks, charts, or external briefing materials")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `draft`: `badge-slate`, `compiled`: `badge-info`, `presented`: `badge-amber`, `accepted`: `badge-green`
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `status_css`: CSS badge class for status.
   - `category_display`: Human-readable label for regulatory category.
-- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+- [x] **Constraints & Indexes (L65 <= 30 chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qmri_ten_num_uniq")` (26 chars)
   - `Index(fields=["tenant", "management_review"], name="idx_qmri_ten_mrv")` (15 chars)
   - `Index(fields=["tenant", "category"], name="idx_qmri_ten_cat")` (15 chars)
@@ -36520,9 +36520,9 @@ apps/quality/
   - `Index(fields=["tenant", "-created_at"], name="idx_qmri_ten_created")` (19 chars)
 
 ### 4. `ManagementReviewAction` (`QMRA-`)
-- [ ] **File**: `apps/quality/models/ManagementReview/ManagementReviewActions.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMRA"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/ManagementReview/ManagementReviewActions.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMRA"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `management_review`: `ForeignKey("quality.ManagementReview", on_delete=models.CASCADE, related_name="actions", help_text="Originating management review cycle")`
   - `title`: `CharField(max_length=255, help_text="Action headline e.g. Procure automated vision inspection system for Line 3")`
   - `action_type`: `CharField(max_length=32, choices=ACTION_TYPE_CHOICES, default="qms_improvement", db_index=True)` — `"qms_improvement"` (15), `"product_improvement"` (19), `"resource_allocation"` (19), `"capa_initiation"` (15), `"procedure_revision"` (18), `"training_competency"` (19), `"regulatory_filing"` (17) (longest: 19 <= 32)
@@ -36539,17 +36539,17 @@ apps/quality/
   - `verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_management_actions", help_text="QA authority verifying action implementation and effectiveness")`
   - `verification_notes`: `TextField(blank=True, help_text="Independent QA verification notes confirming effectiveness")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `open`: `badge-info`, `in_progress`: `badge-amber`, `pending_verification`: `badge-amber`, `completed`: `badge-green`, `cancelled`: `badge-muted`
   - `PRIORITY_CSS`: `critical`: `badge-red`, `high`: `badge-amber`, `medium`: `badge-info`, `low`: `badge-slate`
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `is_overdue`: True if active (`status` in open, in_progress, pending_verification) and `due_date < timezone.now().date()`.
   - `days_open`: Total elapsed days from creation to completion or today.
   - `days_until_due`: Signed integer days until deadline.
   - `urgency_badge_css`: Dynamic badge class based on deadline and overdue status (`badge-red` if overdue, `badge-amber` if <= 7 days, `badge-green` if completed).
   - `status_css`: CSS badge class for status.
   - `priority_css`: CSS badge class for priority.
-- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+- [x] **Constraints & Indexes (L65 <= 30 chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qmra_ten_num_uniq")` (26 chars)
   - `Index(fields=["tenant", "management_review"], name="idx_qmra_ten_mrv")` (15 chars)
   - `Index(fields=["tenant", "status"], name="idx_qmra_ten_status")` (18 chars)
@@ -36561,27 +36561,27 @@ apps/quality/
 
 ## Forms Layout (`apps/quality/forms/ManagementReview/`)
 
-- [ ] `QualityObjectives.py`: `QualityObjectiveForm`
+- [x] `QualityObjectives.py`: `QualityObjectiveForm`
   - `Meta.model = QualityObjective`
   - `fields = ["title", "description", "category", "period_year", "cadence", "metric_unit", "baseline_value", "target_value", "current_value", "target_direction", "status", "rag_status", "owner", "org_unit", "target_date", "last_evaluated_date", "action_plan_summary", "notes"]`
   - Excluded: `tenant`, `number`, `created_at`, `updated_at`.
   - Widgets: `target_date`: `DateInput(type='date')`, `last_evaluated_date`: `DateInput(type='date')`.
   - Scoped querysets in `__init__`: `owner` (`User.objects.filter(tenant=self.tenant)`), `org_unit` (`OrgUnit.objects.filter(tenant=self.tenant)`).
   - Tenant validation in `clean()` (L39).
-- [ ] `ManagementReviews.py`: `ManagementReviewForm`
+- [x] `ManagementReviews.py`: `ManagementReviewForm`
   - `Meta.model = ManagementReview`
   - `fields = ["title", "cadence", "period_start", "period_end", "scheduled_date", "actual_meeting_date", "location", "executive_sponsor", "lead_facilitator", "org_unit", "attendees_roster", "quorum_met", "status", "qms_suitability_conclusion", "executive_summary", "minutes_discussion", "resource_decisions", "notes"]`
   - Excluded: `tenant`, `number`, `electronic_signature`, `approved_by`, `approved_at`, `created_at`, `updated_at`.
   - Widgets: `period_start`: `DateInput(type='date')`, `period_end`: `DateInput(type='date')`, `scheduled_date`: `DateInput(type='date')`, `actual_meeting_date`: `DateInput(type='date')`.
   - Scoped querysets in `__init__`: `executive_sponsor` & `lead_facilitator` (`User.objects.filter(tenant=self.tenant)`), `org_unit` (`OrgUnit.objects.filter(tenant=self.tenant)`).
   - Tenant validation in `clean()` (L39).
-- [ ] `ManagementReviewInputs.py`: `ManagementReviewInputForm`
+- [x] `ManagementReviewInputs.py`: `ManagementReviewInputForm`
   - `Meta.model = ManagementReviewInput`
   - `fields = ["management_review", "agenda_order", "title", "category", "summary_findings", "metrics_data", "status", "presenter", "linked_audit", "linked_capa", "linked_complaint", "linked_ncr", "attachments_summary", "notes"]`
   - Excluded: `tenant`, `number`, `created_at`, `updated_at`.
   - Scoped querysets in `__init__`: `management_review` (`ManagementReview.objects.filter(tenant=self.tenant)`), `presenter` (`User.objects.filter(tenant=self.tenant)`), `linked_audit` (`QualityAudit.objects.filter(tenant=self.tenant)`), `linked_capa` (`CapaInvestigation.objects.filter(tenant=self.tenant)`), `linked_complaint` (`CustomerComplaint.objects.filter(tenant=self.tenant)`), `linked_ncr` (`NonConformanceReport.objects.filter(tenant=self.tenant)`).
   - Tenant validation in `clean()` (L39).
-- [ ] `ManagementReviewActions.py`: `ManagementReviewActionForm`
+- [x] `ManagementReviewActions.py`: `ManagementReviewActionForm`
   - `Meta.model = ManagementReviewAction`
   - `fields = ["management_review", "title", "action_type", "priority", "description", "assignee", "due_date", "status", "budget_allocated", "spawned_capa", "spawned_change_order", "completion_date", "resolution_summary", "verified_by", "verification_notes", "notes"]`
   - Excluded: `tenant`, `number`, `created_at`, `updated_at`.
@@ -36630,13 +36630,13 @@ apps/quality/
    - `quality_planning_export`: `GET /quality/planning-dashboard/export/` (CSV export)
 
 ### Re-exports and Registrations
-- [ ] Surgical edit to `apps/quality/models/__init__.py`: re-export `QualityObjective`, `ManagementReview`, `ManagementReviewInput`, `ManagementReviewAction`, and append to `__all__`.
-- [ ] Surgical edit to `apps/quality/forms/__init__.py`: re-export `QualityObjectiveForm`, `ManagementReviewForm`, `ManagementReviewInputForm`, `ManagementReviewActionForm`, and append to `__all__`.
-- [ ] Surgical edit to `apps/quality/views/__init__.py`: re-export all view functions.
-- [ ] Surgical edit to `apps/quality/urls/__init__.py`: include `ManagementReview` urlpatterns.
-- [ ] Surgical edit to `apps/quality/admin.py`: register all 4 models with search fields, list display, filters, and readonly system fields.
-- [ ] Surgical edit to `apps/quality/management/commands/seed_quality.py`: implement `_seed_submodule_12_14` generating demo objectives, reviews, input topics, and action items with full idempotency (`get_or_create`).
-- [ ] Wire-up in `apps/core/navigation.py`:
+- [x] Surgical edit to `apps/quality/models/__init__.py`: re-export `QualityObjective`, `ManagementReview`, `ManagementReviewInput`, `ManagementReviewAction`, and append to `__all__`.
+- [x] Surgical edit to `apps/quality/forms/__init__.py`: re-export `QualityObjectiveForm`, `ManagementReviewForm`, `ManagementReviewInputForm`, `ManagementReviewActionForm`, and append to `__all__`.
+- [x] Surgical edit to `apps/quality/views/__init__.py`: re-export all view functions.
+- [x] Surgical edit to `apps/quality/urls/__init__.py`: include `ManagementReview` urlpatterns.
+- [x] Surgical edit to `apps/quality/admin.py`: register all 4 models with search fields, list display, filters, and readonly system fields.
+- [x] Surgical edit to `apps/quality/management/commands/seed_quality.py`: implement `_seed_submodule_12_14` generating demo objectives, reviews, input topics, and action items with full idempotency (`get_or_create`).
+- [x] Wire-up in `apps/core/navigation.py`:
   ```python
   "12.14": {
       "Management Review Scheduling": "quality:management_review_list",
@@ -36651,19 +36651,19 @@ apps/quality/
 
 ## Templates Layout (`templates/quality/managementreview/`)
 
-- [ ] `quality_objective/list.html`: Quality objectives register, title, category pill, target year, baseline/target/current metrics, variance, RAG status badge (`rag_css`), owner, org unit, filter bar, CSV export.
-- [ ] `quality_objective/detail.html`: Full objective dossier, category, timeline, target direction, metric progress bar, RAG status indicator, responsible owner & org unit, operational action plan summary, notes, audit trail link.
-- [ ] `quality_objective/form.html`: Objective creation/edit form with title, category selector, period year, cadence dropdown, metric unit, baseline/target/current values, direction selector, status, RAG status, owner selector (`accounts.User`), org unit selector (`core.OrgUnit`), target and evaluation dates, action plan narrative.
-- [ ] `management_review/list.html`: Management reviews register, number, title, cadence, review period window, scheduled date, executive sponsor, status badge (`status_css`), suitability verdict badge (`suitability_css`), inputs count, actions count, filter bar, CSV export.
-- [ ] `management_review/detail.html`: Comprehensive review cycle dossier, review metadata, executive sponsor, lead facilitator, location, attendee roster, quorum verification card, status badge, suitability conclusion card, executive summary, minutes discussion, resource allocation decisions, inputs tab (embedded agenda topics), actions tab (embedded action items with overdue badges), 21 CFR Part 11 electronic signature card, approve modal/form, audit dossier export button.
-- [ ] `management_review/form.html`: Management review scheduling form with title, cadence selector, start/end period bounds, scheduled and actual dates, location, executive sponsor selector, lead facilitator selector, org unit selector, attendee roster text area, quorum toggle, status, suitability verdict, executive summary, minutes notes, resource decisions.
-- [ ] `management_review_input/list.html`: Agenda inputs register, review link, agenda order pill, topic title, category badge, presenter, status badge, linked audit/CAPA/complaint/NCR pills, filter bar, CSV export.
-- [ ] `management_review_input/detail.html`: Detailed input agenda topic, governing review link, presenter, category, summary findings narrative, metrics tabular data, linked source records (`quality.QualityAudit`, `quality.CapaInvestigation`, `quality.CustomerComplaint`, `quality.NonConformanceReport`), external slide deck reference.
-- [ ] `management_review_input/form.html`: Input agenda item creation/edit form with review selector, order integer, title, category dropdown, presenter selector, summary findings editor, metrics data editor, status, linked sibling entity dropdowns (audit, CAPA, complaint, NCR), attachments note.
-- [ ] `management_review_action/list.html`: Review action items register, number, title, governing review link, action type badge, priority badge (`priority_css`), assignee, target due date, urgency badge (`urgency_badge_css`), status badge (`status_css`), spawned CAPA / change order links, filter bar, CSV export.
-- [ ] `management_review_action/detail.html`: Action item dossier, governing review link, action type, priority, assignee, due date, completion date, elapsed days open, overdue status card, budget allocated, resolution summary, spawned CAPA (`quality.CapaInvestigation`) and DocumentChangeOrder (`quality.DocumentChangeOrder`) cards, independent QA verification card with verified_by and verification notes, verify modal/form, spawn-CAPA button.
-- [ ] `management_review_action/form.html`: Action item creation/edit form with review selector, title, action type selector, priority dropdown, description, assignee selector (`accounts.User`), due date, status, budget allocated, spawned CAPA and change order dropdowns, completion date, resolution summary, verification fields.
-- [ ] `quality_planning_dashboard.html`: Command center for Quality Planning & Management Review:
+- [x] `quality_objective/list.html`: Quality objectives register, title, category pill, target year, baseline/target/current metrics, variance, RAG status badge (`rag_css`), owner, org unit, filter bar, CSV export.
+- [x] `quality_objective/detail.html`: Full objective dossier, category, timeline, target direction, metric progress bar, RAG status indicator, responsible owner & org unit, operational action plan summary, notes, audit trail link.
+- [x] `quality_objective/form.html`: Objective creation/edit form with title, category selector, period year, cadence dropdown, metric unit, baseline/target/current values, direction selector, status, RAG status, owner selector (`accounts.User`), org unit selector (`core.OrgUnit`), target and evaluation dates, action plan narrative.
+- [x] `management_review/list.html`: Management reviews register, number, title, cadence, review period window, scheduled date, executive sponsor, status badge (`status_css`), suitability verdict badge (`suitability_css`), inputs count, actions count, filter bar, CSV export.
+- [x] `management_review/detail.html`: Comprehensive review cycle dossier, review metadata, executive sponsor, lead facilitator, location, attendee roster, quorum verification card, status badge, suitability conclusion card, executive summary, minutes discussion, resource allocation decisions, inputs tab (embedded agenda topics), actions tab (embedded action items with overdue badges), 21 CFR Part 11 electronic signature card, approve modal/form, audit dossier export button.
+- [x] `management_review/form.html`: Management review scheduling form with title, cadence selector, start/end period bounds, scheduled and actual dates, location, executive sponsor selector, lead facilitator selector, org unit selector, attendee roster text area, quorum toggle, status, suitability verdict, executive summary, minutes notes, resource decisions.
+- [x] `management_review_input/list.html`: Agenda inputs register, review link, agenda order pill, topic title, category badge, presenter, status badge, linked audit/CAPA/complaint/NCR pills, filter bar, CSV export.
+- [x] `management_review_input/detail.html`: Detailed input agenda topic, governing review link, presenter, category, summary findings narrative, metrics tabular data, linked source records (`quality.QualityAudit`, `quality.CapaInvestigation`, `quality.CustomerComplaint`, `quality.NonConformanceReport`), external slide deck reference.
+- [x] `management_review_input/form.html`: Input agenda item creation/edit form with review selector, order integer, title, category dropdown, presenter selector, summary findings editor, metrics data editor, status, linked sibling entity dropdowns (audit, CAPA, complaint, NCR), attachments note.
+- [x] `management_review_action/list.html`: Review action items register, number, title, governing review link, action type badge, priority badge (`priority_css`), assignee, target due date, urgency badge (`urgency_badge_css`), status badge (`status_css`), spawned CAPA / change order links, filter bar, CSV export.
+- [x] `management_review_action/detail.html`: Action item dossier, governing review link, action type, priority, assignee, due date, completion date, elapsed days open, overdue status card, budget allocated, resolution summary, spawned CAPA (`quality.CapaInvestigation`) and DocumentChangeOrder (`quality.DocumentChangeOrder`) cards, independent QA verification card with verified_by and verification notes, verify modal/form, spawn-CAPA button.
+- [x] `management_review_action/form.html`: Action item creation/edit form with review selector, title, action type selector, priority dropdown, description, assignee selector (`accounts.User`), due date, status, budget allocated, spawned CAPA and change order dropdowns, completion date, resolution summary, verification fields.
+- [x] `quality_planning_dashboard.html`: Command center for Quality Planning & Management Review:
   - Top KPI stat cards: Active Quality Objectives, Objectives On Track %, Scheduled/Completed Reviews, Open Action Items, Overdue Actions, QMS Suitability Index.
   - Objectives by Category Breakdown and RAG status distribution charts/bars.
   - Management Review Cadence Calendar / Timeline.
@@ -36674,62 +36674,62 @@ apps/quality/
 
 ## Execution Checklist (Steps 1 through 9)
 
-- [ ] **Step 1: Pre-build Contract** -> Freeze `.claude/tasks/contract-quality-12.14.md` (all model fields, choices, form fields, view context vars, and URL patterns pinned).
-- [ ] **Step 2: Build Entity by Entity** (4 backend files + 3 templates per entity, strictly one by one):
-  - [ ] Entity 1: `QualityObjective`
-    - [ ] `apps/quality/models/ManagementReview/QualityObjectives.py`
-    - [ ] `apps/quality/forms/ManagementReview/QualityObjectives.py`
-    - [ ] `apps/quality/views/ManagementReview/QualityObjectives.py`
-    - [ ] `apps/quality/urls/ManagementReview/QualityObjectives.py`
-    - [ ] `templates/quality/managementreview/quality_objective/list.html`
-    - [ ] `templates/quality/managementreview/quality_objective/detail.html`
-    - [ ] `templates/quality/managementreview/quality_objective/form.html`
-  - [ ] Entity 2: `ManagementReview`
-    - [ ] `apps/quality/models/ManagementReview/ManagementReviews.py`
-    - [ ] `apps/quality/forms/ManagementReview/ManagementReviews.py`
-    - [ ] `apps/quality/views/ManagementReview/ManagementReviews.py`
-    - [ ] `apps/quality/urls/ManagementReview/ManagementReviews.py`
-    - [ ] `templates/quality/managementreview/management_review/list.html`
-    - [ ] `templates/quality/managementreview/management_review/detail.html`
-    - [ ] `templates/quality/managementreview/management_review/form.html`
-  - [ ] Entity 3: `ManagementReviewInput`
-    - [ ] `apps/quality/models/ManagementReview/ManagementReviewInputs.py`
-    - [ ] `apps/quality/forms/ManagementReview/ManagementReviewInputs.py`
-    - [ ] `apps/quality/views/ManagementReview/ManagementReviewInputs.py`
-    - [ ] `apps/quality/urls/ManagementReview/ManagementReviewInputs.py`
-    - [ ] `templates/quality/managementreview/management_review_input/list.html`
-    - [ ] `templates/quality/managementreview/management_review_input/detail.html`
-    - [ ] `templates/quality/managementreview/management_review_input/form.html`
-  - [ ] Entity 4: `ManagementReviewAction`
-    - [ ] `apps/quality/models/ManagementReview/ManagementReviewActions.py`
-    - [ ] `apps/quality/forms/ManagementReview/ManagementReviewActions.py`
-    - [ ] `apps/quality/views/ManagementReview/ManagementReviewActions.py`
-    - [ ] `apps/quality/urls/ManagementReview/ManagementReviewActions.py`
-    - [ ] `templates/quality/managementreview/management_review_action/list.html`
-    - [ ] `templates/quality/managementreview/management_review_action/detail.html`
-    - [ ] `templates/quality/managementreview/management_review_action/form.html`
-  - [ ] Dedicated Dashboard: `QualityPlanningDashboard`
-    - [ ] `apps/quality/views/ManagementReview/QualityPlanningDashboard.py`
-    - [ ] `apps/quality/urls/ManagementReview/QualityPlanningDashboard.py`
-    - [ ] `templates/quality/managementreview/quality_planning_dashboard.html`
-- [ ] **Step 3: Single-Writer Integrate & Migrations**
-  - [ ] Re-export models in `apps/quality/models/__init__.py`
-  - [ ] Re-export forms in `apps/quality/forms/__init__.py`
-  - [ ] Re-export views in `apps/quality/views/__init__.py`
-  - [ ] Re-export & include urls in `apps/quality/urls/__init__.py`
-  - [ ] Register 4 models in `apps/quality/admin.py`
-  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_14`)
-  - [ ] Wire `LIVE_LINKS["12.14"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration `0025_...`
-  - [ ] Run `migrate quality`
-  - [ ] Run `seed_quality` twice (verify idempotency)
-  - [ ] Run `manage.py check` (0 issues)
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.14.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
-- [ ] **Step 7: Automated Tests** -> `test_managementreview_models.py`, `test_managementreview_forms.py`, `test_managementreview_views.py`, `test_managementreview_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.14.md`
+- [x] **Step 1: Pre-build Contract** -> Freeze `.claude/tasks/contract-quality-12.14.md` (all model fields, choices, form fields, view context vars, and URL patterns pinned).
+- [x] **Step 2: Build Entity by Entity** (4 backend files + 3 templates per entity, strictly one by one):
+  - [x] Entity 1: `QualityObjective`
+    - [x] `apps/quality/models/ManagementReview/QualityObjectives.py`
+    - [x] `apps/quality/forms/ManagementReview/QualityObjectives.py`
+    - [x] `apps/quality/views/ManagementReview/QualityObjectives.py`
+    - [x] `apps/quality/urls/ManagementReview/QualityObjectives.py`
+    - [x] `templates/quality/managementreview/quality_objective/list.html`
+    - [x] `templates/quality/managementreview/quality_objective/detail.html`
+    - [x] `templates/quality/managementreview/quality_objective/form.html`
+  - [x] Entity 2: `ManagementReview`
+    - [x] `apps/quality/models/ManagementReview/ManagementReviews.py`
+    - [x] `apps/quality/forms/ManagementReview/ManagementReviews.py`
+    - [x] `apps/quality/views/ManagementReview/ManagementReviews.py`
+    - [x] `apps/quality/urls/ManagementReview/ManagementReviews.py`
+    - [x] `templates/quality/managementreview/management_review/list.html`
+    - [x] `templates/quality/managementreview/management_review/detail.html`
+    - [x] `templates/quality/managementreview/management_review/form.html`
+  - [x] Entity 3: `ManagementReviewInput`
+    - [x] `apps/quality/models/ManagementReview/ManagementReviewInputs.py`
+    - [x] `apps/quality/forms/ManagementReview/ManagementReviewInputs.py`
+    - [x] `apps/quality/views/ManagementReview/ManagementReviewInputs.py`
+    - [x] `apps/quality/urls/ManagementReview/ManagementReviewInputs.py`
+    - [x] `templates/quality/managementreview/management_review_input/list.html`
+    - [x] `templates/quality/managementreview/management_review_input/detail.html`
+    - [x] `templates/quality/managementreview/management_review_input/form.html`
+  - [x] Entity 4: `ManagementReviewAction`
+    - [x] `apps/quality/models/ManagementReview/ManagementReviewActions.py`
+    - [x] `apps/quality/forms/ManagementReview/ManagementReviewActions.py`
+    - [x] `apps/quality/views/ManagementReview/ManagementReviewActions.py`
+    - [x] `apps/quality/urls/ManagementReview/ManagementReviewActions.py`
+    - [x] `templates/quality/managementreview/management_review_action/list.html`
+    - [x] `templates/quality/managementreview/management_review_action/detail.html`
+    - [x] `templates/quality/managementreview/management_review_action/form.html`
+  - [x] Dedicated Dashboard: `QualityPlanningDashboard`
+    - [x] `apps/quality/views/ManagementReview/QualityPlanningDashboard.py`
+    - [x] `apps/quality/urls/ManagementReview/QualityPlanningDashboard.py`
+    - [x] `templates/quality/managementreview/quality_planning_dashboard.html`
+- [x] **Step 3: Single-Writer Integrate & Migrations**
+  - [x] Re-export models in `apps/quality/models/__init__.py`
+  - [x] Re-export forms in `apps/quality/forms/__init__.py`
+  - [x] Re-export views in `apps/quality/views/__init__.py`
+  - [x] Re-export & include urls in `apps/quality/urls/__init__.py`
+  - [x] Register 4 models in `apps/quality/admin.py`
+  - [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_14`)
+  - [x] Wire `LIVE_LINKS["12.14"]` in `apps/core/navigation.py`
+  - [x] Run `makemigrations quality` -> incremental migration `0025_...`
+  - [x] Run `migrate quality`
+  - [x] Run `seed_quality` twice (verify idempotency)
+  - [x] Run `manage.py check` (0 issues)
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.14.md`
+- [x] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
+- [x] **Step 7: Automated Tests** -> `test_managementreview_models.py`, `test_managementreview_forms.py`, `test_managementreview_views.py`, `test_managementreview_security.py` -> 100% green
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.14.md`
 
 ---
 
@@ -36740,3 +36740,39 @@ apps/quality/
 3. **Statistical SPC Metric Live-Streaming Feed** — Real-time automated querying and rendering of IPQC/IQC SPC run charts directly into review input presentation widgets without manual transcription. (`GAP-quality-12.14-03`)
 
 ---
+
+## Review notes — Sub-module 12.14 Close-out (2026-11-20)
+
+- **Sub-module**: 12.14 Management Review & Quality Planning (`apps/quality/models/ManagementReview/`)
+- **Base Commit**: `9cc45e74` (fixtures update & test passes)
+- **Pre-build Contract**: Frozen in `.claude/tasks/contract-quality-12.14.md`
+- **Models Built (4)**:
+  - `QualityObjective` (`QOBJ-`): Strategic quality objectives complying with ISO 9001:2015 Clause 6.2 and ISO 13485:2016 Clause 5.4.1 across 6 categories (customer_satisfaction, regulatory_compliance, product_quality, process_efficiency, supplier_performance, safety_culture), SMART targets, baseline/target/current metrics, owner attribution (`accounts.User`), org unit linkage (`core.OrgUnit`), RAG traffic lights, and formal approval/achievement state machine.
+  - `ManagementReview` (`QMRV-`): Executive management review sessions complying with ISO 9001:2015 Clause 9.3 and ISO 13485:2016 Clause 5.6 across quarterly/semi_annual/annual/ad_hoc cadences, period coverage windows, scheduled and actual dates, executive sponsors and lead facilitators, suitability/adequacy/effectiveness determinations, resource commitments, quorum checks, and 21 CFR Part 11 compliant digital electronic signature linking (`quality.ElectronicSignatureRecord`).
+  - `ManagementReviewInput` (`QMRI-`): Review agenda input topics across 13 mandatory ISO 9001/13485 agenda categories, presenter attribution, agenda ordering, executive summary findings, metrics data, status tracking, and direct spine FK links to sibling records (`quality.QualityAudit`, `quality.CapaInvestigation`, `quality.CustomerComplaint`, `quality.NonConformanceReport`).
+  - `ManagementReviewAction` (`QMRA-`): Review action items and continuous improvement decisions complying with ISO 9001:2015 Clause 9.3.3 and ISO 13485:2016 Clause 5.6.3 across 6 action categories, priority triage, due dates, assignees, budget allocation, direct cross-spawning of CAPA investigations (`QCAP-`), DocumentChangeOrder linking (`QDCR-`), and independent QA verification preventing assignee self-verification.
+- **Command Center & Dossier Export**:
+  - `quality_planning_dashboard`: Executive command center with active review telemetry, agenda input compilation meters, action item SLA countdown radar, RAG objective health meters, action backlog aging tiers, and cross-module Quality Spine indicators.
+  - `management_review_dossier` & `management_review_dossier_export`: Audit-ready executive review compendium and CSV export with 21 CFR Part 11 digital signature manifest.
+- **Integrations & Migrations**:
+  - Re-exported in `apps/quality/{models,forms,views,urls}/__init__.py`.
+  - Admin registered in `apps/quality/admin.py` for all 4 models.
+  - Navigation wired in `apps/core/navigation.py` under `LIVE_LINKS["12.14"]`.
+  - Migrations `0025_managementreview_models.py` and `0026_alter_qualityobjective_rag_status_and_more.py` generated and applied.
+  - Idempotent demo data seeded via `apps/quality/management/commands/seed_quality.py` (`_seed_submodule_12_14`).
+  - `manage.py check`: 0 issues identified.
+- **Review Findings (27)**:
+  - 6 serial review passes completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+  - Findings consolidated in `.claude/tasks/review-quality-12.14.md` (6 Critical, 11 Important, 10 Minor).
+  - All 27 findings burned down and resolved in Phase 5 by `code-fixer` in ID order with individual git commits.
+- **Test Suite (100% Green)**:
+  - 163 dedicated tests across 4 test modules:
+    - `test_managementreview_models.py` (32 tests)
+    - `test_managementreview_forms.py` (45 tests)
+    - `test_managementreview_views.py` (57 tests)
+    - `test_managementreview_security.py` (29 tests)
+  - Full unfiltered quality test suite passed: **2,316 passing tests** across `apps/quality/tests/` (0 failures, 0 errors).
+- **Gaps & Deferred Work**:
+  - Recorded in `.agents/tasks/gaps-quality-12.14.md`.
+  - In-scope gaps: None (0 open).
+  - Deferred external scope: `GAP-quality-12.14-01` (Direct Live PowerPoint PPTX Deck Exporter), `GAP-quality-12.14-02` (Automated Webhook Meeting Integration for Zoom/Teams/Meet), `GAP-quality-12.14-03` (Statistical SPC Metric Live-Streaming Feed).
