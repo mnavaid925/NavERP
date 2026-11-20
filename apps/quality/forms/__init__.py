@@ -124,6 +124,23 @@ from apps.quality.forms.CustomerComplaints.RegulatoryReports import (
 from apps.quality.forms.CustomerComplaints.FieldActions import (
     FieldActionForm,
 )
+from apps.quality.forms.ManagementReview.QualityObjectives import (
+    QualityObjectiveEvaluateForm,
+    QualityObjectiveForm,
+)
+from apps.quality.forms.ManagementReview.ManagementReviews import (
+    ManagementReviewApproveForm,
+    ManagementReviewForm,
+    ManagementReviewMinutesForm,
+)
+from apps.quality.forms.ManagementReview.ManagementReviewInputs import (
+    ManagementReviewInputForm,
+)
+from apps.quality.forms.ManagementReview.ManagementReviewActions import (
+    ManagementReviewActionCompleteForm,
+    ManagementReviewActionForm,
+    ManagementReviewActionVerifyForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -186,5 +203,14 @@ __all__ = [
     "ComplaintInvestigationForm",
     "RegulatoryReportForm",
     "FieldActionForm",
+    "QualityObjectiveForm",
+    "QualityObjectiveEvaluateForm",
+    "ManagementReviewForm",
+    "ManagementReviewMinutesForm",
+    "ManagementReviewApproveForm",
+    "ManagementReviewInputForm",
+    "ManagementReviewActionForm",
+    "ManagementReviewActionCompleteForm",
+    "ManagementReviewActionVerifyForm",
 ]
 
