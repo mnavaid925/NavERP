@@ -408,23 +408,23 @@
                 <form method="post" action="{% url 'quality:customer_complaint_triage' complaint.pk %}" class="space-y-4">
                     {% csrf_token %}
                     <div>
-                        <label class="form-label text-xs">Complaint Validity</label>
+                        <label for="{{ triage_form.validity.id_for_label }}" class="form-label text-xs">Complaint Validity</label>
                         {{ triage_form.validity }}
                     </div>
                     <div>
-                        <label class="form-label text-xs">Severity Grading</label>
+                        <label for="{{ triage_form.severity.id_for_label }}" class="form-label text-xs">Severity Grading</label>
                         {{ triage_form.severity }}
                     </div>
                     <div>
-                        <label class="form-label text-xs">Regulatory Reportability</label>
+                        <label for="{{ triage_form.reportability.id_for_label }}" class="form-label text-xs">Regulatory Reportability</label>
                         {{ triage_form.reportability }}
                     </div>
                     <div>
-                        <label class="form-label text-xs">Non-Reportable Rationale</label>
+                        <label for="{{ triage_form.non_reportable_justification.id_for_label }}" class="form-label text-xs">Non-Reportable Rationale</label>
                         {{ triage_form.non_reportable_justification }}
                     </div>
                     <div>
-                        <label class="form-label text-xs">Failure Category</label>
+                        <label for="{{ triage_form.complaint_category.id_for_label }}" class="form-label text-xs">Failure Category</label>
                         {{ triage_form.complaint_category }}
                     </div>
                     <div class="flex items-center gap-2">
@@ -434,15 +434,15 @@
                         </label>
                     </div>
                     <div>
-                        <label class="form-label text-xs">No Investigation Rationale</label>
+                        <label for="{{ triage_form.no_investigation_rationale.id_for_label }}" class="form-label text-xs">No Investigation Rationale</label>
                         {{ triage_form.no_investigation_rationale }}
                     </div>
                     <div>
-                        <label class="form-label text-xs">Assign Investigator</label>
+                        <label for="{{ triage_form.assigned_to.id_for_label }}" class="form-label text-xs">Assign Investigator</label>
                         {{ triage_form.assigned_to }}
                     </div>
                     <div>
-                        <label class="form-label text-xs">Triage Notes</label>
+                        <label for="{{ triage_form.triage_notes.id_for_label }}" class="form-label text-xs">Triage Notes</label>
                         {{ triage_form.triage_notes }}
                     </div>
                     <button type="submit" class="btn btn-primary w-full">
