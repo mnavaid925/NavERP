@@ -118,9 +118,12 @@ def management_review_detail(request, pk):
         select_related=("executive_sponsor", "lead_facilitator", "org_unit", "approved_by", "electronic_signature"),
     )
 
-    inputs = review.inputs.select_related("presenter", "linked_audit", "linked_capa", "linked_complaint", "linked_ncr").order_by("agenda_order", "id")
-    actions = review.actions.select_related("assignee", "verified_by", "spawned_capa", "spawned_change_order").order_by("due_date", "id")
-    open_actions = actions.filter(status__in=["open", "in_progress", "pending_verification"])
+    inputs = list(review.inputs.select_related("presenter", "linked_audit", "linked_capa", "linked_complaint", "linked_ncr").order_by("agenda_order", "id"))
+    actions = list(review.actions.select_related("assignee", "verified_by", "spawned_capa", "spawned_change_order").order_by("due_date", "id"))
+    open_actions = [a for a in actions if a.status in ["open", "in_progress", "pending_verification"]]
+    total_inputs_count = len(inputs)
+    total_actions_count = len(actions)
+    open_actions_count = len(open_actions)
 
     approve_form = ManagementReviewApproveForm()
 
@@ -141,6 +144,9 @@ def management_review_detail(request, pk):
         "inputs": inputs,
         "actions": actions,
         "open_actions": open_actions,
+        "total_inputs_count": total_inputs_count,
+        "total_actions_count": total_actions_count,
+        "open_actions_count": open_actions_count,
         "approve_form": approve_form,
         "can_start": can_start,
         "can_draft_minutes": can_draft_minutes,
