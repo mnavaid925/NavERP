@@ -88,7 +88,7 @@
         <div class="card-body">
             <div class="space-y-3">
                 {% for r in urgent_regulatory_deadlines %}
-                <div class="p-3 bg-white rounded border border-slate-200 flex items-center justify-between hover:bg-slate-50 transition">
+                <div class="p-3 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-750 transition">
                     <div>
                         <div class="flex items-center gap-2">
                             <a href="{% url 'quality:regulatory_report_detail' r.pk %}" class="font-medium text-blue-600 hover:underline">
@@ -203,7 +203,7 @@
                         <span class="font-mono text-slate-600">{{ rc.count }} investigations</span>
                     </div>
                     <div class="w-full bg-slate-100 rounded-full h-2">
-                        <div class="bg-amber-500 h-2 rounded-full" style="width: {% widthratio rc.count 20 100 %}%;"></div>
+                        <div class="bg-amber-500 h-2 rounded-full" style="width: {{ rc.percent }}%;"></div>
                     </div>
                 </div>
                 {% empty %}
