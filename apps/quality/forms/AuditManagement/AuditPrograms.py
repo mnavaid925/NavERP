@@ -19,7 +19,6 @@ class AuditProgramForm(forms.ModelForm):
             "start_date",
             "end_date",
             "allocated_budget_hours",
-            "status",
             "program_manager",
             "notes",
         ]
@@ -32,7 +31,6 @@ class AuditProgramForm(forms.ModelForm):
             "start_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "end_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "allocated_budget_hours": forms.NumberInput(attrs={"class": "form-input", "min": 0}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "program_manager": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Additional administrative or governance notes..."}),
         }
