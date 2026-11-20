@@ -7,9 +7,9 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'dashboard:home' %}">Home</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <span>{% if is_edit %}Edit {{ complaint.number }}{% else %}New Intake{% endif %}</span>
         </div>
         <h1 class="page-title">{% if is_edit %}Edit Customer Complaint {{ complaint.number }}{% else %}Intake & Log Customer Complaint{% endif %}</h1>
@@ -27,7 +27,7 @@
             </div>
             {% endif %}
 
-            <!-- Intake Section -->
+            {# Intake Section #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">1. Allegation & Inbound Channel</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -59,7 +59,7 @@
                 </div>
             </div>
 
-            <!-- Complainant Section -->
+            {# Complainant Section #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">2. Complainant / Reporter Information</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -86,7 +86,7 @@
                 </div>
             </div>
 
-            <!-- Product Identification -->
+            {# Product Identification #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">3. Product & Manufacturing Traceability</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -123,7 +123,7 @@
                 </div>
             </div>
 
-            <!-- Incident Narrative -->
+            {# Incident Narrative #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">4. Incident Narrative & Patient Impact</h3>
                 <div class="space-y-4">
@@ -149,7 +149,7 @@
                 </div>
             </div>
 
-            <!-- Triage & Vigilance Screening -->
+            {# Triage & Vigilance Screening #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">5. Initial Triage & Regulatory Vigilance</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -189,7 +189,7 @@
                 </div>
             </div>
 
-            <!-- Investigation & Sample Return -->
+            {# Investigation & Sample Return #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">6. Investigation Strategy & Sample Return</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -230,7 +230,7 @@
                 </div>
             </div>
 
-            <!-- Customer Response -->
+            {# Customer Response #}
             <div>
                 <h3 class="text-base font-semibold text-slate-800 mb-3">7. Customer Communication & Closure</h3>
                 <div class="space-y-4">
