@@ -473,7 +473,47 @@ from apps.quality.views.TrainingCompetency.CompetencyCertifications import (
     employee_training_dossier,
     training_compliance_dashboard,
 )
-
+from apps.quality.views.CustomerComplaints.CustomerComplaints import (
+    customer_complaint_list,
+    customer_complaint_detail,
+    customer_complaint_create,
+    customer_complaint_edit,
+    customer_complaint_delete,
+    customer_complaint_triage,
+    customer_complaint_close,
+    customer_complaint_export_csv,
+)
+from apps.quality.views.CustomerComplaints.ComplaintInvestigations import (
+    complaint_investigation_list,
+    complaint_investigation_detail,
+    complaint_investigation_create,
+    complaint_investigation_edit,
+    complaint_investigation_delete,
+    complaint_investigation_complete,
+    complaint_investigation_export_csv,
+)
+from apps.quality.views.CustomerComplaints.RegulatoryReports import (
+    regulatory_report_list,
+    regulatory_report_detail,
+    regulatory_report_create,
+    regulatory_report_edit,
+    regulatory_report_delete,
+    regulatory_report_submit,
+    regulatory_report_acknowledge,
+    regulatory_report_export_csv,
+)
+from apps.quality.views.CustomerComplaints.FieldActions import (
+    field_action_list,
+    field_action_detail,
+    field_action_create,
+    field_action_edit,
+    field_action_delete,
+    field_action_close,
+    field_action_export_csv,
+)
+from apps.quality.views.CustomerComplaints.ComplaintTrendingDashboard import (
+    complaint_trending_dashboard,
+)
 
 __all__ = [
     "controlled_document_list",
@@ -833,5 +873,36 @@ __all__ = [
     "competency_certification_export_csv",
     "training_compliance_dashboard",
     "employee_training_dossier",
+    "customer_complaint_list",
+    "customer_complaint_detail",
+    "customer_complaint_create",
+    "customer_complaint_edit",
+    "customer_complaint_delete",
+    "customer_complaint_triage",
+    "customer_complaint_close",
+    "customer_complaint_export_csv",
+    "complaint_investigation_list",
+    "complaint_investigation_detail",
+    "complaint_investigation_create",
+    "complaint_investigation_edit",
+    "complaint_investigation_delete",
+    "complaint_investigation_complete",
+    "complaint_investigation_export_csv",
+    "regulatory_report_list",
+    "regulatory_report_detail",
+    "regulatory_report_create",
+    "regulatory_report_edit",
+    "regulatory_report_delete",
+    "regulatory_report_submit",
+    "regulatory_report_acknowledge",
+    "regulatory_report_export_csv",
+    "field_action_list",
+    "field_action_detail",
+    "field_action_create",
+    "field_action_edit",
+    "field_action_delete",
+    "field_action_close",
+    "field_action_export_csv",
+    "complaint_trending_dashboard",
 ]
 
