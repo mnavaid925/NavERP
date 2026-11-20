@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import models, transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -68,9 +68,14 @@ def customer_complaint_list(request):
     total_count = qs.count()
 
     base_tenant_qs = CustomerComplaint.objects.filter(tenant=request.tenant)
-    open_count = base_tenant_qs.exclude(status__in=["closed", "cancelled"]).count()
-    reportable_count = base_tenant_qs.filter(reportability="reportable_event").count()
-    critical_count = base_tenant_qs.filter(severity="critical_safety").count()
+    stats = base_tenant_qs.aggregate(
+        open_count=Count("id", filter=~Q(status__in=["closed", "cancelled"])),
+        reportable_count=Count("id", filter=Q(reportability="reportable_event")),
+        critical_count=Count("id", filter=Q(severity="critical_safety")),
+    )
+    open_count = stats["open_count"]
+    reportable_count = stats["reportable_count"]
+    critical_count = stats["critical_count"]
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
