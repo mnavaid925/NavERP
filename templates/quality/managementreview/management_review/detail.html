@@ -1,0 +1,439 @@
+{% extends "base.html" %}
+
+{% block title %}{{ review.number }} — Management Review — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_planning_dashboard' %}">Quality Planning</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:management_review_list' %}">Management Reviews</a>
+            <span class="sep">/</span>
+            <span>{{ review.number }}</span>
+        </div>
+        <h1 class="page-title">{{ review.title }}</h1>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <a href="{% url 'quality:management_review_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to List
+        </a>
+        <a href="{% url 'quality:management_review_export_pdf' review.pk %}" target="_blank" class="btn btn-outline" title="Printable Dossier for FDA/ISO Auditors">
+            <i data-lucide="file-text"></i> Audit Dossier
+        </a>
+
+        {% if can_start %}
+        <form method="post" action="{% url 'quality:management_review_start' review.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="play"></i> Start Meeting
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_draft_minutes %}
+        <a href="{% url 'quality:management_review_draft_minutes' review.pk %}" class="btn btn-primary">
+            <i data-lucide="file-edit"></i> Draft Minutes & Decisions
+        </a>
+        {% endif %}
+
+        {% if review.status != 'approved' and review.status != 'cancelled' %}
+        <a href="{% url 'quality:management_review_edit' review.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if can_cancel %}
+        <form method="post" action="{% url 'quality:management_review_cancel' review.pk %}" class="inline" onsubmit="return confirm('Cancel this management review session?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-rose-600 hover:bg-rose-50">
+                <i data-lucide="x-circle"></i> Cancel Review
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="stat-label">Scheduled Date</div>
+            <div class="stat-value text-slate-800">{{ review.scheduled_date|date:"M d, Y" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if review.status == 'approved' %}green{% elif review.status == 'meeting_active' %}orange{% else %}purple{% endif %}">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-label">Cycle Status</div>
+            <div class="stat-value text-base mt-1">
+                <span class="badge {{ review.status_badge_class }}">{{ review.get_status_display }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="list-checks"></i>
+        </div>
+        <div>
+            <div class="stat-label">Input Topics</div>
+            <div class="stat-value">{{ review.total_inputs_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if review.open_actions_count > 0 %}orange{% else %}green{% endif %}">
+            <i data-lucide="check-square"></i>
+        </div>
+        <div>
+            <div class="stat-label">Action Items</div>
+            <div class="stat-value">{{ review.total_actions_count }} <span class="text-xs font-normal text-slate-500">({{ review.open_actions_count }} open)</span></div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Review Cycle Scope & Details</h3>
+                <span class="badge {{ review.cadence_badge_class }}">{{ review.get_cadence_display }}</span>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Review Number</dt>
+                        <dd class="font-mono font-semibold">{{ review.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Period Under Review</dt>
+                        <dd>{{ review.period_start|date:"M d, Y" }} &ndash; {{ review.period_end|date:"M d, Y" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Scheduled Date</dt>
+                        <dd>{{ review.scheduled_date|date:"M d, Y" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Actual Meeting Date</dt>
+                        <dd>{{ review.actual_meeting_date|date:"M d, Y"|default:"Not held yet" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Meeting Location</dt>
+                        <dd>{{ review.location|default:"Not specified" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Quorum Verified</dt>
+                        <dd>
+                            {% if review.quorum_met %}
+                            <span class="text-emerald-600 font-medium inline-flex items-center gap-1">
+                                <i data-lucide="check" class="w-4 h-4"></i> Quorum Met
+                            </span>
+                            {% else %}
+                            <span class="text-rose-600 font-medium inline-flex items-center gap-1">
+                                <i data-lucide="alert-circle" class="w-4 h-4"></i> Quorum Not Met
+                            </span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Executive Sponsor</dt>
+                        <dd>
+                            {% if review.executive_sponsor %}
+                            {{ review.executive_sponsor.get_full_name|default:review.executive_sponsor.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Lead Facilitator</dt>
+                        <dd>
+                            {% if review.lead_facilitator %}
+                            {{ review.lead_facilitator.get_full_name|default:review.lead_facilitator.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if review.attendees_roster %}
+                <div class="mt-6 border-t border-slate-100 pt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Documented Attendee Roster</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded border border-slate-200">
+                        {{ review.attendees_roster }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Executive QMS Suitability & Proceedings</h3>
+                <span class="badge {{ review.suitability_badge_class }}">{{ review.get_qms_suitability_conclusion_display }}</span>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Executive Summary</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200 min-h-[60px]">
+                        {{ review.executive_summary|default:"No executive summary recorded yet. Use 'Draft Minutes & Decisions' to complete proceedings." }}
+                    </div>
+                </div>
+
+                {% if review.minutes_discussion %}
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Detailed Discussion & Topic Findings</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                        {{ review.minutes_discussion }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if review.resource_decisions %}
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Resource Allocation & Budget Decisions</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                        {{ review.resource_decisions }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Executive Authorization</h3>
+            </div>
+            <div class="card-body">
+                {% if review.status == 'approved' %}
+                <div class="p-4 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-900 text-sm space-y-2">
+                    <div class="font-semibold flex items-center gap-1.5 text-emerald-800">
+                        <i data-lucide="shield-check" class="w-5 h-5 text-emerald-600"></i> Formally Approved & Closed
+                    </div>
+                    <div class="text-xs">
+                        <strong>Approved by:</strong> {{ review.approved_by.get_full_name|default:review.approved_by.username }}
+                    </div>
+                    <div class="text-xs">
+                        <strong>Signed at:</strong> {{ review.approved_at|date:"M d, Y H:i" }}
+                    </div>
+                    {% if review.electronic_signature %}
+                    <div class="text-xs font-mono text-emerald-700 pt-1 border-t border-emerald-200">
+                        Sig Record: {{ review.electronic_signature.number }}
+                    </div>
+                    {% endif %}
+                </div>
+                {% elif can_approve %}
+                <form method="post" action="{% url 'quality:management_review_approve' review.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div class="p-3 bg-amber-50 rounded border border-amber-200 text-amber-900 text-xs">
+                        This review is ready for executive sign-off per ISO 13485:2016 § 5.6 and QMSR.
+                    </div>
+                    <div class="form-group">
+                        <label for="id_comment" class="form-label text-xs">Approval Remarks</label>
+                        {{ approve_form.comment }}
+                    </div>
+                    <div class="flex items-start gap-2 pt-1">
+                        {{ approve_form.confirm_suitability }}
+                        <label for="id_confirm_suitability" class="text-xs text-slate-700 font-medium">
+                            I certify executive review and endorse the QMS suitability conclusion.
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="check-check"></i> Formally Approve Review
+                    </button>
+                </form>
+                {% else %}
+                <div class="text-sm text-slate-500">
+                    <p>To enable formal executive approval, the review meeting must be conducted and an executive QMS suitability conclusion recorded.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Governance Metadata</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-slate-500">Facility / Org Unit</dt>
+                        <dd class="font-medium text-slate-900 mt-0.5">
+                            {{ review.org_unit.name|default:"Enterprise-Wide" }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500">Created</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ review.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500">Last Modified</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ review.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    {% if review.notes %}
+                    <div>
+                        <dt class="text-xs text-slate-500">Internal Notes</dt>
+                        <dd class="text-slate-700 text-xs mt-0.5 whitespace-pre-line">{{ review.notes }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="space-y-6 mb-6">
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div>
+                <h3 class="font-semibold text-slate-900">1. Review Inputs Compilation (ISO 13485:2016 § 5.6.2 / ISO 9001 § 9.3.2)</h3>
+                <p class="text-xs text-slate-500">Standardized quality data sources and findings presented for executive review</p>
+            </div>
+            <a href="{% url 'quality:management_review_input_create' %}?review_id={{ review.pk }}" class="btn btn-outline btn-sm">
+                <i data-lucide="plus"></i> Add Agenda Input
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Input #</th>
+                        <th>Topic Title</th>
+                        <th>Category</th>
+                        <th>Presenter</th>
+                        <th>Status</th>
+                        <th>Source Link</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inp in inputs %}
+                    <tr>
+                        <td class="font-mono text-xs">{{ inp.agenda_order }}</td>
+                        <td class="font-mono text-xs font-semibold">
+                            <a href="{% url 'quality:management_review_input_detail' inp.pk %}" class="text-blue-600 hover:underline">
+                                {{ inp.number }}
+                            </a>
+                        </td>
+                        <td class="font-medium text-slate-900">{{ inp.title }}</td>
+                        <td>
+                            <span class="badge {{ inp.category_badge_class }}">{{ inp.get_category_display }}</span>
+                        </td>
+                        <td class="text-xs">{{ inp.presenter.get_full_name|default:inp.presenter.username }}</td>
+                        <td>
+                            <span class="badge {{ inp.status_badge_class }}">{{ inp.get_status_display }}</span>
+                        </td>
+                        <td class="text-xs">
+                            {% if inp.linked_audit %}
+                            <span class="text-blue-600 font-mono">{{ inp.linked_audit.number }}</span>
+                            {% elif inp.linked_capa %}
+                            <span class="text-purple-600 font-mono">{{ inp.linked_capa.number }}</span>
+                            {% elif inp.linked_complaint %}
+                            <span class="text-amber-600 font-mono">{{ inp.linked_complaint.number }}</span>
+                            {% elif inp.linked_ncr %}
+                            <span class="text-rose-600 font-mono">{{ inp.linked_ncr.number }}</span>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions">
+                                <a href="{% url 'quality:management_review_input_detail' inp.pk %}" class="btn btn-icon btn-outline" title="View Input">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'quality:management_review_input_edit' inp.pk %}" class="btn btn-icon btn-outline" title="Edit Input">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-6 text-slate-500 text-sm">
+                            No input topics compiled for this review cycle yet. Click "Add Agenda Input" to populate required ISO Clause 5.6.2 items.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div>
+                <h3 class="font-semibold text-slate-900">2. Review Outputs & Decisions (ISO 13485:2016 § 5.6.3 / ISO 9001 § 9.3.3)</h3>
+                <p class="text-xs text-slate-500">Executive action items, improvements, resource commitments, and QMS enhancements</p>
+            </div>
+            <a href="{% url 'quality:management_review_action_create' %}?review_id={{ review.pk }}" class="btn btn-outline btn-sm">
+                <i data-lucide="plus"></i> Add Action Item
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action #</th>
+                        <th>Action Title</th>
+                        <th>Type</th>
+                        <th>Priority</th>
+                        <th>Assignee</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for act in actions %}
+                    <tr>
+                        <td class="font-mono text-xs font-semibold">
+                            <a href="{% url 'quality:management_review_action_detail' act.pk %}" class="text-blue-600 hover:underline">
+                                {{ act.number }}
+                            </a>
+                        </td>
+                        <td class="font-medium text-slate-900">{{ act.title }}</td>
+                        <td>
+                            <span class="badge {{ act.action_type_badge_class }}">{{ act.get_action_type_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {{ act.priority_badge_class }}">{{ act.get_priority_display }}</span>
+                        </td>
+                        <td class="text-xs">{{ act.assignee.get_full_name|default:act.assignee.username }}</td>
+                        <td>
+                            <span class="text-sm font-medium {% if act.is_overdue %}text-rose-600 font-bold{% endif %}">
+                                {{ act.due_date|date:"M d, Y" }}
+                            </span>
+                            {% if act.is_overdue %}
+                            <span class="badge badge-red text-xs ml-1">Overdue</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ act.status_badge_class }}">{{ act.get_status_display }}</span>
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions">
+                                <a href="{% url 'quality:management_review_action_detail' act.pk %}" class="btn btn-icon btn-outline" title="View Action">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'quality:management_review_action_edit' act.pk %}" class="btn btn-icon btn-outline" title="Edit Action">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-6 text-slate-500 text-sm">
+                            No action items generated yet. Record executive actions and continual improvement initiatives via "Add Action Item".
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
