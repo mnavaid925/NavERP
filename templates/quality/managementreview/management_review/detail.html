@@ -20,7 +20,7 @@
         <a href="{% url 'quality:management_review_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left"></i> Back to List
         </a>
-        <a href="{% url 'quality:management_review_export_pdf' review.pk %}" target="_blank" class="btn btn-outline" title="Printable Dossier for FDA/ISO Auditors">
+        <a href="{% url 'quality:management_review_export_pdf' review.pk %}" target="_blank" rel="noopener noreferrer" class="btn btn-outline" title="Printable Dossier for FDA/ISO Auditors">
             <i data-lucide="file-text"></i> Audit Dossier
         </a>
 
