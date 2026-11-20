@@ -104,6 +104,18 @@ from apps.quality.models.TrainingCompetency.TrainingEnrollments import (
 from apps.quality.models.TrainingCompetency.CompetencyCertifications import (
     CompetencyCertification,
 )
+from apps.quality.models.CustomerComplaints.CustomerComplaints import (
+    CustomerComplaint,
+)
+from apps.quality.models.CustomerComplaints.ComplaintInvestigations import (
+    ComplaintInvestigation,
+)
+from apps.quality.models.CustomerComplaints.RegulatoryReports import (
+    RegulatoryReport,
+)
+from apps.quality.models.CustomerComplaints.FieldActions import (
+    FieldAction,
+)
 
 
 
@@ -1043,6 +1055,81 @@ class CompetencyCertificationAdmin(admin.ModelAdmin):
     list_filter = ("qualification_level", "status", "tenant")
     search_fields = ("number", "qualification_title", "trainee__username", "certificate_hash")
     list_select_related = ("tenant", "trainee", "course", "competency_matrix", "certified_by", "enrollment")
+
+
+@admin.register(CustomerComplaint)
+class CustomerComplaintAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "customer",
+        "item_code",
+        "lot_number",
+        "severity",
+        "status",
+        "validity",
+        "reportability",
+        "date_received",
+        "tenant",
+    )
+    list_filter = ("status", "severity", "validity", "reportability", "intake_channel", "tenant")
+    search_fields = ("number", "title", "item_code", "item_name", "lot_number", "serial_number", "complainant_name")
+    list_select_related = ("tenant", "customer", "sales_order", "assigned_to")
+
+
+@admin.register(ComplaintInvestigation)
+class ComplaintInvestigationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "complaint",
+        "lead_investigator",
+        "analytical_method",
+        "root_cause_category",
+        "status",
+        "dhr_reviewed",
+        "capa_required",
+        "tenant",
+    )
+    list_filter = ("status", "analytical_method", "root_cause_category", "capa_required", "tenant")
+    search_fields = ("number", "complaint__number", "dhr_lot_number", "root_cause_narrative", "investigation_conclusion")
+    list_select_related = ("tenant", "complaint", "lead_investigator", "qa_approved_by", "capa", "ncr", "risk_assessment")
+
+
+@admin.register(RegulatoryReport)
+class RegulatoryReportAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "complaint",
+        "agency",
+        "report_type",
+        "adverse_event_class",
+        "timeline_category",
+        "statutory_due_date",
+        "submission_status",
+        "tenant",
+    )
+    list_filter = ("agency", "report_type", "adverse_event_class", "timeline_category", "submission_status", "tenant")
+    search_fields = ("number", "complaint__number", "agency_report_identifier", "agency_acknowledgement_number", "event_summary")
+    list_select_related = ("tenant", "complaint", "prepared_by", "reviewed_by")
+
+
+@admin.register(FieldAction)
+class FieldActionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "action_type",
+        "recall_class",
+        "coordinator",
+        "affected_product_code",
+        "status",
+        "initiation_date",
+        "tenant",
+    )
+    list_filter = ("action_type", "recall_class", "status", "tenant")
+    search_fields = ("number", "title", "affected_product_code", "affected_product_name", "affected_lot_numbers", "regulatory_recall_number")
+    list_select_related = ("tenant", "initiating_complaint", "coordinator", "fsn_document")
+
 
 
 
