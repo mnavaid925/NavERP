@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ certification.number }}{% else %}Issue Competency Certificate{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:competency_certification_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:competency_certification_list' %}">Competency Certifications</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ certification.number }}{% else %}Issue Certificate{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Certificate: {{ certification.number }}{% else %}Issue Competency Certification{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger mb-6">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.qualification_title.id_for_label }}" class="form-label">Qualification Diploma Title <span class="text-red-500">*</span></label>
+                        {{ form.qualification_title }}
+                        {% if form.qualification_title.errors %}<div class="form-error">{{ form.qualification_title.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.trainee.id_for_label }}" class="form-label">Certified Employee / Trainee <span class="text-red-500">*</span></label>
+                        {{ form.trainee }}
+                        {% if form.trainee.errors %}<div class="form-error">{{ form.trainee.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.qualification_level.id_for_label }}" class="form-label">Qualification Level <span class="text-red-500">*</span></label>
+                        {{ form.qualification_level }}
+                        {% if form.qualification_level.errors %}<div class="form-error">{{ form.qualification_level.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.course.id_for_label }}" class="form-label">Qualifying Course <span class="text-red-500">*</span></label>
+                        {{ form.course }}
+                        {% if form.course.errors %}<div class="form-error">{{ form.course.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.competency_matrix.id_for_label }}" class="form-label">Competency Matrix (Optional)</label>
+                        {{ form.competency_matrix }}
+                        {% if form.competency_matrix.errors %}<div class="form-error">{{ form.competency_matrix.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.enrollment.id_for_label }}" class="form-label">Source Training Enrollment (Optional)</label>
+                        {{ form.enrollment }}
+                        {% if form.enrollment.errors %}<div class="form-error">{{ form.enrollment.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.certified_by.id_for_label }}" class="form-label">Authorizing Quality Certifier <span class="text-red-500">*</span></label>
+                        {{ form.certified_by }}
+                        {% if form.certified_by.errors %}<div class="form-error">{{ form.certified_by.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.issue_date.id_for_label }}" class="form-label">Issue Date <span class="text-red-500">*</span></label>
+                        {{ form.issue_date }}
+                        {% if form.issue_date.errors %}<div class="form-error">{{ form.issue_date.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.valid_until.id_for_label }}" class="form-label">Expiration Date (Blank if Permanent)</label>
+                        {{ form.valid_until }}
+                        {% if form.valid_until.errors %}<div class="form-error">{{ form.valid_until.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.renewal_interval_months.id_for_label }}" class="form-label">Renewal Frequency (Months) <span class="text-red-500">*</span></label>
+                        {{ form.renewal_interval_months }}
+                        {% if form.renewal_interval_months.errors %}<div class="form-error">{{ form.renewal_interval_months.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="{{ form.authorized_work_centers.id_for_label }}" class="form-label">Authorized Facilities, Cleanrooms & Equipment</label>
+                        {{ form.authorized_work_centers }}
+                        {% if form.authorized_work_centers.errors %}<div class="form-error">{{ form.authorized_work_centers.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">Certification Notes & Remarks</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'quality:competency_certification_detail' certification.pk %}{% else %}{% url 'quality:competency_certification_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i> Save Certificate
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
