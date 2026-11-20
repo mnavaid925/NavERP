@@ -84,7 +84,7 @@ class RegulatoryReport(TenantNumbered):
 
     complaint = models.ForeignKey(
         "quality.CustomerComplaint",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="regulatory_reports",
         help_text="Associated customer complaint",
     )
