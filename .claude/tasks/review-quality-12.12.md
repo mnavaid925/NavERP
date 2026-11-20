@@ -44,3 +44,31 @@ Commit after fixing Critical and Important findings. (2 Critical, 6 Important, 3
 - performance-reviewer: In `apps/quality/views/TrainingCompetency/CompetencyCertifications.py:319-332` (`training_compliance_dashboard`), department metrics loop executes 4 queries per department across `departments[:6]` (24+ queries in view). Consolidate into single aggregate/annotated query.
 - security-reviewer: In `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:267, 297` and `CompetencyCertifications.py:203, 220`, verify role gating and auditor/trainee independence on verification, waiver, renewal, and suspension actions.
 - frontend-reviewer: In `templates/quality/trainingcompetency/competency_certification/detail.html:27`, verify "Renew Validity" visibility for `expiring_soon` status, and add copy-to-clipboard control for the SHA-256 certificate hash.
+
+
+## 2. Explorer Pass
+
+### Verdict
+Commit after fixing Critical and Important findings (2 Critical, 6 Important, 3 Minor).
+
+### Critical
+1. `templates/quality/trainingcompetency/training_enrollment/detail.html:257` — Unguarded nullable FK lookup in filter argument causes 500 error (Lesson L10): `{{ enrollment.practical_verified_by.get_full_name|default:enrollment.practical_verified_by.username }}` evaluates `enrollment.practical_verified_by.username` as an argument to `default:` before calling the filter. When viewing enrollments for non-practical courses where `practical_verified_by` is None, this raises `VariableDoesNotExist: Failed lookup for key [username] in None`. Fix: Guard with `{% if enrollment.practical_verified_by %}{{ enrollment.practical_verified_by.get_full_name|default:enrollment.practical_verified_by.username }}{% else %}Automated / Exam Assessment{% endif %}`. Also guard line 279 (`waived_by`) with `{% if enrollment.waived_by %}...{% else %}—{% endif %}`.
+2. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:256` — Failed exam score auto-issues formal qualification certification: In `training_enrollment_complete`, when trainee exam score is below passing (`score < course.passing_score`), `is_passed` is set to `False`, but the view continues into `else:`, sets `enrollment.status = "verified"` and calls `_auto_issue_certification()`. Fix: Add failure check before verification to set status="failed", save, audit log, and return redirect with warning.
+
+### Important
+1. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:256, 281` — Multi-table writes not wrapped in atomic transaction: Status updates to `TrainingEnrollment` and auto-issuance of `CompetencyCertification` with audit log are executed without `transaction.atomic()`. Fix: Wrap both `training_enrollment_complete` and `training_enrollment_verify` auto-issuance blocks in `with transaction.atomic():`.
+2. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:267` — Trainee practical self-verification vulnerability: Any authenticated tenant user (including `enrollment.trainee`) can POST to `/training/enrollments/<pk>/verify/` and verify their own practical qualification and auto-issue their own certificate. Fix: Enforce supervisor independence: `if request.user == enrollment.trainee and not request.user.is_tenant_admin: messages.error(...)`.
+3. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:297` — Missing authorization gating on regulatory waivers: Any standard authenticated employee can waive training requirements (including their own). Fix: Restrict `training_enrollment_waive` to tenant administrators or staff.
+4. `apps/quality/views/TrainingCompetency/CompetencyCertifications.py:203, 220` — Missing role authorization on renewal and suspension: Any authenticated user can renew or suspend any employee's competency certification via direct POST. Fix: Gate with `if not (request.user.is_tenant_admin or request.user.is_staff): messages.error(...)`.
+5. `apps/quality/views/TrainingCompetency/CompetencyMatrices.py:156` — Missing status guard on matrix approval: `competency_matrix_approve` permits approving already approved or retired matrices via direct POST. Fix: Add `if matrix.status != "draft": messages.error(...)`.
+6. `apps/quality/views/TrainingCompetency/QualityTrainingCourses.py:182` — Missing status guard on course activation: `training_course_activate` permits activating retired courses. Fix: Add `if course.status not in ("draft", "under_revision"): messages.error(...)`.
+
+### Minor
+1. `templates/quality/trainingcompetency/competency_certification/detail.html:27` — "Renew Validity" button hidden for `expiring_soon` status: Condition `{% if certification.status == 'active' or certification.status == 'expired' %}` prevents users from renewing certifications currently flagged as `expiring_soon`. Fix: Update to include `certification.status == 'expiring_soon'`.
+2. `templates/quality/trainingcompetency/training_course/list.html:59-108, 205` — View/template filter drift on `controlled_document`: `training_course_list` view passes `documents` and `selected_doc` in context and filters on `controlled_document`, but `training_course/list.html` omits the document dropdown from the filter grid and omits `&controlled_document={{ selected_doc }}` from the pagination links. Fix: Add `<select name="controlled_document">` to the filter form and append to pagination links.
+3. `apps/quality/views/TrainingCompetency/CompetencyCertifications.py:348, 386` — Context key naming divergence from contract: In `training_compliance_dashboard`, context keys are `"expiring_list"` and `"dept_metrics"` (contract noted `expiring_certifications` and `department_metrics`). In `employee_training_dossier`, context key is `"certifications"` (contract noted `active_certifications`). Fix: Provide contract keys as aliases in view context dicts.
+
+### Done well
+- Strict tenant scoping across all models (`TenantNumbered`), views (`quality_scope`, `quality_object`), forms (`reject_foreign`, tenant-filtered querysets), and foreign key validations.
+- Navigation `LIVE_LINKS["12.12"]` precisely maps all 5 sub-module areas.
+- Clean seeder integration with 100% idempotent seeding.
