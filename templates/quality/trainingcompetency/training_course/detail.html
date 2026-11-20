@@ -92,7 +92,9 @@
                     </div>
                     <div class="detail-item">
                         <dt>Passing Score Threshold</dt>
-                        <dd class="font-semibold text-blue-600">{{ course.passing_score }}%</dd>
+                        <dd class="font-semibold text-blue-600">
+                            {% if course.passing_score %}{{ course.passing_score }}%{% else %}N/A (Attendance Only){% endif %}
+                        </dd>
                     </div>
                     <div class="detail-item">
                         <dt>Competency Matrix</dt>
