@@ -24,7 +24,6 @@ class CompetencyCertificationForm(forms.ModelForm):
             "valid_until",
             "renewal_interval_months",
             "authorized_work_centers",
-            "certified_by",
             "notes",
         ]
         widgets = {
@@ -38,7 +37,6 @@ class CompetencyCertificationForm(forms.ModelForm):
             "valid_until": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "renewal_interval_months": forms.NumberInput(attrs={"class": "form-input", "min": 1}),
             "authorized_work_centers": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Specific cleanroom suites, production lines, or equipment IDs authorized..."}),
-            "certified_by": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Certification credentials, examination remarks, or special limitations..."}),
         }
 
@@ -50,7 +48,6 @@ class CompetencyCertificationForm(forms.ModelForm):
             self.fields["trainee"].queryset = User.objects.filter(tenant=self.tenant, is_active=True)
             self.fields["course"].queryset = QualityTrainingCourse.objects.filter(tenant=self.tenant)
             self.fields["competency_matrix"].queryset = CompetencyMatrix.objects.filter(tenant=self.tenant)
-            self.fields["certified_by"].queryset = User.objects.filter(tenant=self.tenant, is_active=True)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -58,7 +55,22 @@ class CompetencyCertificationForm(forms.ModelForm):
         valid = cleaned_data.get("valid_until")
         if issue and valid and valid < issue:
             self.add_error("valid_until", "Expiration date cannot be earlier than issue date.")
-        reject_foreign(self, cleaned_data, ["enrollment", "trainee", "course", "competency_matrix", "certified_by"])
+
+        enrollment = cleaned_data.get("enrollment")
+        trainee = cleaned_data.get("trainee")
+        course = cleaned_data.get("course")
+        matrix = cleaned_data.get("competency_matrix")
+
+        if enrollment:
+            if trainee and enrollment.trainee_id != trainee.pk:
+                self.add_error("trainee", "Trainee does not match the bound training enrollment.")
+            if course and enrollment.course_id != course.pk:
+                self.add_error("course", "Course does not match the bound training enrollment.")
+
+        if course and matrix and course.competency_matrix_id and matrix.pk != course.competency_matrix_id:
+            self.add_error("competency_matrix", "Competency matrix does not match the bound course curriculum.")
+
+        reject_foreign(self, cleaned_data, ["enrollment", "trainee", "course", "competency_matrix"])
         return cleaned_data
 
 
