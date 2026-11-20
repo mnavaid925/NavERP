@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}{{ field_action.number }} — Field Action & Recall — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:field_action_list' %}">Field Actions</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ field_action.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ field_action.number }}</h1>
+            <span class="badge badge-red">{{ field_action.get_action_type_display }}</span>
+            <span class="badge badge-amber">{{ field_action.get_recall_class_display }}</span>
+
+            {% if field_action.status == "closed_terminated" %}
+            <span class="badge badge-green">Terminated & Closed</span>
+            {% elif field_action.status == "reconciliation_complete" %}
+            <span class="badge badge-purple">Reconciliation Complete</span>
+            {% elif field_action.status == "quarantine_in_progress" %}
+            <span class="badge badge-amber">Field Recovery Active</span>
+            {% else %}
+            <span class="badge badge-info">{{ field_action.get_status_display }}</span>
+            {% endif %}
+        </div>
+        <div class="text-sm text-slate-500 mt-1">{{ field_action.title }}</div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:field_action_edit' field_action.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Action
+        </a>
+        {% if field_action.initiating_complaint %}
+        <a href="{% url 'quality:customer_complaint_detail' field_action.initiating_complaint.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> View Complaint
+        </a>
+        {% endif %}
+        <form method="post" action="{% url 'quality:field_action_delete' field_action.pk %}" onsubmit="return confirm('Permanently delete field action {{ field_action.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Recall Strategy & Health Hazard Rationale -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Defect Description & Health Hazard Evaluation (HHE)</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        Reason for Action & Defect Summary
+                    </h4>
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 text-slate-800 text-sm whitespace-pre-line leading-relaxed font-sans">
+                        {{ field_action.reason_for_action }}
+                    </div>
+                </div>
+
+                {% if field_action.hhe_summary %}
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        Clinical Health Hazard Evaluation Rationale
+                    </h4>
+                    <div class="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-900 whitespace-pre-line">
+                        {{ field_action.hhe_summary }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if field_action.fsn_document %}
+                <div class="p-3 bg-blue-50 border border-blue-200 rounded flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-semibold text-blue-900 uppercase">Controlled Field Safety Notice (FSN)</div>
+                        <div class="text-sm font-medium text-blue-800">{{ field_action.fsn_document.title }} ({{ field_action.fsn_document.number }})</div>
+                    </div>
+                    <a href="{% url 'quality:controlled_document_detail' field_action.fsn_document.pk %}" class="btn btn-sm btn-outline">
+                        View FSN
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Affected Product Scope & Distribution -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Affected Scope & Distribution Traceability</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Product / Model</dt>
+                        <dd class="font-medium">{{ field_action.affected_product_name }} ({{ field_action.affected_product_code }})</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Distribution Period</dt>
+                        <dd>{{ field_action.distribution_start_date|date:"M d, Y"|default:"—" }} to {{ field_action.distribution_end_date|date:"M d, Y"|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item sm:col-span-2">
+                        <dt>Recalled Lot / Batch Numbers</dt>
+                        <dd class="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 whitespace-pre-line">
+                            {{ field_action.affected_lot_numbers }}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Reconciliation Dashboard -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Unit Recovery & Field Reconciliation Audit</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-slate-700">Total Unit Recovery Reconciliation</span>
+                        <span class="text-base font-bold text-blue-600 font-mono">{{ field_action.reconciliation_rate }}%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-3">
+                        <div class="bg-blue-600 h-3 rounded-full" style="width: {{ field_action.reconciliation_rate }}%;"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500">Shipped to Commerce</div>
+                        <div class="text-xl font-bold font-mono text-slate-800">{{ field_action.total_units_distributed }}</div>
+                    </div>
+                    <div class="p-3 bg-amber-50 rounded border border-amber-200">
+                        <div class="text-xs text-amber-700">Held in Field Quarantine</div>
+                        <div class="text-xl font-bold font-mono text-amber-800">{{ field_action.units_quarantined_field }}</div>
+                    </div>
+                    <div class="p-3 bg-green-50 rounded border border-green-200">
+                        <div class="text-xs text-green-700">Physically Recovered / Destroyed</div>
+                        <div class="text-xl font-bold font-mono text-green-800">{{ field_action.units_recovered_destroyed }}</div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-slate-700">Consignee Customer Response Rate</span>
+                        <span class="text-base font-bold text-slate-800 font-mono">{{ field_action.consignee_response_rate }}%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2">
+                        <div class="bg-green-600 h-2 rounded-full" style="width: {{ field_action.consignee_response_rate }}%;"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>Targeted: {{ field_action.consignees_targeted }}</span>
+                        <span>Notified: {{ field_action.consignees_notified }}</span>
+                        <span>Responded: {{ field_action.consignees_responded }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: Regulatory Governance & Closure -->
+    <div class="space-y-6">
+        <!-- Metadata Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Governance & Administration</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Recall Coordinator</dt>
+                        <dd class="font-medium">
+                            {% if field_action.coordinator %}
+                            {{ field_action.coordinator.get_full_name|default:field_action.coordinator.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Initiation Date</dt>
+                        <dd>{{ field_action.initiation_date|date:"F d, Y" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Regulatory Authority</dt>
+                        <dd>{{ field_action.regulatory_agency_notified|default:"Not Yet Notified" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Agency Recall #</dt>
+                        <dd class="font-mono font-medium">{{ field_action.regulatory_recall_number|default:"Pending Agency Assignment" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Agency Notification Date</dt>
+                        <dd>{{ field_action.agency_notification_date|date:"F d, Y"|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Termination & Closure Action Card -->
+        {% if field_action.status != "closed_terminated" and field_action.status != "cancelled" %}
+        <div class="card border-green-300">
+            <div class="card-header bg-green-50">
+                <h3 class="card-title text-green-900"><i data-lucide="check-check" class="inline w-4 h-4 mr-1"></i> Formally Terminate & Close Recall</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:field_action_close' field_action.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div>
+                        <label for="closure_summary" class="form-label text-xs">Termination & Reconciliation Audit Memo</label>
+                        <textarea name="closure_summary" id="closure_summary" rows="3" class="form-textarea" placeholder="Agency concurrence, reconciliation effectiveness, destroyed certificates audit...">{{ field_action.closure_summary }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full bg-green-600 hover:bg-green-700" onclick="return confirm('Terminate and close this product recall? Verify agency concurrence.');">
+                        <i data-lucide="lock"></i> Terminate & Close Recall
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="card bg-slate-50">
+            <div class="card-header">
+                <h3 class="card-title">Termination Record</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Termination Date</dt>
+                        <dd>{{ field_action.termination_date|date:"F d, Y"|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Closure Summary</dt>
+                        <dd class="text-sm whitespace-pre-line">{{ field_action.closure_summary|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
