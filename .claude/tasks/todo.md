@@ -35971,9 +35971,9 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 ## Models (from research — 4)
 
 ### 1. `CustomerComplaint` (`QCMP-`)
-- [ ] **File**: `apps/quality/models/CustomerComplaints/CustomerComplaints.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCMP"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/CustomerComplaints/CustomerComplaints.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCMP"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Short headline summary of customer allegation")`
   - `intake_channel`: `CharField(max_length=30, choices=INTAKE_CHANNEL_CHOICES, default="email", db_index=True)` — `"phone"` (5), `"email"` (5), `"web_portal"` (10), `"sales_rep"` (9), `"service_tech"` (12), `"distributor"` (11), `"regulatory_agency"` (17), `"other"` (5) (longest: 17 <= 30)
   - `customer`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="customer_complaints", help_text="Complainant customer or facility (core.Party)")`
@@ -36008,12 +36008,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `closed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="closed_complaints")`
   - `closed_at`: `DateTimeField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `SEVERITY_CSS`: `critical_safety`: `badge-red`, `major_malfunction`: `badge-amber`, `minor_cosmetic`: `badge-info`, `service_inconvenience`: `badge-slate`, `unspecified`: `badge-muted`
   - `STATUS_CSS`: `draft`: `badge-slate`, `open_triage`: `badge-info`, `under_investigation`: `badge-amber`, `regulatory_review`: `badge-red`, `capa_initiated`: `badge-amber`, `resolution_pending`: `badge-info`, `closed`: `badge-green`, `cancelled_invalid`: `badge-muted`
   - `REPORTABLE_CSS`: `undetermined`: `badge-amber`, `reportable_event`: `badge-red`, `non_reportable`: `badge-green`, `exempt`: `badge-muted`
-- [ ] **Form Exclusions**: `tenant`, `number`, `closed_at`, `closed_by`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `closed_at`, `closed_by`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcmp_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qcmp_ten_status")` (18)
   - `Index(fields=["tenant", "severity"], name="idx_qcmp_ten_severity")` (20)
@@ -36022,12 +36022,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "customer"], name="idx_qcmp_ten_cust")` (17)
   - `Index(fields=["tenant", "date_received"], name="idx_qcmp_ten_rcvd")` (17)
   - `Index(fields=["tenant", "-created_at"], name="idx_qcmp_ten_created")` (20)
-- [ ] **Helper Properties**: `days_open`, `has_active_regulatory_report`, `is_overdue`
+- [x] **Helper Properties**: `days_open`, `has_active_regulatory_report`, `is_overdue`
 
 ### 2. `ComplaintInvestigation` (`QCIN-`)
-- [ ] **File**: `apps/quality/models/CustomerComplaints/ComplaintInvestigations.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCIN"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/CustomerComplaints/ComplaintInvestigations.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCIN"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `complaint`: `ForeignKey("quality.CustomerComplaint", on_delete=models.CASCADE, related_name="investigations", help_text="Governing customer complaint")`
   - `title`: `CharField(max_length=255, help_text="Investigation title e.g. Failure Analysis - Lot B2026 Catheter Rupture")`
   - `lead_investigator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="led_complaint_investigations", help_text="Lead QA / engineering investigator")`
@@ -36051,11 +36051,11 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `investigation_conclusion`: `TextField(blank=True, help_text="Final formal technical conclusion and disposition recommendation")`
   - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_complaint_investigations", help_text="Quality manager approving conclusion")`
   - `approved_at`: `DateTimeField(null=True, blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `assigned`: `badge-slate`, `dhr_review`: `badge-info`, `sample_testing`: `badge-amber`, `root_cause_analysis`: `badge-amber`, `clinical_review`: `badge-amber`, `completed`: `badge-green`, `cancelled`: `badge-muted`
   - `ROOT_CAUSE_CSS`: `component_defect`: `badge-red`, `assembly_workmanship`: `badge-red`, `process_deviation`: `badge-amber`, `design_flaw`: `badge-red`, `software_bug`: `badge-amber`, `packaging_barrier`: `badge-amber`, `transit_damage`: `badge-slate`, `user_error_misuse`: `badge-info`, `unconfirmed_no_defect`: `badge-muted`, `other`: `badge-slate`
-- [ ] **Form Exclusions**: `tenant`, `number`, `approved_at`, `approved_by`, `actual_completion_date`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `approved_at`, `approved_by`, `actual_completion_date`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcin_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qcin_ten_status")` (18)
   - `Index(fields=["tenant", "root_cause_category"], name="idx_qcin_ten_root")` (16)
@@ -36063,12 +36063,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "lead_investigator"], name="idx_qcin_ten_investigator")` (24)
   - `Index(fields=["tenant", "target_completion_date"], name="idx_qcin_ten_target")` (18)
   - `Index(fields=["tenant", "-created_at"], name="idx_qcin_ten_created")` (20)
-- [ ] **Helper Properties**: `is_overdue`, `is_complete`
+- [x] **Helper Properties**: `is_overdue`, `is_complete`
 
 ### 3. `RegulatoryReport` (`QRPT-`)
-- [ ] **File**: `apps/quality/models/CustomerComplaints/RegulatoryReports.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRPT"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/CustomerComplaints/RegulatoryReports.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRPT"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `complaint`: `ForeignKey("quality.CustomerComplaint", on_delete=models.CASCADE, related_name="regulatory_reports", help_text="Originating customer complaint")`
   - `agency`: `CharField(max_length=30, choices=AGENCY_CHOICES, default="fda_cdrh", db_index=True)` — `"fda_cdrh"` (8), `"fda_cder"` (8), `"eu_competent_auth"` (17), `"health_canada"` (13), `"pmda_japan"` (10), `"tga_australia"` (13), `"mhra_uk"` (7), `"other_authority"` (15) (longest: 17 <= 30)
   - `report_type`: `CharField(max_length=35, choices=REPORT_TYPE_CHOICES, default="initial_report", db_index=True)` — `"initial_report"` (14), `"follow_up_supplemental"` (22), `"final_closure_report"` (20), `"non_reportable_justification"` (28) (longest: 28 <= 35)
@@ -36086,23 +36086,23 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `submitted_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="submitted_regulatory_reports")`
   - `closure_date`: `DateField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `draft`: `badge-slate`, `under_medical_review`: `badge-amber`, `ready_for_submission`: `badge-info`, `submitted`: `badge-info`, `agency_accepted`: `badge-green`, `additional_info_requested`: `badge-amber`, `closed`: `badge-muted`
   - `ADVERSE_EVENT_CSS`: `death`: `badge-red`, `serious_injury`: `badge-red`, `malfunction_recurrent`: `badge-amber`, `public_health_threat`: `badge-red`, `remedial_action_trigger`: `badge-amber`
-- [ ] **Form Exclusions**: `tenant`, `number`, `submitted_by`, `submission_date`, `closure_date`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `submitted_by`, `submission_date`, `closure_date`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrpt_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "agency"], name="idx_qrpt_ten_agency")` (18)
   - `Index(fields=["tenant", "status"], name="idx_qrpt_ten_status")` (18)
   - `Index(fields=["tenant", "due_date"], name="idx_qrpt_ten_due")` (15)
   - `Index(fields=["tenant", "complaint"], name="idx_qrpt_ten_complaint")` (21)
   - `Index(fields=["tenant", "-created_at"], name="idx_qrpt_ten_created")` (20)
-- [ ] **Helper Properties**: `is_overdue`, `days_until_due`, `urgency_badge_css`
+- [x] **Helper Properties**: `is_overdue`, `days_until_due`, `urgency_badge_css`
 
 ### 4. `FieldAction` (`QFMA-`)
-- [ ] **File**: `apps/quality/models/CustomerComplaints/FieldActions.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFMA"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/CustomerComplaints/FieldActions.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFMA"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Official title of field action / recall campaign")`
   - `action_type`: `CharField(max_length=32, choices=ACTION_TYPE_CHOICES, default="recall_removal", db_index=True)` — `"recall_removal"` (14), `"fsca_safety_notice"` (18), `"field_correction_rework"` (23), `"safety_advisory_alert"` (21), `"market_withdrawal"` (17) (longest: 23 <= 32)
   - `recall_classification`: `CharField(max_length=25, choices=RECALL_CLASSIFICATION_CHOICES, default="class_ii_moderate", db_index=True)` — `"class_i_critical"` (16), `"class_ii_moderate"` (17), `"class_iii_minor"` (15), `"fsca_safety_alert"` (17), `"not_classified"` (14) (longest: 17 <= 25)
@@ -36128,12 +36128,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `regulatory_reference_number`: `CharField(max_length=64, blank=True, help_text="Official agency recall number e.g. FDA Recall Z-1234-2026")`
   - `termination_date`: `DateField(null=True, blank=True, help_text="Date agency agreed to formal recall termination")`
   - `closure_justification`: `TextField(blank=True, help_text="Final reconciliation report, recovery analysis, and termination rationale")`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `draft_strategy`: `badge-slate`, `management_approved`: `badge-info`, `agency_notified`: `badge-amber`, `active_notification`: `badge-amber`, `reconciliation_active`: `badge-info`, `termination_requested`: `badge-amber`, `closed_terminated`: `badge-green`, `cancelled`: `badge-muted`
   - `RECALL_CLASS_CSS`: `class_i_critical`: `badge-red`, `class_ii_moderate`: `badge-amber`, `class_iii_minor`: `badge-info`, `fsca_safety_alert`: `badge-slate`, `not_classified`: `badge-muted`
   - `ACTION_TYPE_CSS`: `recall_removal`: `badge-red`, `fsca_safety_notice`: `badge-amber`, `field_correction_rework`: `badge-info`, `safety_advisory_alert`: `badge-slate`, `market_withdrawal`: `badge-muted`
-- [ ] **Form Exclusions**: `tenant`, `number`, `termination_date`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `termination_date`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qfma_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qfma_ten_status")` (18)
   - `Index(fields=["tenant", "recall_classification"], name="idx_qfma_ten_class")` (17)
@@ -36141,7 +36141,7 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "affected_item_code"], name="idx_qfma_ten_item")` (17)
   - `Index(fields=["tenant", "initiation_date"], name="idx_qfma_ten_init")` (17)
   - `Index(fields=["tenant", "-created_at"], name="idx_qfma_ten_created")` (20)
-- [ ] **Helper Properties**: `reconciliation_rate`, `consignee_response_rate`, `is_active`
+- [x] **Helper Properties**: `reconciliation_rate`, `consignee_response_rate`, `is_active`
 
 ---
 
@@ -36221,13 +36221,13 @@ apps/quality/
    - `complaint_trending_export`: `GET /quality/complaint-trending/export/`
 
 ### Re-exports and Registrations
-- [ ] Surgical edit to `apps/quality/models/__init__.py`: re-export `CustomerComplaint`, `ComplaintInvestigation`, `RegulatoryReport`, `FieldAction`, and append to `__all__`.
-- [ ] Surgical edit to `apps/quality/forms/__init__.py`: re-export `CustomerComplaintForm`, `ComplaintInvestigationForm`, `RegulatoryReportForm`, `FieldActionForm`, and append to `__all__`.
-- [ ] Surgical edit to `apps/quality/views/__init__.py`: re-export all view functions.
-- [ ] Surgical edit to `apps/quality/urls/__init__.py`: include `CustomerComplaints` urlpatterns.
-- [ ] Surgical edit to `apps/quality/admin.py`: register all 4 models with search fields, list display, filters, and readonly system fields.
-- [ ] Surgical edit to `apps/quality/management/commands/seed_quality.py`: implement `_seed_submodule_12_13` generating demo complaints, investigations, vigilance reports, and field actions with full idempotency (`get_or_create`).
-- [ ] Wire-up in `apps/core/navigation.py`:
+- [x] Surgical edit to `apps/quality/models/__init__.py`: re-export `CustomerComplaint`, `ComplaintInvestigation`, `RegulatoryReport`, `FieldAction`, and append to `__all__`.
+- [x] Surgical edit to `apps/quality/forms/__init__.py`: re-export `CustomerComplaintForm`, `ComplaintInvestigationForm`, `RegulatoryReportForm`, `FieldActionForm`, and append to `__all__`.
+- [x] Surgical edit to `apps/quality/views/__init__.py`: re-export all view functions.
+- [x] Surgical edit to `apps/quality/urls/__init__.py`: include `CustomerComplaints` urlpatterns.
+- [x] Surgical edit to `apps/quality/admin.py`: register all 4 models with search fields, list display, filters, and readonly system fields.
+- [x] Surgical edit to `apps/quality/management/commands/seed_quality.py`: implement `_seed_submodule_12_13` generating demo complaints, investigations, vigilance reports, and field actions with full idempotency (`get_or_create`).
+- [x] Wire-up in `apps/core/navigation.py`:
   ```python
   "12.13": {
       "Complaint Intake & Triage": "quality:customer_complaint_list",
@@ -36242,19 +36242,19 @@ apps/quality/
 
 ## Templates Layout (`templates/quality/customercomplaints/`)
 
-- [ ] `customer_complaint/list.html`: Customer complaint intake register, complaint number, received date, customer name, product/lot, severity badge, triage validity pill, reportability status, investigator, filter bar, CSV export.
-- [ ] `customer_complaint/detail.html`: Full complaint dossier, customer details, product/lot traceability, incident narrative, physical sample return status (RMA link), triage disposition, regulatory reportability screening card, linked investigations, linked vigilance reports, linked field actions, customer response letter, formal closure sign-off card.
-- [ ] `customer_complaint/form.html`: Complaint intake form with customer selector (`core.Party`), sales order selector (`scm.SalesOrder`), RMA selector (`scm.ReturnAuthorization`), product/lot inputs, severity and category dropdowns, validity triage, reportability flags, non-reportable justification text area.
-- [ ] `complaint_investigation/list.html`: Technical investigations register, parent complaint link, target completion date, overdue status badge, root cause category pill, lead investigator, filter bar, CSV export.
-- [ ] `complaint_investigation/detail.html`: Failure analysis protocol, DHR / batch manufacturing history review, returned sample lab testing results, clinical health hazard evaluation, ISO 14971 FMEA risk assessment check, root cause narrative (5 Whys), linked CAPA (`quality.CapaInvestigation`) and NCR (`quality.NonConformanceReport`), conclusion and quality approval block.
-- [ ] `complaint_investigation/form.html`: Investigation creation/edit form with complaint selector, investigator assignment, target date, test method dropdown, laboratory findings editor, clinical evaluation summary, risk assessment linkage, root cause classification, CAPA/NCR triggers.
-- [ ] `regulatory_report/list.html`: Regulatory vigilance reporting tracker, target agency, report type, statutory timeline pill, statutory countdown badge (`urgency_badge_css`), submission status, filter bar, CSV export.
-- [ ] `regulatory_report/detail.html`: Official vigilance submission dossier, authority requirements, adverse event classification, statutory countdown clock, MedWatch 3500A / EU MIR data summary, patient outcome, event narrative, submission recording and tracking numbers.
-- [ ] `regulatory_report/form.html`: Vigilance report form with complaint selector, agency dropdown, statutory timeline selector, calculated due date, adverse event classification, patient outcome, device problem code, technical narrative editor.
-- [ ] `field_action/list.html`: Field actions & recalls register, action type, recall classification badge, affected item/lot, consignee notification progress, unit recovery reconciliation rate bar, status, filter bar, CSV export.
-- [ ] `field_action/detail.html`: Product recall command center, Health Hazard Evaluation (HHA), affected product & lot scope, distribution date range, Field Safety Notice (`quality.ControlledDocument`) link, consignee notification counters, customer response rate bar, unit recovery reconciliation progress bar, regulatory notification dates, termination justification.
-- [ ] `field_action/form.html`: Field action declaration form with initiating complaint selector, coordinator assignment, FSN document link, affected product/lot/serial inputs, HHA clinical summary, distribution dates, distributed unit quantities, consignee target counts.
-- [ ] `complaint_trending_dashboard.html`: Quality Executive Complaint Intelligence & Post-Market Surveillance dashboard featuring:
+- [x] `customer_complaint/list.html`: Customer complaint intake register, complaint number, received date, customer name, product/lot, severity badge, triage validity pill, reportability status, investigator, filter bar, CSV export.
+- [x] `customer_complaint/detail.html`: Full complaint dossier, customer details, product/lot traceability, incident narrative, physical sample return status (RMA link), triage disposition, regulatory reportability screening card, linked investigations, linked vigilance reports, linked field actions, customer response letter, formal closure sign-off card.
+- [x] `customer_complaint/form.html`: Complaint intake form with customer selector (`core.Party`), sales order selector (`scm.SalesOrder`), RMA selector (`scm.ReturnAuthorization`), product/lot inputs, severity and category dropdowns, validity triage, reportability flags, non-reportable justification text area.
+- [x] `complaint_investigation/list.html`: Technical investigations register, parent complaint link, target completion date, overdue status badge, root cause category pill, lead investigator, filter bar, CSV export.
+- [x] `complaint_investigation/detail.html`: Failure analysis protocol, DHR / batch manufacturing history review, returned sample lab testing results, clinical health hazard evaluation, ISO 14971 FMEA risk assessment check, root cause narrative (5 Whys), linked CAPA (`quality.CapaInvestigation`) and NCR (`quality.NonConformanceReport`), conclusion and quality approval block.
+- [x] `complaint_investigation/form.html`: Investigation creation/edit form with complaint selector, investigator assignment, target date, test method dropdown, laboratory findings editor, clinical evaluation summary, risk assessment linkage, root cause classification, CAPA/NCR triggers.
+- [x] `regulatory_report/list.html`: Regulatory vigilance reporting tracker, target agency, report type, statutory timeline pill, statutory countdown badge (`urgency_badge_css`), submission status, filter bar, CSV export.
+- [x] `regulatory_report/detail.html`: Official vigilance submission dossier, authority requirements, adverse event classification, statutory countdown clock, MedWatch 3500A / EU MIR data summary, patient outcome, event narrative, submission recording and tracking numbers.
+- [x] `regulatory_report/form.html`: Vigilance report form with complaint selector, agency dropdown, statutory timeline selector, calculated due date, adverse event classification, patient outcome, device problem code, technical narrative editor.
+- [x] `field_action/list.html`: Field actions & recalls register, action type, recall classification badge, affected item/lot, consignee notification progress, unit recovery reconciliation rate bar, status, filter bar, CSV export.
+- [x] `field_action/detail.html`: Product recall command center, Health Hazard Evaluation (HHA), affected product & lot scope, distribution date range, Field Safety Notice (`quality.ControlledDocument`) link, consignee notification counters, customer response rate bar, unit recovery reconciliation progress bar, regulatory notification dates, termination justification.
+- [x] `field_action/form.html`: Field action declaration form with initiating complaint selector, coordinator assignment, FSN document link, affected product/lot/serial inputs, HHA clinical summary, distribution dates, distributed unit quantities, consignee target counts.
+- [x] `complaint_trending_dashboard.html`: Quality Executive Complaint Intelligence & Post-Market Surveillance dashboard featuring:
   - KPI Summary Cards: Total Complaints (YTD), Active Investigations, Pending Regulatory Filings, Active Recalls, Recurrence Rate %
   - Statutory Vigilance Urgency Countdown Radar: Highlighted imminent 2-day, 5-day, 10-day, 15-day, and 30-day deadlines
   - Root Cause Pareto & Failure Symptom Breakdown: Visual distribution by component defect, workmanship, user error, etc.
@@ -36265,31 +36265,31 @@ apps/quality/
 
 ## Execution Steps
 
-- [ ] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.13.md`): Pin all model fields, form fields/exclusions, URL route names, and view context variables.
-- [ ] **Step 2: Build Entity by Entity**:
-  - [ ] Entity 1: `CustomerComplaint` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 2: `ComplaintInvestigation` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 3: `RegulatoryReport` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Entity 4: `FieldAction` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
-  - [ ] Dedicated Dashboard: `ComplaintTrendingDashboard.py` + `templates/quality/customercomplaints/complaint_trending_dashboard.html`
-- [ ] **Step 3: Integrate**:
-  - [ ] Update `apps/quality/models/__init__.py` re-exports (`CustomerComplaint`, `ComplaintInvestigation`, `RegulatoryReport`, `FieldAction`)
-  - [ ] Update `apps/quality/forms/__init__.py` re-exports (`CustomerComplaintForm`, `ComplaintInvestigationForm`, `RegulatoryReportForm`, `FieldActionForm`)
-  - [ ] Update `apps/quality/views/__init__.py` re-exports
-  - [ ] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
-  - [ ] Register 4 models in `apps/quality/admin.py`
-  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_13`)
-  - [ ] Wire `LIVE_LINKS["12.13"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration `0020_...`
-  - [ ] Run `migrate quality`
-  - [ ] Run `seed_quality` twice (verify idempotency)
-  - [ ] Run `manage.py check` (0 issues)
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.13.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
-- [ ] **Step 7: Automated Tests** -> `test_customercomplaints_models.py`, `test_customercomplaints_forms.py`, `test_customercomplaints_views.py`, `test_customercomplaints_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.13.md`
+- [x] **Step 1: Freeze Pre-Build Contract** (`.claude/tasks/contract-quality-12.13.md`): Pin all model fields, form fields/exclusions, URL route names, and view context variables.
+- [x] **Step 2: Build Entity by Entity**:
+  - [x] Entity 1: `CustomerComplaint` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 2: `ComplaintInvestigation` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 3: `RegulatoryReport` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Entity 4: `FieldAction` (`models`, `forms`, `views`, `urls` + `list.html`, `detail.html`, `form.html`)
+  - [x] Dedicated Dashboard: `ComplaintTrendingDashboard.py` + `templates/quality/customercomplaints/complaint_trending_dashboard.html`
+- [x] **Step 3: Integrate**:
+  - [x] Update `apps/quality/models/__init__.py` re-exports (`CustomerComplaint`, `ComplaintInvestigation`, `RegulatoryReport`, `FieldAction`)
+  - [x] Update `apps/quality/forms/__init__.py` re-exports (`CustomerComplaintForm`, `ComplaintInvestigationForm`, `RegulatoryReportForm`, `FieldActionForm`)
+  - [x] Update `apps/quality/views/__init__.py` re-exports
+  - [x] Update `apps/quality/urls/__init__.py` re-exports and urlpatterns
+  - [x] Register 4 models in `apps/quality/admin.py`
+  - [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_13`)
+  - [x] Wire `LIVE_LINKS["12.13"]` in `apps/core/navigation.py`
+  - [x] Run `makemigrations quality` -> incremental migration `0020_...`
+  - [x] Run `migrate quality`
+  - [x] Run `seed_quality` twice (verify idempotency)
+  - [x] Run `manage.py check` (0 issues)
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.13.md`
+- [x] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
+- [x] **Step 7: Automated Tests** -> `test_customercomplaints_models.py`, `test_customercomplaints_forms.py`, `test_customercomplaints_views.py`, `test_customercomplaints_security.py` -> 100% green
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.13.md`
 
 ---
 
@@ -36302,5 +36302,36 @@ apps/quality/
 
 ---
 
-## Review notes — Sub-module 12.13 Close-out (Pending)
-*(Filled in at Phase 7)*
+## Review notes — Sub-module 12.13 Close-out (2026-11-20)
+
+- **Sub-module**: 12.13 Customer Complaint Handling (`apps/quality/models/CustomerComplaints/`)
+- **Base Commit**: `bc9fc6d0e8137f54214ffd3af0019c12e69c6c72`
+- **Pre-build Contract**: Frozen in `.claude/tasks/contract-quality-12.13.md`
+- **Models Built (4)**:
+  - `CustomerComplaint` (`QCMP-`): 21 CFR § 820.198 compliant allegation intake, severity/validity/reportability triage, customer letter tracking, tenant isolation.
+  - `ComplaintInvestigation` (`QCIN-`): Technical failure analysis, DHR review, 8 analytical methods, clinical HHE, ISO 14971 residual risk escalation check, 5-Whys/Ishikawa root causes, CAPA/NCR linking.
+  - `RegulatoryReport` (`QRPT-`): 21 CFR Part 803 / EU MDR Article 87 adverse event vigilance reporting, 4 statutory countdown clocks (5/10/15/30-day), XML gateway transmission tracking, ACK numbers.
+  - `FieldAction` (`QFMA-`): 21 CFR Part 7 / 806 market corrections/removals, Class I/II/III recalls, FSN document linking, consignee response tracking, unit recovery reconciliation progress.
+- **Command Center**:
+  - `complaint_trending_dashboard`: Post-market surveillance intelligence, cycle time calculations, Pareto defect distribution, statutory countdown radar.
+- **Integrations & Migrations**:
+  - Re-exported in `apps/quality/{models,forms,views,urls}/__init__.py`.
+  - Admin registered in `apps/quality/admin.py`.
+  - Navigation wired in `apps/core/navigation.py` under `LIVE_LINKS["12.13"]`.
+  - Migrations `0020_customercomplaint_complaintinvestigation_regulatoryreport_fieldaction` and `0024_composite_indexes` generated and applied.
+  - Idempotent demo data seeded via `apps/quality/management/commands/seed_quality.py`.
+- **Review Findings (25)**:
+  - 6 serial review passes completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+  - Findings consolidated in `.claude/tasks/review-quality-12.13.md` (4 Critical, 12 Important, 9 Minor).
+  - All 25 findings burned down and resolved in Phase 5 with individual git commits.
+- **Test Suite (100% Green)**:
+  - 34 dedicated tests across 4 test modules:
+    - `test_customercomplaints_models.py` (6 tests)
+    - `test_customercomplaints_forms.py` (9 tests)
+    - `test_customercomplaints_views.py` (10 tests)
+    - `test_customercomplaints_security.py` (9 tests)
+  - Full unfiltered quality test suite passed: **2,001 passing tests** across `apps/quality/tests/` (0 failures, 0 errors).
+- **Gaps & Deferred Work**:
+  - Recorded in `.agents/tasks/gaps-quality-12.13.md`.
+  - In-scope gaps: None (0 open).
+  - Deferred external gateways: `GAP-quality-12.13-01` (FDA ESG AS2 Connector), `GAP-quality-12.13-02` (EUDAMED M2M), `GAP-quality-12.13-03` (Public web portal), `GAP-quality-12.13-04` (Computer vision OCR).
