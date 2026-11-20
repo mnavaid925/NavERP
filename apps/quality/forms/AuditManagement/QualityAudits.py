@@ -32,8 +32,6 @@ class QualityAuditForm(forms.ModelForm):
             "scope_objectives",
             "product_scope",
             "lot_number_sampled",
-            "status",
-            "outcome",
             "executive_summary",
             "notes",
         ]
@@ -55,8 +53,6 @@ class QualityAuditForm(forms.ModelForm):
             "scope_objectives": forms.Textarea(attrs={"class": "form-textarea", "rows": 4, "placeholder": "Audit criteria, processes, procedures, and scope boundaries..."}),
             "product_scope": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Orthopedic Implant Series V2 / Infusion Pump FG"}),
             "lot_number_sampled": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. LOT-2026-0881"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
-            "outcome": forms.Select(attrs={"class": "form-select"}),
             "executive_summary": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Management summary of findings, strengths, and conclusions..."}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Internal audit logistics or coordination notes..."}),
         }
