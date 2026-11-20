@@ -32,7 +32,6 @@ class RegulatoryInspectionHostForm(forms.ModelForm):
             "form_483_issued",
             "observations_count",
             "formal_outcome",
-            "daily_summary_notes",
             "closeout_memo",
         ]
         widgets = {
@@ -56,7 +55,6 @@ class RegulatoryInspectionHostForm(forms.ModelForm):
             "form_483_issued": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "observations_count": forms.NumberInput(attrs={"class": "form-input", "min": 0}),
             "formal_outcome": forms.Select(attrs={"class": "form-select"}),
-            "daily_summary_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Daily debrief notes, inspector requests, and focus areas..."}),
             "closeout_memo": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Exit conference debrief, commitments, and executive action plan..."}),
         }
 
