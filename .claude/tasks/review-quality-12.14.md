@@ -2,7 +2,7 @@
 
 **Changeset**: `BASE` (`ed5bf098c22bd035a09707951ecc3e17152533ad`) to `HEAD`  
 **Target**: `apps/quality/` (Sub-module 12.14)  
-**Status**: Review in progress (Reviewer 2 of 6 completed)
+**Status**: Review in progress (Reviewer 3 of 6 completed)
 
 ---
 
@@ -98,3 +98,38 @@
 - **M5**: Slicing divergence in `urgent_actions` on dashboard (`[:6]` vs `[:5]`).
   - **File**: `apps/quality/views/ManagementReview/QualityPlanningDashboard.py:74`
   - **Details**: Contract specifies `urgent_actions: top 5 open actions ordered by due date`; view slices `[:6]`.
+
+
+---
+
+## 3. Frontend Reviewer Pass (`frontend-reviewer`)
+
+### Critical
+- None. (Zero comment leaks, zero illegal badge classes, zero broken URLs, zero broken filter comparisons).
+
+### Important
+- **I9**: Missing POST-Delete form on Management Review detail page.
+  - **File**: `templates/quality/managementreview/management_review/detail.html:48-56`
+  - **Details**: Rule 4 requires detail pages to provide Edit / POST-Delete / Back actions. Draft and scheduled reviews can be deleted from list, but detail only has "Cancel Review".
+  - **Fix**: Add POST-Delete form with CSRF and confirm dialog when `review.status != 'approved' and review.status != 'cancelled'`.
+
+- **I10**: Missing `aria-label` attributes on icon-only buttons.
+  - **Files**:
+    - `templates/quality/managementreview/quality_objective/list.html:114, 194, 197, 202`
+    - `templates/quality/managementreview/management_review/list.html:114, 187, 191, 196`
+    - `templates/quality/managementreview/management_review/detail.html:344, 347, 418, 421`
+    - `templates/quality/managementreview/management_review_input/list.html:114, 184, 187, 192`
+    - `templates/quality/managementreview/management_review_action/list.html:114, 186, 190, 195`
+  - **Details**: Icon-only buttons have `title` but lack `aria-label` for screen reader accessibility (Rule 10).
+
+### Minor
+- **M6**: Add `rel="noopener noreferrer"` to external dossier window link.
+  - **File**: `templates/quality/managementreview/management_review/detail.html:23`
+
+- **M7**: Add `.badge-muted` & `.badge-slate` to dossier print stylesheet.
+  - **File**: `templates/quality/managementreview/management_review/dossier.html:15`
+
+- **M8**: Align `.pagination-info` to the left with `mr-auto` in list templates.
+  - **Files**: List templates (`quality_objective`, `management_review`, `management_review_input`, `management_review_action`).
+
+- **M9 (confirmed M4)**: Add `<select name="assignee">` to filter form in `management_review_action/list.html` or reconcile line 113.
