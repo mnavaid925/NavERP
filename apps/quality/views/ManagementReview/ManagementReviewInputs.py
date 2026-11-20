@@ -152,6 +152,7 @@ def management_review_input_create(request):
         "review_input": None,
         "is_edit": False,
         "parent_review": parent_review,
+        "review": parent_review,
     }
     return render(request, "quality/managementreview/management_review_input/form.html", context)
 
@@ -179,6 +180,7 @@ def management_review_input_edit(request, pk):
         "review_input": review_input,
         "is_edit": True,
         "parent_review": review_input.management_review,
+        "review": review_input.management_review,
     }
     return render(request, "quality/managementreview/management_review_input/form.html", context)
 
