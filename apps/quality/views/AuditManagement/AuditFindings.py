@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
@@ -230,20 +231,26 @@ def audit_finding_create_capa(request, pk):
         messages.info(request, f"Finding {finding.number} is already linked to CAPA {finding.linked_capa.number}.")
         return redirect("quality:capa_investigation_detail", pk=finding.linked_capa.pk)
 
-    capa = CapaInvestigation.objects.create(
-        tenant=request.tenant,
-        title=f"CAPA from Audit Finding: {finding.title}",
-        source_type="internal_audit",
-        problem_description=f"Standard Clause: {finding.standard_clause}\n\nRequirement: {finding.requirement_statement}\n\nEvidence: {finding.condition_evidence}",
-        severity="critical" if finding.severity == "critical" else "major",
-        lead_investigator=request.user,
-        target_completion_date=finding.response_due_date,
-        status="initiated",
-    )
-    finding.linked_capa = capa
-    finding.status = "capa_in_progress"
-    finding.save(update_fields=["linked_capa", "status", "updated_at"])
-    write_audit_log(request.user, finding, "update", tenant=request.tenant)
+    with transaction.atomic():
+        capa = CapaInvestigation.objects.create(
+            tenant=request.tenant,
+            title=f"CAPA from Audit Finding: {finding.title}"[:255],
+            source_type="internal_audit",
+            source_reference=finding.number,
+            action_type="corrective",
+            issue_summary=f"Standard Clause: {finding.standard_clause}\n\nRequirement: {finding.requirement_statement}\n\nEvidence: {finding.condition_evidence}",
+            risk_priority="critical" if finding.severity == "critical" else "high",
+            quality_owner=finding.audit.lead_auditor or request.user,
+            lead_investigator=request.user,
+            target_closure_date=finding.response_due_date,
+            department=finding.audited_org_unit,
+            status="draft",
+        )
+        finding.linked_capa = capa
+        finding.status = "capa_in_progress"
+        finding.save(update_fields=["linked_capa", "status", "updated_at"])
+        write_audit_log(request.user, finding, "update", tenant=request.tenant)
+
     messages.success(request, f"Closed-loop CAPA {capa.number} initiated for finding {finding.number}.")
     return redirect("quality:capa_investigation_detail", pk=capa.pk)
 
