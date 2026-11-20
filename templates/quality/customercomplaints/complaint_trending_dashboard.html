@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Complaint Trending & Post-Market Surveillance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Trending & Post-Market Surveillance</span>
+        </div>
+        <h1 class="page-title">Complaint Trending & Post-Market Surveillance</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:customer_complaint_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i> Complaints Register
+        </a>
+        <a href="{% url 'quality:customer_complaint_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Log Intake
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="message-square"></i>
+        </div>
+        <div>
+            <div class="stat-label">YTD Complaints</div>
+            <div class="stat-value">{{ total_complaints_ytd }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active / Open</div>
+            <div class="stat-value">{{ open_complaints }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-label">Reportable (MDR)</div>
+            <div class="stat-value">{{ reportable_adverse_events }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="truck"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Recalls</div>
+            <div class="stat-value">{{ active_field_recalls }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="timer"></i>
+        </div>
+        <div>
+            <div class="stat-label">Avg Cycle Time</div>
+            <div class="stat-value">{{ avg_cycle_days }}<span class="text-xs text-slate-400 font-normal ml-1">days</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Grid: Vigilance Deadlines & Active Recalls -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Statutory Vigilance Countdown Radar -->
+    <div class="card border-red-200">
+        <div class="card-header bg-red-50 flex items-center justify-between">
+            <h3 class="card-title text-red-900 flex items-center gap-2">
+                <i data-lucide="alert-circle" class="w-4 h-4"></i> Statutory Vigilance Countdown Radar
+            </h3>
+            <a href="{% url 'quality:regulatory_report_list' %}" class="btn btn-sm btn-outline text-red-700">
+                View All Filings
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="space-y-3">
+                {% for r in urgent_regulatory_deadlines %}
+                <div class="p-3 bg-white rounded border border-slate-200 flex items-center justify-between hover:bg-slate-50 transition">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <a href="{% url 'quality:regulatory_report_detail' r.pk %}" class="font-medium text-blue-600 hover:underline">
+                                {{ r.number }}
+                            </a>
+                            <span class="badge badge-info text-xs">{{ r.get_agency_display }}</span>
+                            <span class="badge {{ r.urgency_badge_css }} text-xs">
+                                {% if r.is_overdue %}Overdue {{ r.days_until_due|stringformat:"+d" }}d
+                                {% else %}{{ r.days_until_due }}d remaining{% endif %}
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-1">
+                            Complaint {{ r.complaint.number }}: {{ r.complaint.title|truncatechars:45 }}
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs font-mono font-bold {% if r.is_overdue %}text-red-600{% else %}text-slate-800{% endif %}">
+                            {{ r.statutory_due_date|date:"M d, Y" }}
+                        </div>
+                        <div class="text-[10px] text-slate-400">{{ r.get_timeline_category_display }}</div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-6 text-sm text-slate-400">
+                    No urgent pending regulatory filings. All statutory reporting clocks are compliant.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Field Recalls Recovery Status -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="card-title flex items-center gap-2">
+                <i data-lucide="truck" class="w-4 h-4 text-orange-600"></i> Field Actions & Recall Recovery Rates
+            </h3>
+            <a href="{% url 'quality:field_action_list' %}" class="btn btn-sm btn-outline">
+                View All Recalls
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="space-y-4">
+                {% for fa in active_recalls %}
+                <div class="p-3 bg-slate-50 rounded border border-slate-200 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <a href="{% url 'quality:field_action_detail' fa.pk %}" class="font-medium text-blue-600 hover:underline">
+                                {{ fa.number }}
+                            </a>
+                            <span class="text-sm text-slate-800 font-medium ml-1">{{ fa.title }}</span>
+                        </div>
+                        <span class="badge badge-amber text-xs font-mono">{{ fa.reconciliation_rate }}% Recovered</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2">
+                        <div class="bg-blue-600 h-2 rounded-full" style="width: {{ fa.reconciliation_rate }}%;"></div>
+                    </div>
+                    <div class="flex items-center justify-between text-xs text-slate-500">
+                        <span>Product: {{ fa.affected_product_name }}</span>
+                        <span>{{ fa.units_recovered_destroyed|add:fa.units_quarantined_field }} / {{ fa.total_units_distributed }} units</span>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-6 text-sm text-slate-400">
+                    No active field recalls in progress.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Middle Grid: Category Breakdown & Root Cause Pareto -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Complaint Categories -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Top Complaint Categories / Failure Codes</h3>
+        </div>
+        <div class="card-body">
+            <div class="space-y-3">
+                {% for cat in category_distribution %}
+                <div>
+                    <div class="flex items-center justify-between text-sm mb-1">
+                        <span class="font-medium text-slate-700">{{ cat.category }}</span>
+                        <span class="font-mono text-slate-600">{{ cat.count }} incidents</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2">
+                        <div class="bg-indigo-600 h-2 rounded-full" style="width: {% widthratio cat.count total_complaints_ytd 100 %}%;"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-6 text-sm text-slate-400">
+                    No failure categories categorized yet.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Root Cause Analysis Pareto -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Root Cause Distribution (Pareto)</h3>
+        </div>
+        <div class="card-body">
+            <div class="space-y-3">
+                {% for rc in root_cause_pareto %}
+                <div>
+                    <div class="flex items-center justify-between text-sm mb-1">
+                        <span class="font-medium text-slate-700">{{ rc.label }}</span>
+                        <span class="font-mono text-slate-600">{{ rc.count }} investigations</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2">
+                        <div class="bg-amber-500 h-2 rounded-full" style="width: {% widthratio rc.count 20 100 %}%;"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-6 text-sm text-slate-400">
+                    No investigated root causes recorded yet.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Grid: Severity Distribution & Inbound Channels -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Severity Grading Breakdown</h3>
+        </div>
+        <div class="card-body">
+            <div class="divide-y divide-slate-100">
+                {% for s in severity_distribution %}
+                <div class="py-2.5 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="badge {{ s.css }}">{{ s.label }}</span>
+                    </div>
+                    <div class="font-mono font-bold text-slate-800">{{ s.count }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Multi-Channel Intake Capture</h3>
+        </div>
+        <div class="card-body">
+            <div class="divide-y divide-slate-100">
+                {% for ch in intake_channel_stats %}
+                <div class="py-2.5 flex items-center justify-between">
+                    <span class="text-sm text-slate-700">{{ ch.label }}</span>
+                    <span class="font-mono font-semibold text-slate-800">{{ ch.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
