@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}{{ report.number }} — Regulatory Vigilance Report — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:regulatory_report_list' %}">Regulatory Reports</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ report.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ report.number }}</h1>
+            <span class="badge badge-info">{{ report.get_agency_display }}</span>
+            <span class="badge badge-slate">{{ report.get_report_type_display }}</span>
+
+            {% if report.submission_status == "acknowledged" %}
+            <span class="badge badge-green">Gateway Acknowledged</span>
+            {% elif report.submission_status == "submitted" %}
+            <span class="badge badge-purple">Submitted to Gateway</span>
+            {% elif report.submission_status == "ready_to_transmit" %}
+            <span class="badge badge-info">Ready to Transmit</span>
+            {% else %}
+            <span class="badge badge-amber">{{ report.get_submission_status_display }}</span>
+            {% endif %}
+
+            <span class="badge {{ report.urgency_badge_css }}">
+                {% if report.is_overdue %}Clock Overdue ({{ report.days_until_due|stringformat:"+d" }}d)
+                {% else %}{{ report.days_until_due }}d until deadline{% endif %}
+            </span>
+        </div>
+        <div class="text-sm text-slate-500 mt-1">
+            Vigilance submission for Complaint <a href="{% url 'quality:customer_complaint_detail' report.complaint.pk %}" class="text-blue-600 hover:underline font-medium">{{ report.complaint.number }}</a>: {{ report.complaint.title }}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:regulatory_report_edit' report.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Report
+        </a>
+        <a href="{% url 'quality:customer_complaint_detail' report.complaint.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> View Complaint
+        </a>
+        <form method="post" action="{% url 'quality:regulatory_report_delete' report.pk %}" onsubmit="return confirm('Permanently delete report {{ report.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Statutory Medical Adverse Event Narrative -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Official Adverse Event Narrative for Regulatory Submission</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-4 bg-white rounded border border-slate-200 text-slate-800 text-sm whitespace-pre-line leading-relaxed font-sans">
+                    {{ report.event_summary }}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-500">Adverse Classification:</span>
+                        <span class="badge badge-red font-medium">{{ report.get_adverse_event_class_display }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-500">Device Operator:</span>
+                        <span class="font-medium text-slate-800">{{ report.device_operator|default:"Healthcare Professional" }}</span>
+                    </div>
+                </div>
+
+                {% if report.patient_remedial_action %}
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        Patient Remedial Interventions & Clinical Outcomes
+                    </h4>
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded text-sm text-slate-800 whitespace-pre-line">
+                        {{ report.patient_remedial_action }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Statutory Clock & Gateway Tracking -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Statutory Reporting Clock & Regulatory Milestones</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Mandated Regulatory Clock</dt>
+                        <dd class="font-medium">{{ report.get_timeline_category_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Statutory Due Date</dt>
+                        <dd class="font-mono text-base font-bold {% if report.is_overdue %}text-red-600{% else %}text-slate-900{% endif %}">
+                            {{ report.statutory_due_date|date:"F d, Y" }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Transmission Date</dt>
+                        <dd class="font-mono">{{ report.submission_date|date:"F d, Y"|default:"Pending Transmission" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Transmission Format</dt>
+                        <dd>{{ report.get_submission_format_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Agency Report Identifier</dt>
+                        <dd class="font-mono font-medium">{{ report.agency_report_identifier|default:"Not Assigned Yet" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Gateway ACK Number</dt>
+                        <dd class="font-mono font-medium text-green-700">{{ report.agency_acknowledgement_number|default:"Awaiting Gateway Receipt" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Gateway ACK Date</dt>
+                        <dd>{{ report.agency_acknowledgement_date|date:"F d, Y"|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: Authorship & Submission Workflow -->
+    <div class="space-y-6">
+        <!-- Metadata Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Authorship & Regulatory Review</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Prepared By</dt>
+                        <dd class="font-medium">
+                            {% if report.prepared_by %}
+                            {{ report.prepared_by.get_full_name|default:report.prepared_by.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Regulatory Reviewer</dt>
+                        <dd>
+                            {% if report.reviewed_by %}
+                            {{ report.reviewed_by.get_full_name|default:report.reviewed_by.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created Timestamp</dt>
+                        <dd class="text-xs text-slate-500">{{ report.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Submission Action Modal/Card -->
+        {% if report.submission_status != "submitted" and report.submission_status != "acknowledged" and report.submission_status != "withdrawn" %}
+        <div class="card border-blue-300">
+            <div class="card-header bg-blue-50">
+                <h3 class="card-title text-blue-900"><i data-lucide="send" class="inline w-4 h-4 mr-1"></i> Record Agency Transmission</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:regulatory_report_submit' report.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div>
+                        <label for="agency_report_identifier" class="form-label text-xs">Agency Report / Case # (Optional)</label>
+                        <input type="text" name="agency_report_identifier" id="agency_report_identifier" value="{{ report.agency_report_identifier }}" class="form-input" placeholder="e.g. MDR-2026-0042">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="check"></i> Confirm Gateway Transmission
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Gateway Acknowledgement Card -->
+        {% if report.submission_status == "submitted" or report.submission_status == "acknowledged" %}
+        <div class="card border-green-300">
+            <div class="card-header bg-green-50">
+                <h3 class="card-title text-green-900"><i data-lucide="check-check" class="inline w-4 h-4 mr-1"></i> Agency Acknowledgement (ACK)</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:regulatory_report_acknowledge' report.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div>
+                        <label for="agency_acknowledgement_number" class="form-label text-xs">Electronic ACK # / Receipt Token</label>
+                        <input type="text" name="agency_acknowledgement_number" id="agency_acknowledgement_number" value="{{ report.agency_acknowledgement_number }}" class="form-input" placeholder="e.g. FDA-ESG-ACK-8839201">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full bg-green-600 hover:bg-green-700">
+                        <i data-lucide="check-circle-2"></i> Record Gateway Acceptance
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
