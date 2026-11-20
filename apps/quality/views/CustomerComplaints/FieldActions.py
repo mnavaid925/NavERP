@@ -214,6 +214,28 @@ def field_action_export_csv(request):
         "initiating_complaint", "coordinator"
     )
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(title__icontains=q)
+            | Q(affected_product_code__icontains=q)
+            | Q(affected_product_name__icontains=q)
+            | Q(regulatory_recall_number__icontains=q)
+        )
+    action_type_filter = request.GET.get("action_type", "").strip()
+    if action_type_filter:
+        qs = qs.filter(action_type=action_type_filter)
+    recall_class_filter = request.GET.get("recall_class", "").strip()
+    if recall_class_filter:
+        qs = qs.filter(recall_class=recall_class_filter)
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    complaint_filter = request.GET.get("complaint", "").strip()
+    if complaint_filter and complaint_filter.isdigit():
+        qs = qs.filter(initiating_complaint_id=int(complaint_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="field_actions_recalls.csv"'
     response["X-Content-Type-Options"] = "nosniff"
