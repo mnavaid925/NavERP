@@ -125,6 +125,7 @@ class ManagementReview(TenantNumbered):
             models.Index(fields=["tenant", "scheduled_date"], name="idx_qmrv_ten_schdate"),
             models.Index(fields=["tenant", "qms_suitability_conclusion"], name="idx_qmrv_ten_suit"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qmrv_ten_created"),
+            models.Index(fields=["tenant", "-scheduled_date", "-created_at"], name="idx_qmrv_ten_date_crd"),
         ]
 
     def __str__(self):
