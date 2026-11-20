@@ -2369,6 +2369,188 @@ def competency_certification_b(db, tenant_b, training_enrollment_b, admin_b, qua
     return cert
 
 
+# -----------------------------------------------------------------------------
+# Sub-module 12.13: Customer Complaint Handling Fixtures
+# -----------------------------------------------------------------------------
+
+@pytest.fixture
+def customer_complaint_a(db, tenant_a, customer_party_a, admin_user):
+    today = timezone.now().date()
+    return CustomerComplaint.objects.create(
+        tenant=tenant_a,
+        title="Infusion Pump Display Freeze",
+        customer=customer_party_a,
+        complainant_name="Dr. Eleanor Vance",
+        complainant_organization="St. Jude Oncology Center",
+        item_code="MED-PUMP-4000",
+        item_name="Infusion Pro Plus 4000",
+        lot_number="LOT-2026-X1",
+        serial_number="SN-40991",
+        date_received=today - timedelta(days=5),
+        problem_description="Infusion pump display froze during therapy administration.",
+        patient_involved=True,
+        adverse_event_alleged=True,
+        severity="critical_safety",
+        status="under_investigation",
+        validity="valid_complaint",
+        reportability="reportable_event",
+        complaint_category="Display / UI Hardware Malfunction",
+        sample_return_status="sample_received",
+        investigation_required=True,
+        assigned_to=admin_user,
+    )
+
+
+@pytest.fixture
+def customer_complaint_b(db, tenant_b, customer_party_b, admin_b):
+    today = timezone.now().date()
+    return CustomerComplaint.objects.create(
+        tenant=tenant_b,
+        title="Blood Glucose Monitor Strip Calibration Error",
+        customer=customer_party_b,
+        complainant_name="Globex Field Coordinator",
+        item_code="GLUCO-STRIP-100",
+        item_name="AccuCheck Reagent Test Strips",
+        lot_number="LOT-GL-998",
+        date_received=today - timedelta(days=3),
+        problem_description="Control solution calibration deviated by 15% from acceptable curve.",
+        severity="minor_cosmetic",
+        status="intake_received",
+        validity="valid_complaint",
+        reportability="non_reportable",
+        non_reportable_justification="Packaging unsealed in high humidity environment.",
+        complaint_category="Calibration & Reagent Drift",
+        investigation_required=True,
+        assigned_to=admin_b,
+    )
+
+
+@pytest.fixture
+def complaint_investigation_a(db, tenant_a, customer_complaint_a, admin_user):
+    today = timezone.now().date()
+    return ComplaintInvestigation.objects.create(
+        tenant=tenant_a,
+        complaint=customer_complaint_a,
+        lead_investigator=admin_user,
+        target_completion_date=today + timedelta(days=10),
+        status="in_progress",
+        dhr_reviewed=True,
+        dhr_lot_number="LOT-2026-X1",
+        dhr_anomalies_identified=False,
+        dhr_review_summary="DHR reviewed with zero in-process non-conformances.",
+        physical_sample_examined=True,
+        analytical_method="electrical_functional",
+        sample_testing_findings="Cold solder joint at pin 14 ribbon connector.",
+        failure_reproduced=True,
+        hhe_required=True,
+        health_hazard_evaluation="Moderate-to-severe potential clinical risk.",
+        risk_exceeds_threshold=True,
+        root_cause_category="component_defect",
+        root_cause_narrative="Connector cold solder joint formed during PCB reflow.",
+        capa_required=True,
+        investigation_conclusion="Hardware defect confirmed; escalated to CAPA.",
+    )
+
+
+@pytest.fixture
+def complaint_investigation_b(db, tenant_b, customer_complaint_b, admin_b):
+    today = timezone.now().date()
+    return ComplaintInvestigation.objects.create(
+        tenant=tenant_b,
+        complaint=customer_complaint_b,
+        lead_investigator=admin_b,
+        target_completion_date=today + timedelta(days=14),
+        status="in_progress",
+        analytical_method="chemical_spectroscopy",
+        root_cause_category="user_error_misuse",
+        root_cause_narrative="Desiccant seal compromised by clinic staff storage.",
+    )
+
+
+@pytest.fixture
+def regulatory_report_a(db, tenant_a, customer_complaint_a, admin_user):
+    today = timezone.now().date()
+    return RegulatoryReport.objects.create(
+        tenant=tenant_a,
+        complaint=customer_complaint_a,
+        agency="fda_cdrh",
+        report_type="initial_report",
+        adverse_event_class="serious_injury",
+        timeline_category="30_day_standard_mdr",
+        statutory_due_date=today + timedelta(days=25),
+        submission_status="draft",
+        submission_format="fda_emdr_xml",
+        event_summary="Infusion pump display froze during active chemotherapy delivery.",
+        device_operator="Healthcare Professional (RN)",
+        prepared_by=admin_user,
+    )
+
+
+@pytest.fixture
+def regulatory_report_b(db, tenant_b, customer_complaint_b, admin_b):
+    today = timezone.now().date()
+    return RegulatoryReport.objects.create(
+        tenant=tenant_b,
+        complaint=customer_complaint_b,
+        agency="eu_competent_auth",
+        report_type="initial_report",
+        adverse_event_class="malfunction_recurrent",
+        timeline_category="15_day_serious_incident",
+        statutory_due_date=today + timedelta(days=12),
+        submission_status="draft",
+        submission_format="eu_mir_xml",
+        event_summary="Test strip calibration drift during outpatient clinic use.",
+        device_operator="Healthcare Professional",
+        prepared_by=admin_b,
+    )
+
+
+@pytest.fixture
+def field_action_a(db, tenant_a, customer_complaint_a, admin_user):
+    today = timezone.now().date()
+    return FieldAction.objects.create(
+        tenant=tenant_a,
+        title="Class II Recall: Infusion Pro Plus 4000 Display PCB",
+        action_type="recall_removal",
+        recall_class="class_ii_moderate",
+        initiating_complaint=customer_complaint_a,
+        coordinator=admin_user,
+        initiation_date=today - timedelta(days=5),
+        status="quarantine_in_progress",
+        affected_product_code="MED-PUMP-4000",
+        affected_product_name="Infusion Pro Plus 4000",
+        affected_lot_numbers="LOT-2026-X1, LOT-2026-X2",
+        reason_for_action="Potential for display ribbon connector cold solder joint.",
+        total_units_distributed=500,
+        consignees_targeted=45,
+        consignees_notified=45,
+        consignees_responded=38,
+        units_quarantined_field=120,
+        units_recovered_destroyed=185,
+        regulatory_agency_notified="FDA CDRH Recall Operations",
+        regulatory_recall_number="Z-1049-2026",
+    )
+
+
+@pytest.fixture
+def field_action_b(db, tenant_b, customer_complaint_b, admin_b):
+    today = timezone.now().date()
+    return FieldAction.objects.create(
+        tenant=tenant_b,
+        title="FSCA: Test Strip Desiccant Warning Notification",
+        action_type="fsca_safety_notice",
+        recall_class="class_iii_minor",
+        initiating_complaint=customer_complaint_b,
+        coordinator=admin_b,
+        initiation_date=today - timedelta(days=2),
+        status="notifications_dispatched",
+        affected_product_code="GLUCO-STRIP-100",
+        affected_product_name="AccuCheck Reagent Test Strips",
+        total_units_distributed=2000,
+        consignees_targeted=100,
+    )
+
+
 
 
 
