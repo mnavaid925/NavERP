@@ -123,6 +123,7 @@ class QualityObjective(TenantNumbered):
             models.Index(fields=["tenant", "period_year"], name="idx_qobj_ten_year"),
             models.Index(fields=["tenant", "rag_status"], name="idx_qobj_ten_rag"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qobj_ten_created"),
+            models.Index(fields=["tenant", "-period_year", "-created_at"], name="idx_qobj_ten_yr_crd"),
         ]
 
     def __str__(self):
