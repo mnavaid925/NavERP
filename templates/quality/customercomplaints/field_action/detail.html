@@ -7,9 +7,9 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'dashboard:home' %}">Home</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <a href="{% url 'quality:field_action_list' %}">Field Actions</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <span>{{ field_action.number }}</span>
         </div>
         <div class="flex items-center gap-3">
@@ -49,7 +49,7 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     <div class="lg:col-span-2 space-y-6">
-        <!-- Recall Strategy & Health Hazard Rationale -->
+        {# Recall Strategy & Health Hazard Rationale #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Defect Description & Health Hazard Evaluation (HHE)</h3>
@@ -89,7 +89,7 @@
             </div>
         </div>
 
-        <!-- Affected Product Scope & Distribution -->
+        {# Affected Product Scope & Distribution #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Affected Scope & Distribution Traceability</h3>
@@ -114,7 +114,7 @@
             </div>
         </div>
 
-        <!-- Reconciliation Dashboard -->
+        {# Reconciliation Dashboard #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Unit Recovery & Field Reconciliation Audit</h3>
@@ -163,9 +163,9 @@
         </div>
     </div>
 
-    <!-- Sidebar: Regulatory Governance & Closure -->
+    {# Sidebar: Regulatory Governance & Closure #}
     <div class="space-y-6">
-        <!-- Metadata Card -->
+        {# Metadata Card #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Governance & Administration</h3>
@@ -200,7 +200,7 @@
             </div>
         </div>
 
-        <!-- Termination & Closure Action Card -->
+        {# Termination & Closure Action Card #}
         {% if field_action.status != "closed_terminated" and field_action.status != "cancelled" %}
         <div class="card border-green-300">
             <div class="card-header bg-green-50">
