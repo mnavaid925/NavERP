@@ -47,6 +47,10 @@ from apps.quality.models import (
     CalibrationRecord,
     OutOfToleranceInvestigation,
     MeasurementSystemAnalysis,
+    AuditProgram,
+    QualityAudit,
+    AuditFinding,
+    RegulatoryInspectionHost,
 )
 
 
@@ -1848,6 +1852,171 @@ def cal_msa_b(db, tenant_b, cal_gage_b, admin_b):
         study_lead=admin_b,
         study_date=timezone.now().date(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 12.11 Fixtures: Audit Management
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def audit_program_a(db, tenant_a, admin_user):
+    today = timezone.now().date()
+    return AuditProgram.objects.create(
+        tenant=tenant_a,
+        title="Acme Enterprise Quality Audit Program",
+        program_year=today.year,
+        program_type="integrated_enterprise",
+        risk_basis="high_risk_semi_annual",
+        scope_description="Global quality oversight covering ISO 13485:2016 design controls and cGMP.",
+        start_date=today.replace(month=1, day=1),
+        end_date=today.replace(month=12, day=31),
+        allocated_budget_hours=480,
+        status="active",
+        program_manager=admin_user,
+        notes="Board-approved audit program.",
+    )
+
+
+@pytest.fixture
+def audit_program_b(db, tenant_b, admin_b):
+    today = timezone.now().date()
+    return AuditProgram.objects.create(
+        tenant=tenant_b,
+        title="Globex Supplier Audit Program",
+        program_year=today.year,
+        program_type="supplier_external",
+        risk_basis="medium_risk_biennial",
+        scope_description="Supplier and external vendor quality audit program.",
+        start_date=today.replace(month=1, day=1),
+        end_date=today.replace(month=12, day=31),
+        allocated_budget_hours=240,
+        status="active",
+        program_manager=admin_b,
+        notes="Globex vendor audit program.",
+    )
+
+
+@pytest.fixture
+def quality_audit_a(db, tenant_a, audit_program_a, admin_user, quality_department):
+    today = timezone.now().date()
+    return QualityAudit.objects.create(
+        tenant=tenant_a,
+        program=audit_program_a,
+        title="ISO 13485:2016 Design Controls Audit",
+        audit_type="internal_system",
+        audit_method="on_site",
+        standard_framework="iso_13485_2016",
+        target_org_unit=quality_department,
+        lead_auditor=admin_user,
+        planned_start_date=today - timedelta(days=10),
+        planned_end_date=today + timedelta(days=5),
+        scope_objectives="Design history file and risk management controls verification.",
+        product_scope="CardioSense Pro Series IV",
+        status="in_progress",
+        outcome="pending",
+    )
+
+
+@pytest.fixture
+def quality_audit_b(db, tenant_b, audit_program_b, admin_b, quality_department_b):
+    today = timezone.now().date()
+    return QualityAudit.objects.create(
+        tenant=tenant_b,
+        program=audit_program_b,
+        title="Globex ISO 9001 Supplier Audit",
+        audit_type="supplier_qualification",
+        audit_method="on_site",
+        standard_framework="iso_9001_2015",
+        target_org_unit=quality_department_b,
+        lead_auditor=admin_b,
+        planned_start_date=today - timedelta(days=5),
+        planned_end_date=today + timedelta(days=10),
+        scope_objectives="Supplier receiving and quality assurance system audit.",
+        product_scope="Globex Valves",
+        status="scheduled",
+        outcome="pending",
+    )
+
+
+@pytest.fixture
+def audit_finding_a(db, tenant_a, quality_audit_a, admin_user, quality_department):
+    today = timezone.now().date()
+    return AuditFinding.objects.create(
+        tenant=tenant_a,
+        audit=quality_audit_a,
+        finding_number_in_audit=1,
+        title="Discrepancy in DHF Table 4 risk file revision index",
+        severity="minor",
+        standard_clause="ISO 13485:2016 §7.3.3",
+        requirement_statement="Design risk management files shall maintain contemporaneous revision history.",
+        condition_evidence="DHF-774 Rev C referenced Risk File RA-102 Rev B instead of active Rev C.",
+        audited_org_unit=quality_department,
+        assignee=admin_user,
+        response_due_date=today + timedelta(days=20),
+        status="issued",
+    )
+
+
+@pytest.fixture
+def audit_finding_b(db, tenant_b, quality_audit_b, admin_b, quality_department_b):
+    today = timezone.now().date()
+    return AuditFinding.objects.create(
+        tenant=tenant_b,
+        audit=quality_audit_b,
+        finding_number_in_audit=1,
+        title="Missing lot traceability in supplier Certificate of Analysis",
+        severity="major",
+        standard_clause="ISO 9001:2015 §8.4",
+        requirement_statement="External suppliers must provide full traceability.",
+        condition_evidence="Raw material heat lot not referenced on receiving tag.",
+        audited_org_unit=quality_department_b,
+        assignee=admin_b,
+        response_due_date=today + timedelta(days=15),
+        status="issued",
+    )
+
+
+@pytest.fixture
+def inspection_host_a(db, tenant_a, quality_audit_a, admin_user):
+    today = timezone.now().date()
+    return RegulatoryInspectionHost.objects.create(
+        tenant=tenant_a,
+        audit=quality_audit_a,
+        inspection_title="US FDA cGMP / QSIT Surveillance Inspection",
+        agency_or_body="fda_cdrh",
+        agency_name="US Food & Drug Administration",
+        lead_inspector_name="Consumer Safety Officer Arthur Vance",
+        scheduled_start_date=today - timedelta(days=2),
+        scheduled_end_date=today + timedelta(days=3),
+        actual_start_date=today - timedelta(days=2),
+        front_room_lead=admin_user,
+        back_room_lead=admin_user,
+        war_room_location="Executive Conference Room Alpha",
+        status="active_inspection",
+        requests_logged_count=12,
+        requests_fulfilled_count=10,
+    )
+
+
+@pytest.fixture
+def inspection_host_b(db, tenant_b, quality_audit_b, admin_b):
+    today = timezone.now().date()
+    return RegulatoryInspectionHost.objects.create(
+        tenant=tenant_b,
+        audit=quality_audit_b,
+        inspection_title="TÜV SÜD ISO 13485:2016 Recertification Audit",
+        agency_or_body="iso_notified_body",
+        agency_name="TÜV SÜD Product Service GmbH",
+        lead_inspector_name="Lead Auditor Klaus Becker",
+        scheduled_start_date=today + timedelta(days=30),
+        scheduled_end_date=today + timedelta(days=34),
+        front_room_lead=admin_b,
+        back_room_lead=admin_b,
+        war_room_location="Boardroom B",
+        status="preparation",
+    )
+
 
 
 
