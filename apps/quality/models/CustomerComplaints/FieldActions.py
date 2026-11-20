@@ -45,7 +45,7 @@ class FieldAction(TenantNumbered):
         "class_i_critical": "badge-red",
         "class_ii_moderate": "badge-amber",
         "class_iii_minor": "badge-info",
-        "fsca_safety_alert": "badge-purple",
+        "fsca_safety_alert": "badge-amber",
         "not_classified": "badge-slate",
     }
 
@@ -54,7 +54,7 @@ class FieldAction(TenantNumbered):
         "regulatory_consultation": "badge-amber",
         "notifications_dispatched": "badge-info",
         "quarantine_in_progress": "badge-amber",
-        "reconciliation_complete": "badge-purple",
+        "reconciliation_complete": "badge-info",
         "closed_terminated": "badge-green",
         "cancelled": "badge-muted",
     }
