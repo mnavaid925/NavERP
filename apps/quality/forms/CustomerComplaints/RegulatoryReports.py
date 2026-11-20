@@ -27,6 +27,8 @@ class RegulatoryReportForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and "complaint" in self.fields:
+            self.fields["complaint"].disabled = True
         if hasattr(self, "tenant") and self.tenant is not None:
             if "complaint" in self.fields:
                 from apps.quality.models.CustomerComplaints.CustomerComplaints import CustomerComplaint
@@ -36,6 +38,12 @@ class RegulatoryReportForm(TenantUniqueMixin, TenantModelForm):
                 self.fields["prepared_by"].queryset = user_qs
             if "reviewed_by" in self.fields:
                 self.fields["reviewed_by"].queryset = user_qs
+
+    def clean_complaint(self):
+        complaint = self.cleaned_data.get("complaint")
+        if self.instance and self.instance.pk:
+            return self.instance.complaint
+        return complaint
 
     def clean(self):
         cleaned_data = super().clean()
