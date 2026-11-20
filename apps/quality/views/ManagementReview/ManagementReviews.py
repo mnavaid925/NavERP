@@ -58,6 +58,10 @@ def management_review_list(request):
     if org_unit_filter and org_unit_filter.isdigit():
         qs = qs.filter(org_unit_id=int(org_unit_filter))
 
+    sponsor_filter = request.GET.get("sponsor", "").strip()
+    if sponsor_filter and sponsor_filter.isdigit():
+        qs = qs.filter(executive_sponsor_id=int(sponsor_filter))
+
     total_count = qs.count()
 
     base_tenant_qs = ManagementReview.objects.filter(tenant=request.tenant)
@@ -79,6 +83,7 @@ def management_review_list(request):
     filter_querystring = query_params.urlencode()
 
     org_units = OrgUnit.objects.filter(tenant=request.tenant).order_by("name")
+    sponsors = User.objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "last_name", "username")
 
     context = {
         "reviews": page_obj,
@@ -94,11 +99,13 @@ def management_review_list(request):
         "status_choices": ManagementReview.STATUS_CHOICES,
         "suitability_choices": ManagementReview.SUITABILITY_CHOICES,
         "org_units": org_units,
+        "sponsors": sponsors,
         "q": q,
         "selected_cadence": cadence_filter,
         "selected_status": status_filter,
         "selected_suitability": suitability_filter,
         "selected_org_unit": org_unit_filter,
+        "selected_sponsor": sponsor_filter,
     }
     return render(request, "quality/managementreview/management_review/list.html", context)
 
