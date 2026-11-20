@@ -244,8 +244,8 @@ def management_review_start(request, pk):
 @login_required
 def management_review_draft_minutes(request, pk):
     review = quality_object(request, ManagementReview, pk)
-    if review.status in ["approved", "cancelled"]:
-        messages.error(request, f"Cannot edit minutes of a {review.get_status_display().lower()} review.")
+    if review.status not in ["meeting_active", "minutes_drafting", "pending_approval"]:
+        messages.error(request, f"Minutes can only be recorded after a review meeting has started (current status: {review.get_status_display()}).")
         return redirect("quality:management_review_detail", pk=review.pk)
 
     if request.method == "POST":
