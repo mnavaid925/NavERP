@@ -51,8 +51,6 @@ def management_review_input_list(request):
     if presenter_filter and presenter_filter.isdigit():
         qs = qs.filter(presenter_id=int(presenter_filter))
 
-    total_count = qs.count()
-
     base_tenant_qs = ManagementReviewInput.objects.filter(tenant=request.tenant)
     stats = base_tenant_qs.aggregate(
         compiled_count=Count("id", filter=Q(status="compiled")),
@@ -64,6 +62,7 @@ def management_review_input_list(request):
     accepted_count = stats["accepted_count"]
 
     paginator = Paginator(qs, PAGE_SIZE)
+    total_count = paginator.count
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
