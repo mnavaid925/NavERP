@@ -22,6 +22,9 @@
         </div>
     </div>
     <div class="page-actions">
+        <a href="{% url 'quality:training_course_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Courses
+        </a>
         <a href="{% url 'quality:training_enrollment_create' %}?course={{ course.pk }}" class="btn btn-primary">
             <i data-lucide="user-plus"></i> Assign Training
         </a>
