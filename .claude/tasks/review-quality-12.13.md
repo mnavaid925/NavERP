@@ -167,4 +167,74 @@
   - **Fix:**
     Use `<span class="sep">/</span>` per `theme.css:247`.
 
+---
+
+## 4. Performance Reviewer Findings
+
+### Critical
+- **C2: Mathematical skew and in-memory model instantiation in cycle time calculation**
+  - **File:** `apps/quality/views/CustomerComplaints/ComplaintTrendingDashboard.py:28-34`
+  - **Problem:**
+    `total_days = sum(c.days_open for c in closed_with_dates[:200])` divides by `total_closed`. If `total_closed > 200`, the metric is corrupted. Furthermore, instantiating 200 full Django model instances into memory to calculate date diffs is inefficient.
+  - **Fix:**
+    Use `values_list("closed_at", "date_received")` or database date difference:
+    ```python
+    closed_dates = list(base_complaints.filter(status="closed", closed_at__isnull=False, date_received__isnull=False).values_list("closed_at", "date_received"))
+    avg_cycle_days = round(sum((ca.date() - dr).days for ca, dr in closed_dates) / len(closed_dates), 1) if closed_dates else 0.0
+    ```
+
+### Important
+- **I7: Redundant child queries (.count(), .exists(), for loop) in complaint detail view**
+  - **Files:** `apps/quality/views/CustomerComplaints/CustomerComplaints.py:110-112` & `templates/quality/customercomplaints/customer_complaint/detail.html:128, 147, 199, 219, 263, 267, 283`
+  - **Problem:**
+    The detail view passes unevaluated querysets (`investigations`, `reports`, `field_actions`). The template calls `{{ investigations.count }}`, `{{ reports.count }}`, `{% if field_actions.exists %}`, `{{ field_actions.count }}`, and iterates each in `{% for %}`, firing 7 queries for 3 child relations.
+  - **Fix:**
+    Evaluate child querysets to lists with `select_related` in the view, and use `|length` and `{% if field_actions %}` in `detail.html`.
+
+- **I8: Foreign key traversal in `ComplaintInvestigation.__str__` triggers queries in audit logging**
+  - **File:** `apps/quality/models/CustomerComplaints/ComplaintInvestigations.py:138-139`
+  - **Problem:**
+    `return f"{self.number} - {self.complaint.number} Investigation"` accesses `self.complaint.number`. When `write_audit_log` or other utilities call `str(obj)`, a synchronous SQL query is fired if `complaint` is not pre-fetched.
+  - **Fix:**
+    Change `__str__` to:
+    ```python
+    def __str__(self):
+        return f"{self.number} - Complaint Investigation"
+    ```
+
+- **I9: Redundant sequential COUNT queries in KPI stat cards**
+  - **Files:**
+    - `apps/quality/views/CustomerComplaints/CustomerComplaints.py:68-74`
+    - `apps/quality/views/CustomerComplaints/ComplaintTrendingDashboard.py:20-22`
+    - `apps/quality/views/CustomerComplaints/ComplaintInvestigations.py:57-62`
+    - `apps/quality/views/CustomerComplaints/RegulatoryReports.py:59-70`
+    - `apps/quality/views/CustomerComplaints/FieldActions.py:57-62`
+  - **Problem:**
+    Each list view executes 3 to 4 sequential `SELECT COUNT(*)` queries against the same tenant-scoped table.
+  - **Fix:**
+    Consolidate into a single `base_tenant_qs.aggregate(Count(...), Count(...))` query per view.
+
+- **I10: Missing composite database indexes on tenant + filter columns**
+  - **Files:**
+    - `apps/quality/models/CustomerComplaints/CustomerComplaints.py:192-201` (`["tenant", "customer"]`, `["tenant", "intake_channel"]`)
+    - `apps/quality/models/CustomerComplaints/RegulatoryReports.py:147-153` (`["tenant", "submission_status", "statutory_due_date"]`, `["tenant", "report_type"]`)
+    - `apps/quality/models/CustomerComplaints/FieldActions.py:122-129` (`["tenant", "initiating_complaint"]`)
+  - **Problem:**
+    Single-column indexes on multi-tenant tables force index intersection or full index scans rather than efficient composite lookups.
+  - **Fix:**
+    Add composite indexes to `Meta.indexes`.
+
+### Minor
+- **M9: CSV export endpoints ignore GET filter parameters**
+  - **Files:**
+    - `apps/quality/views/CustomerComplaints/CustomerComplaints.py:246`
+    - `apps/quality/views/CustomerComplaints/ComplaintInvestigations.py:206`
+    - `apps/quality/views/CustomerComplaints/RegulatoryReports.py:229`
+    - `apps/quality/views/CustomerComplaints/FieldActions.py:197`
+  - **Problem:**
+    CSV export views do not apply the search keyword or status filters present in `request.GET`.
+  - **Fix:**
+    Apply the standard filter parameters to the export queryset before streaming.
+
+
 
