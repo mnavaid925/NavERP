@@ -182,10 +182,13 @@ def audit_finding_edit(request, pk):
 @tenant_admin_required
 def audit_finding_delete(request, pk):
     finding = quality_object(request, AuditFinding, pk)
+    audit = finding.audit
     audit_pk = finding.audit_id
     number = finding.number
     write_audit_log(request.user, finding, "delete", tenant=request.tenant)
     finding.delete()
+    if audit:
+        audit.sync_findings_counts()
     messages.success(request, f"Audit Finding {number} deleted successfully.")
     if audit_pk:
         return redirect("quality:quality_audit_detail", pk=audit_pk)
