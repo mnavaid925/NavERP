@@ -3468,6 +3468,13 @@ LIVE_LINKS = {
         "Competency Assessment & Certification": "quality:competency_certification_list",
         "Training Records & Compliance": "quality:training_compliance_dashboard",
     },
+    "12.13": {
+        "Complaint Intake & Triage": "quality:customer_complaint_list",
+        "Investigation & Root Cause Analysis": "quality:complaint_investigation_list",
+        "Regulatory Reporting & Vigilance": "quality:regulatory_report_list",
+        "Field Action & Recall Management": "quality:field_action_list",
+        "Complaint Trending & Closure": "quality:complaint_trending_dashboard",
+    },
 
 
 
