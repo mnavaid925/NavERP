@@ -7,9 +7,9 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'dashboard:home' %}">Home</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <span>{{ complaint.number }}</span>
         </div>
         <div class="flex items-center gap-3">
@@ -69,7 +69,7 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     <div class="lg:col-span-2 space-y-6">
-        <!-- Allegation & Problem Description -->
+        {# Allegation & Problem Description #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Complaint Allegation & Incident Narrative</h3>
@@ -122,7 +122,7 @@
             </div>
         </div>
 
-        <!-- Linked Investigations -->
+        {# Linked Investigations #}
         <div class="card">
             <div class="card-header flex items-center justify-between">
                 <h3 class="card-title">Technical Investigations & DHR Reviews ({{ investigations|length }})</h3>
@@ -193,7 +193,7 @@
             </div>
         </div>
 
-        <!-- Linked Regulatory Reports -->
+        {# Linked Regulatory Reports #}
         <div class="card">
             <div class="card-header flex items-center justify-between">
                 <h3 class="card-title">Regulatory Vigilance & Adverse Event Reports ({{ reports|length }})</h3>
@@ -259,7 +259,7 @@
             </div>
         </div>
 
-        <!-- Linked Field Actions -->
+        {# Linked Field Actions #}
         {% if field_actions %}
         <div class="card">
             <div class="card-header">
@@ -307,9 +307,9 @@
         {% endif %}
     </div>
 
-    <!-- Metadata Sidebar & Workflow Actions -->
+    {# Metadata Sidebar & Workflow Actions #}
     <div class="space-y-6">
-        <!-- Key Metadata Card -->
+        {# Key Metadata Card #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Complaint Identification</h3>
@@ -371,7 +371,7 @@
             </div>
         </div>
 
-        <!-- Sample Return Card -->
+        {# Sample Return Card #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Physical Sample Tracking</h3>
@@ -398,7 +398,7 @@
             </div>
         </div>
 
-        <!-- QA Triage Section (if under triage) -->
+        {# QA Triage Section (if under triage) #}
         {% if triage_form and complaint.status != "closed" and complaint.status != "cancelled" %}
         <div class="card border-amber-300">
             <div class="card-header bg-amber-50">
@@ -453,7 +453,7 @@
         </div>
         {% endif %}
 
-        <!-- Closure Sign-Off Card -->
+        {# Closure Sign-Off Card #}
         {% if complaint.status != "closed" and complaint.status != "cancelled" %}
         <div class="card border-green-300">
             <div class="card-header bg-green-50">
