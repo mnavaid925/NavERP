@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Regulatory Vigilance Reports — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Regulatory Vigilance & MDR</span>
+        </div>
+        <h1 class="page-title">Regulatory Reporting & Vigilance (MDR / MIR)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:regulatory_report_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:regulatory_report_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> File Vigilance Report
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Submissions</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="send"></i>
+        </div>
+        <div>
+            <div class="stat-label">Pending Transmission</div>
+            <div class="stat-value">{{ pending_submission_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-label">Overdue Statutory Clock</div>
+            <div class="stat-value">{{ overdue_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Report #, complaint #, ACK, summary..." class="form-input">
+            </div>
+            <div>
+                <label for="agency" class="form-label text-xs">Regulatory Agency</label>
+                <select name="agency" id="agency" class="form-select">
+                    <option value="">All Authorities</option>
+                    {% for val, label in agency_choices %}
+                    <option value="{{ val }}" {% if request.GET.agency == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="submission_status" class="form-label text-xs">Submission Status</label>
+                <select name="submission_status" id="submission_status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in submission_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.submission_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="timeline_category" class="form-label text-xs">Statutory Clock</label>
+                <select name="timeline_category" id="timeline_category" class="form-select">
+                    <option value="">All Clocks</option>
+                    {% for val, label in timeline_category_choices %}
+                    <option value="{{ val }}" {% if request.GET.timeline_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if request.GET.urlencode %}
+                <a href="{% url 'quality:regulatory_report_list' %}" class="btn btn-ghost" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Report #</th>
+                    <th>Linked Complaint</th>
+                    <th>Agency Authority</th>
+                    <th>Report Type</th>
+                    <th>Adverse Classification</th>
+                    <th>Statutory Clock</th>
+                    <th>Mandated Deadline</th>
+                    <th>Status</th>
+                    <th>Gateway ACK #</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in reports %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'quality:regulatory_report_detail' r.pk %}" class="text-blue-600 hover:underline">
+                            {{ r.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:customer_complaint_detail' r.complaint.pk %}" class="text-slate-800 hover:text-blue-600 font-medium text-sm">
+                            {{ r.complaint.number }}
+                        </a>
+                        <div class="text-xs text-slate-500 truncate max-w-xs">{{ r.complaint.title }}</div>
+                    </td>
+                    <td><span class="badge badge-info">{{ r.get_agency_display }}</span></td>
+                    <td class="text-xs">{{ r.get_report_type_display }}</td>
+                    <td>
+                        {% if r.adverse_event_class == "death" %}
+                        <span class="badge badge-red">Death</span>
+                        {% elif r.adverse_event_class == "serious_injury" %}
+                        <span class="badge badge-red">Serious Injury</span>
+                        {% elif r.adverse_event_class == "public_health_threat" %}
+                        <span class="badge badge-red">Public Threat</span>
+                        {% elif r.adverse_event_class == "remedial_action_trigger" %}
+                        <span class="badge badge-amber">Remedial Action</span>
+                        {% else %}
+                        <span class="badge badge-slate">Malfunction</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs font-mono">{{ r.get_timeline_category_display }}</td>
+                    <td>
+                        <div class="font-mono text-xs {% if r.is_overdue %}text-red-600 font-bold{% else %}text-slate-700{% endif %}">
+                            {{ r.statutory_due_date|date:"Y-m-d" }}
+                        </div>
+                        <span class="badge {{ r.urgency_badge_css }} text-[10px]">
+                            {% if r.is_overdue %}Overdue {{ r.days_until_due|stringformat:"+d" }}d
+                            {% elif r.submission_status == "acknowledged" %}Compliant
+                            {% else %}{{ r.days_until_due }}d remaining{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        {% if r.submission_status == "acknowledged" %}
+                        <span class="badge badge-green">Acknowledged</span>
+                        {% elif r.submission_status == "submitted" %}
+                        <span class="badge badge-purple">Submitted</span>
+                        {% elif r.submission_status == "ready_to_transmit" %}
+                        <span class="badge badge-info">Ready</span>
+                        {% elif r.submission_status == "rejected_supplement_needed" %}
+                        <span class="badge badge-red">Deficient</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ r.get_submission_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-xs text-slate-600">
+                        {{ r.agency_acknowledgement_number|default:"—" }}
+                    </td>
+                    <td class="table-actions">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'quality:regulatory_report_detail' r.pk %}" class="btn btn-icon" title="View report">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:regulatory_report_edit' r.pk %}" class="btn btn-icon" title="Edit report">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'quality:regulatory_report_delete' r.pk %}" onsubmit="return confirm('Permanently delete report {{ r.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete report">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="file-warning"></i>
+                            </div>
+                            <div class="empty-state-title">No vigilance reports recorded</div>
+                            <div class="empty-state-text">
+                                {% if request.GET.urlencode %}
+                                No regulatory reports match the filter parameters.
+                                {% else %}
+                                There are no regulatory adverse event reports currently filed.
+                                {% endif %}
+                            </div>
+                            <div class="mt-4">
+                                <a href="{% url 'quality:regulatory_report_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i> File Vigilance Report
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} reports
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i> Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i> Previous
+            </span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm font-medium text-slate-700">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Next <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                Next <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
