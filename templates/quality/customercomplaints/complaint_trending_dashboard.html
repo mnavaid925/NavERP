@@ -7,9 +7,9 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'dashboard:home' %}">Home</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <span>Trending & Post-Market Surveillance</span>
         </div>
         <h1 class="page-title">Complaint Trending & Post-Market Surveillance</h1>
@@ -24,7 +24,7 @@
     </div>
 </div>
 
-<!-- KPI Cards -->
+{# KPI Cards #}
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
     <div class="stat-card">
         <div class="stat-icon blue">
@@ -73,9 +73,9 @@
     </div>
 </div>
 
-<!-- Top Grid: Vigilance Deadlines & Active Recalls -->
+{# Top Grid: Vigilance Deadlines & Active Recalls #}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-    <!-- Statutory Vigilance Countdown Radar -->
+    {# Statutory Vigilance Countdown Radar #}
     <div class="card border-red-200">
         <div class="card-header bg-red-50 flex items-center justify-between">
             <h3 class="card-title text-red-900 flex items-center gap-2">
@@ -120,7 +120,7 @@
         </div>
     </div>
 
-    <!-- Active Field Recalls Recovery Status -->
+    {# Active Field Recalls Recovery Status #}
     <div class="card">
         <div class="card-header flex items-center justify-between">
             <h3 class="card-title flex items-center gap-2">
@@ -161,9 +161,9 @@
     </div>
 </div>
 
-<!-- Middle Grid: Category Breakdown & Root Cause Pareto -->
+{# Middle Grid: Category Breakdown & Root Cause Pareto #}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-    <!-- Complaint Categories -->
+    {# Complaint Categories #}
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">Top Complaint Categories / Failure Codes</h3>
@@ -189,7 +189,7 @@
         </div>
     </div>
 
-    <!-- Root Cause Analysis Pareto -->
+    {# Root Cause Analysis Pareto #}
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">Root Cause Distribution (Pareto)</h3>
@@ -216,7 +216,7 @@
     </div>
 </div>
 
-<!-- Bottom Grid: Severity Distribution & Inbound Channels -->
+{# Bottom Grid: Severity Distribution & Inbound Channels #}
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <div class="card">
         <div class="card-header">
