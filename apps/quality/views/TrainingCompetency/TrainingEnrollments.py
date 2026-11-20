@@ -279,6 +279,15 @@ def training_enrollment_complete(request, pk):
 @require_POST
 def training_enrollment_verify(request, pk):
     enrollment = quality_object(request, TrainingEnrollment, pk)
+
+    if enrollment.status != "completed":
+        messages.error(request, "Enrollment must be in completed status before practical verification can be performed.")
+        return redirect("quality:training_enrollment_detail", pk=enrollment.pk)
+
+    if request.user == enrollment.trainee and not getattr(request.user, "is_tenant_admin", False):
+        messages.error(request, "Segregation of duties violation: Trainees cannot verify their own practical qualification.")
+        return redirect("quality:training_enrollment_detail", pk=enrollment.pk)
+
     form = PracticalVerificationForm(request.POST)
     if form.is_valid():
         rating = form.cleaned_data.get("practical_rating")
