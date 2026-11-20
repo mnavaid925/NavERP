@@ -10,6 +10,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.quality.forms.AuditManagement.RegulatoryInspectionHosts import (
     InspectionLogRequestForm,
     RegulatoryInspectionHostForm,
@@ -159,6 +160,7 @@ def regulatory_inspection_host_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def regulatory_inspection_host_delete(request, pk):
     host = quality_object(request, RegulatoryInspectionHost, pk)
     number = host.number
