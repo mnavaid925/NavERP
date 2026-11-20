@@ -196,6 +196,13 @@ def audit_finding_delete(request, pk):
 @require_POST
 def audit_finding_submit_response(request, pk):
     finding = quality_object(request, AuditFinding, pk)
+    if finding.status not in ("draft", "issued", "escalated"):
+        messages.warning(
+            request,
+            f"Audit Finding {finding.number} cannot accept remediation response in status '{finding.get_status_display()}'.",
+        )
+        return redirect("quality:audit_finding_detail", pk=finding.pk)
+
     form = AuditFindingResponseForm(request.POST, instance=finding)
     if form.is_valid():
         finding = form.save(commit=False)
