@@ -213,11 +213,18 @@ class QualityAudit(TenantNumbered):
         return self.findings.exclude(status="closed").count()
 
     def sync_findings_counts(self):
-        self.total_findings_count = self.findings.count()
-        self.critical_findings_count = self.findings.filter(severity="critical").count()
-        self.major_findings_count = self.findings.filter(severity="major").count()
-        self.minor_findings_count = self.findings.filter(severity="minor").count()
-        self.ofi_findings_count = self.findings.filter(severity="observation_ofi").count()
+        aggs = self.findings.aggregate(
+            total=models.Count("id"),
+            critical=models.Count("id", filter=models.Q(severity="critical")),
+            major=models.Count("id", filter=models.Q(severity="major")),
+            minor=models.Count("id", filter=models.Q(severity="minor")),
+            ofi=models.Count("id", filter=models.Q(severity="observation_ofi")),
+        )
+        self.total_findings_count = aggs["total"]
+        self.critical_findings_count = aggs["critical"]
+        self.major_findings_count = aggs["major"]
+        self.minor_findings_count = aggs["minor"]
+        self.ofi_findings_count = aggs["ofi"]
         self.save(update_fields=[
             "total_findings_count",
             "critical_findings_count",
