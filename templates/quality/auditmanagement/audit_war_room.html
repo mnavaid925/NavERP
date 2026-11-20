@@ -175,7 +175,7 @@
                 {% for insp in active_inspections %}
                 <a href="?host={{ insp.pk }}" class="block p-3 rounded border {% if insp.pk == selected_host.pk %}border-primary bg-primary/5 font-semibold text-primary{% else %}border-slate-200 hover:bg-slate-50 text-slate-700{% endif %} text-xs transition-colors">
                     <div class="font-medium truncate">{{ insp.number }} - {{ insp.inspection_title }}</div>
-                    <div class="text-2xs text-muted mt-0.5">{{ insp.agency_name }} • {{ insp.scheduled_start_date }}</div>
+                    <div class="text-xs text-muted mt-0.5">{{ insp.agency_name }} • {{ insp.scheduled_start_date }}</div>
                 </a>
                 {% endfor %}
             </div>
