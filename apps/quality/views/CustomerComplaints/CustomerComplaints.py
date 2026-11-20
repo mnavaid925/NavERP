@@ -162,6 +162,9 @@ def customer_complaint_create(request):
 @login_required
 def customer_complaint_edit(request, pk):
     complaint = quality_object(request, CustomerComplaint, pk)
+    if complaint.status in ["closed", "cancelled"]:
+        messages.error(request, f"Complaint {complaint.number} is {complaint.get_status_display()} and cannot be modified.")
+        return redirect("quality:customer_complaint_detail", pk=complaint.pk)
 
     if request.method == "POST":
         form = CustomerComplaintForm(request.POST, instance=complaint, tenant=request.tenant)
