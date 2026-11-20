@@ -124,14 +124,20 @@ def management_review_input_create(request):
     parent_review = None
     if review_id and review_id.isdigit():
         parent_review = quality_object(request, ManagementReview, int(review_id))
+        if parent_review.status in ["approved", "cancelled"]:
+            messages.error(request, f"Cannot add inputs to a {parent_review.get_status_display().lower()} review.")
+            return redirect("quality:management_review_detail", pk=parent_review.pk)
         initial["management_review"] = parent_review.pk
         initial["agenda_order"] = parent_review.inputs.count() + 1
 
     if request.method == "POST":
         form = ManagementReviewInputForm(request.POST, tenant=request.tenant)
         if form.is_valid():
+            obj = form.save(commit=False)
+            if obj.management_review.status in ["approved", "cancelled"]:
+                messages.error(request, f"Cannot add inputs to a {obj.management_review.get_status_display().lower()} review.")
+                return redirect("quality:management_review_detail", pk=obj.management_review.pk)
             with transaction.atomic():
-                obj = form.save(commit=False)
                 obj.tenant = request.tenant
                 obj.status = "compiled"
                 obj.save()
@@ -152,7 +158,11 @@ def management_review_input_create(request):
 
 @login_required
 def management_review_input_edit(request, pk):
-    review_input = quality_object(request, ManagementReviewInput, pk)
+    review_input = quality_object(request, ManagementReviewInput, pk, select_related=("management_review",))
+    if review_input.management_review.status in ["approved", "cancelled"]:
+        messages.error(request, f"Cannot edit inputs of a {review_input.management_review.get_status_display().lower()} review.")
+        return redirect("quality:management_review_input_detail", pk=review_input.pk)
+
     if request.method == "POST":
         form = ManagementReviewInputForm(request.POST, instance=review_input, tenant=request.tenant)
         if form.is_valid():
@@ -176,7 +186,11 @@ def management_review_input_edit(request, pk):
 @login_required
 @require_POST
 def management_review_input_delete(request, pk):
-    review_input = quality_object(request, ManagementReviewInput, pk)
+    review_input = quality_object(request, ManagementReviewInput, pk, select_related=("management_review",))
+    if review_input.management_review.status in ["approved", "cancelled"]:
+        messages.error(request, f"Cannot delete inputs of a {review_input.management_review.get_status_display().lower()} review.")
+        return redirect("quality:management_review_detail", pk=review_input.management_review_id)
+
     parent_id = review_input.management_review_id
     number = review_input.number
     with transaction.atomic():
@@ -189,7 +203,11 @@ def management_review_input_delete(request, pk):
 @login_required
 @require_POST
 def management_review_input_present(request, pk):
-    review_input = quality_object(request, ManagementReviewInput, pk)
+    review_input = quality_object(request, ManagementReviewInput, pk, select_related=("management_review",))
+    if review_input.management_review.status in ["approved", "cancelled"]:
+        messages.error(request, f"Cannot alter inputs of a {review_input.management_review.get_status_display().lower()} review.")
+        return redirect("quality:management_review_input_detail", pk=review_input.pk)
+
     with transaction.atomic():
         review_input.status = "presented"
         review_input.save()
@@ -201,7 +219,11 @@ def management_review_input_present(request, pk):
 @login_required
 @require_POST
 def management_review_input_accept(request, pk):
-    review_input = quality_object(request, ManagementReviewInput, pk)
+    review_input = quality_object(request, ManagementReviewInput, pk, select_related=("management_review",))
+    if review_input.management_review.status in ["approved", "cancelled"]:
+        messages.error(request, f"Cannot alter inputs of a {review_input.management_review.get_status_display().lower()} review.")
+        return redirect("quality:management_review_input_detail", pk=review_input.pk)
+
     with transaction.atomic():
         review_input.status = "accepted"
         review_input.save()
