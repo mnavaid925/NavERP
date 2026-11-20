@@ -1,6 +1,7 @@
 from datetime import date
 
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.shortcuts import render
 
 from apps.quality.models.AuditManagement.AuditFindings import AuditFinding
@@ -15,23 +16,26 @@ def audit_action_tracker(request):
     )
 
     open_findings = base_qs.exclude(status="closed").order_by("response_due_date")
-    overdue_findings = [f for f in open_findings if f.is_overdue]
+    overdue_findings = base_qs.filter(
+        response_due_date__lt=date.today(),
+        status__in=["draft", "issued", "escalated"],
+    ).order_by("response_due_date")
     pending_verification = base_qs.filter(status="verification_pending").order_by("-updated_at")
-    escalated_findings = base_qs.filter(status="escalated").order_by("-updated_at")
 
-    total_open_count = len(open_findings)
-    overdue_count = len(overdue_findings)
-    critical_count = sum(1 for f in open_findings if f.severity in ("critical", "major"))
-    pending_verification_count = pending_verification.count()
+    stats = base_qs.aggregate(
+        total_open=Count("id", filter=~Q(status="closed")),
+        overdue=Count("id", filter=Q(response_due_date__lt=date.today(), status__in=["draft", "issued", "escalated"])),
+        critical=Count("id", filter=~Q(status="closed") & Q(severity__in=["critical", "major"])),
+        pending_verification=Count("id", filter=Q(status="verification_pending")),
+    )
 
     context = {
         "open_findings": open_findings,
         "overdue_findings": overdue_findings,
         "pending_verification": pending_verification,
-        "escalated_findings": escalated_findings,
-        "total_open_count": total_open_count,
-        "overdue_count": overdue_count,
-        "critical_count": critical_count,
-        "pending_verification_count": pending_verification_count,
+        "total_open_count": stats["total_open"],
+        "overdue_count": stats["overdue"],
+        "critical_count": stats["critical"],
+        "pending_verification_count": stats["pending_verification"],
     }
     return render(request, "quality/auditmanagement/audit_action_tracker.html", context)
