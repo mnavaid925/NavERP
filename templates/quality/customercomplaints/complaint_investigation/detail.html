@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+
+{% block title %}{{ investigation.number }} — Complaint Investigation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:complaint_investigation_list' %}">Investigations</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ investigation.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ investigation.number }}</h1>
+            {% if investigation.status == "approved" %}
+            <span class="badge badge-green">Approved & Closed</span>
+            {% elif investigation.status == "rejected_rework" %}
+            <span class="badge badge-red">Rework Required</span>
+            {% elif investigation.status == "hhe_review" %}
+            <span class="badge badge-purple">HHE Review</span>
+            {% elif investigation.status == "pending_qa_review" %}
+            <span class="badge badge-amber">Pending QA Sign-Off</span>
+            {% elif investigation.status == "in_progress" %}
+            <span class="badge badge-amber">In Progress</span>
+            {% else %}
+            <span class="badge badge-info">{{ investigation.get_status_display }}</span>
+            {% endif %}
+
+            <span class="badge badge-slate">{{ investigation.get_analytical_method_display }}</span>
+            {% if investigation.capa_required %}
+            <span class="badge badge-purple"><i data-lucide="alert-circle" class="w-3 h-3 inline"></i> CAPA Triggered</span>
+            {% endif %}
+        </div>
+        <div class="text-sm text-slate-500 mt-1">
+            Investigation for Complaint <a href="{% url 'quality:customer_complaint_detail' investigation.complaint.pk %}" class="text-blue-600 hover:underline font-medium">{{ investigation.complaint.number }}</a>: {{ investigation.complaint.title }}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:complaint_investigation_edit' investigation.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Investigation
+        </a>
+        <a href="{% url 'quality:customer_complaint_detail' investigation.complaint.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> View Complaint
+        </a>
+        <form method="post" action="{% url 'quality:complaint_investigation_delete' investigation.pk %}" onsubmit="return confirm('Permanently delete investigation {{ investigation.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Root Cause Analysis Narrative -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Root Cause Determination & 5 Whys Analysis</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Root Cause Category</div>
+                    <div class="text-base font-medium text-slate-900">{{ investigation.get_root_cause_category_display }}</div>
+                </div>
+
+                <div>
+                    <h4 class="text-sm font-semibold text-slate-700 mb-2">5 Whys / Failure Tree Narrative</h4>
+                    <div class="p-4 bg-white rounded border border-slate-200 text-slate-800 text-sm whitespace-pre-line leading-relaxed font-sans">
+                        {{ investigation.root_cause_narrative|default:"No root cause narrative documented yet." }}
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-sm font-semibold text-slate-700 mb-2">Formal Engineering Conclusion</h4>
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 text-slate-800 text-sm whitespace-pre-line leading-relaxed font-sans">
+                        {{ investigation.investigation_conclusion|default:"Pending final engineering conclusion." }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DHR / Batch Review -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Device History Record (DHR) & Batch Audit</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>DHR Review Executed</dt>
+                        <dd>
+                            {% if investigation.dhr_reviewed %}
+                            <span class="badge badge-green">Yes — Completed</span>
+                            {% else %}
+                            <span class="badge badge-slate">Not Reviewed</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Examined Lot / Batch #</dt>
+                        <dd class="font-mono">{{ investigation.dhr_lot_number|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Batch Quantity Shipped</dt>
+                        <dd class="font-mono">{{ investigation.dhr_quantity_produced }} units</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Historical Batch Anomalies</dt>
+                        <dd>
+                            {% if investigation.dhr_anomalies_identified %}
+                            <span class="badge badge-red">Anomalies / Deviations Observed</span>
+                            {% else %}
+                            <span class="badge badge-green">Clean Batch Record</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item sm:col-span-2">
+                        <dt>DHR Review Findings</dt>
+                        <dd class="text-sm whitespace-pre-line">{{ investigation.dhr_review_summary|default:"No anomalies noted during batch record examination." }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Physical Sample Lab Diagnostics -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Laboratory Diagnostics & Failure Reproduction</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Physical Sample Analyzed</dt>
+                        <dd>
+                            {% if investigation.physical_sample_examined %}
+                            <span class="badge badge-green">Yes — Lab Inspected</span>
+                            {% else %}
+                            <span class="badge badge-muted">No Sample Available</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Failure Replicated</dt>
+                        <dd>
+                            {% if investigation.failure_reproduced %}
+                            <span class="badge badge-red">Reproduced Under Test</span>
+                            {% else %}
+                            <span class="badge badge-muted">Not Replicated</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item sm:col-span-2">
+                        <dt>Laboratory Findings & Diagnostics</dt>
+                        <dd class="text-sm whitespace-pre-line">{{ investigation.sample_testing_findings|default:"Laboratory inspection summary pending." }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Health Hazard Evaluation (HHE) & Risk Alignment -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Clinical Health Hazard Evaluation & ISO 14971 FMEA</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>HHE Mandated</dt>
+                        <dd>
+                            {% if investigation.hhe_required %}
+                            <span class="badge badge-red">Clinical HHE Required</span>
+                            {% else %}
+                            <span class="badge badge-muted">No HHE Mandated</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>FMEA Threshold Exceeded</dt>
+                        <dd>
+                            {% if investigation.risk_exceeds_threshold %}
+                            <span class="badge badge-red">Yes — Exceeds Risk Threshold</span>
+                            {% else %}
+                            <span class="badge badge-green">Within Acceptable Risk Limits</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Linked Risk Assessment</dt>
+                        <dd>
+                            {% if investigation.risk_assessment %}
+                            <a href="{% url 'quality:risk_assessment_detail' investigation.risk_assessment.pk %}" class="text-blue-600 hover:underline">
+                                {{ investigation.risk_assessment.number }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item sm:col-span-2">
+                        <dt>Clinical Health Hazard Assessment</dt>
+                        <dd class="text-sm whitespace-pre-line">{{ investigation.health_hazard_evaluation|default:"Clinical evaluation not required or not yet performed." }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: Escalations & Approval -->
+    <div class="space-y-6">
+        <!-- Details Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Investigation Metadata</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Lead Investigator</dt>
+                        <dd class="font-medium">
+                            {% if investigation.lead_investigator %}
+                            {{ investigation.lead_investigator.get_full_name|default:investigation.lead_investigator.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Completion</dt>
+                        <dd class="font-mono {% if investigation.is_overdue %}text-red-600 font-bold{% endif %}">
+                            {{ investigation.target_completion_date|date:"M d, Y"|default:"—" }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Actual Completion</dt>
+                        <dd class="font-mono">{{ investigation.actual_completion_date|date:"M d, Y"|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>QA Sign-Off By</dt>
+                        <dd>
+                            {% if investigation.qa_approved_by %}
+                            {{ investigation.qa_approved_by.get_full_name|default:investigation.qa_approved_by.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Approval Date</dt>
+                        <dd>{{ investigation.qa_approved_date|date:"M d, Y"|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Corrective Action Escalation Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Corrective & Preventive Action (CAPA)</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-600">CAPA Mandatory:</span>
+                    {% if investigation.capa_required %}
+                    <span class="badge badge-purple">Yes</span>
+                    {% else %}
+                    <span class="badge badge-muted">No</span>
+                    {% endif %}
+                </div>
+                {% if investigation.capa %}
+                <div class="p-3 bg-purple-50 border border-purple-200 rounded">
+                    <div class="text-xs font-semibold text-purple-900 uppercase">Linked CAPA</div>
+                    <a href="{% url 'quality:capa_investigation_detail' investigation.capa.pk %}" class="text-sm font-medium text-purple-700 hover:underline">
+                        {{ investigation.capa.number }}: {{ investigation.capa.title }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if investigation.ncr %}
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded">
+                    <div class="text-xs font-semibold text-amber-900 uppercase">Linked Non-Conformance</div>
+                    <a href="{% url 'quality:non_conformance_report_detail' investigation.ncr.pk %}" class="text-sm font-medium text-amber-700 hover:underline">
+                        {{ investigation.ncr.number }}: {{ investigation.ncr.title }}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- QA Approval Sign-Off Action -->
+        {% if investigation.status != "approved" %}
+        <div class="card border-blue-300">
+            <div class="card-header bg-blue-50">
+                <h3 class="card-title text-blue-900"><i data-lucide="check-circle-2" class="inline w-4 h-4 mr-1"></i> QA Review & Formal Approval</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <form method="post" action="{% url 'quality:complaint_investigation_complete' investigation.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action_type" value="approve">
+                    <button type="submit" class="btn btn-primary w-full bg-green-600 hover:bg-green-700" onclick="return confirm('Formally approve this technical investigation and lock conclusions?');">
+                        <i data-lucide="check"></i> Approve & Close Investigation
+                    </button>
+                </form>
+
+                <form method="post" action="{% url 'quality:complaint_investigation_complete' investigation.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action_type" value="reject">
+                    <button type="submit" class="btn btn-outline w-full text-red-600 hover:bg-red-50" onclick="return confirm('Return investigation to engineering for rework?');">
+                        <i data-lucide="x"></i> Reject (Require Rework)
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
