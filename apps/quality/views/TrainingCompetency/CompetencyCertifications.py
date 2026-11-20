@@ -377,6 +377,9 @@ def training_compliance_dashboard(request):
         "recent_enrollments": recent_enrollments,
         "expiring_list": expiring_list,
         "dept_metrics": dept_metrics,
+        "department_metrics": dept_metrics,
+        "active_certifications": active_certifications,
+        "expiring_certifications": expiring_certifications,
     }
     return render(request, "quality/trainingcompetency/training_compliance_dashboard.html", context)
 
@@ -410,6 +413,7 @@ def employee_training_dossier(request):
     total_assigned = TrainingEnrollment.objects.filter(tenant=tenant, trainee=trainee).count()
     completed_count = completed_enrollments.count()
     compliance_rate = round((completed_count / total_assigned * 100), 1) if total_assigned > 0 else 100.0
+    active_certs_count = certifications.filter(status="active").count()
 
     context = {
         "trainee": trainee,
@@ -417,11 +421,13 @@ def employee_training_dossier(request):
         "certifications": certifications,
         "completed_enrollments": completed_enrollments,
         "pending_enrollments": pending_enrollments,
+        "active_certifications": active_certs_count,
         "summary": {
             "total_assigned": total_assigned,
             "completed_count": completed_count,
             "pending_count": pending_enrollments.count(),
-            "active_certs": certifications.filter(status="active").count(),
+            "active_certs": active_certs_count,
+            "active_certifications": active_certs_count,
             "compliance_rate": compliance_rate,
         },
     }
