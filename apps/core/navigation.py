@@ -3475,6 +3475,13 @@ LIVE_LINKS = {
         "Field Action & Recall Management": "quality:field_action_list",
         "Complaint Trending & Closure": "quality:complaint_trending_dashboard",
     },
+    "12.14": {
+        "Management Review Scheduling": "quality:management_review_list",
+        "Quality Objectives & KPIs": "quality:quality_objective_list",
+        "Review Inputs & Data Compilation": "quality:management_review_input_list",
+        "Management Review Outputs & Decisions": "quality:management_review_action_list",
+        "Quality Planning & Continuous Improvement": "quality:quality_planning_dashboard",
+    },
 
 
 
