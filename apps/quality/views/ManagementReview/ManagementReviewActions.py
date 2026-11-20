@@ -119,9 +119,10 @@ def management_review_action_detail(request, pk):
         select_related=("management_review", "assignee", "verified_by", "spawned_capa", "spawned_change_order"),
     )
 
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)
     can_start = action_item.status == "open"
     can_complete = action_item.status in ["open", "in_progress"]
-    can_verify = action_item.status == "pending_verification"
+    can_verify = action_item.status == "pending_verification" and (action_item.assignee_id != request.user.id or is_admin)
     can_escalate_capa = action_item.spawned_capa is None and action_item.status not in ["completed", "cancelled"]
 
     complete_form = ManagementReviewActionCompleteForm(initial={"resolution_summary": action_item.resolution_summary})
@@ -238,6 +239,10 @@ def management_review_action_delete(request, pk):
 @require_POST
 def management_review_action_start(request, pk):
     action_item = quality_object(request, ManagementReviewAction, pk)
+    if action_item.status != "open":
+        messages.warning(request, f"Action item {action_item.number} is already {action_item.get_status_display().lower()}.")
+        return redirect("quality:management_review_action_detail", pk=action_item.pk)
+
     with transaction.atomic():
         action_item.status = "in_progress"
         action_item.save()
@@ -250,6 +255,10 @@ def management_review_action_start(request, pk):
 @require_POST
 def management_review_action_complete(request, pk):
     action_item = quality_object(request, ManagementReviewAction, pk)
+    if action_item.status not in ["open", "in_progress"]:
+        messages.warning(request, f"Action item {action_item.number} cannot be completed because it is {action_item.get_status_display().lower()}.")
+        return redirect("quality:management_review_action_detail", pk=action_item.pk)
+
     form = ManagementReviewActionCompleteForm(request.POST)
     if form.is_valid():
         with transaction.atomic():
@@ -268,6 +277,15 @@ def management_review_action_complete(request, pk):
 @require_POST
 def management_review_action_verify(request, pk):
     action_item = quality_object(request, ManagementReviewAction, pk)
+    if action_item.status != "pending_verification":
+        messages.error(request, f"Only actions pending verification can be verified (current: {action_item.get_status_display().lower()}).")
+        return redirect("quality:management_review_action_detail", pk=action_item.pk)
+
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)
+    if action_item.assignee_id == request.user.id and not is_admin:
+        messages.error(request, "Independent QA verification is required. Assignee cannot self-verify.")
+        return redirect("quality:management_review_action_detail", pk=action_item.pk)
+
     form = ManagementReviewActionVerifyForm(request.POST)
     if form.is_valid():
         with transaction.atomic():
