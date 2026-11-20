@@ -2571,6 +2571,11 @@ def field_action_b(db, tenant_b, customer_complaint_b, admin_b):
 # ==============================================================================
 
 @pytest.fixture
+def staff_user(member_user):
+    return member_user
+
+
+@pytest.fixture
 def quality_objective_a(db, tenant_a, admin_user, quality_department):
     today = timezone.now().date()
     return QualityObjective.objects.create(
@@ -2623,10 +2628,9 @@ def management_review_a(db, tenant_a, admin_user, staff_user, quality_department
     return ManagementReview.objects.create(
         tenant=tenant_a,
         title="Q3 Executive QMS Suitability & Performance Review",
-        description="Formal quarterly management review per ISO 13485:2016 §5.6.",
         cadence="quarterly",
-        period_year=today.year,
-        period_quarter="Q3",
+        period_start=today - timedelta(days=90),
+        period_end=today,
         scheduled_date=today + timedelta(days=14),
         executive_sponsor=admin_user,
         lead_facilitator=staff_user,
@@ -2643,7 +2647,8 @@ def management_review_b(db, tenant_b, admin_b, quality_department_b):
         tenant=tenant_b,
         title="Globex Annual Management Quality Review",
         cadence="annual",
-        period_year=today.year,
+        period_start=today - timedelta(days=365),
+        period_end=today,
         scheduled_date=today + timedelta(days=30),
         executive_sponsor=admin_b,
         lead_facilitator=admin_b,
@@ -2662,7 +2667,7 @@ def management_review_input_a(db, tenant_a, management_review_a, admin_user):
         title="Internal & Supplier Quality Audit Performance Summary",
         agenda_order=1,
         presenter=admin_user,
-        data_summary="12 internal audits executed; 3 minor findings identified and resolved.",
+        summary_findings="12 internal audits executed; 3 minor findings identified and resolved.",
         status="compiled",
     )
 
@@ -2676,7 +2681,7 @@ def management_review_input_b(db, tenant_b, management_review_b, admin_b):
         title="Globex Field Complaints Trending Analysis",
         agenda_order=1,
         presenter=admin_b,
-        data_summary="Complaint volume declined by 18% over prior quarter.",
+        summary_findings="Complaint volume declined by 18% over prior quarter.",
         status="compiled",
     )
 
@@ -2704,6 +2709,7 @@ def management_review_action_b(db, tenant_b, management_review_b, admin_b):
         tenant=tenant_b,
         management_review=management_review_b,
         title="Globex Packaging SOP Revision",
+        description="Revise packaging SOP per updated specifications.",
         action_type="procedure_revision",
         priority="medium",
         assignee=admin_b,
