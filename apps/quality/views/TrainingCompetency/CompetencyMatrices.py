@@ -155,6 +155,15 @@ def competency_matrix_delete(request, pk):
 @require_POST
 def competency_matrix_approve(request, pk):
     matrix = quality_object(request, CompetencyMatrix, pk)
+
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)):
+        messages.error(request, "Permission denied. Only authorized quality managers or tenant administrators can approve competency matrices.")
+        return redirect("quality:competency_matrix_detail", pk=matrix.pk)
+
+    if matrix.status != "draft":
+        messages.error(request, f"Only draft competency matrices can be approved (current status: {matrix.get_status_display()}).")
+        return redirect("quality:competency_matrix_detail", pk=matrix.pk)
+
     matrix.status = "approved"
     matrix.approved_by = request.user
     matrix.approval_date = timezone.now().date()
@@ -168,6 +177,15 @@ def competency_matrix_approve(request, pk):
 @require_POST
 def competency_matrix_retire(request, pk):
     matrix = quality_object(request, CompetencyMatrix, pk)
+
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)):
+        messages.error(request, "Permission denied. Only authorized quality managers or tenant administrators can retire competency matrices.")
+        return redirect("quality:competency_matrix_detail", pk=matrix.pk)
+
+    if matrix.status != "approved":
+        messages.error(request, "Only approved competency matrices can be retired.")
+        return redirect("quality:competency_matrix_detail", pk=matrix.pk)
+
     matrix.status = "retired"
     matrix.save()
     write_audit_log(request.user, matrix, "retire", tenant=request.tenant)
