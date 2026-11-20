@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Management Review Outputs & Actions — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_planning_dashboard' %}">Quality Planning</a>
+            <span class="sep">/</span>
+            <span>Review Actions</span>
+        </div>
+        <h1 class="page-title">Management Review Outputs & Decisions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:management_review_action_export_csv' %}?{{ filter_querystring }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:management_review_action_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Add Action Item
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="check-square"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Actions</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active / Open</div>
+            <div class="stat-value">{{ open_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-label">Overdue Actions</div>
+            <div class="stat-value">{{ overdue_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="stat-label">Verified & Closed</div>
+            <div class="stat-value">{{ completed_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" placeholder="Title, #, description, summary..." class="form-input">
+            </div>
+            <div>
+                <label for="action_type" class="form-label text-xs">Output Type</label>
+                <select name="action_type" id="action_type" class="form-select">
+                    <option value="">All Action Types</option>
+                    {% for val, label in action_type_choices %}
+                    <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="priority" class="form-label text-xs">Priority</label>
+                <select name="priority" id="priority" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for val, label in priority_choices %}
+                    <option value="{{ val }}" {% if selected_priority == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="review" class="form-label text-xs">Review Cycle</label>
+                <select name="review" id="review" class="form-select">
+                    <option value="">All Reviews</option>
+                    {% for r in reviews %}
+                    <option value="{{ r.pk }}" {% if selected_review == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }} &ndash; {{ r.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if q or selected_type or selected_priority or selected_status or selected_review or selected_assignee %}
+                <a href="{% url 'quality:management_review_action_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Action #</th>
+                    <th>Review Session</th>
+                    <th>Action Title</th>
+                    <th>Type</th>
+                    <th>Priority</th>
+                    <th>Assignee</th>
+                    <th>Target Due Date</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for act in page_obj %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'quality:management_review_action_detail' act.pk %}" class="text-blue-600 hover:underline">
+                            {{ act.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:management_review_detail' act.management_review.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                            {{ act.management_review.number }}
+                        </a>
+                        <div class="text-xs text-slate-500 truncate max-w-[160px]">{{ act.management_review.title }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ act.title }}</div>
+                        <div class="text-xs text-slate-500 truncate max-w-[220px]">{{ act.description }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.action_type_badge_class }}">
+                            {{ act.get_action_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.priority_badge_class }}">
+                            {{ act.get_priority_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs">
+                        {{ act.assignee.get_full_name|default:act.assignee.username }}
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium {% if act.is_overdue %}text-rose-600 font-bold{% endif %}">
+                            {{ act.due_date|date:"M d, Y" }}
+                        </div>
+                        {% if act.is_overdue %}
+                        <span class="badge badge-red text-xs">Overdue</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ act.status_badge_class }}">
+                            {{ act.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'quality:management_review_action_detail' act.pk %}" class="btn btn-icon btn-outline" title="View Action">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if act.status != 'completed' and act.status != 'cancelled' %}
+                            <a href="{% url 'quality:management_review_action_edit' act.pk %}" class="btn btn-icon btn-outline" title="Edit Action">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'quality:management_review_action_delete' act.pk %}" class="inline" onsubmit="return confirm('Delete action item {{ act.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Action">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="check-square" class="empty-icon"></i>
+                            <div class="empty-title">No Action Items Found</div>
+                            <div class="empty-desc">
+                                {% if q or selected_type or selected_priority or selected_status or selected_review %}
+                                No review action items matched your current filter criteria.
+                                {% else %}
+                                No management review action items have been registered yet.
+                                {% endif %}
+                            </div>
+                            <div class="mt-4">
+                                <a href="{% url 'quality:management_review_action_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i> Create Action Item
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} actions
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
