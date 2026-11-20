@@ -103,6 +103,18 @@ from apps.quality.models.TrainingCompetency.TrainingEnrollments import (
 from apps.quality.models.TrainingCompetency.CompetencyCertifications import (
     CompetencyCertification,
 )
+from apps.quality.models.CustomerComplaints.CustomerComplaints import (
+    CustomerComplaint,
+)
+from apps.quality.models.CustomerComplaints.ComplaintInvestigations import (
+    ComplaintInvestigation,
+)
+from apps.quality.models.CustomerComplaints.RegulatoryReports import (
+    RegulatoryReport,
+)
+from apps.quality.models.CustomerComplaints.FieldActions import (
+    FieldAction,
+)
 
 __all__ = [
     "TenantOwned",
@@ -155,5 +167,9 @@ __all__ = [
     "QualityTrainingCourse",
     "TrainingEnrollment",
     "CompetencyCertification",
+    "CustomerComplaint",
+    "ComplaintInvestigation",
+    "RegulatoryReport",
+    "FieldAction",
 ]
 
