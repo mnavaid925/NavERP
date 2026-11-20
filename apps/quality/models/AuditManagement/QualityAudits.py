@@ -210,6 +210,8 @@ class QualityAudit(TenantNumbered):
 
     @property
     def open_findings_count(self):
+        if hasattr(self, "annotated_open_findings"):
+            return self.annotated_open_findings
         return self.findings.exclude(status="closed").count()
 
     def sync_findings_counts(self):
