@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+
+{% block title %}{{ complaint.number }} — Customer Complaint — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ complaint.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ complaint.number }}</h1>
+            {% if complaint.severity == "critical_safety" %}
+            <span class="badge badge-red">{{ complaint.get_severity_display }}</span>
+            {% elif complaint.severity == "major_malfunction" %}
+            <span class="badge badge-amber">{{ complaint.get_severity_display }}</span>
+            {% elif complaint.severity == "minor_cosmetic" %}
+            <span class="badge badge-info">{{ complaint.get_severity_display }}</span>
+            {% else %}
+            <span class="badge badge-slate">{{ complaint.get_severity_display }}</span>
+            {% endif %}
+
+            {% if complaint.status == "closed" %}
+            <span class="badge badge-muted">Closed</span>
+            {% elif complaint.status == "resolved" %}
+            <span class="badge badge-green">Resolved</span>
+            {% elif complaint.status == "under_investigation" %}
+            <span class="badge badge-amber">Under Investigation</span>
+            {% elif complaint.status == "pending_regulatory" %}
+            <span class="badge badge-red">Regulatory Pending</span>
+            {% elif complaint.status == "capa_pending" %}
+            <span class="badge badge-purple">CAPA Pending</span>
+            {% else %}
+            <span class="badge badge-info">{{ complaint.get_status_display }}</span>
+            {% endif %}
+
+            {% if complaint.reportability == "reportable_event" %}
+            <span class="badge badge-red"><i data-lucide="alert-triangle" class="w-3 h-3 inline"></i> MDR Mandatory</span>
+            {% elif complaint.reportability == "non_reportable" %}
+            <span class="badge badge-green">Non-Reportable</span>
+            {% endif %}
+        </div>
+        <div class="text-sm text-slate-500 mt-1">{{ complaint.title }}</div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:customer_complaint_edit' complaint.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Complaint
+        </a>
+        {% if complaint.status != "closed" and complaint.status != "cancelled" %}
+        <a href="{% url 'quality:complaint_investigation_create' %}?complaint={{ complaint.pk }}" class="btn btn-outline">
+            <i data-lucide="microscope"></i> Add Investigation
+        </a>
+        <a href="{% url 'quality:regulatory_report_create' %}?complaint={{ complaint.pk }}" class="btn btn-outline text-red-600">
+            <i data-lucide="file-warning"></i> File Vigilance Report
+        </a>
+        {% endif %}
+        <form method="post" action="{% url 'quality:customer_complaint_delete' complaint.pk %}" onsubmit="return confirm('Permanently delete complaint {{ complaint.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Allegation & Problem Description -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Complaint Allegation & Incident Narrative</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-4 bg-slate-50 rounded border border-slate-200 text-slate-800 text-sm whitespace-pre-line leading-relaxed font-sans">
+                    {{ complaint.problem_description }}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-500">Patient Involved:</span>
+                        {% if complaint.patient_involved %}
+                        <span class="badge badge-red font-semibold">Yes — Direct Patient Impact</span>
+                        {% else %}
+                        <span class="badge badge-muted">No</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-500">Adverse Event Alleged:</span>
+                        {% if complaint.adverse_event_alleged %}
+                        <span class="badge badge-red font-semibold">Yes — Serious Injury/Death/Intervention</span>
+                        {% else %}
+                        <span class="badge badge-muted">No</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if complaint.non_reportable_justification %}
+                <div class="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+                    <div class="text-xs font-semibold uppercase tracking-wider text-green-800 mb-1">
+                        Regulatory Non-Reportability Justification (21 CFR 820.198(a)(3))
+                    </div>
+                    <div class="text-sm text-green-900 whitespace-pre-line">
+                        {{ complaint.non_reportable_justification }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if complaint.no_investigation_rationale %}
+                <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded">
+                    <div class="text-xs font-semibold uppercase tracking-wider text-amber-800 mb-1">
+                        No Investigation Rationale
+                    </div>
+                    <div class="text-sm text-amber-900 whitespace-pre-line">
+                        {{ complaint.no_investigation_rationale }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Linked Investigations -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="card-title">Technical Investigations & DHR Reviews ({{ investigations.count }})</h3>
+                <a href="{% url 'quality:complaint_investigation_create' %}?complaint={{ complaint.pk }}" class="btn btn-sm btn-outline">
+                    <i data-lucide="plus"></i> New Investigation
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Investigation #</th>
+                            <th>Lead Investigator</th>
+                            <th>Status</th>
+                            <th>DHR Review</th>
+                            <th>Root Cause</th>
+                            <th>Method</th>
+                            <th class="table-actions">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inv in investigations %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'quality:complaint_investigation_detail' inv.pk %}" class="text-blue-600 hover:underline">
+                                    {{ inv.number }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if inv.lead_investigator %}{{ inv.lead_investigator.get_full_name|default:inv.lead_investigator.username }}{% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {% if inv.status == "approved" %}
+                                <span class="badge badge-green">Approved</span>
+                                {% elif inv.status == "rejected_rework" %}
+                                <span class="badge badge-red">Rework</span>
+                                {% elif inv.status == "hhe_review" %}
+                                <span class="badge badge-purple">HHE Review</span>
+                                {% else %}
+                                <span class="badge badge-amber">{{ inv.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if inv.dhr_reviewed %}
+                                <span class="badge badge-info">DHR Verified</span>
+                                {% if inv.dhr_anomalies_identified %}<span class="badge badge-amber">Anomalies</span>{% endif %}
+                                {% else %}
+                                <span class="badge badge-slate">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs">{{ inv.get_root_cause_category_display }}</td>
+                            <td class="text-xs text-slate-500">{{ inv.get_analytical_method_display }}</td>
+                            <td class="table-actions">
+                                <a href="{% url 'quality:complaint_investigation_detail' inv.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-6 text-sm text-slate-400">
+                                No technical investigations logged yet for this complaint.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Linked Regulatory Reports -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="card-title">Regulatory Vigilance & Adverse Event Reports ({{ reports.count }})</h3>
+                <a href="{% url 'quality:regulatory_report_create' %}?complaint={{ complaint.pk }}" class="btn btn-sm btn-outline text-red-600">
+                    <i data-lucide="plus"></i> New Report
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Report #</th>
+                            <th>Agency</th>
+                            <th>Type</th>
+                            <th>Clock</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Gateway Ack</th>
+                            <th class="table-actions">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rpt in reports %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'quality:regulatory_report_detail' rpt.pk %}" class="text-blue-600 hover:underline">
+                                    {{ rpt.number }}
+                                </a>
+                            </td>
+                            <td><span class="badge badge-info">{{ rpt.get_agency_display }}</span></td>
+                            <td class="text-xs">{{ rpt.get_report_type_display }}</td>
+                            <td class="text-xs">{{ rpt.get_timeline_category_display }}</td>
+                            <td class="text-xs font-mono {% if rpt.is_overdue %}text-red-600 font-bold{% endif %}">
+                                {{ rpt.statutory_due_date|date:"Y-m-d" }}
+                            </td>
+                            <td>
+                                {% if rpt.submission_status == "acknowledged" %}
+                                <span class="badge badge-green">Acknowledged</span>
+                                {% elif rpt.submission_status == "submitted" %}
+                                <span class="badge badge-purple">Submitted</span>
+                                {% elif rpt.submission_status == "ready_to_transmit" %}
+                                <span class="badge badge-info">Ready</span>
+                                {% else %}
+                                <span class="badge badge-amber">{{ rpt.get_submission_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs font-mono">{{ rpt.agency_acknowledgement_number|default:"—" }}</td>
+                            <td class="table-actions">
+                                <a href="{% url 'quality:regulatory_report_detail' rpt.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-6 text-sm text-slate-400">
+                                No statutory vigilance submissions logged for this complaint.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Linked Field Actions -->
+        {% if field_actions.exists %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-red-700">Triggered Field Actions & Recalls ({{ field_actions.count }})</h3>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Action #</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Class</th>
+                            <th>Status</th>
+                            <th>Distributed</th>
+                            <th>Recovered</th>
+                            <th class="table-actions">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fa in field_actions %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'quality:field_action_detail' fa.pk %}" class="text-blue-600 hover:underline">
+                                    {{ fa.number }}
+                                </a>
+                            </td>
+                            <td class="font-medium">{{ fa.title }}</td>
+                            <td><span class="badge badge-red">{{ fa.get_action_type_display }}</span></td>
+                            <td><span class="badge badge-amber">{{ fa.get_recall_class_display }}</span></td>
+                            <td><span class="badge badge-info">{{ fa.get_status_display }}</span></td>
+                            <td class="text-right font-mono">{{ fa.total_units_distributed }}</td>
+                            <td class="text-right font-mono">{{ fa.units_recovered_destroyed }}</td>
+                            <td class="table-actions">
+                                <a href="{% url 'quality:field_action_detail' fa.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Metadata Sidebar & Workflow Actions -->
+    <div class="space-y-6">
+        <!-- Key Metadata Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Complaint Identification</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Product / SKU</dt>
+                        <dd class="font-medium">{{ complaint.item_name }} ({{ complaint.item_code }})</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Manufacturing Lot</dt>
+                        <dd class="font-mono">{{ complaint.lot_number|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Serial Number</dt>
+                        <dd class="font-mono">{{ complaint.serial_number|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>UDI-DI / GTIN</dt>
+                        <dd class="font-mono text-xs">{{ complaint.udi_di_number|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Customer Account</dt>
+                        <dd>{% if complaint.customer %}{{ complaint.customer.name }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Complainant</dt>
+                        <dd>
+                            <div>{{ complaint.complainant_name }}</div>
+                            {% if complaint.complainant_organization %}<div class="text-xs text-slate-500">{{ complaint.complainant_organization }}</div>{% endif %}
+                            {% if complaint.complainant_email %}<div class="text-xs text-slate-500">{{ complaint.complainant_email }}</div>{% endif %}
+                            {% if complaint.complainant_phone %}<div class="text-xs text-slate-500">{{ complaint.complainant_phone }}</div>{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Originating Sales Order</dt>
+                        <dd>{% if complaint.sales_order %}{{ complaint.sales_order.order_number }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Date Received</dt>
+                        <dd>{{ complaint.date_received|date:"M d, Y" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Date of Occurrence</dt>
+                        <dd>{{ complaint.date_of_occurrence|date:"M d, Y"|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Days Open</dt>
+                        <dd class="font-bold {% if complaint.is_overdue %}text-red-600{% endif %}">
+                            {{ complaint.days_open }} days
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Assigned QA Specialist</dt>
+                        <dd>{% if complaint.assigned_to %}{{ complaint.assigned_to.get_full_name|default:complaint.assigned_to.username }}{% else %}—{% endif %}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Sample Return Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Physical Sample Tracking</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Return Status</dt>
+                        <dd><span class="badge badge-info">{{ complaint.get_sample_return_status_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Linked RMA</dt>
+                        <dd>{% if complaint.return_authorization %}{{ complaint.return_authorization.number }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Tracking #</dt>
+                        <dd class="font-mono">{{ complaint.sample_tracking_number|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Received Date</dt>
+                        <dd>{{ complaint.sample_received_date|date:"M d, Y"|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- QA Triage Section (if under triage) -->
+        {% if triage_form and complaint.status != "closed" and complaint.status != "cancelled" %}
+        <div class="card border-amber-300">
+            <div class="card-header bg-amber-50">
+                <h3 class="card-title text-amber-900"><i data-lucide="check-square" class="inline w-4 h-4 mr-1"></i> QA Intake Triage & Disposition</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:customer_complaint_triage' complaint.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label text-xs">Complaint Validity</label>
+                        {{ triage_form.validity }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Severity Grading</label>
+                        {{ triage_form.severity }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Regulatory Reportability</label>
+                        {{ triage_form.reportability }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Non-Reportable Rationale</label>
+                        {{ triage_form.non_reportable_justification }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Failure Category</label>
+                        {{ triage_form.complaint_category }}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ triage_form.investigation_required }}
+                        <label for="{{ triage_form.investigation_required.id_for_label }}" class="text-sm font-medium text-slate-700">
+                            Formal Investigation Mandated
+                        </label>
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">No Investigation Rationale</label>
+                        {{ triage_form.no_investigation_rationale }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Assign Investigator</label>
+                        {{ triage_form.assigned_to }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Triage Notes</label>
+                        {{ triage_form.triage_notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="check"></i> Submit Triage Disposition
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Closure Sign-Off Card -->
+        {% if complaint.status != "closed" and complaint.status != "cancelled" %}
+        <div class="card border-green-300">
+            <div class="card-header bg-green-50">
+                <h3 class="card-title text-green-900"><i data-lucide="lock" class="inline w-4 h-4 mr-1"></i> Formal QMS Closure</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:customer_complaint_close' complaint.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label for="resolution_summary" class="form-label text-xs">Resolution Narrative</label>
+                        <textarea name="resolution_summary" id="resolution_summary" rows="3" class="form-textarea" placeholder="Customer explanation, corrective outcomes, CAPA linkage...">{{ complaint.resolution_summary }}</textarea>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" name="customer_letter_sent" id="customer_letter_sent" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" {% if complaint.customer_letter_sent %}checked{% endif %}>
+                        <label for="customer_letter_sent" class="text-sm text-slate-700">Customer Letter / Response Delivered</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full bg-green-600 hover:bg-green-700">
+                        <i data-lucide="check-circle-2"></i> Approve & Close Complaint
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="card bg-slate-50">
+            <div class="card-header">
+                <h3 class="card-title">Closure Record</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Closed By</dt>
+                        <dd>{% if complaint.closed_by %}{{ complaint.closed_by.get_full_name|default:complaint.closed_by.username }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Closed At</dt>
+                        <dd>{{ complaint.closed_at|date:"M d, Y H:i"|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Customer Letter</dt>
+                        <dd>{% if complaint.customer_letter_sent %}Dispatched on {{ complaint.customer_letter_date|date:"M d, Y" }}{% else %}Not sent{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Resolution Summary</dt>
+                        <dd class="text-sm whitespace-pre-line">{{ complaint.resolution_summary|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
