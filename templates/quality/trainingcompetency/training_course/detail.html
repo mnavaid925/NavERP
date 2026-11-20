@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}{{ course.number }} — {{ course.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_course_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_course_list' %}">Training Courses</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ course.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ course.title }}</h1>
+            <span class="badge {{ course.status_badge }}">{{ course.get_status_display }}</span>
+            <span class="badge {{ course.category_badge }}">{{ course.get_category_display }}</span>
+            <span class="badge {{ course.delivery_badge }}">{{ course.get_delivery_method_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:training_enrollment_create' %}?course={{ course.pk }}" class="btn btn-primary">
+            <i data-lucide="user-plus"></i> Assign Training
+        </a>
+        <a href="{% url 'quality:training_course_edit' course.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        {% if course.status == 'draft' %}
+        <form method="post" action="{% url 'quality:training_course_activate' course.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-600">
+                <i data-lucide="check-circle-2"></i> Activate Course
+            </button>
+        </form>
+        {% endif %}
+        {% if course.status != 'retired' %}
+        <form method="post" action="{% url 'quality:training_course_retire' course.pk %}" class="inline" onsubmit="return confirm('Retire this training course?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600">
+                <i data-lucide="archive"></i> Retire
+            </button>
+        </form>
+        {% endif %}
+        {% if request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'quality:training_course_delete' course.pk %}" class="inline" onsubmit="return confirm('Delete this course permanently?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2">
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Course Specifications</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Course Number</dt>
+                        <dd class="font-semibold">{{ course.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Course Code</dt>
+                        <dd>{{ course.course_code|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Category</dt>
+                        <dd><span class="badge {{ course.category_badge }}">{{ course.get_category_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Delivery Method</dt>
+                        <dd><span class="badge {{ course.delivery_badge }}">{{ course.get_delivery_method_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Assessment Method</dt>
+                        <dd><span class="badge {{ course.assessment_badge }}">{{ course.get_assessment_method_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Duration</dt>
+                        <dd class="font-medium">{{ course.duration_hours }} Hours</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Passing Score Threshold</dt>
+                        <dd class="font-semibold text-blue-600">{{ course.passing_score }}%</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Competency Matrix</dt>
+                        <dd>
+                            {% if course.competency_matrix %}
+                            <a href="{% url 'quality:competency_matrix_detail' course.competency_matrix.pk %}" class="text-blue-600 hover:underline">
+                                {{ course.competency_matrix.number }} - {{ course.competency_matrix.role_title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Bound SOP Document</dt>
+                        <dd>
+                            {% if course.controlled_document %}
+                            <a href="{% url 'quality:controlled_document_detail' course.controlled_document.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ course.controlled_document.number }} — {{ course.controlled_document.title }}
+                            </a>
+                            <div class="text-xs text-slate-500">Bound Revision: {{ course.document_revision|default:"Current" }}</div>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Retrain on SOP Revision</dt>
+                        <dd>
+                            {% if course.retrain_on_revision %}
+                            <span class="badge badge-green">Enabled (Automated Retrain)</span>
+                            {% else %}
+                            <span class="badge badge-slate">Disabled</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Course Instructor</dt>
+                        <dd>
+                            {% if course.instructor %}
+                            {{ course.instructor.get_full_name|default:course.instructor.username }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>External Provider</dt>
+                        <dd>
+                            {% if course.external_provider %}
+                            {{ course.external_provider.name }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        {% if course.syllabus_summary %}
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Course Syllabus & Learning Objectives</h2>
+            </div>
+            <div class="card-body prose max-w-none text-slate-700">
+                {{ course.syllabus_summary|linebreaks }}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if course.ojt_checklist_criteria %}
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">OJT Demonstration & Checklist Criteria</h2>
+            </div>
+            <div class="card-body prose max-w-none text-slate-700 bg-amber-50/50 p-4 rounded border border-amber-200">
+                {{ course.ojt_checklist_criteria|linebreaks }}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Recent Training Enrollments ({{ course.enrollments_count }})</h2>
+                <a href="{% url 'quality:training_enrollment_create' %}?course={{ course.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i> New Assignment
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Enrollment</th>
+                            <th>Trainee</th>
+                            <th>Reason</th>
+                            <th>Due Date</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for enr in recent_enrollments %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'quality:training_enrollment_detail' enr.pk %}" class="font-medium text-blue-600 hover:underline">
+                                    {{ enr.number }}
+                                </a>
+                            </td>
+                            <td>{{ enr.trainee.get_full_name|default:enr.trainee.username }}</td>
+                            <td><span class="badge {{ enr.reason_badge }}">{{ enr.get_assignment_reason_display }}</span></td>
+                            <td>{{ enr.due_date }}</td>
+                            <td>{% if enr.score is not None %}{{ enr.score }}%{% else %}—{% endif %}</td>
+                            <td><span class="badge {{ enr.status_badge }}">{{ enr.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-slate-500">
+                                No trainees enrolled in this course yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Enrollment Metrics</h2>
+            </div>
+            <div class="card-body">
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-slate-600">Active Enrollments</span>
+                            <span class="font-semibold">{{ course.active_enrollments_count }}</span>
+                        </div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-slate-600">Completed & Verified</span>
+                            <span class="font-semibold text-green-600">{{ course.completed_enrollments_count }}</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-600">Total Assigned</span>
+                            <span class="font-semibold">{{ course.enrollments_count }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Qualified Certificate Holders</h2>
+            </div>
+            <div class="card-body">
+                {% if certifications %}
+                <ul class="divide-y divide-slate-100">
+                    {% for cert in certifications %}
+                    <li class="py-2 flex items-center justify-between text-sm">
+                        <span>{{ cert.trainee.get_full_name|default:cert.trainee.username }}</span>
+                        <span class="badge {{ cert.level_badge }}">{{ cert.get_qualification_level_display }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-sm text-slate-500">No active certifications issued for this course yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if course.notes %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Administrative Notes</h2>
+            </div>
+            <div class="card-body text-sm text-slate-700">
+                {{ course.notes|linebreaks }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
