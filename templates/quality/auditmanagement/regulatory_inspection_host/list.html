@@ -133,7 +133,7 @@
                     <td>
                         <div class="text-xs font-medium">{{ host.lead_inspector_name }}</div>
                         {% if host.inspector_credentials %}
-                        <div class="text-2xs text-muted">{{ host.inspector_credentials }}</div>
+                        <div class="text-xs text-muted">{{ host.inspector_credentials }}</div>
                         {% endif %}
                     </td>
                     <td>
@@ -150,7 +150,7 @@
                         <div class="text-xs">
                             <span class="font-bold text-slate-800">{{ host.requests_fulfilled_count }}</span>
                             <span class="text-muted">/ {{ host.requests_logged_count }}</span>
-                            <span class="text-2xs text-muted">({{ host.fulfillment_rate }}%)</span>
+                            <span class="text-xs text-muted">({{ host.fulfillment_rate }}%)</span>
                         </div>
                     </td>
                     <td>
