@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Field Actions & Recalls — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Field Actions & Recalls</span>
+        </div>
+        <h1 class="page-title">Field Actions & Recall Management (FSCA / FSN)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:field_action_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:field_action_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Initiate Field Action
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Actions</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="truck"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Field Recalls</div>
+            <div class="stat-value">{{ active_recall_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Class I Critical</div>
+            <div class="stat-value">{{ class_i_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Action #, title, SKU, lots, recall #..." class="form-input">
+            </div>
+            <div>
+                <label for="action_type" class="form-label text-xs">Action Type</label>
+                <select name="action_type" id="action_type" class="form-select">
+                    <option value="">All Action Types</option>
+                    {% for val, label in action_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.action_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="recall_class" class="form-label text-xs">Recall Class</label>
+                <select name="recall_class" id="recall_class" class="form-select">
+                    <option value="">All Classes</option>
+                    {% for val, label in recall_class_choices %}
+                    <option value="{{ val }}" {% if request.GET.recall_class == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if request.GET.urlencode %}
+                <a href="{% url 'quality:field_action_list' %}" class="btn btn-ghost" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Action #</th>
+                    <th>Recall Title</th>
+                    <th>Action Type</th>
+                    <th>Classification</th>
+                    <th>Affected Product</th>
+                    <th>Recalled Lots</th>
+                    <th>Unit Recovery</th>
+                    <th>Status</th>
+                    <th>Initiation Date</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fa in field_actions %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'quality:field_action_detail' fa.pk %}" class="text-blue-600 hover:underline">
+                            {{ fa.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ fa.title }}</div>
+                        {% if fa.regulatory_recall_number %}
+                        <div class="text-xs text-slate-500 font-mono">Agency: {{ fa.regulatory_recall_number }}</div>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-red">{{ fa.get_action_type_display }}</span></td>
+                    <td>
+                        {% if fa.recall_class == "class_i_critical" %}
+                        <span class="badge badge-red">Class I</span>
+                        {% elif fa.recall_class == "class_ii_moderate" %}
+                        <span class="badge badge-amber">Class II</span>
+                        {% elif fa.recall_class == "class_iii_minor" %}
+                        <span class="badge badge-info">Class III</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ fa.get_recall_class_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ fa.affected_product_name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ fa.affected_product_code }}</div>
+                    </td>
+                    <td class="font-mono text-xs max-w-xs truncate" title="{{ fa.affected_lot_numbers }}">
+                        {{ fa.affected_lot_numbers }}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <div class="w-16 bg-slate-200 rounded-full h-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: {{ fa.reconciliation_rate }}%;"></div>
+                            </div>
+                            <span class="text-xs font-mono font-medium">{{ fa.reconciliation_rate }}%</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400">
+                            {{ fa.units_recovered_destroyed|add:fa.units_quarantined_field }} / {{ fa.total_units_distributed }} units
+                        </div>
+                    </td>
+                    <td>
+                        {% if fa.status == "closed_terminated" %}
+                        <span class="badge badge-green">Terminated & Closed</span>
+                        {% elif fa.status == "reconciliation_complete" %}
+                        <span class="badge badge-purple">Reconciliation Audit</span>
+                        {% elif fa.status == "quarantine_in_progress" %}
+                        <span class="badge badge-amber">Recovery In Progress</span>
+                        {% elif fa.status == "notifications_dispatched" %}
+                        <span class="badge badge-info">Notified</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ fa.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">{{ fa.initiation_date|date:"M d, Y" }}</td>
+                    <td class="table-actions">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'quality:field_action_detail' fa.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:field_action_edit' fa.pk %}" class="btn btn-icon" title="Edit action">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'quality:field_action_delete' fa.pk %}" onsubmit="return confirm('Permanently delete field action {{ fa.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete action">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="shield-check"></i>
+                            </div>
+                            <div class="empty-state-title">No field actions recorded</div>
+                            <div class="empty-state-text">
+                                {% if request.GET.urlencode %}
+                                No field actions or recalls match the filter criteria.
+                                {% else %}
+                                There are no active field safety corrective actions or product recalls.
+                                {% endif %}
+                            </div>
+                            <div class="mt-4">
+                                <a href="{% url 'quality:field_action_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i> Initiate Field Action
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} actions
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i> Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i> Previous
+            </span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm font-medium text-slate-700">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Next <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                Next <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
