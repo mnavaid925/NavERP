@@ -10,6 +10,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.models.OrgUnit import OrgUnit
 from apps.quality.forms.AuditManagement.QualityAudits import QualityAuditForm
 from apps.quality.models.AuditManagement.AuditPrograms import AuditProgram
@@ -182,6 +183,7 @@ def quality_audit_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def quality_audit_delete(request, pk):
     audit = quality_object(request, QualityAudit, pk)
     number = audit.number
