@@ -72,3 +72,28 @@ Commit after fixing Critical and Important findings (2 Critical, 6 Important, 3 
 - Strict tenant scoping across all models (`TenantNumbered`), views (`quality_scope`, `quality_object`), forms (`reject_foreign`, tenant-filtered querysets), and foreign key validations.
 - Navigation `LIVE_LINKS["12.12"]` precisely maps all 5 sub-module areas.
 - Clean seeder integration with 100% idempotent seeding.
+
+
+## 3. Frontend Reviewer Pass
+
+### Verdict
+Commit after fixing Critical and Important findings (2 Critical, 2 Important, 3 Minor).
+
+### Critical
+1. `templates/quality/trainingcompetency/training_enrollment/detail.html:257` — Missing `{% if %}` null-guard on nullable FK inside filter argument (Lesson L10): `enrollment.practical_verified_by` accessed as `default:enrollment.practical_verified_by.username` when `None`. Fix: Guard with `{% if enrollment.practical_verified_by %}{{ enrollment.practical_verified_by.get_full_name|default:enrollment.practical_verified_by.username }}{% else %}—{% endif %}`.
+2. `templates/quality/trainingcompetency/training_enrollment/detail.html:279` — Missing `{% if %}` null-guard on nullable FK inside filter argument (Lesson L10): `enrollment.waived_by` accessed as `default:enrollment.waived_by.username` when `None`. Fix: Guard with `{% if enrollment.waived_by %}{{ enrollment.waived_by.get_full_name|default:enrollment.waived_by.username }}{% else %}—{% endif %}`.
+
+### Important
+1. `templates/quality/trainingcompetency/{competency_matrix,training_course,training_enrollment,competency_certification}/form.html:28` — Non-existent `.alert` and `.alert-danger` classes in form templates (Lesson L13 / L33): neither `.alert` nor `.alert-danger` exists in `static/css/theme.css`. Fix: Replace `<div class="alert alert-danger mb-6">` with `<div class="p-3 mb-6 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">` and wrap errors in `<div class="form-error font-medium">`.
+2. `templates/quality/trainingcompetency/{competency_matrix,training_course,training_enrollment,competency_certification}/detail.html` — Detail pages lack explicit "Back to List" button in `.page-actions`. Fix: In each detail template's `.page-actions` container, add `<a href="{% url 'quality:<entity>_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to ...</a>`.
+
+### Minor
+1. `templates/quality/trainingcompetency/competency_certification/detail.html:211`, `employee_training_dossier.html:45` — Dark mode styling on modal and profile banner: Add `dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700` and `dark:bg-slate-800/60 dark:border-slate-700`.
+2. `templates/quality/trainingcompetency/{competency_matrix,training_course,training_enrollment,competency_certification}/list.html` — Semantic HTML in `.empty-state` blocks: Use `<h3 class="font-medium text-slate-800">` and `<p class="text-sm text-slate-500">` inside empty-state to align with theme.css rules.
+3. List templates — Explicit `aria-label` on icon-only action buttons: Add `aria-label` attributes alongside existing `title` attributes.
+
+### Done well
+- 100% adherence to theme.css color-named badge standards (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`). Zero non-existent semantic badges.
+- Zero multi-line `{# ... #}` comment leaks (L2).
+- All list pages guard pagination with `has_previous`/`has_next` (L9) and preserve search/filter query parameters.
+- All FK filter comparisons use `|stringformat:"d"`. All tables wrapped in `.table-wrap`.
