@@ -7,9 +7,9 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'dashboard:home' %}">Home</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <a href="{% url 'quality:regulatory_report_list' %}">Regulatory Reports</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <span>{% if is_edit %}Edit {{ report.number }}{% else %}New Submission{% endif %}</span>
         </div>
         <h1 class="page-title">{% if is_edit %}Edit Regulatory Report {{ report.number }}{% else %}Author Statutory Vigilance Report{% endif %}</h1>
@@ -27,7 +27,7 @@
             </div>
             {% endif %}
 
-            <!-- Jurisdiction & Timeline Section -->
+            {# Jurisdiction & Timeline Section #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">1. Authority & Statutory Deadlines</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -59,7 +59,7 @@
                 </div>
             </div>
 
-            <!-- Adverse Event Section -->
+            {# Adverse Event Section #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">2. Medical Adverse Event Narrative</h3>
                 <div class="space-y-4">
@@ -88,7 +88,7 @@
                 </div>
             </div>
 
-            <!-- Transmission & Authorship -->
+            {# Transmission & Authorship #}
             <div>
                 <h3 class="text-base font-semibold text-slate-800 mb-3">3. Transmission & Gateway Status</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
