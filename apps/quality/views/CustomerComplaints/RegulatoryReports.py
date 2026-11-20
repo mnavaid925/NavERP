@@ -208,6 +208,10 @@ def regulatory_report_delete(request, pk):
 @require_POST
 def regulatory_report_submit(request, pk):
     report = quality_object(request, RegulatoryReport, pk)
+    if report.submission_status not in ["draft", "under_internal_review", "ready_to_transmit"]:
+        messages.error(request, f"Report {report.number} is already {report.get_submission_status_display()} and cannot be re-submitted.")
+        return redirect("quality:regulatory_report_detail", pk=report.pk)
+
     identifier = request.POST.get("agency_report_identifier", "").strip()
 
     with transaction.atomic():
@@ -226,6 +230,10 @@ def regulatory_report_submit(request, pk):
 @require_POST
 def regulatory_report_acknowledge(request, pk):
     report = quality_object(request, RegulatoryReport, pk)
+    if report.submission_status != "submitted":
+        messages.error(request, f"Report {report.number} must be in 'submitted' status before recording an agency acknowledgement.")
+        return redirect("quality:regulatory_report_detail", pk=report.pk)
+
     ack_number = request.POST.get("agency_acknowledgement_number", "").strip()
 
     with transaction.atomic():
