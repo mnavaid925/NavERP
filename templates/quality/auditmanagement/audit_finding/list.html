@@ -117,7 +117,7 @@
             </div>
             <div class="flex items-end gap-2">
                 <button type="submit" class="btn btn-primary w-full">Filter</button>
-                <a href="{% url 'quality:audit_finding_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'quality:audit_finding_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="rotate-ccw"></i>
                 </a>
             </div>
@@ -207,15 +207,15 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:audit_finding_detail' fnd.pk %}" class="btn btn-icon" title="View Details">
+                        <a href="{% url 'quality:audit_finding_detail' fnd.pk %}" class="btn btn-icon" title="View Details" aria-label="View Details">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'quality:audit_finding_edit' fnd.pk %}" class="btn btn-icon" title="Edit Finding">
+                        <a href="{% url 'quality:audit_finding_edit' fnd.pk %}" class="btn btn-icon" title="Edit Finding" aria-label="Edit Finding">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'quality:audit_finding_delete' fnd.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Finding {{ fnd.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-danger" title="Delete Finding">
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete Finding" aria-label="Delete Finding">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
