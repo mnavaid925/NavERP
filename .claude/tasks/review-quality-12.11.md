@@ -23,3 +23,17 @@ Changeset: `e052bfb46552937ccf9713c99c1f4e2d31fca73e...HEAD`
 - [ ] `templates/quality/auditmanagement/quality_audit/list.html:257,263` — `program` and `org_unit` filter query parameters are omitted from pagination links. Fix: Interpolate `selected_program` and `selected_org_unit` into pagination hrefs.
 - [ ] `templates/quality/auditmanagement/audit_finding/list.html:231,237` — `org_unit` and `assignee` filter query parameters are omitted from pagination links. Fix: Interpolate `selected_org_unit` and `selected_assignee` into pagination hrefs.
 - [ ] `apps/quality/views/AuditManagement/QualityAudits.py:196-217` — `quality_audit_publish_report` and `quality_audit_close` lack guards rejecting actions when `audit.status == "cancelled"`. Fix: Add `if audit.status == "cancelled":` validation guard.
+
+---
+
+## 2. Explorer Findings
+
+### Important
+- [ ] `apps/quality/models/AuditManagement/AuditFindings.py:136-140` and `apps/quality/views/AuditManagement/AuditFindings.py:69-72` — Overdue SLA status divergence: `is_overdue` and view query flag findings with `response_submitted`, `capa_in_progress`, or `verification_pending` as overdue. Fix: Restrict overdue check to statuses `("draft", "issued", "escalated")`.
+- [ ] `apps/quality/views/AuditManagement/AuditFindings.py:180-190` — Stale finding counts on deletion: deleting a finding via `audit_finding_delete` does not call `audit.sync_findings_counts()`. Fix: Call `audit.sync_findings_counts()` after deleting finding.
+- [ ] `templates/quality/auditmanagement/quality_audit/list.html:68-116` & `templates/quality/auditmanagement/audit_finding/list.html:67-107` — Dropped filter dropdowns and pagination query params for `program`, `org_unit`, and `assignee`. Fix: Add filter dropdowns and preserve parameters in pagination links.
+
+### Minor
+- [ ] `apps/quality/views/AuditManagement/{AuditPrograms,QualityAudits,AuditFindings,RegulatoryInspectionHosts}.py` — CSV export views only inspect `q` and ignore active dropdown filter params (`status`, `type`, etc.). Fix: Apply active filters in export views.
+- [ ] `apps/quality/views/AuditManagement/AuditActionTracker.py:1` — Unused import `from datetime import date`. Fix: Remove unused import.
+
