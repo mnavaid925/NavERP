@@ -146,3 +146,10 @@ class AuditFinding(TenantNumbered):
         super().save(*args, **kwargs)
         if hasattr(self, "audit") and self.audit_id:
             self.audit.sync_findings_counts()
+
+    def delete(self, *args, **kwargs):
+        audit = self.audit if (hasattr(self, "audit") and self.audit_id) else None
+        res = super().delete(*args, **kwargs)
+        if audit:
+            audit.sync_findings_counts()
+        return res
