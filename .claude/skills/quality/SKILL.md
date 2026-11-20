@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management — Audit Programs [QPRG-], Quality Audits [QAUD-], Graded Audit Findings & Observations [QFND-], Regulatory & Certification Inspection Hosts [QHST-], Audit Action Tracker, and Inspection War Room Command Center; and 12.13 Customer Complaint Handling — Customer Complaints [QCMP-], Complaint Investigations [QCIN-], Regulatory Vigilance Reports [QRPT-], Field Actions & Recalls [QFMA-], and Complaint Intelligence & Trending Command Center). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.13), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management — Competency Matrices [QMTX-], Quality Training Courses [QCRS-], Training Enrollments [QENR-], Competency Certifications [QCERT-], Training Compliance Dashboard, and Employee Training Dossiers; and 12.13 Customer Complaint Handling). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.13), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -95,6 +95,14 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Audit Action Tracker**: Cross-audit compliance workbench monitoring open findings, CAPA escalations, remediation response milestones, and overdue SLAs across 4 aging tiers (`0-30`, `31-60`, `61-90`, `>90 days`) with status badges and CSV export.
   - **Inspection War Room Command Center**: Real-time operational hosting interface featuring Front Room / Back Room live request dispatching (`war_room_requests`), document staging tracking, SME runner assignments, and scribe audit logs.
 
+- **12.12 Training & Competency Management**:
+  - **Competency Matrices & Qualification Profiles** [`QMTX-`]: Role-based qualification profiles conforming to ISO 13485:2016 §6.2 and FDA 21 CFR § 820.25 across qualification tiers (`trainee`, `independent`, `specialist`, `trainer`, `auditor`), criticality ratings (`low`, `medium`, `high`, `critical_gxp`), departments (`core.OrgUnit`), passing thresholds (default 80%), re-qualification cycle intervals, prerequisite experience requirements, and formal quality approval workflows.
+  - **Quality Training Courses & Curricula** [`QCRS-`]: Comprehensive training course catalog across categories (`gxp_compliance`, `safety_ehs`, `technical_sop`, `equipment_operation`, `quality_tools`, `general`), delivery methodologies (`read_and_understand`, `classroom_lecture`, `on_the_job`, `elearning`, `vendor_external`, `blended`), assessment methods (`written_exam`, `practical_ojt`, `attendance_only`, `both_exam_and_ojt`, `manager_evaluation`), bound controlled documents (`ControlledDocument`), automated DCO revision retraining triggers, duration hours, passing scores, OJT practical checklists, external course providers (`core.Party`), and instructors (`accounts.User`).
+  - **Training Assignments & Scheduling (Enrollments)** [`QENR-`]: Assignment tracking across reasons (`onboarding_new_hire`, `annual_refresher`, `dco_revision_retrain`, `capa_corrective_action`, `role_transfer`, `manager_assignment`, `remediation_retrain`), due date scheduling, overdue detection, exam scoring, trainee self-certification, independent supervisor practical verification (with strict segregation of duties preventing trainee self-evaluation), formal regulatory waiver workflows, and automated qualification certification issuance.
+  - **Competency Certifications & Digital Credentials** [`QCERT-`]: Audit-ready operator qualification credentials across levels (`level_1_novice`, `level_2_qualified`, `level_3_senior_specialist`, `level_4_trainer_assessor`), cryptographic SHA-256 digital verification hashes, authorized work centers/cleanroom suites, validity periods with expiration alerts (`expiring_soon`), formal renewal workflows with hash recalculation, and documented suspension/revocation controls.
+  - **Training Compliance Command Center & Skills Gap Dashboard**: Executive dashboard calculating compliance percentages ($Qualified / Assigned \times 100$), tracking active certifications, overdue enrollments, and expiring credentials, with a 1-query optimized department-by-department compliance matrix and recent activity streams.
+  - **Employee Training Dossier & Regulatory Transcript**: Complete training profile and qualification transcript for individual employees, detailing active certifications, completed training history, pending assignments, and compliance statistics.
+
 - **12.13 Customer Complaint Handling**:
   - **Customer Complaint Intake & Triage** [`QCMP-`]: FDA 21 CFR § 820.198, ISO 13485:2016 Clause 8.2.2, and ISO 10002 compliant customer allegation logging across intake channels (`phone`, `email`, `web_portal`, `sales_rep`, `service_tech`, `distributor`, `regulatory_agency`, `other`). Tracks customer link (`core.Party`), sales orders (`scm.SalesOrder`), return material authorizations (`scm.ReturnAuthorization`), product/lot/serial data, patient involvement, adverse event screening, severity triage (`critical_safety`, `major_malfunction`, `minor_cosmetic`, `service_inconvenience`, `unspecified`), validity determination (`pending_triage`, `valid_complaint`, `invalid_allegation`, `commercial_inquiry`), regulatory reportability classification (`undetermined`, `reportable_event`, `non_reportable`, `exempt`), sample return tracking, non-reportable justification mandate, formal closure letter dispatch, and multi-tenant isolation.
   - **Complaint Technical Investigations & Root Cause Analysis** [`QCIN-`]: Technical problem-solving investigations verifying whether non-conformances occurred. Tracks DHR (Device History Record) batch manufacturing reviews, physical sample examinations, laboratory analytical methods (`visual_microscopy`, `dimensional_metrology`, `mechanical_stress`, `electrical_functional`, `chemical_spectroscopy`, `software_code_audit`, `historical_data_review`, `other`), clinical Health Hazard Evaluations (HHE), ISO 14971 residual risk escalation check (`risk_exceeds_threshold`), Ishikawa/5-Whys root cause categories (`component_defect`, `assembly_workmanship`, `process_deviation`, `design_flaw`, `software_bug`, `packaging_barrier`, `transit_damage`, `user_error_misuse`, `unconfirmed_no_defect`, `other`), direct cross-module CAPA (`QCAP-`) and NCR (`QNCR-`) escalations, and formal QA approval workflows.
@@ -167,6 +175,11 @@ apps/quality/
       QualityAudits.py                        <- QualityAudit [QAUD-]
       AuditFindings.py                        <- AuditFinding [QFND-]
       RegulatoryInspections.py                <- RegulatoryInspectionHost [QHST-]
+    TrainingCompetency/                       <- Sub-module 12.12 models
+      CompetencyMatrices.py                   <- CompetencyMatrix [QMTX-]
+      QualityTrainingCourses.py               <- QualityTrainingCourse [QCRS-]
+      TrainingEnrollments.py                  <- TrainingEnrollment [QENR-]
+      CompetencyCertifications.py             <- CompetencyCertification [QCERT-]
     CustomerComplaints/                       <- Sub-module 12.13 models
       CustomerComplaints.py                   <- CustomerComplaint [QCMP-]
       ComplaintInvestigations.py              <- ComplaintInvestigation [QCIN-]
@@ -230,6 +243,11 @@ apps/quality/
       QualityAudits.py                        <- QualityAuditForm, QualityAuditScoreForm
       AuditFindings.py                        <- AuditFindingForm, AuditFindingResponseForm, AuditFindingVerifyForm
       RegulatoryInspections.py                <- RegulatoryInspectionHostForm, RegulatoryInspectionLogEntryForm
+    TrainingCompetency/                       <- Sub-module 12.12 forms
+      CompetencyMatrices.py                   <- CompetencyMatrixForm
+      QualityTrainingCourses.py               <- QualityTrainingCourseForm
+      TrainingEnrollments.py                  <- TrainingEnrollmentForm, TrainingCompletionForm, PracticalVerificationForm, TrainingWaiverForm
+      CompetencyCertifications.py             <- CompetencyCertificationForm, CertificationSuspensionForm
     CustomerComplaints/                       <- Sub-module 12.13 forms
       CustomerComplaints.py                   <- CustomerComplaintForm, ComplaintTriageForm
       ComplaintInvestigations.py              <- ComplaintInvestigationForm
@@ -304,6 +322,11 @@ apps/quality/
       RegulatoryInspections.py                <- List, Detail, Create, Edit, Delete, Advance Status, Add Log, Export
       AuditActionTracker.py                   <- Audit Action Tracker, Tracker Export
       AuditWarRoom.py                         <- Inspection War Room Command Center, War Room Export
+    TrainingCompetency/                       <- Sub-module 12.12 views
+      CompetencyMatrices.py                   <- List, Detail, Create, Edit, Delete, Approve, Retire, Export
+      QualityTrainingCourses.py               <- List, Detail, Create, Edit, Delete, Activate, Retire, Export
+      TrainingEnrollments.py                  <- List, Detail, Create, Edit, Delete, Complete, Verify, Waive, Export
+      CompetencyCertifications.py             <- List, Detail, Create, Edit, Delete, Renew, Suspend, Export, Compliance Dashboard, Employee Dossier
     CustomerComplaints/                       <- Sub-module 12.13 views
       CustomerComplaints.py                   <- List, Detail, Create, Edit, Delete, Triage, Close, Export
       ComplaintInvestigations.py              <- List, Detail, Create, Edit, Delete, Complete, Export
@@ -378,6 +401,11 @@ apps/quality/
       RegulatoryInspections.py
       AuditActionTracker.py
       AuditWarRoom.py
+    TrainingCompetency/                       <- Sub-module 12.12 URLs
+      CompetencyMatrices.py
+      QualityTrainingCourses.py
+      TrainingEnrollments.py
+      CompetencyCertifications.py
     CustomerComplaints/                       <- Sub-module 12.13 URLs
       CustomerComplaints.py
       ComplaintInvestigations.py
@@ -388,8 +416,12 @@ apps/quality/
   admin.py                                    <- Django admin registrations for all models
   management/commands/
     seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.13)
-  tests/                                      <- Pytest test suite (100% green, 2,001+ passing tests)
+  tests/                                      <- Pytest test suite (100% green, 2,153+ passing tests)
     conftest.py                               <- Shared 12.1 through 12.13 fixtures
+    test_trainingcompetency_models.py         <- Sub-module 12.12 model tests (28 tests)
+    test_trainingcompetency_forms.py          <- Sub-module 12.12 form tests (44 tests)
+    test_trainingcompetency_views.py          <- Sub-module 12.12 view tests (40 tests)
+    test_trainingcompetency_security.py       <- Sub-module 12.12 security tests (40 tests)
     test_customercomplaints_models.py         <- Sub-module 12.13 model tests (6 tests)
     test_customercomplaints_forms.py          <- Sub-module 12.13 form tests (9 tests)
     test_customercomplaints_views.py          <- Sub-module 12.13 view tests (10 tests)
@@ -646,6 +678,32 @@ apps/quality/
 - **Properties & Methods:** `inspection_type_badge`, `status_badge`, `requests_count`, `is_active_hosting`.
 - **Compound Indexes:** `idx_qhst_ten_stat` on `(tenant, inspection_status)`, `idx_qhst_ten_type` on `(tenant, inspection_type)`, `idx_qhst_ten_dates` on `(tenant, start_date)`, `idx_qhst_ten_created` on `(tenant, -created_at)`.
 
+### Sub-module 12.12 Entities
+
+#### 33. `CompetencyMatrix` (Prefix: `QMTX-`)
+- **Table:** `quality_competency_matrix`
+- **Key Fields:** `number`, `title`, `role_title`, `qualification_tier` (`trainee`, `independent`, `specialist`, `trainer`, `auditor`), `department` (`core.OrgUnit`), `criticality` (`low`, `medium`, `high`, `critical_gxp`), `revision`, `status` (`draft`, `approved`, `active`, `retired`), `minimum_passing_score` (int, default 80), `validity_period_months` (int, default 12), `prerequisite_experience_months` (int), `description`, `approved_by` (`accounts.User`), `approval_date`, `notes`.
+- **Properties & Methods:** `tier_badge`, `criticality_badge`, `status_badge`, `courses_count`, `active_courses_count`, `certifications_count`.
+- **Compound Indexes:** `idx_qmtx_ten_status` on `(tenant, status)`, `idx_qmtx_ten_tier` on `(tenant, qualification_tier)`, `idx_qmtx_ten_crit` on `(tenant, criticality)`, `idx_qmtx_ten_dept` on `(tenant, department)`, `idx_qmtx_ten_created` on `(tenant, -created_at)`.
+
+#### 34. `QualityTrainingCourse` (Prefix: `QCRS-`)
+- **Table:** `quality_training_course`
+- **Key Fields:** `number`, `competency_matrix` (`CompetencyMatrix`), `title`, `course_code`, `category` (`gxp_compliance`, `safety_ehs`, `technical_sop`, `equipment_operation`, `quality_tools`, `general`), `delivery_method` (`read_and_understand`, `classroom_lecture`, `on_the_job`, `elearning`, `vendor_external`, `blended`), `assessment_method` (`written_exam`, `practical_ojt`, `attendance_only`, `both_exam_and_ojt`, `manager_evaluation`), `status` (`draft`, `active`, `under_revision`, `retired`), `controlled_document` (`ControlledDocument`), `document_revision`, `retrain_on_revision` (bool, default True), `duration_hours` (Decimal), `passing_score` (int, default 80), `ojt_checklist_criteria`, `syllabus_summary`, `external_provider` (`core.Party`), `instructor` (`accounts.User`), `notes`.
+- **Properties & Methods:** `category_badge`, `delivery_badge`, `assessment_badge`, `status_badge`, `enrollments_count`, `active_enrollments_count`, `completed_enrollments_count`.
+- **Compound Indexes:** `idx_qcrs_ten_status` on `(tenant, status)`, `idx_qcrs_ten_cat` on `(tenant, category)`, `idx_qcrs_ten_delivery` on `(tenant, delivery_method)`, `idx_qcrs_ten_assess` on `(tenant, assessment_method)`, `idx_qcrs_ten_matrix` on `(tenant, competency_matrix)`, `idx_qcrs_ten_cdoc` on `(tenant, controlled_document)`, `idx_qcrs_ten_created` on `(tenant, -created_at)`.
+
+#### 35. `TrainingEnrollment` (Prefix: `QENR-`)
+- **Table:** `quality_training_enrollment`
+- **Key Fields:** `number`, `course` (`QualityTrainingCourse`), `trainee` (`accounts.User`), `assignment_reason` (`onboarding_new_hire`, `annual_refresher`, `dco_revision_retrain`, `capa_corrective_action`, `role_transfer`, `manager_assignment`, `remediation_retrain`), `document_change_order` (`DocumentChangeOrder`), `capa_action` (`CapaAction`), `assigned_date`, `due_date`, `status` (`assigned`, `in_progress`, `completed`, `verified`, `overdue`, `waived`, `failed`), `completion_date`, `score` (Decimal), `is_passed` (bool), `self_certified` (bool), `self_certified_at`, `practical_evaluation_notes`, `practical_verified_by` (`accounts.User`), `practical_verified_at`, `practical_rating` (`exceeds_standard`, `meets_standard`, `needs_improvement`, `unsatisfactory`), `waiver_reason`, `waived_by` (`accounts.User`), `waived_at`, `notes`.
+- **Properties & Methods:** `is_overdue`, `days_remaining`, `requires_practical_verification`, `reason_badge`, `practical_rating_badge`, `status_badge`.
+- **Compound Indexes:** `idx_qenr_ten_status` on `(tenant, status)`, `idx_qenr_ten_trainee` on `(tenant, trainee)`, `idx_qenr_ten_course` on `(tenant, course)`, `idx_qenr_ten_due` on `(tenant, due_date)`, `idx_qenr_ten_reason` on `(tenant, assignment_reason)`, `idx_qenr_ten_assign_ord` on `(tenant, -assigned_date, -created_at)`, `idx_qenr_ten_stat_due` on `(tenant, status, due_date)`.
+
+#### 36. `CompetencyCertification` (Prefix: `QCERT-`)
+- **Table:** `quality_competency_certification`
+- **Key Fields:** `number`, `enrollment` (`TrainingEnrollment`), `trainee` (`accounts.User`), `course` (`QualityTrainingCourse`), `competency_matrix` (`CompetencyMatrix`), `qualification_title`, `qualification_level` (`level_1_novice`, `level_2_qualified`, `level_3_senior_specialist`, `level_4_trainer_assessor`), `certificate_hash` (CharField 64, SHA-256 fingerprint), `issue_date`, `valid_until`, `renewal_interval_months` (int, default 12), `status` (`active`, `expiring_soon`, `expired`, `suspended`, `revoked`, `superseded`), `authorized_work_centers`, `certified_by` (`accounts.User`), `electronic_signature` (`ElectronicSignatureRecord`), `suspension_reason`, `notes`.
+- **Properties & Methods:** `is_valid`, `days_until_expiration`, `is_expiring_soon`, `is_expired`, `generate_certificate_hash()`, `level_badge`, `status_badge`.
+- **Compound Indexes:** `idx_qcert_ten_status` on `(tenant, status)`, `idx_qcert_ten_trainee` on `(tenant, trainee)`, `idx_qcert_ten_course` on `(tenant, course)`, `idx_qcert_ten_valid` on `(tenant, valid_until)`, `idx_qcert_ten_level` on `(tenant, qualification_level)`, `idx_qcert_ten_hash` on `(tenant, certificate_hash)`, `idx_qcert_ten_issue_ord` on `(tenant, -issue_date, -created_at)`, `idx_qcert_ten_stat_valid` on `(tenant, status, valid_until)`.
+
 
 ---
 
@@ -899,6 +957,45 @@ All routes use the `quality:` namespace:
 | `/quality/audits/inspections/<pk>/war-room/` | `audit_war_room` | Live Inspection War Room command center with request dispatching |
 | `/quality/audits/inspections/<pk>/war-room/export/` | `audit_war_room_export` | CSV export of War Room request manifest |
 
+### Sub-module 12.12 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/training/dashboard/` | `training_compliance_dashboard` | Executive training compliance command center with compliance rate, KPIs, and department breakdown |
+| `/quality/training/dossier/` | `employee_training_dossier` | Individual employee qualification dossier and regulatory training transcript |
+| `/quality/training/matrices/` | `competency_matrix_list` | Competency matrices register with tier, criticality, department, and status filters |
+| `/quality/training/matrices/create/` | `competency_matrix_create` | Define role-based competency qualification profile |
+| `/quality/training/matrices/<pk>/` | `competency_matrix_detail` | Detailed matrix requirements, linked courses, and active certified holders |
+| `/quality/training/matrices/<pk>/edit/` | `competency_matrix_edit` | Edit matrix parameters and passing criteria |
+| `/quality/training/matrices/<pk>/delete/` | `competency_matrix_delete` | POST-only delete (requires tenant admin) |
+| `/quality/training/matrices/<pk>/approve/` | `competency_matrix_approve` | Formal matrix approval workflow (admin/staff only) |
+| `/quality/training/matrices/<pk>/retire/` | `competency_matrix_retire` | Retire competency matrix |
+| `/quality/training/matrices/export/` | `competency_matrix_export` | CSV export of competency matrices |
+| `/quality/training/courses/` | `training_course_list` | Quality training courses catalog with category, delivery, assessment, and document filters |
+| `/quality/training/courses/create/` | `training_course_create` | Create training course bound to SOP document and competency matrix |
+| `/quality/training/courses/<pk>/` | `training_course_detail` | Detailed course curriculum, syllabus, and recent enrollments |
+| `/quality/training/courses/<pk>/edit/` | `training_course_edit` | Edit course curriculum, duration, and passing score |
+| `/quality/training/courses/<pk>/delete/` | `training_course_delete` | POST-only delete (requires tenant admin) |
+| `/quality/training/courses/<pk>/activate/` | `training_course_activate` | Activate draft/under_revision training course |
+| `/quality/training/courses/<pk>/retire/` | `training_course_retire` | Retire training course |
+| `/quality/training/courses/export/` | `training_course_export` | CSV export of quality training courses |
+| `/quality/training/enrollments/` | `training_enrollment_list` | Training assignments register with reason, status, course, trainee, and overdue filters |
+| `/quality/training/enrollments/create/` | `training_enrollment_create` | Assign course to employee with due date and trigger reason |
+| `/quality/training/enrollments/<pk>/` | `training_enrollment_detail` | Enrollment dossier with exam submission, practical verification, and waiver workflows |
+| `/quality/training/enrollments/<pk>/edit/` | `training_enrollment_edit` | Edit assignment due date and trigger references |
+| `/quality/training/enrollments/<pk>/delete/` | `training_enrollment_delete` | POST-only delete (requires tenant admin) |
+| `/quality/training/enrollments/<pk>/complete/` | `training_enrollment_complete` | Submit exam score; auto-verifies non-practical courses or advances practical courses to completed |
+| `/quality/training/enrollments/<pk>/verify/` | `training_enrollment_verify` | Supervisor practical OJT verification; auto-issues competency certification (enforces SoD) |
+| `/quality/training/enrollments/<pk>/waive/` | `training_enrollment_waive` | Formal training waiver/exemption with documented regulatory rationale |
+| `/quality/training/enrollments/export/` | `training_enrollment_export` | CSV export of training enrollments |
+| `/quality/training/certifications/` | `competency_certification_list` | Competency certifications register with level, status, trainee, course, and expiring filters |
+| `/quality/training/certifications/create/` | `competency_certification_create` | Manually issue competency certification with SHA-256 fingerprint |
+| `/quality/training/certifications/<pk>/` | `competency_certification_detail` | Executive diploma certificate with SHA-256 digital fingerprint and authorized work centers |
+| `/quality/training/certifications/<pk>/edit/` | `competency_certification_edit` | Edit certification validity and authorized facilities |
+| `/quality/training/certifications/<pk>/delete/` | `competency_certification_delete` | POST-only delete (requires tenant admin) |
+| `/quality/training/certifications/<pk>/renew/` | `competency_certification_renew` | Re-certify qualification; recalculates validity window and SHA-256 fingerprint |
+| `/quality/training/certifications/<pk>/suspend/` | `competency_certification_suspend` | Suspend or revoke certification with documented quality justification |
+| `/quality/training/certifications/export/` | `competency_certification_export` | CSV export of competency certifications |
+
 ### Sub-module 12.13 Routes
 | URL Pattern | View Name | Purpose |
 |---|---|---|
@@ -1046,6 +1143,18 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
     - `QHST-2026-00001` (FDA QSIT Comprehensive Surveillance Inspection, On-Site Active with War Room requests)
     - `QHST-2026-00002` (BSI Notified Body ISO 13485:2016 Recertification Audit, Announced Prep)
 
+- **12.12 Data**:
+  - 3 Competency Matrices per tenant (`Aseptic Cleanroom Operator Matrix`, `Incoming Quality Inspector Matrix`, `QMS Internal Auditor Matrix`).
+  - 4 Quality Training Courses per tenant bound to controlled SOP documents (`SOP-0042 Cleanroom Entry`, `GLX-TRN-101 Metrology`, `ISO 13485 Internal Auditing`, `Good Documentation Practices`).
+  - 6 Training Enrollments per tenant spanning multiple lifecycle states (`assigned`, `in_progress`, `completed`, `verified`, `overdue`, `waived`).
+  - 3 Competency Certifications per tenant with SHA-256 digital verification fingerprints, authorized facility work centers, and validity tracking.
+
+- **12.13 Data**:
+  - 4 Customer Complaints per tenant across critical safety and major malfunction severities.
+  - 3 Technical Investigations with DHR review, laboratory findings, and HHE evaluations.
+  - 2 Regulatory Reports (FDA 3500A MedWatch / EU MIR) with statutory timeline clocks.
+  - 2 Field Actions & Recalls with consignee notification and unit recovery tracking.
+
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
 ---
@@ -1124,6 +1233,12 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - Overdue SLA Calculation Safety: `AuditFinding.is_overdue` strictly checks `status in ("draft", "issued", "escalated")` and `response_due_date < timezone.now().date()`, ensuring that findings with submitted remediation responses in verification or closed states are not falsely marked overdue.
     - Seamless QMS Spine CAPA Integration: `audit_finding_create_capa` auto-populates `CapaInvestigation` with `issue_summary`, `action_type="corrective"`, `source_type="internal_audit"`, `source_reference`, `risk_priority`, `quality_owner`, `lead_investigator`, and links back to the finding.
     - Inspection War Room Live Dispatching: `RegulatoryInspectionHost` supports structured JSON request dispatching (`war_room_requests`) capturing request number, topic, requested item, SME runner, status (`requested`, `retrieving`, `legal_review`, `ready_for_inspector`, `presented`), and delivery timestamps.
+18. **Training & Competency Management Invariants (ISO 13485 §6.2 / 21 CFR § 820.25):**
+    - Segregation of Duties (SoD) on Practical Evaluations: Under regulatory quality standards, a trainee (`enrollment.trainee`) is strictly prohibited from verifying their own practical competency demonstration. `training_enrollment_verify` validates that `request.user != enrollment.trainee` (unless overridden by tenant administrator), ensuring evaluator independence.
+    - GxP Exam Failure Safety Gate: When a candidate completes an exam with a score below the required passing threshold (`score < course.passing_score`), the enrollment is transitioned to `failed`, written to the audit log, and prohibited from entering verification or auto-issuing credentials. Remediation retraining is required.
+    - Multi-Gate Practical Course Auto-Issuance: For courses requiring practical OJT assessment (`assessment_method in ("practical_ojt", "both_exam_and_ojt")`), completing the exam advances the enrollment to `completed` (pending practical verification). Only upon independent supervisor practical evaluation with a passing rating does the enrollment transition to `verified` and auto-issue a `CompetencyCertification`. Non-practical courses auto-issue upon exam pass.
+    - Cryptographic SHA-256 Digital Fingerprints: Every `CompetencyCertification` computes a tamper-evident SHA-256 hash digest derived from `tenant_id:number:trainee_id:course_id:issue_date:SECRET_KEY`. When renewed via `competency_certification_renew`, the validity window is extended by `renewal_interval_months` and a fresh verification hash is generated.
+    - Optimized 1-Query Compliance Dashboard: The department compliance breakdown aggregates all enrolled and qualified personnel using a single SQL query with conditional aggregations (`Count('id')`, `Count('id', filter=Q(status='verified'))`) on `TrainingEnrollment`, eliminating N+1 query loops.
 
 ---
 
@@ -1210,6 +1325,13 @@ LIVE_LINKS = {
         "Audit Findings & Reporting": "quality:audit_finding_list",
         "Corrective Action Tracking": "quality:audit_action_tracker",
         "Regulatory & Certification Audits": "quality:regulatory_inspection_host_list",
+    },
+    "12.12": {
+        "Training Needs Analysis": "quality:competency_matrix_list",
+        "Course Development & Delivery": "quality:training_course_list",
+        "Training Scheduling & Enrollment": "quality:training_enrollment_list",
+        "Competency Assessment & Certification": "quality:competency_certification_list",
+        "Training Records & Compliance": "quality:training_compliance_dashboard",
     },
     "12.13": {
         "Complaint Intake & Triage": "quality:customer_complaint_list",
