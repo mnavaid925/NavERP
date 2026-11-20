@@ -117,6 +117,7 @@
             <div class="card-body">
                 <form method="post" action="{% url 'quality:regulatory_inspection_host_log_request' selected_host.pk %}" class="space-y-4">
                     {% csrf_token %}
+                    <input type="hidden" name="source" value="war_room">
                     <div class="form-group">
                         <label class="form-label">Inspector Document / Record Request Description <span class="text-danger">*</span></label>
                         {{ request_form.request_description }}
@@ -153,6 +154,7 @@
                 {% if selected_host.pending_requests_count > 0 %}
                 <form method="post" action="{% url 'quality:regulatory_inspection_host_fulfill_request' selected_host.pk %}">
                     {% csrf_token %}
+                    <input type="hidden" name="source" value="war_room">
                     <button type="submit" class="btn btn-primary w-full bg-emerald-600 hover:bg-emerald-700">
                         <i data-lucide="check"></i> Deliver Next Document to Front Room
                     </button>
