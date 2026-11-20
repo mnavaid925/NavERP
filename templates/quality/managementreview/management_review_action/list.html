@@ -65,7 +65,7 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
             <div>
                 <label for="q" class="form-label text-xs">Search</label>
                 <input type="text" name="q" id="q" value="{{ q }}" placeholder="Title, #, description, summary..." class="form-input">
@@ -103,6 +103,15 @@
                     <option value="">All Reviews</option>
                     {% for r in reviews %}
                     <option value="{{ r.pk }}" {% if selected_review == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }} &ndash; {{ r.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="assignee" class="form-label text-xs">Assignee</label>
+                <select name="assignee" id="assignee" class="form-select">
+                    <option value="">All Assignees</option>
+                    {% for a in assignees %}
+                    <option value="{{ a.pk }}" {% if selected_assignee == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.get_full_name|default:a.username }}</option>
                     {% endfor %}
                 </select>
             </div>
