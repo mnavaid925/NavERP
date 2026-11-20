@@ -119,16 +119,16 @@
                     {% csrf_token %}
                     <input type="hidden" name="source" value="war_room">
                     <div class="form-group">
-                        <label class="form-label">Inspector Document / Record Request Description <span class="text-danger">*</span></label>
+                        <label class="form-label" for="{{ request_form.request_description.id_for_label }}">Inspector Document / Record Request Description <span class="text-danger">*</span></label>
                         {{ request_form.request_description }}
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="form-group">
-                            <label class="form-label">Assign Back Room SME / Retriever</label>
+                            <label class="form-label" for="{{ request_form.assigned_sme.id_for_label }}">Assign Back Room SME / Retriever</label>
                             {{ request_form.assigned_sme }}
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Retrieval Priority SLA</label>
+                            <label class="form-label" for="{{ request_form.priority.id_for_label }}">Retrieval Priority SLA</label>
                             {{ request_form.priority }}
                         </div>
                     </div>
