@@ -21,10 +21,13 @@
         </div>
     </div>
     <div class="page-actions">
+        <a href="{% url 'quality:competency_certification_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Certifications
+        </a>
         <a href="{% url 'quality:competency_certification_edit' certification.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i> Edit
         </a>
-        {% if certification.status == 'active' or certification.status == 'expired' %}
+        {% if certification.status == 'active' or certification.status == 'expired' or certification.status == 'expiring_soon' %}
         <form method="post" action="{% url 'quality:competency_certification_renew' certification.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
