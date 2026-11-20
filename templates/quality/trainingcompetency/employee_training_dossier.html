@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Employee Quality Training Dossier — {{ trainee.get_full_name|default:trainee.username }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_compliance_dashboard' %}">Training Compliance</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Employee Training Dossier</span>
+        </div>
+        <h1 class="page-title">Employee Training File & Regulatory Inspection Dossier</h1>
+    </div>
+    <div class="page-actions">
+        <button type="button" class="btn btn-outline" onclick="window.print();">
+            <i data-lucide="printer"></i> Print Transcript
+        </button>
+        <a href="{% url 'quality:training_enrollment_create' %}?trainee={{ trainee.pk }}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Assign Training
+        </a>
+    </div>
+</div>
+
+<!-- Trainee Switcher Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="flex flex-wrap items-center gap-4">
+            <label for="trainee" class="form-label mb-0 font-medium">Select Employee Dossier:</label>
+            <select name="trainee" id="trainee" class="form-select max-w-xs" onchange="this.form.submit();">
+                {% for u in users %}
+                <option value="{{ u.pk }}" {% if trainee.pk == u.pk %}selected{% endif %}>
+                    {{ u.get_full_name|default:u.username }} (@{{ u.username }})
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-outline btn-sm">Load Dossier</button>
+        </form>
+    </div>
+</div>
+
+<!-- Employee Profile & Summary Banner -->
+<div class="card mb-6 bg-slate-50 border-slate-300">
+    <div class="card-body p-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-2xl shadow">
+                    {{ trainee.first_name|default:trainee.username|slice:":1"|upper }}
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">{{ trainee.get_full_name|default:trainee.username }}</h2>
+                    <div class="text-sm text-slate-500">
+                        Username: <span class="font-mono text-slate-700">@{{ trainee.username }}</span> • Email: {{ trainee.email|default:"—" }}
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">
+                        Regulatory inspection readiness transcript verified for 21 CFR Part 11 / ISO 13485 compliance.
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-6">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-600">{{ summary.compliance_rate }}%</div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Compliance</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-blue-600">{{ summary.active_certs }}</div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Certifications</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-slate-900">{{ summary.completed_count }}</div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Completed</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold {% if summary.pending_count > 0 %}text-amber-600{% else %}text-slate-400{% endif %}">
+                        {{ summary.pending_count }}
+                    </div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Pending</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Section 1: Active Competency Certifications Portfolio -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">1. Competency Certifications Portfolio ({{ certifications.count }})</h2>
+        <a href="{% url 'quality:competency_certification_create' %}?trainee={{ trainee.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="award"></i> Issue Certification
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Certificate Number</th>
+                    <th>Qualification Title</th>
+                    <th>Level</th>
+                    <th>Course</th>
+                    <th>Issue Date</th>
+                    <th>Valid Until</th>
+                    <th>Verification Fingerprint</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cert in certifications %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:competency_certification_detail' cert.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ cert.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-900">{{ cert.qualification_title }}</td>
+                    <td><span class="badge {{ cert.level_badge }}">{{ cert.get_qualification_level_display }}</span></td>
+                    <td>
+                        <a href="{% url 'quality:training_course_detail' cert.course.pk %}" class="text-xs text-blue-600 hover:underline">
+                            {{ cert.course.number }}
+                        </a>
+                    </td>
+                    <td>{{ cert.issue_date }}</td>
+                    <td>
+                        {% if cert.valid_until %}
+                        <span class="{% if cert.is_expired %}text-red-600 font-bold{% elif cert.is_expiring_soon %}text-amber-600 font-bold{% endif %}">
+                            {{ cert.valid_until }}
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400">Permanent</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-xs text-slate-500 max-w-xs truncate" title="{{ cert.certificate_hash }}">
+                        {{ cert.certificate_hash|slice:":16" }}...
+                    </td>
+                    <td><span class="badge {{ cert.status_badge }}">{{ cert.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-slate-500">
+                        No competency certifications issued to this employee.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Section 2: Completed Training History -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">2. Completed Training & Competency Verification History ({{ completed_enrollments.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Enrollment</th>
+                    <th>Course Title</th>
+                    <th>Delivery Mode</th>
+                    <th>Completion Date</th>
+                    <th>Score</th>
+                    <th>Practical Rating</th>
+                    <th>Verified By</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for enr in completed_enrollments %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:training_enrollment_detail' enr.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ enr.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-900">{{ enr.course.title }}</td>
+                    <td><span class="badge {{ enr.course.delivery_badge }}">{{ enr.course.get_delivery_method_display }}</span></td>
+                    <td>{{ enr.completion_date|default:"—" }}</td>
+                    <td>
+                        {% if enr.score is not None %}
+                        <span class="font-semibold {% if enr.is_passed %}text-green-600{% else %}text-red-600{% endif %}">
+                            {{ enr.score }}%
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if enr.practical_rating %}
+                        <span class="badge {{ enr.practical_rating_badge }}">{{ enr.get_practical_rating_display }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if enr.practical_verified_by %}
+                        {{ enr.practical_verified_by.get_full_name|default:enr.practical_verified_by.username }}
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ enr.status_badge }}">{{ enr.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-slate-500">
+                        No completed training courses on record.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Section 3: Pending & Overdue Assignments -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">3. Pending Training & Re-Qualification Assignments ({{ pending_enrollments.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Enrollment</th>
+                    <th>Course Title</th>
+                    <th>Assignment Reason</th>
+                    <th>Assigned Date</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for enr in pending_enrollments %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:training_enrollment_detail' enr.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ enr.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-900">{{ enr.course.title }}</td>
+                    <td><span class="badge {{ enr.reason_badge }}">{{ enr.get_assignment_reason_display }}</span></td>
+                    <td>{{ enr.assigned_date }}</td>
+                    <td>
+                        <span class="{% if enr.is_overdue %}text-red-600 font-bold{% endif %}">
+                            {{ enr.due_date }}
+                        </span>
+                    </td>
+                    <td><span class="badge {{ enr.status_badge }}">{{ enr.get_status_display }}</span></td>
+                    <td class="text-right">
+                        <a href="{% url 'quality:training_enrollment_detail' enr.pk %}" class="btn btn-outline btn-sm">
+                            Complete Training →
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-4 text-green-600 font-medium">
+                        ✓ All training assignments are completed and up-to-date.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
