@@ -109,7 +109,7 @@ def training_course_detail(request, pk):
         "obj": course,
         "recent_enrollments": course.enrollments.all()[:10],
         "active_enrollments": course.enrollments.filter(status__in=["assigned", "in_progress"]),
-        "certifications": course.issued_certifications.filter(status="active"),
+        "certifications": course.issued_certifications.filter(status="active").select_related("trainee"),
     }
     return render(request, "quality/trainingcompetency/training_course/detail.html", context)
 
