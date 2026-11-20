@@ -61,8 +61,6 @@ def management_review_action_list(request):
     if assignee_filter and assignee_filter.isdigit():
         qs = qs.filter(assignee_id=int(assignee_filter))
 
-    total_count = qs.count()
-
     today = timezone.now().date()
     base_tenant_qs = ManagementReviewAction.objects.filter(tenant=request.tenant)
     stats = base_tenant_qs.aggregate(
@@ -75,6 +73,7 @@ def management_review_action_list(request):
     completed_count = stats["completed_count"]
 
     paginator = Paginator(qs, PAGE_SIZE)
+    total_count = paginator.count
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
