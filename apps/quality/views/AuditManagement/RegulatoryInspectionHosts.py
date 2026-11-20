@@ -219,6 +219,12 @@ def regulatory_inspection_host_fulfill_request(request, pk):
 @require_POST
 def regulatory_inspection_host_close(request, pk):
     host = quality_object(request, RegulatoryInspectionHost, pk)
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "role", "") == "admin"
+    is_lead = (request.user.id in (host.front_room_lead_id, host.back_room_lead_id))
+    if not (is_lead or is_admin):
+        messages.error(request, "Only the Front Room Lead, Back Room Lead, or a tenant administrator can close this regulatory inspection record.")
+        return redirect("quality:regulatory_inspection_host_detail", pk=host.pk)
+
     host.status = "inspection_closed"
     if not host.actual_end_date:
         host.actual_end_date = timezone.now().date()
