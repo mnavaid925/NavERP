@@ -254,8 +254,12 @@
                             Practical Rating: <span class="badge {{ enrollment.practical_rating_badge }}">{{ enrollment.get_practical_rating_display }}</span>
                         </div>
                         <div class="text-xs text-slate-500 mt-1">
+                            {% if enrollment.practical_verified_by %}
                             Verified by: {{ enrollment.practical_verified_by.get_full_name|default:enrollment.practical_verified_by.username }}
-                            on {{ enrollment.practical_verified_at|date:"Y-m-d H:i" }}
+                            {% if enrollment.practical_verified_at %}on {{ enrollment.practical_verified_at|date:"Y-m-d H:i" }}{% endif %}
+                            {% else %}
+                            Verification completed automatically
+                            {% endif %}
                         </div>
                     </div>
                     {% if certification %}
@@ -276,8 +280,12 @@
             <div class="card-body">
                 <p class="text-slate-800">{{ enrollment.waiver_reason|linebreaks }}</p>
                 <div class="text-xs text-slate-500 mt-2">
+                    {% if enrollment.waived_by %}
                     Exemption authorized by: {{ enrollment.waived_by.get_full_name|default:enrollment.waived_by.username }}
-                    on {{ enrollment.waived_at|date:"Y-m-d H:i" }}
+                    {% if enrollment.waived_at %}on {{ enrollment.waived_at|date:"Y-m-d H:i" }}{% endif %}
+                    {% else %}
+                    Exemption authorized
+                    {% endif %}
                 </div>
             </div>
         </div>
