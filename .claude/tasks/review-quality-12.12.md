@@ -147,3 +147,34 @@ Conditional Fail (2 Critical, 1 Important, 1 Minor). 50 of 54 runtime checks pas
 - Robust resilience/fuzzing: all 8 fuzz tests with junk parameters returned HTTP 200 without crashes.
 - CSV exports fully compliant.
 - State machines for Matrix approve/retire, Course activate/retire, and Certification renew/suspend transition cleanly.
+
+
+## 6. Security Reviewer Pass
+
+### Verdict
+Commit after fixing Critical and High findings (2 Critical, 2 High, 3 Medium, 3 Low).
+
+### Critical
+1. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:240-261` — Failing Exam Scores Auto-Issue Regulatory Competency Certifications: `score < passing_score` sets `is_passed=False` but executes `else:`, marking enrollment `verified` and issuing formal certification. Fix: Add check `if not enrollment.is_passed: enrollment.status = "failed"; enrollment.save(); write_audit_log(...); messages.warning(...); return redirect(...)`.
+2. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:267-285` — Segregation of Duties (SoD) Bypass via Trainee Self-Verification: Trainees can submit a direct POST to verify their own practical qualification and auto-issue their own certification. Fix: Add assessor independence check `if request.user == enrollment.trainee and not getattr(request.user, "is_tenant_admin", False): messages.error(...); return redirect(...)`.
+
+### High
+1. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:296-311` — Missing Authorization Gate on Regulatory Training Waivers: Any authenticated user can waive mandatory compliance training. Fix: Restrict to tenant admins or authorized staff (`request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)`).
+2. `apps/quality/views/TrainingCompetency/CompetencyCertifications.py:202-232` — Missing Authorization Gates on Certification Renewal and Suspension: Any authenticated user can renew or suspend any certification. Fix: Restrict renewal and suspension to tenant admins or authorized quality staff.
+
+### Medium
+1. `apps/quality/forms/TrainingCompetency/CompetencyMatrices.py:11-28` — Mass Assignment / Approval Attribution Exposure in Form: `CompetencyMatrixForm` exposes `approved_by` and `approval_date` in `Meta.fields`. Fix: Exclude `approved_by` and `approval_date` from `CompetencyMatrixForm.Meta.fields`.
+2. `apps/quality/views/TrainingCompetency/CompetencyMatrices.py:156-165` & `QualityTrainingCourses.py:182-189` — Missing Status Guards and Role Gating on Matrix Approval and Course Activation: Can be triggered without admin/staff permission or on non-draft records. Fix: Add role checks and status checks (`matrix.status == "draft"`, `course.status in ("draft", "under_revision")`).
+3. `apps/quality/forms/TrainingCompetency/CompetencyCertifications.py:13-29` — Attributor Forgery via Editable `certified_by` Field in Form: Exclude `certified_by` from `CompetencyCertificationForm.Meta.fields` and set `cert.certified_by = request.user` in view.
+
+### Low
+1. `apps/quality/forms/TrainingCompetency/TrainingEnrollments.py:57-63` — Unvalidated Numeric Bounds on Server in Exam Score Parsing: Add `min_value=0, max_value=100` on `TrainingCompletionForm.score` DecimalField.
+2. `apps/quality/forms/TrainingCompetency/CompetencyCertifications.py:55-62` — Cross-Record Mismatch Between Enrollment, Trainee, and Course: Validate in `clean()` that `enrollment.trainee` matches `trainee` and `enrollment.course` matches `course`.
+3. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:256-261, 281-284` — Missing Atomic Transaction Wrapping Multi-Table Auto-Issuance Writes: Wrap state transitions and certification issuance in `with transaction.atomic():`.
+
+### Done well
+- Robust Multi-Tenant Data Isolation (IDOR Immunity) on all 4 models and views.
+- Foreign Key Tenant Scoping with reject_foreign on all forms.
+- Strict CSRF & @require_POST on all state mutations.
+- Deletion endpoints gated by @tenant_admin_required.
+- Comprehensive AuditLog trail on all mutations.
