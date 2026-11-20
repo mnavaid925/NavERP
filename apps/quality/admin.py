@@ -1073,7 +1073,7 @@ class CustomerComplaintAdmin(admin.ModelAdmin):
         "tenant",
     )
     list_filter = ("status", "severity", "validity", "reportability", "intake_channel", "tenant")
-    search_fields = ("number", "title", "item_code", "item_name", "lot_number", "serial_number", "complainant_name")
+    search_fields = ("number", "title", "item_code", "item_name", "lot_number", "serial_number", "complainant_name", "customer__name")
     list_select_related = ("tenant", "customer", "sales_order", "assigned_to")
 
 
