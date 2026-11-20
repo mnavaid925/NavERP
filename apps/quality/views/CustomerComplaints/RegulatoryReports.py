@@ -160,6 +160,9 @@ def regulatory_report_create(request):
 @login_required
 def regulatory_report_edit(request, pk):
     report = quality_object(request, RegulatoryReport, pk)
+    if report.submission_status in ["submitted", "acknowledged", "withdrawn"]:
+        messages.error(request, f"Regulatory report {report.number} is {report.get_submission_status_display()} and cannot be modified.")
+        return redirect("quality:regulatory_report_detail", pk=report.pk)
 
     if request.method == "POST":
         form = RegulatoryReportForm(request.POST, instance=report, tenant=request.tenant)
