@@ -121,6 +121,7 @@ class FieldAction(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_qfma_ten_status"),
+            models.Index(fields=["tenant", "initiating_complaint"], name="idx_qfma_ten_cmp"),
             models.Index(fields=["tenant", "action_type"], name="idx_qfma_ten_atype"),
             models.Index(fields=["tenant", "recall_class"], name="idx_qfma_ten_rclass"),
             models.Index(fields=["tenant", "affected_product_code"], name="idx_qfma_ten_pcode"),
