@@ -191,6 +191,8 @@ class CustomerComplaint(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_qcmp_ten_status"),
+            models.Index(fields=["tenant", "customer"], name="idx_qcmp_ten_cust"),
+            models.Index(fields=["tenant", "intake_channel"], name="idx_qcmp_ten_chan"),
             models.Index(fields=["tenant", "severity"], name="idx_qcmp_ten_sev"),
             models.Index(fields=["tenant", "reportability"], name="idx_qcmp_ten_rep"),
             models.Index(fields=["tenant", "validity"], name="idx_qcmp_ten_val"),
