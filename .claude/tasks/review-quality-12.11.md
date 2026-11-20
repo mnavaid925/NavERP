@@ -37,3 +37,16 @@ Changeset: `e052bfb46552937ccf9713c99c1f4e2d31fca73e...HEAD`
 - [ ] `apps/quality/views/AuditManagement/{AuditPrograms,QualityAudits,AuditFindings,RegulatoryInspectionHosts}.py` — CSV export views only inspect `q` and ignore active dropdown filter params (`status`, `type`, etc.). Fix: Apply active filters in export views.
 - [ ] `apps/quality/views/AuditManagement/AuditActionTracker.py:1` — Unused import `from datetime import date`. Fix: Remove unused import.
 
+---
+
+## 3. Frontend Reviewer Findings
+
+### Important
+- [ ] `templates/quality/auditmanagement/audit_finding/list.html:47,56`, `regulatory_inspection_host/list.html:50`, `audit_action_tracker.html:40,49` — Banned `stat-icon red` class (Rule 2 / L33): Theme design system strictly supports `blue`, `green`, `orange`, `purple`, `slate`. Fix: Replace `stat-icon red` with `stat-icon orange` (for critical/alert stat cards) or `stat-icon slate`.
+- [ ] `templates/quality/auditmanagement/audit_finding/list.html:168`, `regulatory_inspection_host/list.html:136,153`, `audit_war_room.html:176` — Non-existent `text-2xs` utility class used. Fix: Replace with standard `text-xs`.
+
+### Minor
+- [ ] `templates/quality/auditmanagement/audit_finding/detail.html:211-219`, `regulatory_inspection_host/detail.html:186-194`, `audit_war_room.html:121-130` — Missing `<label for="...">` bindings and missing label on request description. Fix: Add explicit `for` attributes bound to `id_for_label` and missing label tag.
+- [ ] `templates/quality/auditmanagement/{audit_program,quality_audit,audit_finding,regulatory_inspection_host}/list.html` — Icon-only action buttons have `title` but lack explicit `aria-label`. Fix: Add `aria-label` matching title for screen reader accessibility.
+
+
