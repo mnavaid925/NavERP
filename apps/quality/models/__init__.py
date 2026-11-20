@@ -115,6 +115,18 @@ from apps.quality.models.CustomerComplaints.RegulatoryReports import (
 from apps.quality.models.CustomerComplaints.FieldActions import (
     FieldAction,
 )
+from apps.quality.models.ManagementReview.QualityObjectives import (
+    QualityObjective,
+)
+from apps.quality.models.ManagementReview.ManagementReviews import (
+    ManagementReview,
+)
+from apps.quality.models.ManagementReview.ManagementReviewInputs import (
+    ManagementReviewInput,
+)
+from apps.quality.models.ManagementReview.ManagementReviewActions import (
+    ManagementReviewAction,
+)
 
 __all__ = [
     "TenantOwned",
@@ -171,5 +183,9 @@ __all__ = [
     "ComplaintInvestigation",
     "RegulatoryReport",
     "FieldAction",
+    "QualityObjective",
+    "ManagementReview",
+    "ManagementReviewInput",
+    "ManagementReviewAction",
 ]
 
