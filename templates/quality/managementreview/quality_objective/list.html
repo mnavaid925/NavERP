@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Objectives & KPIs — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_planning_dashboard' %}">Quality Planning</a>
+            <span class="sep">/</span>
+            <span>Objectives & KPIs</span>
+        </div>
+        <h1 class="page-title">Quality Objectives & KPIs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:quality_objective_export_csv' %}?{{ filter_querystring }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:quality_objective_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Objective
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Objectives</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">On Track / Achieved</div>
+            <div class="stat-value">{{ on_track_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-label">At Risk (Amber)</div>
+            <div class="stat-value">{{ at_risk_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-label">Behind Target (Red)</div>
+            <div class="stat-value">{{ behind_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" placeholder="Title, #, rationale..." class="form-input">
+            </div>
+            <div>
+                <label for="category" class="form-label text-xs">Category</label>
+                <select name="category" id="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Lifecycle Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="rag_status" class="form-label text-xs">RAG Status</label>
+                <select name="rag_status" id="rag_status" class="form-select">
+                    <option value="">All RAG Statuses</option>
+                    {% for val, label in rag_choices %}
+                    <option value="{{ val }}" {% if selected_rag == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="org_unit" class="form-label text-xs">Department / Unit</label>
+                <select name="org_unit" id="org_unit" class="form-select">
+                    <option value="">All Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if selected_org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if q or selected_category or selected_status or selected_rag or selected_org_unit %}
+                <a href="{% url 'quality:quality_objective_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Objective & Year</th>
+                    <th>Category</th>
+                    <th>Target vs Actual</th>
+                    <th>RAG</th>
+                    <th>Status</th>
+                    <th>Owner / Unit</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for obj in page_obj %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'quality:quality_objective_detail' obj.pk %}" class="text-blue-600 hover:underline">
+                            {{ obj.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ obj.title }}</div>
+                        <div class="text-xs text-slate-500">Year: {{ obj.period_year }} &bull; {{ obj.get_cadence_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ obj.category_badge_class }}">
+                            {{ obj.get_category_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-sm font-semibold">
+                            {% if obj.current_value is not None %}
+                            {{ obj.current_value }} {{ obj.metric_unit }}
+                            {% else %}
+                            <span class="text-slate-400">Not recorded</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-slate-500">
+                            Target: {{ obj.target_value }} {{ obj.metric_unit }}
+                            {% if obj.variance is not None %}
+                            <span class="{% if obj.is_achieved %}text-emerald-600{% else %}text-rose-600{% endif %} font-medium">
+                                ({% if obj.variance > 0 %}+{% endif %}{{ obj.variance }})
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ obj.rag_badge_class }}">
+                            {{ obj.get_rag_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ obj.status_badge_class }}">
+                            {{ obj.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs">
+                        <div>
+                            {% if obj.owner %}
+                            {{ obj.owner.get_full_name|default:obj.owner.username }}
+                            {% else %}—{% endif %}
+                        </div>
+                        <div class="text-slate-400">
+                            {{ obj.org_unit.name|default:"Enterprise-wide" }}
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'quality:quality_objective_detail' obj.pk %}" class="btn btn-icon btn-outline" title="View Objective">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:quality_objective_edit' obj.pk %}" class="btn btn-icon btn-outline" title="Edit Objective">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'quality:quality_objective_delete' obj.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Quality Objective {{ obj.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Objective">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="target" class="empty-icon"></i>
+                            <div class="empty-title">No Quality Objectives Found</div>
+                            <div class="empty-desc">
+                                {% if q or selected_category or selected_status or selected_rag or selected_org_unit %}
+                                No quality objectives matched your current filter criteria.
+                                {% else %}
+                                No quality objectives or KPIs have been established yet for this tenant.
+                                {% endif %}
+                            </div>
+                            <div class="mt-4">
+                                <a href="{% url 'quality:quality_objective_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i> Define First Objective
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} objectives
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
