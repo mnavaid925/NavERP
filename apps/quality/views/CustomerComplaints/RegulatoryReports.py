@@ -186,6 +186,14 @@ def regulatory_report_delete(request, pk):
     report = quality_object(request, RegulatoryReport, pk)
     number = report.number
     complaint_pk = report.complaint_id
+
+    if report.submission_status in ["submitted", "acknowledged"]:
+        messages.error(
+            request,
+            f"Cannot delete regulatory report {number}: report has already been submitted to regulatory authorities.",
+        )
+        return redirect("quality:regulatory_report_detail", pk=report.pk)
+
     with transaction.atomic():
         write_audit_log(request.user, report, "delete", tenant=request.tenant)
         report.delete()
