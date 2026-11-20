@@ -12,6 +12,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.models.OrgUnit import OrgUnit
 from apps.quality.forms.AuditManagement.AuditFindings import AuditFindingForm, AuditFindingResponseForm
 from apps.quality.models.AuditManagement.AuditFindings import AuditFinding
@@ -178,6 +179,7 @@ def audit_finding_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def audit_finding_delete(request, pk):
     finding = quality_object(request, AuditFinding, pk)
     audit_pk = finding.audit_id
