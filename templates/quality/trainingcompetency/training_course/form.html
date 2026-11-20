@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ course.number }}{% else %}New Training Course{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_course_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_course_list' %}">Training Courses</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ course.number }}{% else %}New Course{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Training Course: {{ course.number }}{% else %}New Quality Training Course{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger mb-6">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Course Title <span class="text-red-500">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.course_code.id_for_label }}" class="form-label">Course Code / Catalog ID</label>
+                        {{ form.course_code }}
+                        {% if form.course_code.errors %}<div class="form-error">{{ form.course_code.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.competency_matrix.id_for_label }}" class="form-label">Competency Matrix</label>
+                        {{ form.competency_matrix }}
+                        {% if form.competency_matrix.errors %}<div class="form-error">{{ form.competency_matrix.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.category.id_for_label }}" class="form-label">Course Category <span class="text-red-500">*</span></label>
+                        {{ form.category }}
+                        {% if form.category.errors %}<div class="form-error">{{ form.category.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.delivery_method.id_for_label }}" class="form-label">Delivery Method <span class="text-red-500">*</span></label>
+                        {{ form.delivery_method }}
+                        {% if form.delivery_method.errors %}<div class="form-error">{{ form.delivery_method.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.assessment_method.id_for_label }}" class="form-label">Assessment Method <span class="text-red-500">*</span></label>
+                        {{ form.assessment_method }}
+                        {% if form.assessment_method.errors %}<div class="form-error">{{ form.assessment_method.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.duration_hours.id_for_label }}" class="form-label">Duration (Hours) <span class="text-red-500">*</span></label>
+                        {{ form.duration_hours }}
+                        {% if form.duration_hours.errors %}<div class="form-error">{{ form.duration_hours.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.passing_score.id_for_label }}" class="form-label">Passing Score (%) <span class="text-red-500">*</span></label>
+                        {{ form.passing_score }}
+                        {% if form.passing_score.errors %}<div class="form-error">{{ form.passing_score.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="flex items-center gap-2 pt-6">
+                        {{ form.retrain_on_revision }}
+                        <label for="{{ form.retrain_on_revision.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                            Retrain on SOP Revision (Automated DCO Retraining)
+                        </label>
+                    </div>
+
+                    <div>
+                        <label for="{{ form.controlled_document.id_for_label }}" class="form-label">Bound SOP / Quality Document</label>
+                        {{ form.controlled_document }}
+                        {% if form.controlled_document.errors %}<div class="form-error">{{ form.controlled_document.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.document_revision.id_for_label }}" class="form-label">Document Revision (e.g. Rev C)</label>
+                        {{ form.document_revision }}
+                        {% if form.document_revision.errors %}<div class="form-error">{{ form.document_revision.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.instructor.id_for_label }}" class="form-label">Internal Instructor / Trainer</label>
+                        {{ form.instructor }}
+                        {% if form.instructor.errors %}<div class="form-error">{{ form.instructor.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.external_provider.id_for_label }}" class="form-label">External Training Provider</label>
+                        {{ form.external_provider }}
+                        {% if form.external_provider.errors %}<div class="form-error">{{ form.external_provider.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="{{ form.syllabus_summary.id_for_label }}" class="form-label">Course Syllabus & Learning Objectives</label>
+                        {{ form.syllabus_summary }}
+                        {% if form.syllabus_summary.errors %}<div class="form-error">{{ form.syllabus_summary.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="{{ form.ojt_checklist_criteria.id_for_label }}" class="form-label">OJT Practical Demonstration Criteria</label>
+                        {{ form.ojt_checklist_criteria }}
+                        {% if form.ojt_checklist_criteria.errors %}<div class="form-error">{{ form.ojt_checklist_criteria.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">Administrative Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'quality:training_course_detail' course.pk %}{% else %}{% url 'quality:training_course_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i> Save Course
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
