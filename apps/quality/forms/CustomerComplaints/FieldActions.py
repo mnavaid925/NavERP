@@ -14,13 +14,14 @@ class FieldActionForm(TenantUniqueMixin, TenantModelForm):
             "number",
             "created_at",
             "updated_at",
+            "status",
+            "termination_date",
         ]
         widgets = {
             "initiation_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             "distribution_start_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             "distribution_end_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             "agency_notification_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
-            "termination_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             "affected_lot_numbers": forms.Textarea(attrs={"rows": 3, "class": "form-textarea", "placeholder": "e.g. LOT-2026-A1, LOT-2026-A2"}),
             "reason_for_action": forms.Textarea(attrs={"rows": 4, "class": "form-textarea"}),
             "hhe_summary": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
