@@ -7,6 +7,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -190,6 +191,9 @@ def regulatory_inspection_host_log_request(request, pk):
         messages.success(request, f"Inspector document request #{host.requests_logged_count} logged in War Room.")
     else:
         messages.error(request, "Please enter a valid request description.")
+    referer = request.META.get("HTTP_REFERER", "")
+    if request.POST.get("source") == "war_room" or "war-room" in referer or "audit_war_room" in referer or "war_room" in referer:
+        return redirect(f"{reverse('quality:audit_war_room')}?host={host.pk}")
     return redirect("quality:regulatory_inspection_host_detail", pk=host.pk)
 
 
@@ -206,6 +210,9 @@ def regulatory_inspection_host_fulfill_request(request, pk):
         messages.success(request, f"Request fulfilled ({host.requests_fulfilled_count}/{host.requests_logged_count}).")
     else:
         messages.info(request, "All logged inspector requests are already fulfilled.")
+    referer = request.META.get("HTTP_REFERER", "")
+    if request.POST.get("source") == "war_room" or "war-room" in referer or "audit_war_room" in referer or "war_room" in referer:
+        return redirect(f"{reverse('quality:audit_war_room')}?host={host.pk}")
     return redirect("quality:regulatory_inspection_host_detail", pk=host.pk)
 
 
