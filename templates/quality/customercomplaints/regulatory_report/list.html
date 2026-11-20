@@ -56,10 +56,22 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+            {% if request.GET.complaint %}
+            <input type="hidden" name="complaint" value="{{ request.GET.complaint }}">
+            {% endif %}
             <div>
                 <label for="q" class="form-label text-xs">Search</label>
                 <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Report #, complaint #, ACK, summary..." class="form-input">
+            </div>
+            <div>
+                <label for="report_type" class="form-label text-xs">Report Type</label>
+                <select name="report_type" id="report_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in report_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.report_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <label for="agency" class="form-label text-xs">Regulatory Agency</label>
