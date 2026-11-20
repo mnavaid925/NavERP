@@ -302,6 +302,29 @@ def customer_complaint_export_csv(request):
         "customer", "assigned_to", "sales_order"
     )
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(title__icontains=q)
+            | Q(item_code__icontains=q)
+            | Q(item_name__icontains=q)
+            | Q(lot_number__icontains=q)
+            | Q(complainant_name__icontains=q)
+        )
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    severity_filter = request.GET.get("severity", "").strip()
+    if severity_filter:
+        qs = qs.filter(severity=severity_filter)
+    reportability_filter = request.GET.get("reportability", "").strip()
+    if reportability_filter:
+        qs = qs.filter(reportability=reportability_filter)
+    customer_filter = request.GET.get("customer", "").strip()
+    if customer_filter and customer_filter.isdigit():
+        qs = qs.filter(customer_id=int(customer_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="customer_complaints.csv"'
     response["X-Content-Type-Options"] = "nosniff"
