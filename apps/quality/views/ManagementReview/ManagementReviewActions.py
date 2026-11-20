@@ -307,7 +307,7 @@ def management_review_action_escalate_capa(request, pk):
             request,
             ManagementReviewAction,
             pk,
-            queryset=ManagementReviewAction.objects.select_for_update(),
+            queryset=ManagementReviewAction.objects.filter(tenant=request.tenant).select_for_update(),
             select_related=("management_review", "spawned_capa"),
         )
         if action_item.spawned_capa:
