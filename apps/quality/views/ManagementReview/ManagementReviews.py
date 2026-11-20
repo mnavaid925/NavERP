@@ -125,10 +125,17 @@ def management_review_detail(request, pk):
 
     approve_form = ManagementReviewApproveForm()
 
+    is_exec_or_admin = (
+        request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+        or getattr(request.user, "is_staff", False)
+        or (review.executive_sponsor_id and review.executive_sponsor_id == request.user.id)
+    )
+
     can_start = review.status in ["scheduled", "in_preparation"]
     can_draft_minutes = review.status in ["meeting_active", "minutes_drafting", "pending_approval"]
-    can_approve = review.status == "pending_approval" or (review.status in ["meeting_active", "minutes_drafting"] and review.qms_suitability_conclusion != "pending")
-    can_cancel = review.status not in ["approved", "cancelled"]
+    can_approve = is_exec_or_admin and (review.status == "pending_approval" or (review.status in ["meeting_active", "minutes_drafting"] and review.qms_suitability_conclusion != "pending"))
+    can_cancel = (is_exec_or_admin or (review.lead_facilitator_id and review.lead_facilitator_id == request.user.id)) and review.status not in ["approved", "cancelled"]
 
     context = {
         "review": review,
@@ -268,6 +275,16 @@ def management_review_draft_minutes(request, pk):
 @require_POST
 def management_review_approve(request, pk):
     review = quality_object(request, ManagementReview, pk)
+    is_authorized = (
+        request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+        or getattr(request.user, "is_staff", False)
+        or (review.executive_sponsor_id and review.executive_sponsor_id == request.user.id)
+    )
+    if not is_authorized:
+        messages.error(request, "Only the designated executive sponsor or quality administrator can approve a management review.")
+        return redirect("quality:management_review_detail", pk=review.pk)
+
     if review.status == "approved":
         messages.info(request, f"Review {review.number} is already approved.")
         return redirect("quality:management_review_detail", pk=review.pk)
@@ -323,6 +340,17 @@ def management_review_approve(request, pk):
 @require_POST
 def management_review_cancel(request, pk):
     review = quality_object(request, ManagementReview, pk)
+    is_authorized = (
+        request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+        or getattr(request.user, "is_staff", False)
+        or (review.executive_sponsor_id and review.executive_sponsor_id == request.user.id)
+        or (review.lead_facilitator_id and review.lead_facilitator_id == request.user.id)
+    )
+    if not is_authorized:
+        messages.error(request, "Only the executive sponsor, lead facilitator, or quality administrator can cancel a management review.")
+        return redirect("quality:management_review_detail", pk=review.pk)
+
     if review.status == "approved":
         messages.error(request, "Approved reviews cannot be cancelled.")
         return redirect("quality:management_review_detail", pk=review.pk)
