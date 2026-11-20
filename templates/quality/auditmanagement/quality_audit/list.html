@@ -65,10 +65,28 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <div>
                 <label for="q" class="form-label text-xs">Search</label>
                 <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Title, #, auditor, scope..." class="form-input">
+            </div>
+            <div>
+                <label for="program" class="form-label text-xs">Program</label>
+                <select name="program" id="program" class="form-select">
+                    <option value="">All Programs</option>
+                    {% for p in programs %}
+                    <option value="{{ p.pk }}" {% if selected_program == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} - {{ p.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="org_unit" class="form-label text-xs">Target Unit</label>
+                <select name="org_unit" id="org_unit" class="form-select">
+                    <option value="">All Units</option>
+                    {% for u in org_units %}
+                    <option value="{{ u.pk }}" {% if selected_org_unit == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <label for="audit_type" class="form-label text-xs">Audit Type</label>
@@ -94,15 +112,6 @@
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div>
-                <label for="outcome" class="form-label text-xs">Outcome</label>
-                <select name="outcome" id="outcome" class="form-select">
-                    <option value="">All Outcomes</option>
-                    {% for val, label in outcome_choices %}
-                    <option value="{{ val }}" {% if selected_outcome == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -254,13 +263,13 @@
         </div>
         <div class="pagination flex gap-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_audit_type %}&audit_type={{ selected_audit_type }}{% endif %}{% if selected_framework %}&standard_framework={{ selected_framework }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_outcome %}&outcome={{ selected_outcome }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_program %}&program={{ selected_program }}{% endif %}{% if selected_org_unit %}&org_unit={{ selected_org_unit }}{% endif %}{% if selected_audit_type %}&audit_type={{ selected_audit_type }}{% endif %}{% if selected_framework %}&standard_framework={{ selected_framework }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_outcome %}&outcome={{ selected_outcome }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
             {% endif %}
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_audit_type %}&audit_type={{ selected_audit_type }}{% endif %}{% if selected_framework %}&standard_framework={{ selected_framework }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_outcome %}&outcome={{ selected_outcome }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_program %}&program={{ selected_program }}{% endif %}{% if selected_org_unit %}&org_unit={{ selected_org_unit }}{% endif %}{% if selected_audit_type %}&audit_type={{ selected_audit_type }}{% endif %}{% if selected_framework %}&standard_framework={{ selected_framework }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_outcome %}&outcome={{ selected_outcome }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
             {% endif %}
