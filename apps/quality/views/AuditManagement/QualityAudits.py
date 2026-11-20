@@ -4,7 +4,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -64,10 +64,16 @@ def quality_audit_list(request):
     if org_unit_param.isdigit():
         qs = qs.filter(target_org_unit_id=int(org_unit_param))
 
-    total_count = QualityAudit.objects.filter(tenant=request.tenant).count()
-    scheduled_count = QualityAudit.objects.filter(tenant=request.tenant, status="scheduled").count()
-    in_progress_count = QualityAudit.objects.filter(tenant=request.tenant, status="in_progress").count()
-    closed_count = QualityAudit.objects.filter(tenant=request.tenant, status="closed").count()
+    audit_stats = QualityAudit.objects.filter(tenant=request.tenant).aggregate(
+        total_count=Count("id"),
+        scheduled_count=Count("id", filter=Q(status="scheduled")),
+        in_progress_count=Count("id", filter=Q(status="in_progress")),
+        closed_count=Count("id", filter=Q(status="closed")),
+    )
+    total_count = audit_stats["total_count"]
+    scheduled_count = audit_stats["scheduled_count"]
+    in_progress_count = audit_stats["in_progress_count"]
+    closed_count = audit_stats["closed_count"]
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
