@@ -227,6 +227,24 @@ def complaint_investigation_export_csv(request):
         "complaint", "lead_investigator", "qa_approved_by"
     )
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(complaint__number__icontains=q)
+            | Q(dhr_lot_number__icontains=q)
+            | Q(root_cause_narrative__icontains=q)
+        )
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    analytical_method_filter = request.GET.get("analytical_method", "").strip()
+    if analytical_method_filter:
+        qs = qs.filter(analytical_method=analytical_method_filter)
+    complaint_filter = request.GET.get("complaint", "").strip()
+    if complaint_filter and complaint_filter.isdigit():
+        qs = qs.filter(complaint_id=int(complaint_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="complaint_investigations.csv"'
     response["X-Content-Type-Options"] = "nosniff"
