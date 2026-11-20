@@ -14,6 +14,7 @@ class ComplaintInvestigationForm(TenantUniqueMixin, TenantModelForm):
             "number",
             "created_at",
             "updated_at",
+            "status",
             "qa_approved_by",
             "qa_approved_date",
         ]
