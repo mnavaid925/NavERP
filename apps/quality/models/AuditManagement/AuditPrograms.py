@@ -99,14 +99,20 @@ class AuditProgram(TenantNumbered):
 
     @property
     def total_audits_count(self):
+        if hasattr(self, "annotated_total"):
+            return self.annotated_total
         return self.audits.count()
 
     @property
     def completed_audits_count(self):
+        if hasattr(self, "annotated_completed"):
+            return self.annotated_completed
         return self.audits.filter(status="closed").count()
 
     @property
     def open_audits_count(self):
+        if hasattr(self, "annotated_open"):
+            return self.annotated_open
         return self.audits.exclude(status__in=["closed", "cancelled"]).count()
 
     @property
