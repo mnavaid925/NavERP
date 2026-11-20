@@ -55,6 +55,10 @@ from apps.quality.models import (
     ComplaintInvestigation,
     RegulatoryReport,
     FieldAction,
+    CompetencyMatrix,
+    QualityTrainingCourse,
+    TrainingEnrollment,
+    CompetencyCertification,
 )
 
 
@@ -2205,6 +2209,165 @@ def field_action_b(db, tenant_b, customer_complaint_b, admin_b):
         total_units_distributed=2000,
         consignees_targeted=100,
     )
+
+
+# -----------------------------------------------------------------------------
+# Sub-module 12.12: Training & Competency Management Fixtures
+# -----------------------------------------------------------------------------
+
+@pytest.fixture
+def competency_matrix_a(db, tenant_a, quality_department, admin_user):
+    return CompetencyMatrix.objects.create(
+        tenant=tenant_a,
+        title="Aseptic Fill Line Operator Matrix",
+        role_title="Cleanroom Technician",
+        qualification_tier="independent",
+        department=quality_department,
+        criticality="critical_gxp",
+        revision="1.0",
+        status="approved",
+        minimum_passing_score=80,
+        validity_period_months=12,
+        prerequisite_experience_months=6,
+        description="Core competency requirements for aseptic cleanroom operators.",
+        approved_by=admin_user,
+        approval_date=timezone.now().date(),
+    )
+
+
+@pytest.fixture
+def competency_matrix_b(db, tenant_b, quality_department_b, admin_b):
+    return CompetencyMatrix.objects.create(
+        tenant=tenant_b,
+        title="Globex Laser Optics Matrix",
+        role_title="Laser Assembly Specialist",
+        qualification_tier="specialist",
+        department=quality_department_b,
+        criticality="high",
+        revision="1.0",
+        status="approved",
+        minimum_passing_score=85,
+        validity_period_months=24,
+        approved_by=admin_b,
+        approval_date=timezone.now().date(),
+    )
+
+
+@pytest.fixture
+def quality_course_a(db, tenant_a, competency_matrix_a, quality_doc_effective, admin_user):
+    return QualityTrainingCourse.objects.create(
+        tenant=tenant_a,
+        competency_matrix=competency_matrix_a,
+        title="SOP-0042 Aseptic Gowning and Cleanroom Entry Protocol",
+        course_code="SOP-TRN-0042",
+        category="gxp_compliance",
+        delivery_method="blended",
+        assessment_method="both_exam_and_ojt",
+        status="active",
+        controlled_document=quality_doc_effective,
+        document_revision=quality_doc_effective.revision,
+        retrain_on_revision=True,
+        duration_hours=Decimal("2.50"),
+        passing_score=80,
+        instructor=admin_user,
+        ojt_checklist_criteria="1. Proper sterile gowning order.\n2. Fingertip particulate count check.\n3. Material airlock pass-through protocol.",
+        syllabus_summary="Complete cleanroom protocol training.",
+    )
+
+
+@pytest.fixture
+def quality_course_b(db, tenant_b, competency_matrix_b, quality_doc_b, admin_b):
+    return QualityTrainingCourse.objects.create(
+        tenant=tenant_b,
+        competency_matrix=competency_matrix_b,
+        title="Globex Laser Waveguide Calibration",
+        course_code="GLX-TRN-101",
+        category="technical_sop",
+        delivery_method="on_the_job",
+        assessment_method="practical_ojt",
+        status="active",
+        controlled_document=quality_doc_b,
+        document_revision=quality_doc_b.revision,
+        retrain_on_revision=False,
+        duration_hours=Decimal("4.00"),
+        passing_score=85,
+        instructor=admin_b,
+        ojt_checklist_criteria="Beam alignment calibration verification.",
+    )
+
+
+@pytest.fixture
+def training_enrollment_a(db, tenant_a, quality_course_a, admin_user):
+    today = timezone.now().date()
+    return TrainingEnrollment.objects.create(
+        tenant=tenant_a,
+        course=quality_course_a,
+        trainee=admin_user,
+        assignment_reason="annual_refresher",
+        assigned_date=today - timedelta(days=5),
+        due_date=today + timedelta(days=25),
+        status="assigned",
+    )
+
+
+@pytest.fixture
+def training_enrollment_b(db, tenant_b, quality_course_b, admin_b):
+    today = timezone.now().date()
+    return TrainingEnrollment.objects.create(
+        tenant=tenant_b,
+        course=quality_course_b,
+        trainee=admin_b,
+        assignment_reason="role_transfer",
+        assigned_date=today - timedelta(days=10),
+        due_date=today + timedelta(days=20),
+        status="assigned",
+    )
+
+
+@pytest.fixture
+def competency_certification_a(db, tenant_a, training_enrollment_a, admin_user, quality_course_a, competency_matrix_a):
+    today = timezone.now().date()
+    cert = CompetencyCertification(
+        tenant=tenant_a,
+        enrollment=training_enrollment_a,
+        trainee=admin_user,
+        course=quality_course_a,
+        competency_matrix=competency_matrix_a,
+        qualification_title="Certified Aseptic Cleanroom Operator",
+        qualification_level="level_2_qualified",
+        issue_date=today - timedelta(days=30),
+        valid_until=today + timedelta(days=335),
+        renewal_interval_months=12,
+        status="active",
+        authorized_work_centers="Cleanroom Suite Alpha, Fill Line 1",
+        certified_by=admin_user,
+    )
+    cert.certificate_hash = cert.generate_certificate_hash()
+    cert.save()
+    return cert
+
+
+@pytest.fixture
+def competency_certification_b(db, tenant_b, training_enrollment_b, admin_b, quality_course_b, competency_matrix_b):
+    today = timezone.now().date()
+    cert = CompetencyCertification(
+        tenant=tenant_b,
+        enrollment=training_enrollment_b,
+        trainee=admin_b,
+        course=quality_course_b,
+        competency_matrix=competency_matrix_b,
+        qualification_title="Globex Laser Calibration Specialist",
+        qualification_level="level_3_senior_specialist",
+        issue_date=today - timedelta(days=60),
+        valid_until=today + timedelta(days=670),
+        renewal_interval_months=24,
+        status="active",
+        certified_by=admin_b,
+    )
+    cert.certificate_hash = cert.generate_certificate_hash()
+    cert.save()
+    return cert
+
 
 
 
