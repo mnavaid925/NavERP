@@ -35576,3 +35576,330 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Review notes — Sub-module 12.11 Close-out (Pending)
 *(Filled in at Phase 7)*
+
+---
+
+# Sub-module 12.12 — Training & Competency Management (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.12.md` (2026-11-20)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), 12.5 (Non-Conformance), 12.6 (Supplier Quality), 12.7 (Incoming Quality Control), 12.8 (In-Process Quality & SPC), 12.9 (Final Product Quality & Release), 12.10 (Calibration & MSA), and 12.11 (Audit Management).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0019_auditprogram_qualityaudit_auditfinding_and_more.py` (claims next incremental migration `0020_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QMTX`** (`CompetencyMatrix`), **`QCRS`** (`QualityTrainingCourse`), **`QENR`** (`TrainingEnrollment`), **`QCERT`** (`CompetencyCertification`).
+> Plan written from `.claude/tasks/research-quality-12.12.md` (Phase 1) and `NavERP.md` (`### 12.12 Training & Competency Management`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/TrainingCompetency/<Entity>.py` (`CompetencyMatrices.py`, `QualityTrainingCourses.py`, `TrainingEnrollments.py`, `CompetencyCertifications.py`, plus dedicated `TrainingComplianceDashboard.py` and `EmployeeTrainingDossier.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/trainingcompetency/{competency_matrix,training_course,training_enrollment,competency_certification}/{list,detail,form}.html` + `templates/quality/trainingcompetency/training_compliance_dashboard.html` + `templates/quality/trainingcompetency/employee_training_dossier.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QMTX`** (`CompetencyMatrix`), **`QCRS`** (`QualityTrainingCourse`), **`QENR`** (`TrainingEnrollment`), **`QCERT`** (`CompetencyCertification`), all 4 model classes, and all URL stems (`competency_matrix_*`, `training_course_*`, `training_enrollment_*`, `competency_certification_*`, `training_compliance_dashboard`, `employee_training_dossier`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`, departments, plant operations, cleanrooms, and analytical testing labs), `accounts.User` (`settings.AUTH_USER_MODEL`, trainees, qualified instructors, practical verifiers, and authorizing managers filtered by `tenant=self.tenant`), `core.Party` (`apps/core/models/Party.py`, role="vendor" or role="institution" for external accredited training providers, registrars, and equipment manufacturers).
+  - Module 12 siblings (12.1, 12.4, 12.5): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`, prefix `QDOC`), `quality.DocumentChangeOrder` (`apps/quality/models/DocumentControl/DocumentChangeOrders.py`, prefix `QDCR`), `quality.ElectronicSignatureRecord` (`apps/quality/models/DocumentControl/ElectronicSignatures.py`, prefix `QSIG`), `quality.CapaAction` (`apps/quality/models/CapaManagement/CapaActions.py`, prefix `QACT`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`, `UOM`): Free-text fields `equipment_scope`, `product_line_scope` with clean loose-coupling (no foreign keys to unbuilt tables).
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `quality.CompetencyMatrix`, `quality.QualityTrainingCourse`, `quality.TrainingEnrollment`, `quality.ControlledDocument`, `quality.DocumentChangeOrder`, `quality.CapaAction`, `quality.ElectronicSignatureRecord`, `core.OrgUnit`, `core.Party`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **GxP and Life Sciences Training Standards Conformance (FDA 21 CFR 820.25 / QMSR, 21 CFR 211.25, 21 CFR Part 11, ISO 13485:2016 §6.2, ISO 9001:2015 §7.2, EU GMP Chapter 2)**:
+  - Complete employee qualification lifecycle: role-based competency matrices, job description syllabus binding, SOP document-driven training with automated revision retraining triggers (`retrain_on_revision`), multi-modal course delivery (Read & Understand, Classroom ILT, E-Learning, OJT Practical, Vendor Certified), 2-step practical OJT verification workflows, numerical exam scoring with minimum passing score enforcement, official competency certificate issuance with tamper-evident cryptographic hash (`certificate_hash`), renewal validity tracking with automated pre-lapse alerting, formal regulatory learner exemption/waiver governance, consolidated individual training dossiers/transcripts, and real-time organizational compliance dashboards.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `trainee_signed_at`, `verified_at`, `approved_date`, `effective_date`, `completion_date`), auto-numbers (`number`), and computed metrics (`enrollments_count`, `completed_enrollments_count`, `attempts_count`, `certificate_hash`) MUST be excluded from `Meta.fields` in standard ModelForms.
+  - Computed helper properties (`is_effective`, `active_courses_count`, `has_document_link`, `is_overdue`, `is_passed`, `days_remaining`, `is_valid`, `days_to_expiration`, `is_expiring_soon`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `CompetencyMatrix` (`QMTX-`)
+- [ ] **File**: `apps/quality/models/TrainingCompetency/CompetencyMatrices.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QMTX"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255, help_text="e.g. Cleanroom Aseptic Operator Competency Matrix")`
+  - `target_role`: `CharField(max_length=128, db_index=True, help_text="Functional role e.g. Aseptic Cleanroom Operator, QC Analytical Chemist, QA Specialist")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="competency_matrices", help_text="Governing department, cleanroom facility, or laboratory unit")`
+  - `qualification_tier`: `CharField(max_length=32, choices=TIER_CHOICES, default="qualified_independent", db_index=True)` — `"entry_trainee"` (13), `"qualified_independent"` (21), `"senior_specialist"` (17), `"master_trainer"` (14) (longest: 21 <= 32)
+  - `criticality`: `CharField(max_length=32, choices=CRITICALITY_CHOICES, default="quality_critical", db_index=True)` — `"gxp_mandatory"` (13), `"quality_critical"` (16), `"operational_standard"` (20), `"continuous_improvement"` (22) (longest: 22 <= 32)
+  - `validity_period_months`: `PositiveIntegerField(default=12, help_text="Recertification validity cycle interval in months (0 = perpetual / no expiry)")`
+  - `passing_score_required`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("80.00"), help_text="Minimum examination passing score percentage required")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"active"` (6), `"under_revision"` (14), `"retired"` (7) (longest: 14 <= 24)
+  - `description`: `TextField(blank=True, help_text="Detailed description of role competencies, regulatory expectations, and prerequisite qualifications")`
+  - `revision`: `PositiveSmallIntegerField(default=1, help_text="Matrix version number")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_competency_matrices")`
+  - `approved_date`: `DateField(null=True, blank=True)`
+  - `effective_date`: `DateField(null=True, blank=True)`
+- [ ] **Badge CSS Dicts**:
+  - `TIER_CSS`: `entry_trainee`: `badge-slate`, `qualified_independent`: `badge-green`, `senior_specialist`: `badge-info`, `master_trainer`: `badge-amber`
+  - `CRITICALITY_CSS`: `gxp_mandatory`: `badge-red`, `quality_critical`: `badge-amber`, `operational_standard`: `badge-info`, `continuous_improvement`: `badge-muted`
+  - `STATUS_CSS`: `draft`: `badge-slate`, `active`: `badge-green`, `under_revision`: `badge-amber`, `retired`: `badge-muted`
+- [ ] **Form Exclusions**: `tenant`, `number`, `approved_by`, `approved_date`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qmtx_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qmtx_ten_status")` (19)
+  - `Index(fields=["tenant", "target_role"], name="idx_qmtx_ten_role")` (17)
+  - `Index(fields=["tenant", "department"], name="idx_qmtx_ten_dept")` (17)
+  - `Index(fields=["tenant", "qualification_tier"], name="idx_qmtx_ten_tier")` (17)
+  - `Index(fields=["tenant", "criticality"], name="idx_qmtx_ten_crit")` (17)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qmtx_ten_created")` (20)
+
+### 2. `QualityTrainingCourse` (`QCRS-`)
+- [ ] **File**: `apps/quality/models/TrainingCompetency/QualityTrainingCourses.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCRS"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `code`: `CharField(max_length=64, db_index=True, help_text="Unique course syllabus code e.g. TRN-SOP-042, TRN-ASEPTIC-101")`
+  - `title`: `CharField(max_length=255, help_text="Course syllabus title e.g. Aseptic Gowning & Cleanroom Protocol Qualification")`
+  - `delivery_method`: `CharField(max_length=32, choices=DELIVERY_METHOD_CHOICES, default="read_and_understand", db_index=True)` — `"read_and_understand"` (19), `"classroom_ilt"` (13), `"elearning"` (9), `"on_the_job_ojt"` (14), `"external_vendor"` (15) (longest: 19 <= 32)
+  - `category`: `CharField(max_length=32, choices=CATEGORY_CHOICES, default="sop_procedure", db_index=True)` — `"sop_procedure"` (13), `"gxp_compliance"` (14), `"safety_ehs"` (10), `"technical_skills"` (16), `"equipment_qualification"` (23), `"audit_capa_remedial"` (19) (longest: 23 <= 32)
+  - `competency_matrix`: `ForeignKey("quality.CompetencyMatrix", on_delete=models.SET_NULL, null=True, blank=True, related_name="courses", help_text="Governing curriculum or role competency matrix")`
+  - `controlled_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_courses", help_text="Bound SOP or specification document from Document Control")`
+  - `retrain_on_revision`: `BooleanField(default=True, help_text="Automatically triggers employee retraining when bound document is revised")`
+  - `duration_hours`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("1.00"), help_text="Planned lecture or estimated self-paced duration hours")`
+  - `passing_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("80.00"), help_text="Minimum examination passing score percentage required")`
+  - `assessment_method`: `CharField(max_length=32, choices=ASSESSMENT_METHOD_CHOICES, default="written_exam", db_index=True)` — `"written_exam"` (12), `"ojt_checklist"` (13), `"trainer_observation"` (19), `"acknowledgment_only"` (19), `"none"` (4) (longest: 19 <= 32)
+  - `ojt_checklist_criteria`: `TextField(blank=True, help_text="Detailed practical demonstration checklist steps and criteria for OJT evaluations")`
+  - `syllabus_content`: `TextField(blank=True, help_text="Detailed learning objectives, course syllabus outline, and reference materials")`
+  - `external_provider`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="provided_quality_courses", help_text="External vendor, accredited registrar, or equipment supplier")`
+  - `instructor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="instructed_quality_courses", help_text="Designated lead instructor or subject matter expert")`
+  - `revision`: `PositiveSmallIntegerField(default=1, help_text="Course version number")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"active"` (6), `"under_revision"` (14), `"retired"` (7) (longest: 14 <= 24)
+- [ ] **Badge CSS Dicts**:
+  - `DELIVERY_CSS`: `read_and_understand`: `badge-info`, `classroom_ilt`: `badge-slate`, `elearning`: `badge-info`, `on_the_job_ojt`: `badge-amber`, `external_vendor`: `badge-muted`
+  - `CATEGORY_CSS`: `sop_procedure`: `badge-info`, `gxp_compliance`: `badge-red`, `safety_ehs`: `badge-amber`, `technical_skills`: `badge-slate`, `equipment_qualification`: `badge-info`, `audit_capa_remedial`: `badge-red`
+  - `ASSESSMENT_CSS`: `written_exam`: `badge-info`, `ojt_checklist`: `badge-amber`, `trainer_observation`: `badge-slate`, `acknowledgment_only`: `badge-info`, `none`: `badge-muted`
+  - `STATUS_CSS`: `draft`: `badge-slate`, `active`: `badge-green`, `under_revision`: `badge-amber`, `retired`: `badge-muted`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcrs_ten_num_uniq")` (25)
+  - `UniqueConstraint(fields=["tenant", "code"], name="quality_qcrs_ten_code_uniq")` (26)
+  - `Index(fields=["tenant", "status"], name="idx_qcrs_ten_status")` (19)
+  - `Index(fields=["tenant", "delivery_method"], name="idx_qcrs_ten_method")` (19)
+  - `Index(fields=["tenant", "category"], name="idx_qcrs_ten_cat")` (16)
+  - `Index(fields=["tenant", "competency_matrix"], name="idx_qcrs_ten_matrix")` (19)
+  - `Index(fields=["tenant", "controlled_document"], name="idx_qcrs_ten_doc")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcrs_ten_created")` (20)
+
+### 3. `TrainingEnrollment` (`QENR-`)
+- [ ] **File**: `apps/quality/models/TrainingCompetency/TrainingEnrollments.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QENR"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `course`: `ForeignKey("quality.QualityTrainingCourse", on_delete=models.CASCADE, related_name="enrollments")`
+  - `trainee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="quality_training_enrollments", help_text="Assigned employee or trainee")`
+  - `assignment_reason`: `CharField(max_length=32, choices=REASON_CHOICES, default="role_onboarding", db_index=True)` — `"role_onboarding"` (15), `"periodic_refresher"` (18), `"document_revision"` (17), `"capa_corrective"` (15), `"management_directed"` (19), `"for_cause"` (9) (longest: 19 <= 32)
+  - `document_change_order`: `ForeignKey("quality.DocumentChangeOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="triggered_training_enrollments", help_text="DCO change request that mandated retraining")`
+  - `capa_action`: `ForeignKey("quality.CapaAction", on_delete=models.SET_NULL, null=True, blank=True, related_name="triggered_training_enrollments", help_text="CAPA action item mandating remedial training")`
+  - `assigned_date`: `DateField(default=timezone.now, db_index=True)`
+  - `due_date`: `DateField(db_index=True)`
+  - `completion_date`: `DateField(null=True, blank=True)`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="assigned", db_index=True)` — `"assigned"` (8), `"in_progress"` (11), `"pending_verification"` (20), `"completed"` (9), `"failed"` (6), `"waived"` (6), `"overdue"` (7) (longest: 20 <= 24)
+  - `score_achieved`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Examination percentage score achieved")`
+  - `attempts_count`: `PositiveSmallIntegerField(default=0, help_text="Number of examination attempts taken")`
+  - `trainee_signed_at`: `DateTimeField(null=True, blank=True, help_text="Timestamp when trainee completed self-study or submitted exam")`
+  - `practical_verifier`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_training_enrollments", help_text="Supervisor or designated evaluator for OJT practical verification")`
+  - `verified_at`: `DateTimeField(null=True, blank=True, help_text="Timestamp of supervisor practical sign-off")`
+  - `verifier_remarks`: `TextField(blank=True, help_text="Practical evaluator notes, observations, and feedback")`
+  - `electronic_signature`: `ForeignKey("quality.ElectronicSignatureRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_enrollments", help_text="Linked 21 CFR Part 11 e-signature record")`
+  - `is_waived`: `BooleanField(default=False, help_text="Whether training requirement was officially waived / exempted")`
+  - `waiver_reason`: `TextField(blank=True, help_text="Formal regulatory justification for waiver / exemption")`
+  - `waived_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="waived_training_enrollments", help_text="Quality authority who approved training waiver")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Badge CSS Dicts**:
+  - `REASON_CSS`: `role_onboarding`: `badge-info`, `periodic_refresher`: `badge-slate`, `document_revision`: `badge-amber`, `capa_corrective`: `badge-red`, `management_directed`: `badge-info`, `for_cause`: `badge-red`
+  - `STATUS_CSS`: `assigned`: `badge-slate`, `in_progress`: `badge-info`, `pending_verification`: `badge-amber`, `completed`: `badge-green`, `failed`: `badge-red`, `waived`: `badge-muted`, `overdue`: `badge-red`
+- [ ] **Form Exclusions**: `tenant`, `number`, `score_achieved`, `attempts_count`, `trainee_signed_at`, `practical_verifier`, `verified_at`, `verifier_remarks`, `electronic_signature`, `is_waived`, `waiver_reason`, `waived_by`, `completion_date`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qenr_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "status"], name="idx_qenr_ten_status")` (19)
+  - `Index(fields=["tenant", "course"], name="idx_qenr_ten_course")` (19)
+  - `Index(fields=["tenant", "trainee"], name="idx_qenr_ten_trainee")` (20)
+  - `Index(fields=["tenant", "assignment_reason"], name="idx_qenr_ten_reason")` (19)
+  - `Index(fields=["tenant", "due_date"], name="idx_qenr_ten_due")` (16)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qenr_ten_created")` (20)
+
+### 4. `CompetencyCertification` (`QCERT-`)
+- [ ] **File**: `apps/quality/models/TrainingCompetency/CompetencyCertifications.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCERT"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `enrollment`: `ForeignKey("quality.TrainingEnrollment", on_delete=models.CASCADE, related_name="certifications", help_text="Source training enrollment completion")`
+  - `trainee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="quality_competency_certifications", help_text="Certified employee")`
+  - `course`: `ForeignKey("quality.QualityTrainingCourse", on_delete=models.CASCADE, related_name="certifications")`
+  - `competency_matrix`: `ForeignKey("quality.CompetencyMatrix", on_delete=models.SET_NULL, null=True, blank=True, related_name="certifications", help_text="Governing competency matrix")`
+  - `certification_name`: `CharField(max_length=255, help_text="Official qualification certificate title e.g. Certified Cleanroom Aseptic Operator")`
+  - `qualification_level`: `CharField(max_length=32, choices=LEVEL_CHOICES, default="level_2_independent", db_index=True)` — `"level_1_provisional"` (19), `"level_2_independent"` (19), `"level_3_senior"` (14), `"level_4_trainer"` (15) (longest: 19 <= 32)
+  - `issue_date`: `DateField(default=timezone.now, db_index=True)`
+  - `valid_until`: `DateField(null=True, blank=True, db_index=True, help_text="Expiration date (null if perpetual / no expiry)")`
+  - `renewal_interval_months`: `PositiveIntegerField(default=12, help_text="Recertification renewal cycle interval in months")`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="active", db_index=True)` — `"active"` (6), `"expiring_soon"` (13), `"expired"` (7), `"suspended"` (9), `"revoked"` (7), `"superseded"` (10) (longest: 13 <= 24)
+  - `certified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="issued_competency_certifications", help_text="Authorizing quality authority or department manager")`
+  - `electronic_signature`: `ForeignKey("quality.ElectronicSignatureRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="issued_certifications", help_text="Linked 21 CFR Part 11 e-signature record")`
+  - `suspension_reason`: `TextField(blank=True, help_text="Reason if certification is suspended or revoked (e.g. quality deviation, audit finding)")`
+  - `certificate_hash`: `CharField(max_length=64, blank=True, help_text="SHA-256 tamper-evident verification digest")`
+  - `remarks`: `TextField(blank=True, help_text="Certification scope boundaries, authorized work centers, equipment serials, or cleanroom suites")`
+- [ ] **Badge CSS Dicts**:
+  - `LEVEL_CSS`: `level_1_provisional`: `badge-slate`, `level_2_independent`: `badge-green`, `level_3_senior`: `badge-info`, `level_4_trainer`: `badge-amber`
+  - `STATUS_CSS`: `active`: `badge-green`, `expiring_soon`: `badge-amber`, `expired`: `badge-red`, `suspended`: `badge-red`, `revoked`: `badge-muted`, `superseded`: `badge-slate`
+- [ ] **Form Exclusions**: `tenant`, `number`, `certificate_hash`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qcert_ten_num_uniq")` (26)
+  - `Index(fields=["tenant", "status"], name="idx_qcert_ten_status")` (20)
+  - `Index(fields=["tenant", "trainee"], name="idx_qcert_ten_trainee")` (21)
+  - `Index(fields=["tenant", "course"], name="idx_qcert_ten_course")` (20)
+  - `Index(fields=["tenant", "qualification_level"], name="idx_qcert_ten_level")` (19)
+  - `Index(fields=["tenant", "valid_until"], name="idx_qcert_ten_valid")` (19)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcert_ten_created")` (21)
+
+---
+
+## Backend (`apps/quality/{models,forms,views,urls}/TrainingCompetency/`)
+
+- [ ] **Models**:
+  - `apps/quality/models/TrainingCompetency/CompetencyMatrices.py` (`CompetencyMatrix`)
+  - `apps/quality/models/TrainingCompetency/QualityTrainingCourses.py` (`QualityTrainingCourse`)
+  - `apps/quality/models/TrainingCompetency/TrainingEnrollments.py` (`TrainingEnrollment`)
+  - `apps/quality/models/TrainingCompetency/CompetencyCertifications.py` (`CompetencyCertification`)
+  - `apps/quality/models/TrainingCompetency/__init__.py` (re-exports `CompetencyMatrix`, `QualityTrainingCourse`, `TrainingEnrollment`, `CompetencyCertification`)
+  - `apps/quality/models/__init__.py` surgical append of `TrainingCompetency` re-exports
+- [ ] **Forms**:
+  - `apps/quality/forms/TrainingCompetency/CompetencyMatrices.py` (`CompetencyMatrixForm` with tenant-scoped `department` and `approved_by` querysets)
+  - `apps/quality/forms/TrainingCompetency/QualityTrainingCourses.py` (`QualityTrainingCourseForm` with tenant-scoped `competency_matrix`, `controlled_document`, `external_provider`, and `instructor` querysets)
+  - `apps/quality/forms/TrainingCompetency/TrainingEnrollments.py`:
+    - `TrainingEnrollmentForm` (base assignment form with tenant-scoped `course`, `trainee`, `document_change_order`, `capa_action`)
+    - `TrainingCompletionForm` (exam score submission and self-certification sign-off)
+    - `PracticalVerificationForm` (supervisor OJT evaluation, remarks, and verification sign-off)
+    - `TrainingWaiverForm` (formal justification and exemption approval)
+  - `apps/quality/forms/TrainingCompetency/CompetencyCertifications.py` (`CompetencyCertificationForm` with tenant-scoped `enrollment`, `trainee`, `course`, `competency_matrix`, `certified_by`, `electronic_signature`)
+  - `apps/quality/forms/TrainingCompetency/__init__.py` (re-exports all forms)
+  - `apps/quality/forms/__init__.py` surgical append of `TrainingCompetency` re-exports
+- [ ] **Views**:
+  - `apps/quality/views/TrainingCompetency/CompetencyMatrices.py`:
+    - `competency_matrix_list`: Filters by `status`, `qualification_tier`, `criticality`, `department_id` (`.isdigit()`), text search `q`, paginated
+    - `competency_matrix_create`: Standard ModelForm handling with audit log
+    - `competency_matrix_detail`: Entity detail card, active courses list, requirement specifications, revision history
+    - `competency_matrix_edit`: Update view with audit log
+    - `competency_matrix_delete`: Safe delete with `@require_POST` and audit log
+    - `competency_matrix_approve`: Formal approval transition to `active` with audit log
+    - `competency_matrix_retire`: State transition to `retired` with audit log
+  - `apps/quality/views/TrainingCompetency/QualityTrainingCourses.py`:
+    - `training_course_list`: Filters by `status`, `delivery_method`, `category`, `assessment_method`, `competency_matrix_id` (`.isdigit()`), `controlled_document_id` (`.isdigit()`), search `q`, paginated
+    - `training_course_create`: Standard ModelForm handling with audit log
+    - `training_course_detail`: Syllabus detail, linked SOP document badge, OJT practical criteria checklist, active enrollments, recent certifications
+    - `training_course_edit`: Update view with audit log
+    - `training_course_delete`: Safe delete with `@require_POST` and audit log
+    - `training_course_activate`: State transition to `active` with audit log
+    - `training_course_retire`: State transition to `retired` with audit log
+  - `apps/quality/views/TrainingCompetency/TrainingEnrollments.py`:
+    - `training_enrollment_list`: Filters by `status`, `assignment_reason`, `course_id` (`.isdigit()`), `trainee_id` (`.isdigit()`), overdue toggle `is_overdue=1`, search `q`, paginated
+    - `training_enrollment_create`: Standard ModelForm handling with audit log
+    - `training_enrollment_detail`: Assignment progress tracker, exam score status, practical evaluation checklist, linked DCO / CAPA origin, audit trail
+    - `training_enrollment_edit`: Update view with audit log
+    - `training_enrollment_delete`: Safe delete with `@require_POST` and audit log
+    - `training_enrollment_complete`: Exam score submission and trainee completion sign-off with audit log
+    - `training_enrollment_verify`: Supervisor practical verification sign-off and optional auto-certification issuance with audit log
+    - `training_enrollment_waive`: Formal regulatory waiver/exemption sign-off with audit log
+  - `apps/quality/views/TrainingCompetency/CompetencyCertifications.py`:
+    - `competency_certification_list`: Filters by `status`, `qualification_level`, `trainee_id` (`.isdigit()`), `course_id` (`.isdigit()`), expiring soon filter `expiring_soon=1`, search `q`, paginated
+    - `competency_certification_create`: Manual / supervisory certificate issuance with audit log
+    - `competency_certification_detail`: Official qualification certificate card, tamper-evident hash display, validity period countdown, linked course syllabus and OJT evidence
+    - `competency_certification_edit`: Update view with audit log
+    - `competency_certification_delete`: Safe delete with `@require_POST` and audit log
+    - `competency_certification_renew`: Recertification workflow extending validity period with audit log
+    - `competency_certification_suspend`: Suspension / revocation workflow with documented reason and audit log
+  - `apps/quality/views/TrainingCompetency/TrainingComplianceDashboard.py`:
+    - `training_compliance_dashboard`: Executive compliance metrics (Total Active Certifications, Overall Training Compliance Rate %, Overdue Enrollments, Expiring in 30 Days), Department qualification breakdown, Course completion leaderboard, and quick navigation shortcuts
+  - `apps/quality/views/TrainingCompetency/EmployeeTrainingDossier.py`:
+    - `employee_training_dossier`: Individual employee GxP training history dossier & transcript viewable by employee selector (`?user_id=X`), featuring all completed courses, exam scores, OJT practical evaluations, certifications held, and audit readiness export
+  - `apps/quality/views/TrainingCompetency/__init__.py` (re-exports all view functions)
+  - `apps/quality/views/__init__.py` surgical append of `TrainingCompetency` re-exports
+- [ ] **URLs**:
+  - `apps/quality/urls/TrainingCompetency/CompetencyMatrices.py` (`competency_matrix_*`)
+  - `apps/quality/urls/TrainingCompetency/QualityTrainingCourses.py` (`training_course_*`)
+  - `apps/quality/urls/TrainingCompetency/TrainingEnrollments.py` (`training_enrollment_*`)
+  - `apps/quality/urls/TrainingCompetency/CompetencyCertifications.py` (`competency_certification_*`)
+  - `apps/quality/urls/TrainingCompetency/TrainingComplianceDashboard.py` (`training_compliance_dashboard`)
+  - `apps/quality/urls/TrainingCompetency/EmployeeTrainingDossier.py` (`employee_training_dossier`)
+  - `apps/quality/urls/TrainingCompetency/__init__.py` (aggregates urlpatterns with literal paths before `<int:pk>`)
+  - `apps/quality/urls/__init__.py` surgical inclusion of `TrainingCompetency` routes
+- [ ] **Admin**: `apps/quality/admin.py` registers `CompetencyMatrixAdmin`, `QualityTrainingCourseAdmin`, `TrainingEnrollmentAdmin`, `CompetencyCertificationAdmin`
+- [ ] **Migration**: `python manage.py makemigrations quality` generates incremental migration `0020_...`
+- [ ] **Extend Seeder**: `apps/quality/management/commands/seed_quality.py` extended with idempotent demo data for ACME tenant:
+  - 3 Competency Matrices (`Cleanroom Aseptic Operator`, `QC Analytical Chemist`, `QA Document & Audit Specialist`)
+  - 4 Quality Training Courses (`TRN-SOP-042`, `TRN-GMP-101`, `TRN-HPLC-201`, `TRN-RCA-301`)
+  - 6 Training Enrollments across all statuses (completed, in-progress, pending practical verification, waived, overdue, DCO-triggered)
+  - 4 Competency Certifications across levels (Level 2 Independent Operator, Level 4 Certified Trainer, Expiring Soon, Expired)
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["12.12"]` entry:
+  ```python
+  "12.12": {
+      "Training Needs Analysis": "quality:competency_matrix_list",
+      "Course Development & Delivery": "quality:training_course_list",
+      "Training Scheduling & Enrollment": "quality:training_enrollment_list",
+      "Competency Assessment & Certification": "quality:competency_certification_list",
+      "Training Records & Compliance": "quality:training_compliance_dashboard",
+  },
+  ```
+
+---
+
+## Templates (`templates/quality/trainingcompetency/`)
+
+- [ ] **Competency Matrix** (`templates/quality/trainingcompetency/competency_matrix/`):
+  - `list.html`: Matrix title, target role, department, qualification tier badge, criticality badge, validity cycle months, passing score %, status badge, filter bar, CSV export
+  - `detail.html`: Matrix specification card, target role profile, linked courses table, approved date & authority, revision history, action buttons (Approve, Retire, Edit)
+  - `form.html`: Matrix creation/edit form with role input, department selector, qualification tier dropdown, criticality dropdown, validity months, passing score %, description
+- [ ] **Quality Training Course** (`templates/quality/trainingcompetency/training_course/`):
+  - `list.html`: Course code, course title, delivery method badge, category badge, bound SOP document link, duration hours, passing score %, assessment method badge, status badge, filter bar, CSV export
+  - `detail.html`: Course syllabus overview, bound document information card, OJT practical demonstration checklist criteria, assigned instructor & external provider, active enrollments table, action buttons (Activate, Retire, Edit)
+  - `form.html`: Course authoring form with code, title, delivery method selector, category selector, matrix selector, SOP document selector, retrain on revision toggle, duration hours, passing score, assessment method selector, OJT checklist criteria, syllabus content
+- [ ] **Training Enrollment** (`templates/quality/trainingcompetency/training_enrollment/`):
+  - `list.html`: Trainee name, course title, assignment reason badge, assigned date, due date, score achieved %, status badge, overdue indicator, filter bar, CSV export
+  - `detail.html`: Enrollment progress card, exam score status, practical supervisor evaluation remarks, linked DCO / CAPA reference card, completion timestamps, action buttons (Submit Completion, Verify Practical OJT, Waive, Edit)
+  - `form.html`: Enrollment assignment form with course selector, trainee selector, assignment reason dropdown, DCO selector, CAPA action selector, assigned date, due date, notes
+- [ ] **Competency Certification** (`templates/quality/trainingcompetency/competency_certification/`):
+  - `list.html`: Certificate number, trainee name, qualification title, qualification level badge, issue date, valid until date, validity countdown badge, status badge, filter bar, CSV export
+  - `detail.html`: Formal qualification diploma view, tamper-evident cryptographic hash badge (`certificate_hash`), authorized work centers/cleanroom suites remarks, source enrollment link, authorizer sign-off, action buttons (Renew Recertification, Suspend, Edit)
+  - `form.html`: Certification issuance form with enrollment selector, trainee selector, course selector, matrix selector, qualification title, qualification level dropdown, issue date, valid until date, renewal interval months, certified by, remarks
+- [ ] **Training Compliance Dashboard** (`templates/quality/trainingcompetency/training_compliance_dashboard.html`):
+  - Executive organizational compliance command center: summary KPI cards (Overall Compliance Rate %, Active Certifications, Overdue Assignments, Expiring Soon <30 Days), Department qualification breakdown, Course completion metrics, and quick action shortcuts
+- [ ] **Employee Training Dossier** (`templates/quality/trainingcompetency/employee_training_dossier.html`):
+  - Regulatory inspection training transcript & employee dossier: employee profile header, active certifications portfolio, completed training courses and exam scores history, supervisor practical evaluation log, pending training assignments, and printable audit export format
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations quality` (creates incremental migration `0020_...`)
+- [ ] `python manage.py migrate quality`
+- [ ] `python manage.py seed_quality` **x2** (strictly idempotent, zero duplicate records or errors)
+- [ ] `python manage.py check` (0 issues reported)
+- [ ] Phase 3.5 Smoke (`qa-smoke-tester`): `temp/smoke_12_12.py` as `admin_acme` / `password` + throwaway Beta tenant asserting 200/302 across all views + literal seeded strings/numbers in HTML (L8, L57) + zero `{#` / `{% comment` leaks + filter operations with `|stringformat:"d"` + junk parameter resilience (L11) + page 2 pagination (L9) + workflow POSTs (matrix approval, course activation, exam score submission, practical verification, waiver sign-off, certification renewal, suspension) + cross-tenant IDOR 404 isolation; verify sidebar shows `12.12` Live across all 5 bullets; delete `temp/smoke_12_12.py`
+
+---
+
+## Close-out
+
+- [ ] Phase 4: Run 6 serial review passes (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` report-only -> `security-reviewer`) scoped to `BASE...HEAD` -> consolidate/dedupe sorted `C#`/`I#`/`M#` into `.claude/tasks/review-quality-12.12.md`
+- [ ] Phase 5: Run `code-fixer` agent against `.claude/tasks/review-quality-12.12.md` (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
+- [ ] Phase 6: Pin test contract & append `12.12` fixtures (`training_*`, `matrix_*`, `course_*`, `cert_*`) in `apps/quality/tests/conftest.py` (L59), then write 4 test modules serially: `test_trainingcompetency_models.py`, `test_trainingcompetency_forms.py`, `test_trainingcompetency_views.py`, `test_trainingcompetency_security.py` (using `test_trainingcompetency_*` names), followed by one **unfiltered** `venv\Scripts\python.exe -m pytest -q -W ignore apps/quality/tests/` green pass (L47)
+- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` with Sub-module 12.12 models/routes/templates/seeder, mark 12.12 complete in `README.md`, record any gaps in `.agents/tasks/gaps-quality-12.12.md` (or declare None), and populate `## Review notes` below
+
+---
+
+## Later passes / deferred
+
+1. **Interactive SCORM / xAPI / cmi5 In-Browser Video Player Engine** — Interactive multimedia course playback engine; course syllabus records, duration tracking, and completion scoring are fully modeled in 12.12 now.
+2. **Direct Exchange / Google Calendar Webhooks** — Real-time push syncing to corporate calendars; session dates, times, and deadlines are tracked directly in NavERP.
+3. **Automated AI Quiz Question Generator (CQ.AI style)** — Generative AI prompt pipeline to extract multiple-choice quizzes from uploaded PDF SOPs; syllabus and question criteria fields are modeled now.
+4. **Physical Cleanroom RFID Badge Access Gate Integration** — Hardware turnstile integration blocking door access if operator training is expired; the `is_user_qualified` backend lookup helper is implemented in 12.12 now.
+
+---
+
+## Review notes — Sub-module 12.12 Close-out (Pending)
+*(Filled in at Phase 7)*
+
