@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ review.number }} — Management Review Audit Dossier — NavERP</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.5; padding: 32px; max-width: 900px; margin: 0 auto; }
+        .header { border-bottom: 2px solid #0284c7; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+        .title { font-size: 24px; font-weight: bold; color: #0f172a; margin: 0; }
+        .meta { font-size: 13px; color: #64748b; margin-top: 4px; }
+        .badge { display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 4px; background: #f1f5f9; color: #475569; }
+        .badge-green { background: #dcfce7; color: #166534; }
+        .badge-amber { background: #fef3c7; color: #92400e; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-info { background: #e0f2fe; color: #075985; }
+        h2 { font-size: 16px; font-weight: bold; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; margin-top: 24px; margin-bottom: 12px; color: #0f172a; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13px; }
+        th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
+        th { background: #f8fafc; font-weight: 600; color: #334155; }
+        .text-sm { font-size: 13px; }
+        .box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 4px; font-size: 13px; margin-bottom: 16px; white-space: pre-line; }
+        .sig-block { margin-top: 32px; border: 1px solid #94a3b8; padding: 16px; border-radius: 4px; background: #fafafa; font-size: 13px; }
+        @media print {
+            body { padding: 0; font-size: 12px; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom: 20px;">
+        <button onclick="window.print()" style="padding: 8px 16px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+            Print / Save as PDF
+        </button>
+    </div>
+
+    <div class="header">
+        <div>
+            <h1 class="title">Management Review Audit Dossier</h1>
+            <div class="meta">
+                Document Number: <strong>{{ review.number }}</strong> &bull; Generated: {{ export_date|date:"Y-m-d H:i" }} UTC
+            </div>
+            <div class="meta">
+                Regulatory Standards: ISO 13485:2016 § 5.6 &bull; FDA 21 CFR Part 820 / QMSR &bull; ISO 9001:2015 § 9.3
+            </div>
+        </div>
+        <div>
+            <span class="badge {{ review.suitability_badge_class }}">{{ review.get_qms_suitability_conclusion_display }}</span>
+        </div>
+    </div>
+
+    <h2>1. Review Session Profile</h2>
+    <table>
+        <tr>
+            <th style="width: 25%;">Review Title</th>
+            <td style="width: 75%;">{{ review.title }}</td>
+        </tr>
+        <tr>
+            <th>Cadence</th>
+            <td>{{ review.get_cadence_display }}</td>
+        </tr>
+        <tr>
+            <th>Period Under Review</th>
+            <td>{{ review.period_start|date:"Y-m-d" }} to {{ review.period_end|date:"Y-m-d" }}</td>
+        </tr>
+        <tr>
+            <th>Scheduled / Actual Date</th>
+            <td>Scheduled: {{ review.scheduled_date|date:"Y-m-d" }} &bull; Held: {{ review.actual_meeting_date|date:"Y-m-d"|default:"Pending" }}</td>
+        </tr>
+        <tr>
+            <th>Executive Sponsor</th>
+            <td>{{ review.executive_sponsor.get_full_name|default:review.executive_sponsor.username }} (Management with Executive Responsibility)</td>
+        </tr>
+        <tr>
+            <th>Lead Facilitator</th>
+            <td>{{ review.lead_facilitator.get_full_name|default:review.lead_facilitator.username }}</td>
+        </tr>
+        <tr>
+            <th>Quorum Verified</th>
+            <td>{% if review.quorum_met %}Yes — All designated functional areas represented{% else %}No — Quorum condition not documented{% endif %}</td>
+        </tr>
+    </table>
+
+    {% if review.attendees_roster %}
+    <h2>2. Attendee Roster</h2>
+    <div class="box">{{ review.attendees_roster }}</div>
+    {% endif %}
+
+    <h2>3. Executive Suitability Determination & Summary</h2>
+    <div class="box">
+        <strong>Conclusion:</strong> {{ review.get_qms_suitability_conclusion_display }}
+        <br><br>
+        <strong>Executive Summary:</strong>
+        <br>
+        {{ review.executive_summary|default:"No executive summary recorded." }}
+    </div>
+
+    {% if review.resource_decisions %}
+    <h2>4. Resource Decisions & Commitments</h2>
+    <div class="box">{{ review.resource_decisions }}</div>
+    {% endif %}
+
+    <h2>5. Compiled Review Inputs (ISO 13485:2016 § 5.6.2)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 8%;">Order</th>
+                <th style="width: 15%;">Input #</th>
+                <th style="width: 35%;">Category & Title</th>
+                <th style="width: 25%;">Findings Synthesis</th>
+                <th style="width: 17%;">Presenter / Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inp in inputs %}
+            <tr>
+                <td>{{ inp.agenda_order }}</td>
+                <td style="font-family: monospace;">{{ inp.number }}</td>
+                <td>
+                    <strong>{{ inp.get_category_display }}</strong>
+                    <br>{{ inp.title }}
+                </td>
+                <td>{{ inp.summary_findings|truncatewords:30 }}</td>
+                <td>{{ inp.presenter.get_full_name|default:inp.presenter.username }}<br><small>{{ inp.get_status_display }}</small></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">No input topics recorded.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>6. Review Outputs & Decisions (ISO 13485:2016 § 5.6.3)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">Action #</th>
+                <th style="width: 35%;">Action Title & Type</th>
+                <th style="width: 12%;">Priority</th>
+                <th style="width: 20%;">Assignee & Due Date</th>
+                <th style="width: 18%;">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for act in actions %}
+            <tr>
+                <td style="font-family: monospace;">{{ act.number }}</td>
+                <td>
+                    <strong>{{ act.title }}</strong>
+                    <br><small>{{ act.get_action_type_display }}</small>
+                </td>
+                <td>{{ act.get_priority_display }}</td>
+                <td>{{ act.assignee.get_full_name|default:act.assignee.username }}<br><small>Due: {{ act.due_date|date:"Y-m-d" }}</small></td>
+                <td>{{ act.get_status_display }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">No action items recorded.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="sig-block">
+        <strong>FDA 21 CFR Part 11 / QMSR Electronic Signature Certification:</strong>
+        <br><br>
+        {% if review.status == 'approved' %}
+        Certified that executive management review has been conducted in accordance with the Quality Management System procedures.
+        <br><br>
+        <strong>Signer:</strong> {{ review.approved_by.get_full_name|default:review.approved_by.username }}
+        <br>
+        <strong>Title:</strong> Management with Executive Responsibility
+        <br>
+        <strong>Date / Timestamp:</strong> {{ review.approved_at|date:"Y-m-d H:i:s" }} UTC
+        {% if review.electronic_signature %}
+        <br>
+        <strong>Signature Record:</strong> {{ review.electronic_signature.number }}
+        {% endif %}
+        {% else %}
+        Review is currently {{ review.get_status_display }}. Pending final executive signature approval.
+        {% endif %}
+    </div>
+</body>
+</html>
