@@ -109,6 +109,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            FieldAction.objects.all().delete()
+            RegulatoryReport.objects.all().delete()
+            ComplaintInvestigation.objects.all().delete()
+            CustomerComplaint.objects.all().delete()
             CompetencyCertification.objects.all().delete()
             TrainingEnrollment.objects.all().delete()
             QualityTrainingCourse.objects.all().delete()
@@ -179,6 +183,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_10(tenant)
             self._seed_submodule_12_11(tenant)
             self._seed_submodule_12_12(tenant)
+            self._seed_submodule_12_13(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -4058,13 +4063,34 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.12 Training & Competency Management seeded successfully."))
 
-        # ---------------------------------------------------------------------
-        # 12.13 Customer Complaint Handling
-        # ---------------------------------------------------------------------
-        if not CustomerComplaint.objects.filter(tenant=tenant).exists():
-            now = timezone.now()
-            today = now.date()
-            customer_party = Party.objects.filter(tenant=tenant).first()
+    def _seed_submodule_12_13(self, tenant):
+        """Seed demo data for Sub-module 12.13: Customer Complaint Handling."""
+        if CustomerComplaint.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.13 Customer Complaint Handling data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.13 Customer Complaint Handling...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+            or User.objects.filter(tenant=tenant).first()
+        )
+        quality_lead = (
+            User.objects.filter(tenant=tenant, username__icontains="quality").first()
+            or User.objects.filter(tenant=tenant, is_staff=True).first()
+            or admin_user
+        )
+        operator_user = (
+            User.objects.filter(tenant=tenant, username__icontains="operator").first()
+            or User.objects.filter(tenant=tenant).exclude(pk=admin_user.pk).first()
+            or admin_user
+        )
+
+        customer_party = Party.objects.filter(tenant=tenant).first()
+        now = timezone.now()
+        today = now.date()
+
+        with transaction.atomic():
 
             cmp1 = CustomerComplaint.objects.create(
                 tenant=tenant,
