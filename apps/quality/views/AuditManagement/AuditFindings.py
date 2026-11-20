@@ -213,6 +213,23 @@ def audit_finding_submit_response(request, pk):
 @require_POST
 def audit_finding_verify_close(request, pk):
     finding = quality_object(request, AuditFinding, pk)
+    if finding.status not in ("response_submitted", "response_accepted", "verification_pending"):
+        messages.warning(
+            request,
+            f"Audit Finding {finding.number} cannot be closed from status '{finding.get_status_display()}'.",
+        )
+        return redirect("quality:audit_finding_detail", pk=finding.pk)
+
+    if request.user == finding.assignee:
+        messages.error(request, "Auditor independence violation: An assignee cannot verify and close their own finding.")
+        return redirect("quality:audit_finding_detail", pk=finding.pk)
+
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "role", "") == "admin"
+    is_lead = (finding.audit.lead_auditor_id == request.user.id)
+    if not (is_lead or is_admin):
+        messages.error(request, "Only the lead auditor or a tenant administrator can verify and close this finding.")
+        return redirect("quality:audit_finding_detail", pk=finding.pk)
+
     closure_notes = request.POST.get("closure_notes", "").strip()
     finding.closure_verified_by = request.user
     finding.closed_date = timezone.now().date()
@@ -220,6 +237,7 @@ def audit_finding_verify_close(request, pk):
     if closure_notes:
         finding.closure_notes = closure_notes
     finding.save()
+    finding.audit.sync_findings_counts()
     write_audit_log(request.user, finding, "verify", tenant=request.tenant)
     messages.success(request, f"Audit Finding {finding.number} verified and closed.")
     return redirect("quality:audit_finding_detail", pk=finding.pk)
