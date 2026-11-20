@@ -124,3 +124,26 @@ Commit after fixing Critical and Important findings (1 Critical, 4 Important, 4 
 - Proper pagination (`Paginator(qs, 15)`) applied after filters.
 - Primary list `select_related` coverage on foreign keys.
 - Safe idempotent seeding within transaction.atomic.
+
+
+## 5. QA Smoke Tester Pass
+
+### Verdict
+Conditional Fail (2 Critical, 1 Important, 1 Minor). 50 of 54 runtime checks passed.
+
+### Critical
+1. `templates/quality/trainingcompetency/training_enrollment/detail.html:257` — Template Variable Lookup Crash (HTTP 500) on Verified Enrollments without Practical Evaluator: `enrollment.practical_verified_by.username` in `default:` argument raises `VariableDoesNotExist` when `practical_verified_by` is None. Fix: Guard with `{% if enrollment.practical_verified_by %}` block.
+2. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:240-261` — GxP Regulatory Defect: Training Completion View Issues Certification to Trainees Who Failed Exam. Candidate scoring below passing score has status set to `verified` and receives formal `CompetencyCertification`. Fix: Check `if not enrollment.is_passed: enrollment.status = "failed"; enrollment.save(); write_audit_log(...); messages.warning(...); return redirect(...)`.
+
+### Important
+1. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:267-285` — Segregation of Duties Violation: Trainee Can Self-Verify Their Own Practical Competency. Trainee can submit POST to verify their own practical qualification. Fix: Add evaluator independence check `if request.user == enrollment.trainee and not request.user.is_tenant_admin: messages.error(...); return redirect(...)`.
+
+### Minor
+1. `templates/quality/trainingcompetency/training_enrollment/detail.html:94` — Missing Default Fallback in Enrollment Detail Exam Score Display: passing score label displayed even when passing score is 0. Fix: Guard label with `if enrollment.course.passing_score > 0`.
+
+### Done well
+- 100% Cross-Tenant IDOR Isolation: 17 of 17 cross-tenant IDOR attack probes returned strict 404 Not Found.
+- Zero raw template comment leaks on all 16 tested GET views.
+- Robust resilience/fuzzing: all 8 fuzz tests with junk parameters returned HTTP 200 without crashes.
+- CSV exports fully compliant.
+- State machines for Matrix approve/retire, Course activate/retire, and Certification renew/suspend transition cleanly.
