@@ -176,6 +176,7 @@ def management_review_action_create(request):
         "action_item": None,
         "is_edit": False,
         "parent_review": parent_review,
+        "review": parent_review,
     }
     return render(request, "quality/managementreview/management_review_action/form.html", context)
 
@@ -207,6 +208,7 @@ def management_review_action_edit(request, pk):
         "action_item": action_item,
         "is_edit": True,
         "parent_review": action_item.management_review,
+        "review": action_item.management_review,
     }
     return render(request, "quality/managementreview/management_review_action/form.html", context)
 
