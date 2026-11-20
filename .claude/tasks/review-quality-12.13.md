@@ -236,5 +236,17 @@
   - **Fix:**
     Apply the standard filter parameters to the export queryset before streaming.
 
+---
+
+## 5. QA Smoke Tester Findings
+
+### Verdict
+**PASS** — 55/55 runtime assertions passed across all 31 endpoints. Zero 500 errors, zero template comment leaks, junk query parameters handled cleanly, and 100% cross-tenant IDOR protection verified (404 on all foreign tenant probes).
+
+### Minor
+- **M10: Route name convention clarification**
+  - Canonical routes are `regulatory_report_acknowledge` and `field_action_close` matching contract-quality-12.13.md. Both verified functional.
+
+
 
 
