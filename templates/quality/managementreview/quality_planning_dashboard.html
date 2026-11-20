@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Planning & Executive Governance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_planning_dashboard' %}">Quality</a>
+            <span class="sep">/</span>
+            <span>Quality Planning & Review</span>
+        </div>
+        <h1 class="page-title">Quality Planning & Management Review</h1>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <a href="{% url 'quality:quality_objective_create' %}" class="btn btn-outline">
+            <i data-lucide="target"></i> New Objective
+        </a>
+        <a href="{% url 'quality:management_review_create' %}" class="btn btn-primary">
+            <i data-lucide="calendar-plus"></i> Schedule Review
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Objectives</div>
+            <div class="stat-value">{{ total_objectives }} <span class="text-xs font-normal text-slate-500">({{ objective_achievement_rate }}% achieved)</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="presentation"></i>
+        </div>
+        <div>
+            <div class="stat-label">Reviews in {{ current_year }}</div>
+            <div class="stat-value">{{ reviews_approved_this_year }} <span class="text-xs font-normal text-slate-500">({{ scheduled_reviews }} upcoming)</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Action Item Closure</div>
+            <div class="stat-value">{{ action_closure_rate }}% <span class="text-xs font-normal text-slate-500">({{ completed_actions }}/{{ total_actions }})</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if overdue_actions > 0 %}red{% else %}slate{% endif %}">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-label">Overdue Actions</div>
+            <div class="stat-value {% if overdue_actions > 0 %}text-rose-600{% endif %}">{{ overdue_actions }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="font-semibold text-slate-900">Objectives RAG Distribution</h3>
+            <a href="{% url 'quality:quality_objective_list' %}" class="text-xs text-blue-600 hover:underline">View All &rarr;</a>
+        </div>
+        <div class="card-body space-y-3">
+            <div class="flex items-center justify-between p-2 rounded bg-emerald-50 border border-emerald-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                    <span class="text-xs font-medium text-emerald-900">Green &bull; On Track / Achieved</span>
+                </div>
+                <span class="font-bold text-emerald-700 text-sm">{{ rag_distribution.green }}</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded bg-amber-50 border border-amber-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                    <span class="text-xs font-medium text-amber-900">Amber &bull; At Risk</span>
+                </div>
+                <span class="font-bold text-amber-700 text-sm">{{ rag_distribution.amber }}</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded bg-rose-50 border border-rose-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+                    <span class="text-xs font-medium text-rose-900">Red &bull; Critical Variance / Behind</span>
+                </div>
+                <span class="font-bold text-rose-700 text-sm">{{ rag_distribution.red }}</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-200">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-slate-400"></span>
+                    <span class="text-xs font-medium text-slate-700">Neutral &bull; Pending Measurement</span>
+                </div>
+                <span class="font-bold text-slate-600 text-sm">{{ rag_distribution.neutral }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="lg:col-span-2 card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="font-semibold text-slate-900">Quality Goals by Focus Area</h3>
+            <span class="text-xs text-slate-500">ISO 9001 § 6.2 / ISO 13485 § 5.4.1</span>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {% for c in category_counts %}
+                <div class="p-3 bg-slate-50 rounded border border-slate-200 flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-medium text-slate-900">{{ c.label }}</div>
+                        <span class="badge {{ c.badge_class }} text-[10px] mt-1">{{ c.category }}</span>
+                    </div>
+                    <span class="font-bold text-slate-800 text-base">{{ c.count }}</span>
+                </div>
+                {% empty %}
+                <div class="text-slate-500 text-sm py-4 col-span-2 text-center">No categories populated yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="font-semibold text-slate-900">Upcoming & Active Review Sessions</h3>
+            <a href="{% url 'quality:management_review_list' %}" class="text-xs text-blue-600 hover:underline">View All &rarr;</a>
+        </div>
+        <div class="card-body divide-y divide-slate-100">
+            {% for rev in upcoming_reviews %}
+            <div class="py-3 flex items-center justify-between first:pt-0 last:pb-0">
+                <div>
+                    <a href="{% url 'quality:management_review_detail' rev.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                        {{ rev.number }} &ndash; {{ rev.title }}
+                    </a>
+                    <div class="text-xs text-slate-500">
+                        Scheduled: {{ rev.scheduled_date|date:"M d, Y" }} &bull; {{ rev.get_cadence_display }}
+                    </div>
+                </div>
+                <span class="badge {{ rev.status_badge_class }}">{{ rev.get_status_display }}</span>
+            </div>
+            {% empty %}
+            <div class="text-slate-500 text-sm py-6 text-center">
+                No upcoming review sessions planned.
+                <div class="mt-2">
+                    <a href="{% url 'quality:management_review_create' %}" class="btn btn-outline btn-sm">Schedule Now</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="font-semibold text-slate-900">Urgent & Overdue Review Actions</h3>
+            <a href="{% url 'quality:management_review_action_list' %}" class="text-xs text-blue-600 hover:underline">View All &rarr;</a>
+        </div>
+        <div class="card-body divide-y divide-slate-100">
+            {% for act in urgent_actions %}
+            <div class="py-3 flex items-center justify-between first:pt-0 last:pb-0">
+                <div class="max-w-[70%]">
+                    <a href="{% url 'quality:management_review_action_detail' act.pk %}" class="font-medium text-slate-900 hover:text-blue-600 truncate block">
+                        {{ act.number }} &ndash; {{ act.title }}
+                    </a>
+                    <div class="text-xs text-slate-500">
+                        Owner: {{ act.assignee.get_full_name|default:act.assignee.username }} &bull;
+                        Due: <span class="{% if act.is_overdue %}text-rose-600 font-bold{% endif %}">{{ act.due_date|date:"M d, Y" }}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="badge {{ act.priority_badge_class }}">{{ act.get_priority_display }}</span>
+                    <span class="badge {{ act.status_badge_class }}">{{ act.get_status_display }}</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-slate-500 text-sm py-6 text-center">
+                All management review action items are up to date!
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
