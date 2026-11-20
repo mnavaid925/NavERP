@@ -70,7 +70,7 @@ class CustomerComplaintForm(TenantUniqueMixin, TenantModelForm):
         return cleaned_data
 
 
-class ComplaintTriageForm(forms.ModelForm):
+class ComplaintTriageForm(TenantModelForm):
     class Meta:
         model = CustomerComplaint
         fields = [
@@ -85,13 +85,16 @@ class ComplaintTriageForm(forms.ModelForm):
             "triage_notes",
         ]
         widgets = {
+            "validity": forms.Select(attrs={"class": "form-select"}),
+            "severity": forms.Select(attrs={"class": "form-select"}),
+            "reportability": forms.Select(attrs={"class": "form-select"}),
+            "complaint_category": forms.TextInput(attrs={"class": "form-input"}),
             "non_reportable_justification": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
             "no_investigation_rationale": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
             "triage_notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         }
 
     def __init__(self, *args, **kwargs):
-        self.tenant = kwargs.pop("tenant", None)
         super().__init__(*args, **kwargs)
         if self.tenant is not None and "assigned_to" in self.fields:
             from django.contrib.auth import get_user_model
