@@ -111,7 +111,7 @@
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if q or selected_cadence or selected_status or selected_suitability or selected_org_unit %}
-                <a href="{% url 'quality:management_review_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters">
+                <a href="{% url 'quality:management_review_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -184,16 +184,16 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'quality:management_review_detail' rev.pk %}" class="btn btn-icon btn-outline" title="View Review">
+                            <a href="{% url 'quality:management_review_detail' rev.pk %}" class="btn btn-icon btn-outline" title="View Review" aria-label="View Review">
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if rev.status != 'approved' and rev.status != 'cancelled' %}
-                            <a href="{% url 'quality:management_review_edit' rev.pk %}" class="btn btn-icon btn-outline" title="Edit Review">
+                            <a href="{% url 'quality:management_review_edit' rev.pk %}" class="btn btn-icon btn-outline" title="Edit Review" aria-label="Edit Review">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'quality:management_review_delete' rev.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Management Review {{ rev.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Review">
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Review" aria-label="Delete Review">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
