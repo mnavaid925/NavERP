@@ -35301,9 +35301,9 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 ## Models (from research — 4)
 
 ### 1. `AuditProgram` (`QPRG-`)
-- [ ] **File**: `apps/quality/models/AuditManagement/AuditPrograms.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QPRG"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/AuditManagement/AuditPrograms.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QPRG"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="e.g. FY2026 Enterprise Quality & Regulatory Audit Program")`
   - `program_year`: `PositiveIntegerField(help_text="Operating fiscal year e.g. 2026")`
   - `program_type`: `CharField(max_length=32, choices=PROGRAM_TYPE_CHOICES, default="internal_qms", db_index=True)` — `"internal_qms"` (12), `"supplier_external"` (17), `"regulatory_certification"` (24), `"integrated_enterprise"` (21) (longest: 24 <= 32)
@@ -35317,12 +35317,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_audit_programs")`
   - `approval_date`: `DateField(null=True, blank=True)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `PROGRAM_TYPE_CSS`: `internal_qms`: `badge-info`, `supplier_external`: `badge-slate`, `regulatory_certification`: `badge-amber`, `integrated_enterprise`: `badge-green`
   - `RISK_BASIS_CSS`: `low_risk_annual`: `badge-muted`, `medium_risk_biennial`: `badge-info`, `high_risk_semi_annual`: `badge-red`, `for_cause_triggered`: `badge-amber`
   - `STATUS_CSS`: `draft`: `badge-slate`, `submitted`: `badge-info`, `approved`: `badge-green`, `active`: `badge-green`, `completed`: `badge-muted`, `cancelled`: `badge-red`
-- [ ] **Form Exclusions**: `tenant`, `number`, `approval_date`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `approval_date`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qprg_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qprg_ten_status")` (19)
   - `Index(fields=["tenant", "program_year"], name="idx_qprg_ten_year")` (17)
@@ -35330,12 +35330,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "risk_basis"], name="idx_qprg_ten_risk")` (17)
   - `Index(fields=["tenant", "program_manager"], name="idx_qprg_ten_mgr")` (16)
   - `Index(fields=["tenant", "-created_at"], name="idx_qprg_ten_created")` (20)
-- [ ] **Helper Properties**: `progress_percentage`, `total_audits_count`, `completed_audits_count`, `open_audits_count`
+- [x] **Helper Properties**: `progress_percentage`, `total_audits_count`, `completed_audits_count`, `open_audits_count`
 
 ### 2. `QualityAudit` (`QAUD-`)
-- [ ] **File**: `apps/quality/models/AuditManagement/QualityAudits.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QAUD"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/AuditManagement/QualityAudits.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QAUD"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `program`: `ForeignKey("quality.AuditProgram", on_delete=models.SET_NULL, null=True, blank=True, related_name="audits", help_text="Parent audit program (nullable for ad-hoc / unannounced audits)")`
   - `title`: `CharField(max_length=255, help_text="Audit title e.g. ISO 13485 Internal Audit - Design & Document Control")`
   - `audit_type`: `CharField(max_length=40, choices=AUDIT_TYPE_CHOICES, default="internal_system", db_index=True)` — `"internal_system"` (15), `"internal_process"` (16), `"internal_product"` (16), `"supplier_qualification"` (22), `"regulatory_fda"` (14), `"certification_notified_body"` (27), `"customer_audit"` (14), `"special_for_cause"` (17) (longest: 27 <= 40)
@@ -35363,13 +35363,13 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `minor_findings_count`: `PositiveIntegerField(default=0)`
   - `ofi_findings_count`: `PositiveIntegerField(default=0)`
   - `notes`: `TextField(blank=True)`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `AUDIT_TYPE_CSS`: `internal_system`: `badge-info`, `internal_process`: `badge-info`, `internal_product`: `badge-info`, `supplier_qualification`: `badge-slate`, `regulatory_fda`: `badge-red`, `certification_notified_body`: `badge-amber`, `customer_audit`: `badge-slate`, `special_for_cause`: `badge-red`
   - `AUDIT_METHOD_CSS`: `on_site`: `badge-info`, `remote_virtual`: `badge-slate`, `hybrid`: `badge-amber`, `desk_audit`: `badge-muted`
   - `STATUS_CSS`: `scheduled`: `badge-slate`, `in_preparation`: `badge-info`, `in_progress`: `badge-amber`, `reporting`: `badge-info`, `capa_pending`: `badge-amber`, `closed`: `badge-green`, `cancelled`: `badge-red`
   - `OUTCOME_CSS`: `pending`: `badge-muted`, `conforming`: `badge-green`, `minor_findings`: `badge-amber`, `major_findings`: `badge-red`, `critical_non_conformance`: `badge-red`, `passed`: `badge-green`, `conditional_pass`: `badge-amber`, `failed`: `badge-red`
-- [ ] **Form Exclusions**: `tenant`, `number`, `report_published_date`, `total_findings_count`, `critical_findings_count`, `major_findings_count`, `minor_findings_count`, `ofi_findings_count`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `report_published_date`, `total_findings_count`, `critical_findings_count`, `major_findings_count`, `minor_findings_count`, `ofi_findings_count`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qaud_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qaud_ten_status")` (19)
   - `Index(fields=["tenant", "audit_type"], name="idx_qaud_ten_type")` (17)
@@ -35379,12 +35379,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "target_org_unit"], name="idx_qaud_ten_unit")` (17)
   - `Index(fields=["tenant", "lead_auditor"], name="idx_qaud_ten_auditor")` (20)
   - `Index(fields=["tenant", "-created_at"], name="idx_qaud_ten_created")` (20)
-- [ ] **Helper Properties**: `is_overdue`, `days_open`, `open_findings_count`
+- [x] **Helper Properties**: `is_overdue`, `days_open`, `open_findings_count`
 
 ### 3. `AuditFinding` (`QFND-`)
-- [ ] **File**: `apps/quality/models/AuditManagement/AuditFindings.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFND"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/AuditManagement/AuditFindings.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QFND"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `audit`: `ForeignKey("quality.QualityAudit", on_delete=models.CASCADE, related_name="findings")`
   - `finding_number_in_audit`: `PositiveSmallIntegerField(default=1, help_text="Sequential number within this audit e.g. 1, 2, 3")`
   - `title`: `CharField(max_length=255, help_text="Finding headline / observation summary")`
@@ -35405,11 +35405,11 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `closure_verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_audit_findings")`
   - `closed_date`: `DateField(null=True, blank=True)`
   - `closure_notes`: `TextField(blank=True, help_text="Lead auditor verification rationale and objective evidence of closure")`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `SEVERITY_CSS`: `critical`: `badge-red`, `major`: `badge-red`, `minor`: `badge-amber`, `observation_ofi`: `badge-info`, `commendation`: `badge-green`
   - `STATUS_CSS`: `draft`: `badge-slate`, `issued`: `badge-amber`, `response_submitted`: `badge-info`, `response_accepted`: `badge-info`, `capa_in_progress`: `badge-amber`, `verification_pending`: `badge-amber`, `closed`: `badge-green`, `escalated`: `badge-red`
-- [ ] **Form Exclusions**: `tenant`, `number`, `response_received_date`, `closed_date`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `response_received_date`, `closed_date`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qfnd_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qfnd_ten_status")` (19)
   - `Index(fields=["tenant", "severity"], name="idx_qfnd_ten_sev")` (16)
@@ -35418,12 +35418,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "response_due_date"], name="idx_qfnd_ten_due")` (16)
   - `Index(fields=["tenant", "linked_capa"], name="idx_qfnd_ten_capa")` (17)
   - `Index(fields=["tenant", "-created_at"], name="idx_qfnd_ten_created")` (20)
-- [ ] **Helper Properties**: `is_overdue`, `requires_capa`
+- [x] **Helper Properties**: `is_overdue`, `requires_capa`
 
 ### 4. `RegulatoryInspectionHost` (`QHST-`)
-- [ ] **File**: `apps/quality/models/AuditManagement/RegulatoryInspectionHosts.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QHST"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/AuditManagement/RegulatoryInspectionHosts.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QHST"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `audit`: `ForeignKey("quality.QualityAudit", on_delete=models.SET_NULL, null=True, blank=True, related_name="regulatory_hosts", help_text="Linked QualityAudit record")`
   - `inspection_title`: `CharField(max_length=255, help_text="e.g. FDA cGMP / QSIT Inspection - Medical Device Facility")`
   - `agency_or_body`: `CharField(max_length=32, choices=AGENCY_CHOICES, default="fda_cdrh", db_index=True)` — `"fda_cdrh"` (8), `"fda_cder"` (8), `"iso_notified_body"` (17), `"ema_eu"` (6), `"health_canada"` (13), `"pmda_japan"` (10), `"customer_corporate"` (18), `"iso_registrar"` (13), `"other_authority"` (15) (longest: 18 <= 32)
@@ -35448,12 +35448,12 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `formal_outcome`: `CharField(max_length=36, choices=OUTCOME_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"nai_no_action_indicated"` (23), `"vai_voluntary_action_indicated"` (29), `"oai_official_action_indicated"` (28), `"certified_unconditional"` (23), `"conditional_clearance"` (21), `"refusal_warning_letter"` (22) (longest: 29 <= 36)
   - `daily_summary_notes`: `TextField(blank=True, help_text="Daily debrief log, inspector questions, and SME interview notes")`
   - `closeout_memo`: `TextField(blank=True, help_text="Exit conference debrief, commitments, and executive response plan")`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `AGENCY_CSS`: `fda_cdrh`: `badge-red`, `fda_cder`: `badge-red`, `iso_notified_body`: `badge-amber`, `ema_eu`: `badge-info`, `health_canada`: `badge-info`, `pmda_japan`: `badge-info`, `customer_corporate`: `badge-slate`, `iso_registrar`: `badge-amber`, `other_authority`: `badge-muted`
   - `STATUS_CSS`: `preparation`: `badge-slate`, `active_inspection`: `badge-amber`, `daily_wrapup`: `badge-info`, `inspection_closed`: `badge-green`, `post_inspection_followup`: `badge-muted`
   - `OUTCOME_CSS`: `pending`: `badge-muted`, `nai_no_action_indicated`: `badge-green`, `vai_voluntary_action_indicated`: `badge-amber`, `oai_official_action_indicated`: `badge-red`, `certified_unconditional`: `badge-green`, `conditional_clearance`: `badge-amber`, `refusal_warning_letter`: `badge-red`
-- [ ] **Form Exclusions**: `tenant`, `number`, `requests_logged_count`, `requests_fulfilled_count`, `observations_count`, `created_at`, `updated_at`
-- [ ] **Constraints & Indexes (`<= 30` chars)**:
+- [x] **Form Exclusions**: `tenant`, `number`, `requests_logged_count`, `requests_fulfilled_count`, `observations_count`, `created_at`, `updated_at`
+- [x] **Constraints & Indexes (`<= 30` chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="quality_qhst_ten_num_uniq")` (25)
   - `Index(fields=["tenant", "status"], name="idx_qhst_ten_status")` (19)
   - `Index(fields=["tenant", "agency_or_body"], name="idx_qhst_ten_agency")` (19)
@@ -35462,45 +35462,45 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - `Index(fields=["tenant", "scheduled_start_date"], name="idx_qhst_ten_sched")` (18)
   - `Index(fields=["tenant", "front_room_lead"], name="idx_qhst_ten_flead")` (18)
   - `Index(fields=["tenant", "-created_at"], name="idx_qhst_ten_created")` (20)
-- [ ] **Helper Properties**: `fulfillment_rate`, `is_active`, `pending_requests_count`
+- [x] **Helper Properties**: `fulfillment_rate`, `is_active`, `pending_requests_count`
 
 ---
 
 ## Backend (`apps/quality/{models,forms,views,urls}/AuditManagement/`)
 
-- [ ] **Shared Helpers**:
+- [x] **Shared Helpers**:
   - `apps/quality/views/AuditManagement/_helpers.py`: Helper functions for safe query param parsing (`.isdigit()`), tenant scoping, audit trail logging, and CSV formula-injection neutralization
-- [ ] **Entity 1: AuditProgram (`QPRG-`)**:
+- [x] **Entity 1: AuditProgram (`QPRG-`)**:
   - `apps/quality/models/AuditManagement/AuditPrograms.py`
   - `apps/quality/forms/AuditManagement/AuditPrograms.py` (`AuditProgramForm`)
   - `apps/quality/views/AuditManagement/AuditPrograms.py` (`audit_program_list`, `audit_program_detail`, `audit_program_create`, `audit_program_edit`, `audit_program_delete`, `audit_program_export_csv`, `audit_program_approve`)
   - `apps/quality/urls/AuditManagement/AuditPrograms.py` (literal routes before `<int:pk>/`)
-- [ ] **Entity 2: QualityAudit (`QAUD-`)**:
+- [x] **Entity 2: QualityAudit (`QAUD-`)**:
   - `apps/quality/models/AuditManagement/QualityAudits.py`
   - `apps/quality/forms/AuditManagement/QualityAudits.py` (`QualityAuditForm`)
   - `apps/quality/views/AuditManagement/QualityAudits.py` (`quality_audit_list`, `quality_audit_detail`, `quality_audit_create`, `quality_audit_edit`, `quality_audit_delete`, `quality_audit_export_csv`, `quality_audit_publish_report`, `quality_audit_close`)
   - `apps/quality/urls/AuditManagement/QualityAudits.py` (literal routes before `<int:pk>/`)
-- [ ] **Entity 3: AuditFinding (`QFND-`)**:
+- [x] **Entity 3: AuditFinding (`QFND-`)**:
   - `apps/quality/models/AuditManagement/AuditFindings.py`
   - `apps/quality/forms/AuditManagement/AuditFindings.py` (`AuditFindingForm`, `AuditFindingResponseForm`)
   - `apps/quality/views/AuditManagement/AuditFindings.py` (`audit_finding_list`, `audit_finding_detail`, `audit_finding_create`, `audit_finding_edit`, `audit_finding_delete`, `audit_finding_export_csv`, `audit_finding_submit_response`, `audit_finding_verify_close`, `audit_finding_create_capa`)
   - `apps/quality/urls/AuditManagement/AuditFindings.py` (literal routes before `<int:pk>/`)
-- [ ] **Entity 4: RegulatoryInspectionHost (`QHST-`)**:
+- [x] **Entity 4: RegulatoryInspectionHost (`QHST-`)**:
   - `apps/quality/models/AuditManagement/RegulatoryInspectionHosts.py`
   - `apps/quality/forms/AuditManagement/RegulatoryInspectionHosts.py` (`RegulatoryInspectionHostForm`, `InspectionLogRequestForm`)
   - `apps/quality/views/AuditManagement/RegulatoryInspectionHosts.py` (`regulatory_inspection_host_list`, `regulatory_inspection_host_detail`, `regulatory_inspection_host_create`, `regulatory_inspection_host_edit`, `regulatory_inspection_host_delete`, `regulatory_inspection_host_export_csv`, `regulatory_inspection_host_log_request`, `regulatory_inspection_host_fulfill_request`, `regulatory_inspection_host_close`)
   - `apps/quality/urls/AuditManagement/RegulatoryInspectionHosts.py` (literal routes before `<int:pk>/`)
-- [ ] **Dedicated Command Center Views & URLs**:
+- [x] **Dedicated Command Center Views & URLs**:
   - `apps/quality/views/AuditManagement/AuditActionTracker.py` (`audit_action_tracker`)
   - `apps/quality/urls/AuditManagement/AuditActionTracker.py` (`action-tracker/` -> `quality:audit_action_tracker`)
   - `apps/quality/views/AuditManagement/AuditWarRoom.py` (`audit_war_room`)
   - `apps/quality/urls/AuditManagement/AuditWarRoom.py` (`war-room/` -> `quality:audit_war_room`)
-- [ ] **Package Re-exports**:
+- [x] **Package Re-exports**:
   - `apps/quality/models/AuditManagement/__init__.py` & `apps/quality/models/__init__.py` re-exports
   - `apps/quality/forms/AuditManagement/__init__.py` & `apps/quality/forms/__init__.py` re-exports
   - `apps/quality/views/AuditManagement/__init__.py` & `apps/quality/views/__init__.py` re-exports
   - `apps/quality/urls/AuditManagement/__init__.py` & `apps/quality/urls/__init__.py` url patterns concatenation
-- [ ] **Admin & Seeder Integration**:
+- [x] **Admin & Seeder Integration**:
   - Register `AuditProgram`, `QualityAudit`, `AuditFinding`, `RegulatoryInspectionHost` in `apps/quality/admin.py`
   - Extend `apps/quality/management/commands/seed_quality.py` with idempotent `_seed_submodule_12_11` creating realistic test data (Acme annual audit programs, ISO 13485 & FDA internal audits, graded findings linked to CAPA & NCR, and active FDA QSIT / TÜV SÜD regulatory inspection host with Front/Back room war room tracking)
 
@@ -35508,7 +35508,7 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Wire-up
 
-- [ ] Add `LIVE_LINKS["12.11"]` in `apps/core/navigation.py` mapping the exact 5 `NavERP.md` feature bullets:
+- [x] Add `LIVE_LINKS["12.11"]` in `apps/core/navigation.py` mapping the exact 5 `NavERP.md` feature bullets:
   ```python
   "12.11": {
       "Audit Program Planning": "quality:audit_program_list",
@@ -35523,45 +35523,45 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Templates (`templates/quality/auditmanagement/`)
 
-- [ ] **Audit Program** (`templates/quality/auditmanagement/audit_program/`):
+- [x] **Audit Program** (`templates/quality/auditmanagement/audit_program/`):
   - `list.html`: Program year, title, program type badge, risk basis badge, status badge, audit count metrics, filter bar, CSV export
   - `detail.html`: Annual schedule overview, scope description, budgeted vs actual auditor hours, audit universe coverage tab, linked QualityAudit records list, approval actions
   - `form.html`: Create/edit form with year, program type, risk basis, scope description, budget hours, and manager selector
-- [ ] **Quality Audit** (`templates/quality/auditmanagement/quality_audit/`):
+- [x] **Quality Audit** (`templates/quality/auditmanagement/quality_audit/`):
   - `list.html`: Audit register, audit type badge, standard framework badge, target org unit / external party, status badge, outcome badge, planned dates, filter bar, CSV export
   - `detail.html`: Executive summary, audit criteria, lead auditor / auditee lead, findings summary breakdown (Critical / Major / Minor / OFI), linked findings table, publish report and close audit actions
   - `form.html`: Audit planning & scheduling form with program linkage, audit type, framework, org unit / supplier selector, checklist SOP link, and planned dates
-- [ ] **Audit Finding** (`templates/quality/auditmanagement/audit_finding/`):
+- [x] **Audit Finding** (`templates/quality/auditmanagement/audit_finding/`):
   - `list.html`: Findings register, severity badge, standard clause, audit link, assignee, response due date, SLA status, status badge, filter bar, CSV export
   - `detail.html`: Requirement statement, objective condition evidence, auditee response section (containment, root cause, corrective action plan), linked CAPA / NCR badges, lead auditor verification sign-off section
   - `form.html`: Finding documentation form with audit selector, severity dropdown, standard clause input, requirement statement, objective evidence, assignee, and SLA deadline
-- [ ] **Regulatory Inspection Host** (`templates/quality/auditmanagement/regulatory_inspection_host/`):
+- [x] **Regulatory Inspection Host** (`templates/quality/auditmanagement/regulatory_inspection_host/`):
   - `list.html`: Inspection hosting register, agency badge, inspection purpose badge, lead inspector, scheduled dates, war room location, requests fulfillment rate, status badge, outcome badge, filter bar, CSV export
   - `detail.html`: Front Room / Back Room roster, daily summary debrief notes, inspector request fulfillment progress bar, Form 483 / observations count, exit conference memo, link to live War Room
   - `form.html`: Inspection host setup form with agency selector, inspector credentials, purpose, dates, Front Room lead, Back Room lead, scribe, and war room location
-- [ ] **Audit Action Tracker** (`templates/quality/auditmanagement/audit_action_tracker.html`):
+- [x] **Audit Action Tracker** (`templates/quality/auditmanagement/audit_action_tracker.html`):
   - Dedicated closed-loop finding remediation dashboard: summary KPI cards (Open Findings, Overdue Responses, Pending Verifications, Escalated CAPAs), aging analysis table by SLA response due date, and quick action links
-- [ ] **Audit War Room** (`templates/quality/auditmanagement/audit_war_room.html`):
+- [x] **Audit War Room** (`templates/quality/auditmanagement/audit_war_room.html`):
   - Dedicated live Front Room & Back Room command center for active regulatory and certification inspections: inspector profile, active inspection timeline, real-time request fulfillment board (pending, in-retrieval, reviewed, presented), daily wrap-up log, and quick request entry modal
 
 ---
 
 ## Verify
 
-- [ ] `python manage.py makemigrations quality` (creates incremental migration `0019_...`)
-- [ ] `python manage.py migrate quality`
-- [ ] `python manage.py seed_quality` **x2** (strictly idempotent, zero duplicate records or errors)
-- [ ] `python manage.py check` (0 issues reported)
-- [ ] Phase 3.5 Smoke (`qa-smoke-tester`): `temp/smoke_12_11.py` as `admin_acme` / `password` + throwaway Beta tenant asserting 200/302 across all views + literal seeded strings/numbers in HTML (L8, L57) + zero `{#` / `{% comment` leaks + filter operations with `|stringformat:"d"` + junk parameter resilience (L11) + page 2 pagination (L9) + workflow POSTs (approvals, response submission, verification, request logging) + cross-tenant IDOR 404 isolation; verify sidebar shows `12.11` Live across all 5 bullets; delete `temp/smoke_12_11.py`
+- [x] `python manage.py makemigrations quality` (creates incremental migration `0019_...`)
+- [x] `python manage.py migrate quality`
+- [x] `python manage.py seed_quality` **x2** (strictly idempotent, zero duplicate records or errors)
+- [x] `python manage.py check` (0 issues reported)
+- [x] Phase 3.5 Smoke (`qa-smoke-tester`): `temp/smoke_12_11.py` as `admin_acme` / `password` + throwaway Beta tenant asserting 200/302 across all views + literal seeded strings/numbers in HTML (L8, L57) + zero `{#` / `{% comment` leaks + filter operations with `|stringformat:"d"` + junk parameter resilience (L11) + page 2 pagination (L9) + workflow POSTs (approvals, response submission, verification, request logging) + cross-tenant IDOR 404 isolation; verify sidebar shows `12.11` Live across all 5 bullets; delete `temp/smoke_12_11.py`
 
 ---
 
 ## Close-out
 
-- [ ] Phase 4: Run 6 serial review passes (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` report-only -> `security-reviewer`) scoped to `BASE...HEAD` -> consolidate/dedupe sorted `C#`/`I#`/`M#` into `.claude/tasks/review-quality-12.11.md`
-- [ ] Phase 5: Run `code-fixer` agent against `.claude/tasks/review-quality-12.11.md` (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
-- [ ] Phase 6: Pin test contract & append `12.11` fixtures (`audit_*`) in `apps/quality/tests/conftest.py` (L59), then write 4 test modules serially: `test_auditmanagement_models.py`, `test_auditmanagement_forms.py`, `test_auditmanagement_views.py`, `test_auditmanagement_security.py` (using `test_auditmanagement_*` names), followed by one **unfiltered** `venv\Scripts\python.exe -m pytest -q -W ignore apps/quality/tests/` green pass (L47)
-- [ ] Phase 7: Update `.claude/skills/quality/SKILL.md` with Sub-module 12.11 models/routes/templates/seeder, mark 12.11 complete in `README.md`, record any gaps in `.agents/tasks/gaps-quality-12.11.md` (or declare None), and populate `## Review notes` below
+- [x] Phase 4: Run 6 serial review passes (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` report-only -> `security-reviewer`) scoped to `BASE...HEAD` -> consolidate/dedupe sorted `C#`/`I#`/`M#` into `.claude/tasks/review-quality-12.11.md`
+- [x] Phase 5: Run `code-fixer` agent against `.claude/tasks/review-quality-12.11.md` (one file per commit) until zero `[ ] open` findings remain and `manage.py check` is clean
+- [x] Phase 6: Pin test contract & append `12.11` fixtures (`audit_*`) in `apps/quality/tests/conftest.py` (L59), then write 4 test modules serially: `test_auditmanagement_models.py`, `test_auditmanagement_forms.py`, `test_auditmanagement_views.py`, `test_auditmanagement_security.py` (using `test_auditmanagement_*` names), followed by one **unfiltered** `venv\Scripts\python.exe -m pytest -q -W ignore apps/quality/tests/` green pass (L47)
+- [x] Phase 7: Update `.claude/skills/quality/SKILL.md` with Sub-module 12.11 models/routes/templates/seeder, mark 12.11 complete in `README.md`, record any gaps in `.agents/tasks/gaps-quality-12.11.md` (or declare None), and populate `## Review notes` below
 
 ---
 
@@ -35574,8 +35574,31 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ---
 
-## Review notes — Sub-module 12.11 Close-out (Pending)
-*(Filled in at Phase 7)*
+## Review notes — Sub-module 12.11 Close-out (Completed 2026-11-20)
+
+- **Execution Mode**: Strictly serial execution following mandatory 7-phase sequence.
+- **Base Changeset**: `BASE` saved as `e052bfb46552937ccf9713c99c1f4e2d31fca73e`.
+- **Pre-Build Spec & Contract**: `.claude/tasks/contract-quality-12.11.md` frozen and committed (`00fbb143`).
+- **Models & Core Spine**:
+  - `AuditProgram` (`QPRG-`), `QualityAudit` (`QAUD-`), `AuditFinding` (`QFND-`), `RegulatoryInspectionHost` (`QHST-`)
+  - Integration with `quality.ControlledDocument`, `quality.CapaInvestigation`, `core.OrgUnit`, `core.Party`, `accounts.User`
+- **Migrations & Seeder**:
+  - Migrations `0019_auditprogram_qualityaudit_auditfinding_and_more.py`, `0021_alter_auditfinding_options.py`, `0022_qualityaudit_idx_qaud_ten_framework.py` applied cleanly
+  - Seeder `_seed_submodule_12_11` tested twice (`manage.py seed_quality`) with 100% idempotent runtime
+  - `manage.py check` reports 0 issues
+- **Smoke Testing**:
+  - `temp/smoke_12_11.py` asserted all 22 views return HTTP 200, context contract verified, no template comment leaks, junk filters resilient, pagination tested, cross-tenant IDOR rejected with 404
+- **Six-Pass Review (`review-quality-12.11.md`)**:
+  - All 6 review agents executed sequentially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
+  - Findings deduplicated, classified (2 Critical, 17 Important, 9 Minor)
+  - `code-fixer` agent resolved all 28 findings with 1 commit per file; all marked `[x] fixed`
+- **Test Suite**:
+  - 51 new unit, form, view, and security tests (`test_auditmanagement_models.py`, `test_auditmanagement_forms.py`, `test_auditmanagement_views.py`, `test_auditmanagement_security.py`)
+  - Full unfiltered quality test suite run: **1,895 passed, 0 failed, 100% green**
+- **Documentation & Gap Register**:
+  - `.claude/skills/quality/SKILL.md` updated with 12.11 models, forms, views, routes, invariants, and LIVE_LINKS
+  - `README.md` updated and marked 12.11 complete in roadmap
+  - Gap register recorded in `.agents/tasks/gaps-quality-12.11.md`: **Gaps: None** (zero open items, 2 deferred external portal items documented)
 
 ---
 
