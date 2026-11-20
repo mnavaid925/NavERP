@@ -134,7 +134,7 @@ class AuditFinding(TenantNumbered):
 
     @property
     def is_overdue(self):
-        if self.status in ("closed", "response_accepted"):
+        if self.status not in ("draft", "issued", "escalated"):
             return False
         return date.today() > self.response_due_date
 
