@@ -245,6 +245,18 @@ def regulatory_inspection_host_export_csv(request):
     if q:
         qs = qs.filter(Q(inspection_title__icontains=q) | Q(number__icontains=q) | Q(agency_name__icontains=q))
 
+    agency = request.GET.get("agency", "").strip()
+    if agency:
+        qs = qs.filter(agency_or_body=agency)
+
+    status = request.GET.get("status", "").strip()
+    if status:
+        qs = qs.filter(status=status)
+
+    formal_outcome = request.GET.get("formal_outcome", "").strip()
+    if formal_outcome:
+        qs = qs.filter(formal_outcome=formal_outcome)
+
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="regulatory_inspections.csv"'
     response["X-Content-Type-Options"] = "nosniff"
