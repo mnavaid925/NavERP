@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}{{ review_input.number }} — Review Input — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_planning_dashboard' %}">Quality Planning</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:management_review_detail' review_input.management_review.pk %}">{{ review_input.management_review.number }}</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:management_review_input_list' %}">Inputs</a>
+            <span class="sep">/</span>
+            <span>{{ review_input.number }}</span>
+        </div>
+        <h1 class="page-title">{{ review_input.title }}</h1>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <a href="{% url 'quality:management_review_detail' review_input.management_review.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Review
+        </a>
+
+        {% if can_present %}
+        <form method="post" action="{% url 'quality:management_review_input_present' review_input.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-700 bg-amber-50 hover:bg-amber-100">
+                <i data-lucide="presentation"></i> Mark Presented
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_accept %}
+        <form method="post" action="{% url 'quality:management_review_input_accept' review_input.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-check"></i> Accept by Management
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'quality:management_review_input_edit' review_input.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form method="post" action="{% url 'quality:management_review_input_delete' review_input.pk %}" class="inline" onsubmit="return confirm('Delete input {{ review_input.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Agenda Topic Profile & Category</h3>
+                <div class="flex items-center gap-2">
+                    <span class="badge {{ review_input.category_badge_class }}">{{ review_input.get_category_display }}</span>
+                    <span class="badge {{ review_input.status_badge_class }}">{{ review_input.get_status_display }}</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Input Number</dt>
+                        <dd class="font-mono font-semibold">{{ review_input.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Agenda Order</dt>
+                        <dd>Item #{{ review_input.agenda_order }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Parent Review Session</dt>
+                        <dd>
+                            <a href="{% url 'quality:management_review_detail' review_input.management_review.pk %}" class="text-blue-600 hover:underline font-semibold">
+                                {{ review_input.management_review.number }}
+                            </a>
+                            <div class="text-xs text-slate-500">{{ review_input.management_review.title }}</div>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Presenter</dt>
+                        <dd>
+                            {% if review_input.presenter %}
+                            {{ review_input.presenter.get_full_name|default:review_input.presenter.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    {% if review_input.attachments_summary %}
+                    <div class="detail-item md:col-span-2">
+                        <dt>Deck / Attachment Reference</dt>
+                        <dd class="font-medium text-slate-800">{{ review_input.attachments_summary }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+
+                <div class="mt-6 border-t border-slate-100 pt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Findings Synthesis & Analysis</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                        {{ review_input.summary_findings }}
+                    </div>
+                </div>
+
+                {% if review_input.metrics_data %}
+                <div class="mt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Presented Performance Metrics & Numbers</h4>
+                    <div class="text-sm font-mono text-slate-800 whitespace-pre-line bg-slate-900 text-slate-100 p-4 rounded">
+                        {{ review_input.metrics_data }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if review_input.notes %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Topic Notes</h3>
+            </div>
+            <div class="card-body">
+                <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                    {{ review_input.notes }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Linked Sibling Quality Records</h3>
+            </div>
+            <div class="card-body space-y-4 text-sm">
+                <div>
+                    <span class="text-xs text-slate-500 block">Linked Quality Audit (12.11)</span>
+                    {% if review_input.linked_audit %}
+                    <a href="{% url 'quality:quality_audit_detail' review_input.linked_audit.pk %}" class="font-mono text-blue-600 hover:underline font-medium">
+                        {{ review_input.linked_audit.number }} &ndash; {{ review_input.linked_audit.title }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-xs text-slate-500 block">Linked CAPA Investigation (12.4)</span>
+                    {% if review_input.linked_capa %}
+                    <a href="{% url 'quality:capa_investigation_detail' review_input.linked_capa.pk %}" class="font-mono text-purple-600 hover:underline font-medium">
+                        {{ review_input.linked_capa.number }} &ndash; {{ review_input.linked_capa.title }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-xs text-slate-500 block">Linked Customer Complaint (12.13)</span>
+                    {% if review_input.linked_complaint %}
+                    <a href="{% url 'quality:customer_complaint_detail' review_input.linked_complaint.pk %}" class="font-mono text-amber-600 hover:underline font-medium">
+                        {{ review_input.linked_complaint.number }} &ndash; {{ review_input.linked_complaint.title }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-xs text-slate-500 block">Linked Non-Conformance Report (12.5)</span>
+                    {% if review_input.linked_ncr %}
+                    <a href="{% url 'quality:non_conformance_report_detail' review_input.linked_ncr.pk %}" class="font-mono text-rose-600 hover:underline font-medium">
+                        {{ review_input.linked_ncr.number }} &ndash; {{ review_input.linked_ncr.title }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Lifecycle Details</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-slate-500">Created</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ review_input.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500">Last Modified</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ review_input.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
