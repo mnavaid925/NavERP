@@ -7,9 +7,9 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'dashboard:home' %}">Home</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <a href="{% url 'quality:field_action_list' %}">Field Actions</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <span>{% if is_edit %}Edit {{ field_action.number }}{% else %}New Action{% endif %}</span>
         </div>
         <h1 class="page-title">{% if is_edit %}Edit Field Action {{ field_action.number }}{% else %}Initiate Field Action / Recall Protocol{% endif %}</h1>
@@ -27,7 +27,7 @@
             </div>
             {% endif %}
 
-            <!-- Protocol Header -->
+            {# Protocol Header #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">1. Protocol Classification & Leadership</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -64,7 +64,7 @@
                 </div>
             </div>
 
-            <!-- Affected Scope -->
+            {# Affected Scope #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">2. Affected Product & Scope</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -96,7 +96,7 @@
                 </div>
             </div>
 
-            <!-- Rationale & Communication -->
+            {# Rationale & Communication #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">3. Defect Rationale & Field Safety Notice (FSN)</h3>
                 <div class="space-y-4">
@@ -118,7 +118,7 @@
                 </div>
             </div>
 
-            <!-- Reconciliation Metrics -->
+            {# Reconciliation Metrics #}
             <div class="border-b border-slate-200 pb-4">
                 <h3 class="text-base font-semibold text-slate-800 mb-3">4. Reconciliation & Consignee Response Tracking</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -155,7 +155,7 @@
                 </div>
             </div>
 
-            <!-- Agency Governance -->
+            {# Agency Governance #}
             <div>
                 <h3 class="text-base font-semibold text-slate-800 mb-3">5. Regulatory Agency Governance</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
