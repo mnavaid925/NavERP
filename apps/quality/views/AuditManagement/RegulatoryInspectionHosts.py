@@ -4,7 +4,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -49,15 +49,14 @@ def regulatory_inspection_host_list(request):
     if formal_outcome:
         qs = qs.filter(formal_outcome=formal_outcome)
 
-    total_count = RegulatoryInspectionHost.objects.filter(tenant=request.tenant).count()
-    active_count = RegulatoryInspectionHost.objects.filter(
-        tenant=request.tenant,
-        status__in=["active_inspection", "daily_wrapup"]
-    ).count()
-    form_483_count = RegulatoryInspectionHost.objects.filter(
-        tenant=request.tenant,
-        form_483_issued=True
-    ).count()
+    host_stats = RegulatoryInspectionHost.objects.filter(tenant=request.tenant).aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(status__in=["active_inspection", "daily_wrapup"])),
+        form_483_count=Count("id", filter=Q(form_483_issued=True)),
+    )
+    total_count = host_stats["total_count"]
+    active_count = host_stats["active_count"]
+    form_483_count = host_stats["form_483_count"]
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
