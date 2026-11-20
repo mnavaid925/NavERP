@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); and 12.10 Calibration & Measurement System Analysis (MSA) — Gage registry [QGAG-], Metrological Calibration Records [QCAL-], Out-of-Tolerance Reverse-Tracing Investigations [QOOT-], AIAG ANOVA Gage R&R Studies [QMSA-], and ISO/IEC 17025 Accredited Calibration Vendor Directory). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.10), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); and 12.11 Audit Management — Audit Programs [QPRG-], Quality Audits [QAUD-], Graded Audit Findings & Observations [QFND-], Regulatory & Certification Inspection Hosts [QHST-], Audit Action Tracker, and Inspection War Room Command Center). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.11), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -87,6 +87,14 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Measurement System Analysis (MSA / Gage R&R)** [`QMSA-`]: AIAG MSA 4th Edition compliant measurement system analysis studies. Supports study types (`grr_crossed_anova`, `grr_nested_anova`, `linearity_and_bias`, `stability_study`, `attribute_agreement_kappa`, `type_1_gage_study`), ANOVA variance decomposition (Repeatability EV, Reproducibility AV, Total GRR, Part Variation PV, Total Variation TV), acceptance criteria evaluation (%GRR of study variation, %GRR of tolerance P/T ratio, and Number of Distinct Categories $ndc \ge 5$), linearity slopes, bias estimates, and regression goodness-of-fit $R^2$.
   - **Calibration Vendor Governance Directory**: Directory of external calibration laboratories and metrology service providers linked to `core.Party`, tracking ISO/IEC 17025 accreditation statuses, active calibrations performed, and direct deep-links into performed calibration history.
 
+- **12.11 Audit Management**:
+  - **Audit Program Planning** [`QPRG-`]: Annual and risk-based audit schedules conforming to ISO 19011:2018 and ISO 13485:2016 Clause 8.2.4. Tracks program year, audit frequency (`annual`, `semi_annual`, `quarterly`, `monthly`, `risk_based_continuous`), lifecycle status (`draft`, `approved`, `active`, `completed`, `cancelled`), lead audit manager (`accounts.User`), approving authority (`accounts.User`), formal approval date, allocated budget, scope description, objectives statement, and dynamic progress metrics (`progress_percentage` reusing annotated counts to prevent N+1 queries).
+  - **Quality Audits & Protocols** [`QAUD-`]: Internal, supplier, and regulatory agency audit execution records across audit types (`internal_qms`, `internal_process`, `supplier_external`, `regulatory_agency`, `customer_second_party`, `certification_body`), standards frameworks (`iso_9001`, `iso_13485`, `fda_21_cfr_820`, `iso_14971`, `mdsap`, `eu_mdr`, `as9100`, `iatf_16949`, `gxp`), lead auditor and audit team members, department/supplier audited, execution methodology (`on_site`, `remote_virtual`, `hybrid`), audit status lifecycle (`scheduled`, `prep_in_progress`, `active_fieldwork`, `reporting`, `capa_pending`, `closed`, `cancelled`), quantitative scoring (0.00-100.00), executive summaries, and dynamic synchronization of child finding counters (`sync_findings_counts()`).
+  - **Audit Findings & Observations** [`QFND-`]: Graded non-conformance logging conforming to ISO 19011 severity grading (`critical_finding`, `major_nonconformance`, `minor_nonconformance`, `opportunity_for_improvement`, `positive_observation`). Captures requirement statements, objective evidence, regulatory clause references, responsible department, assigned auditee (`accounts.User`), SLA response due dates, remediation responses, independent verification sign-off (enforcing auditor independence by barring assignees from self-verifying and closing), and direct cross-spawning of CAPA investigations (`QCAP-`).
+  - **Regulatory & Certification Inspection Hosting** [`QHST-`]: Specialized inspection host command center for FDA (QSIT / 483 / EIR), ISO 13485 Notified Body, MDSAP, and customer audits. Tracks inspection types, inspecting agencies/bodies, lead inspector credentials, facility locations, hosting rooms / virtual bridges, company host liaisons, designated scribes, inspection status lifecycle (`announced_prep`, `on_site_active`, `daily_wrap_up`, `exit_interview`, `post_audit_response`, `closed`), Form 483 issuance flags, agency report references, structured Front/Back Room request queues, and timestamped live inspection notes.
+  - **Audit Action Tracker**: Cross-audit compliance workbench monitoring open findings, CAPA escalations, remediation response milestones, and overdue SLAs across 4 aging tiers (`0-30`, `31-60`, `61-90`, `>90 days`) with status badges and CSV export.
+  - **Inspection War Room Command Center**: Real-time operational hosting interface featuring Front Room / Back Room live request dispatching (`war_room_requests`), document staging tracking, SME runner assignments, and scribe audit logs.
+
 ---
 
 ## App Layout & Architecture
@@ -147,6 +155,11 @@ apps/quality/
       CalibrationRecords.py                   <- CalibrationRecord [QCAL-]
       OutOfToleranceInvestigations.py         <- OutOfToleranceInvestigation [QOOT-]
       MeasurementSystemAnalyses.py            <- MeasurementSystemAnalysis [QMSA-]
+    AuditManagement/                          <- Sub-module 12.11 models
+      AuditPrograms.py                        <- AuditProgram [QPRG-]
+      QualityAudits.py                        <- QualityAudit [QAUD-]
+      AuditFindings.py                        <- AuditFinding [QFND-]
+      RegulatoryInspections.py                <- RegulatoryInspectionHost [QHST-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -200,6 +213,11 @@ apps/quality/
       CalibrationRecords.py                   <- CalibrationRecordForm
       OutOfToleranceInvestigations.py         <- OutOfToleranceInvestigationForm
       MeasurementSystemAnalyses.py            <- MeasurementSystemAnalysisForm
+    AuditManagement/                          <- Sub-module 12.11 forms
+      AuditPrograms.py                        <- AuditProgramForm, AuditProgramApprovalForm
+      QualityAudits.py                        <- QualityAuditForm, QualityAuditScoreForm
+      AuditFindings.py                        <- AuditFindingForm, AuditFindingResponseForm, AuditFindingVerifyForm
+      RegulatoryInspections.py                <- RegulatoryInspectionHostForm, RegulatoryInspectionLogEntryForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -262,6 +280,13 @@ apps/quality/
       OutOfToleranceInvestigations.py         <- List, Detail, Create, Edit, Delete, Export
       MeasurementSystemAnalyses.py            <- List, Detail, Create, Edit, Delete, Export
       CalibrationVendors.py                   <- Calibration Vendor Directory
+    AuditManagement/                          <- Sub-module 12.11 views
+      AuditPrograms.py                        <- List, Detail, Create, Edit, Delete, Approve, Export
+      QualityAudits.py                        <- List, Detail, Create, Edit, Delete, Advance Status, Export
+      AuditFindings.py                        <- List, Detail, Create, Edit, Delete, Submit Response, Verify/Close, Create CAPA, Export
+      RegulatoryInspections.py                <- List, Detail, Create, Edit, Delete, Advance Status, Add Log, Export
+      AuditActionTracker.py                   <- Audit Action Tracker, Tracker Export
+      AuditWarRoom.py                         <- Inspection War Room Command Center, War Room Export
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -323,12 +348,23 @@ apps/quality/
       OutOfToleranceInvestigations.py
       MeasurementSystemAnalyses.py
       CalibrationVendors.py
+    AuditManagement/                          <- Sub-module 12.11 URLs
+      AuditPrograms.py
+      QualityAudits.py
+      AuditFindings.py
+      RegulatoryInspections.py
+      AuditActionTracker.py
+      AuditWarRoom.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.10)
-  tests/                                      <- Pytest test suite (100% green, 1,844 passing tests)
-    conftest.py                               <- Shared 12.1 through 12.10 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.11)
+  tests/                                      <- Pytest test suite (100% green, 1,895+ passing tests)
+    conftest.py                               <- Shared 12.1 through 12.11 fixtures
+    test_auditmanagement_models.py           <- Sub-module 12.11 model tests (10 tests)
+    test_auditmanagement_forms.py            <- Sub-module 12.11 form tests (13 tests)
+    test_auditmanagement_views.py            <- Sub-module 12.11 view tests (16 tests)
+    test_auditmanagement_security.py         <- Sub-module 12.11 security tests (12 tests)
     test_calibrationanalysis_models.py        <- Sub-module 12.10 model tests (44 tests)
     test_calibrationanalysis_forms.py         <- Sub-module 12.10 form tests (45 tests)
     test_calibrationanalysis_views.py         <- Sub-module 12.10 view tests (73 tests)
@@ -551,6 +587,32 @@ apps/quality/
 - **Properties & Methods:** `layer_css`, `status_css`, `is_compliant`, `total_findings`.
 - **Compound Indexes:** `idx_qlpa_ten_layer`, `idx_qlpa_ten_status`, `idx_qlpa_ten_wc_date`, `idx_qlpa_ten_created`.
 
+### Sub-module 12.11 Entities
+
+#### 29. `AuditProgram` (Prefix: `QPRG-`)
+- **Table:** `quality_audit_program`
+- **Key Fields:** `number`, `program_year` (int), `title`, `frequency` (`annual`, `semi_annual`, `quarterly`, `monthly`, `risk_based_continuous`), `status` (`draft`, `approved`, `active`, `completed`, `cancelled`), `lead_audit_manager` (`accounts.User`), `approving_authority` (`accounts.User`), `approval_date`, `allocated_budget` (Decimal), `scope_description`, `objectives_statement`, `notes`.
+- **Properties & Methods:** `progress_percentage` (reusing pre-annotated totals to eliminate N+1 queries), `status_badge`, `frequency_badge`, `total_audits_count`, `completed_audits_count`.
+- **Compound Indexes:** `idx_qprg_ten_year` on `(tenant, -program_year)`, `idx_qprg_ten_status` on `(tenant, status)`, `idx_qprg_ten_created` on `(tenant, -created_at)`.
+
+#### 30. `QualityAudit` (Prefix: `QAUD-`)
+- **Table:** `quality_audit`
+- **Key Fields:** `number`, `program` (`AuditProgram`), `title`, `audit_type` (`internal_qms`, `internal_process`, `supplier_external`, `regulatory_agency`, `customer_second_party`, `certification_body`), `standards_framework` (`iso_9001`, `iso_13485`, `fda_21_cfr_820`, `iso_14971`, `mdsap`, `eu_mdr`, `as9100`, `iatf_16949`, `gxp`), `lead_auditor` (`accounts.User`), `audit_team_members` (`ManyToManyField(accounts.User)`), `department` (`core.OrgUnit`), `supplier` (`core.Party`), `scheduled_start_date`, `scheduled_end_date`, `actual_start_date`, `actual_end_date`, `execution_method` (`on_site`, `remote_virtual`, `hybrid`), `status` (`scheduled`, `prep_in_progress`, `active_fieldwork`, `reporting`, `capa_pending`, `closed`, `cancelled`), `audit_score` (Decimal), `executive_summary`, `total_findings_count` (int), `open_findings_count` (int), `critical_findings_count` (int), `notes`.
+- **Properties & Methods:** `audit_type_badge`, `framework_badge`, `status_badge`, `method_badge`, `sync_findings_counts()`.
+- **Compound Indexes:** `idx_qaud_ten_stat` on `(tenant, status)`, `idx_qaud_ten_type` on `(tenant, audit_type)`, `idx_qaud_ten_dates` on `(tenant, scheduled_start_date)`, `idx_qaud_ten_created` on `(tenant, -created_at)`, `idx_qaud_ten_framework` on `(tenant, standards_framework)`.
+
+#### 31. `AuditFinding` (Prefix: `QFND-`)
+- **Table:** `quality_audit_finding`
+- **Key Fields:** `number`, `audit` (`QualityAudit`), `finding_grade` (`critical_finding`, `major_nonconformance`, `minor_nonconformance`, `opportunity_for_improvement`, `positive_observation`), `title`, `requirement_statement`, `objective_evidence`, `clause_reference`, `department` (`core.OrgUnit`), `assignee` (`accounts.User`), `response_due_date`, `remediation_response`, `response_submitted_at`, `status` (`draft`, `issued`, `remediation_submitted`, `verified_closed`, `escalated_to_capa`), `verified_by` (`accounts.User`), `verified_at`, `verification_notes`, `linked_capa` (`CapaInvestigation`), `notes`.
+- **Properties & Methods:** `grade_badge`, `status_badge`, `is_overdue` (evaluated only for `draft`, `issued`, `escalated` past due date), `save()` / `delete()` (automatically synchronizes parent audit finding counters).
+- **Compound Indexes:** `idx_qfnd_ten_grade` on `(tenant, finding_grade)`, `idx_qfnd_ten_stat` on `(tenant, status)`, `idx_qfnd_ten_due` on `(tenant, response_due_date)`, `idx_qfnd_ten_created` on `(tenant, -created_at)`.
+
+#### 32. `RegulatoryInspectionHost` (Prefix: `QHST-`)
+- **Table:** `quality_regulatory_inspection_host`
+- **Key Fields:** `number`, `inspection_title`, `inspection_type` (`fda_qsit`, `notified_body_iso13485`, `customer_qualification`, `health_canada_mdsap`, `mhra_ema`, `unannounced_inspection`), `inspecting_agency`, `lead_inspector_name`, `inspector_credentials`, `start_date`, `end_date`, `facility_location`, `primary_room_bridge`, `company_host_liaison` (`accounts.User`), `designated_scribe` (`accounts.User`), `inspection_status` (`announced_prep`, `on_site_active`, `daily_wrap_up`, `exit_interview`, `post_audit_response`, `closed`), `form_483_issued` (bool), `findings_count` (int), `agency_report_reference`, `war_room_requests` (JSONField), `live_inspection_notes`, `notes`.
+- **Properties & Methods:** `inspection_type_badge`, `status_badge`, `requests_count`, `is_active_hosting`.
+- **Compound Indexes:** `idx_qhst_ten_stat` on `(tenant, inspection_status)`, `idx_qhst_ten_type` on `(tenant, inspection_type)`, `idx_qhst_ten_dates` on `(tenant, start_date)`, `idx_qhst_ten_created` on `(tenant, -created_at)`.
+
 
 ---
 
@@ -765,6 +827,45 @@ All routes use the `quality:` namespace:
 | `/quality/in-process-quality/spc-dashboard/` | `spc_dashboard` | Interactive In-Process Quality SPC dashboard and Work Instruction compliance |
 | `/quality/in-process-quality/spc-dashboard/export/` | `spc_dashboard_export` | CSV export of in-process quality control summary metrics |
 
+### Sub-module 12.11 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/audits/programs/` | `audit_program_list` | Audit programs list with year, frequency, status filters and progress tracking |
+| `/quality/audits/programs/create/` | `audit_program_create` | Create annual/multi-year audit program |
+| `/quality/audits/programs/<pk>/` | `audit_program_detail` | Audit program detail with linked audits, progress percentage, and KPI metrics |
+| `/quality/audits/programs/<pk>/edit/` | `audit_program_edit` | Edit audit program metadata and budget allocation |
+| `/quality/audits/programs/<pk>/delete/` | `audit_program_delete` | POST-only delete (requires tenant admin) |
+| `/quality/audits/programs/<pk>/approve/` | `audit_program_approve` | Formal program approval (requires tenant admin) |
+| `/quality/audits/programs/export/` | `audit_program_export` | CSV export of audit programs with formula sanitization |
+| `/quality/audits/audits/` | `quality_audit_list` | Quality audits list with type, framework, status, method, and date filters |
+| `/quality/audits/audits/create/` | `quality_audit_create` | Schedule quality audit with audit team members |
+| `/quality/audits/audits/<pk>/` | `quality_audit_detail` | Detailed audit dossier with finding cards, score, and action shortcuts |
+| `/quality/audits/audits/<pk>/edit/` | `quality_audit_edit` | Edit quality audit protocol, team members, and scoring |
+| `/quality/audits/audits/<pk>/delete/` | `quality_audit_delete` | POST-only delete (requires tenant admin) |
+| `/quality/audits/audits/<pk>/advance-status/` | `quality_audit_advance_status` | POST-only lifecycle status progression |
+| `/quality/audits/audits/export/` | `quality_audit_export` | CSV export of quality audits with audit logging |
+| `/quality/audits/findings/` | `audit_finding_list` | Graded audit findings list with grade, status, and overdue SLA filters |
+| `/quality/audits/findings/create/` | `audit_finding_create` | Log audit finding/observation with requirement and evidence |
+| `/quality/audits/findings/<pk>/` | `audit_finding_detail` | Audit finding dossier with remediation tracking and CAPA escalation |
+| `/quality/audits/findings/<pk>/edit/` | `audit_finding_edit` | Edit audit finding requirement, clause, and assignee |
+| `/quality/audits/findings/<pk>/delete/` | `audit_finding_delete` | POST-only delete (requires tenant admin, resyncs audit counters) |
+| `/quality/audits/findings/<pk>/submit-response/` | `audit_finding_submit_response` | Submit remediation response and evidence |
+| `/quality/audits/findings/<pk>/verify-close/` | `audit_finding_verify_close` | Verify and close finding (enforces auditor independence) |
+| `/quality/audits/findings/<pk>/create-capa/` | `audit_finding_create_capa` | Directly spawn linked CAPA investigation (`QCAP-`) |
+| `/quality/audits/findings/export/` | `audit_finding_export` | CSV export of audit findings with audit logging |
+| `/quality/audits/inspections/` | `regulatory_inspection_host_list` | Regulatory inspection hosts list with agency, type, and status filters |
+| `/quality/audits/inspections/create/` | `regulatory_inspection_host_create` | Schedule inspection hosting protocol (FDA, Notified Body, MDSAP) |
+| `/quality/audits/inspections/<pk>/` | `regulatory_inspection_host_detail` | Inspection hosting dossier with liaison, scribe, and live request log |
+| `/quality/audits/inspections/<pk>/edit/` | `regulatory_inspection_host_edit` | Edit inspection hosting metadata and findings count |
+| `/quality/audits/inspections/<pk>/delete/` | `regulatory_inspection_host_delete` | POST-only delete (requires tenant admin) |
+| `/quality/audits/inspections/<pk>/advance-status/` | `regulatory_inspection_host_advance_status` | POST-only inspection hosting phase transition |
+| `/quality/audits/inspections/<pk>/add-log/` | `regulatory_inspection_host_add_log` | Add timestamped live observation/scribe entry |
+| `/quality/audits/inspections/export/` | `regulatory_inspection_host_export` | CSV export of regulatory inspection hosting records |
+| `/quality/audits/action-tracker/` | `audit_action_tracker` | Audit Action Tracker workbench with aging tiers and overdue SLA alerts |
+| `/quality/audits/action-tracker/export/` | `audit_action_tracker_export` | CSV export of open audit remediation actions |
+| `/quality/audits/inspections/<pk>/war-room/` | `audit_war_room` | Live Inspection War Room command center with request dispatching |
+| `/quality/audits/inspections/<pk>/war-room/export/` | `audit_war_room_export` | CSV export of War Room request manifest |
+
 ---
 
 ## Seeder (`seed_quality`)
@@ -861,6 +962,22 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
     - `MSA-2026-002` (Gage R&R ANOVA on Digital Caliper, %GRR 22.40%, NDC 6, Marginal/Conditional)
     - `MSA-2026-003` (Linearity and Bias Study on Master Gauge Blocks, R² 0.985, Acceptable)
 
+- **12.11 Data**:
+  - 2 Audit Programs per tenant:
+    - `QPRG-2026-00001` (Annual Integrated QMS Audit Program 2026, Approved, $65,000 budget)
+    - `QPRG-2026-00002` (Risk-Based Supplier Quality Audit Program 2026, Draft, $45,000 budget)
+  - 3 Quality Audits per tenant:
+    - `QAUD-2026-00001` (Internal QMS & Design Controls Audit, ISO 13485:2016, Closed, Audit Score: 94.50%)
+    - `QAUD-2026-00002` (Critical Component Supplier On-Site Audit, ISO 9001:2015, Active Fieldwork)
+    - `QAUD-2026-00003` (Annual Regulatory Preparedness Audit, FDA 21 CFR § 820, Scheduled)
+  - 3 Audit Findings per tenant:
+    - `QFND-2026-00001` (DCO Sign-off Missing Witness Signature, Minor Non-conformance, Verified Closed)
+    - `QFND-2026-00002` (Calibration Traceability Certificate Expired, Major Non-conformance, Escalated to CAPA)
+    - `QFND-2026-00003` (Supplier Quality Manual Review Interval Review, Opportunity for Improvement, Draft)
+  - 2 Regulatory Inspection Hosts per tenant:
+    - `QHST-2026-00001` (FDA QSIT Comprehensive Surveillance Inspection, On-Site Active with War Room requests)
+    - `QHST-2026-00002` (BSI Notified Body ISO 13485:2016 Recertification Audit, Announced Prep)
+
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
 ---
@@ -932,6 +1049,13 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - OOT Reverse-Tracing Window: When creating an Out-of-Tolerance investigation, the initial suspect manufacturing window defaults between the last valid in-spec passing calibration date and the failure event date.
     - AIAG ANOVA Variance Decomposition: MSA Gage R&R calculates repeatability $EV$, reproducibility $AV$, total Gage R&R $GRR = \sqrt{EV^2 + AV^2}$, part variation $PV$, and total variation $TV = \sqrt{GRR^2 + PV^2}$. Acceptance evaluates $\%GRR = (GRR / TV) \times 100\%$ and $ndc = 1.41 \times (PV / GRR) \ge 5$.
     - CSV Formula Sanitization: All calibration and MSA CSV exports apply `_csv_safe` formula sanitization (leading quote neutralization for `=`, `+`, `-`, `@`, `\t`, `\r`) with `X-Content-Type-Options: nosniff`.
+17. **Audit Management Invariants (ISO 19011:2018 / ISO 13485:2016 §8.2.4 / 21 CFR § 820.22):**
+    - Auditor Independence Principle: Under ISO 19011:2018 §4(e), auditors must not audit their own work. In `AuditFindingVerifyForm` and `audit_finding_verify_close`, verification of remediation actions prohibits the finding's assignee (`assignee == request.user`) from self-verifying and closing their own audit finding unless overridden by tenant admin.
+    - Dynamic Finding Counter Synchronization: `QualityAudit.sync_findings_counts()` recalculates `total_findings_count`, `open_findings_count`, and `critical_findings_count` across finding save and delete signals, ensuring audit-level KPI metrics never drift.
+    - Deletion Cascade Recalculation: `AuditFinding.delete()` explicitly triggers `self.audit.sync_findings_counts()` so parent summary counters remain accurate upon deletion.
+    - Overdue SLA Calculation Safety: `AuditFinding.is_overdue` strictly checks `status in ("draft", "issued", "escalated")` and `response_due_date < timezone.now().date()`, ensuring that findings with submitted remediation responses in verification or closed states are not falsely marked overdue.
+    - Seamless QMS Spine CAPA Integration: `audit_finding_create_capa` auto-populates `CapaInvestigation` with `issue_summary`, `action_type="corrective"`, `source_type="internal_audit"`, `source_reference`, `risk_priority`, `quality_owner`, `lead_investigator`, and links back to the finding.
+    - Inspection War Room Live Dispatching: `RegulatoryInspectionHost` supports structured JSON request dispatching (`war_room_requests`) capturing request number, topic, requested item, SME runner, status (`requested`, `retrieving`, `legal_review`, `ready_for_inspector`, `presented`), and delivery timestamps.
 
 ---
 
@@ -1011,6 +1135,13 @@ LIVE_LINKS = {
         "Out-of-Tolerance (OOT) Handling": "quality:out_of_tolerance_investigation_list",
         "Measurement System Analysis (MSA / Gage R&R)": "quality:measurement_system_analysis_list",
         "Calibration Vendor Management": "quality:calibration_vendor_directory",
+    },
+    "12.11": {
+        "Audit Program Planning": "quality:audit_program_list",
+        "Audit Execution & Checklists": "quality:quality_audit_list",
+        "Audit Findings & Reporting": "quality:audit_finding_list",
+        "Corrective Action Tracking": "quality:audit_action_tracker",
+        "Regulatory & Certification Audits": "quality:regulatory_inspection_host_list",
     },
 }
 ```
