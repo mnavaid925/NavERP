@@ -144,7 +144,7 @@
 
         <div class="card mb-6">
             <div class="card-header flex justify-between items-center">
-                <h2 class="card-title">Required Training Courses ({{ courses.count }})</h2>
+                <h2 class="card-title">Required Training Courses ({{ courses|length }})</h2>
                 <a href="{% url 'quality:training_course_create' %}?competency_matrix={{ matrix.pk }}" class="btn btn-outline btn-sm">
                     <i data-lucide="plus"></i> Add Course
                 </a>
