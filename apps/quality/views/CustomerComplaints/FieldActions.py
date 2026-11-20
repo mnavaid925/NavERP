@@ -64,11 +64,16 @@ def field_action_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+    filter_querystring = query_params.urlencode()
+
     context = {
         "field_actions": page_obj,
         "page_obj": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "filter_querystring": filter_querystring,
         "total_count": total_count,
         "active_recall_count": active_recall_count,
         "class_i_count": class_i_count,
