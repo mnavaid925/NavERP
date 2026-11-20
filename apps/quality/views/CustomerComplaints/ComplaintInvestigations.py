@@ -188,7 +188,15 @@ def complaint_investigation_delete(request, pk):
 @require_POST
 def complaint_investigation_complete(request, pk):
     investigation = quality_object(request, ComplaintInvestigation, pk)
+    if investigation.status == "approved":
+        messages.error(request, f"Investigation {investigation.number} is already approved.")
+        return redirect("quality:complaint_investigation_detail", pk=investigation.pk)
+
     action_type = request.POST.get("action_type", "approve")
+    if action_type == "approve":
+        if investigation.lead_investigator == request.user and not request.user.is_tenant_admin:
+            messages.error(request, "Independent QA sign-off required: lead investigator cannot approve their own investigation.")
+            return redirect("quality:complaint_investigation_detail", pk=investigation.pk)
 
     with transaction.atomic():
         if action_type == "approve":
