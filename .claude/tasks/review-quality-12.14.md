@@ -2,7 +2,7 @@
 
 **Changeset**: `BASE` (`ed5bf098c22bd035a09707951ecc3e17152533ad`) to `HEAD`  
 **Target**: `apps/quality/` (Sub-module 12.14)  
-**Status**: Review in progress (Reviewer 3 of 6 completed)
+**Status**: Review in progress (Reviewer 4 of 6 completed)
 
 ---
 
@@ -133,3 +133,39 @@
   - **Files**: List templates (`quality_objective`, `management_review`, `management_review_input`, `management_review_action`).
 
 - **M9 (confirmed M4)**: Add `<select name="assignee">` to filter form in `management_review_action/list.html` or reconcile line 113.
+
+
+---
+
+## 4. Performance Reviewer Pass (`performance-reviewer`)
+
+### Critical
+- **C3**: N+1 queries in Management Review CSV export (`ManagementReviews.py:360-361`).
+  - **Details**: `management_review_export_csv` evaluates `r.total_inputs_count` and `r.total_actions_count` per row, firing `1 + 2*N` SQL queries.
+  - **Fix**: Annotate `inputs_cnt=Count("inputs", distinct=True)` and `actions_cnt=Count("actions", distinct=True)` on queryset before iterating.
+
+- **C4**: Severe KPI metric query splitting in Quality Planning Dashboard (`QualityPlanningDashboard.py:36-74`).
+  - **Details**: Executes 23 separate queries per page hit (repeated count queries for RAG status, category loop, reviews counts, and action counts).
+  - **Fix**: Consolidate into SQL `.aggregate()` with conditional filters and single `GROUP BY` for category counts, dropping from 23 queries to 6 queries (-74%).
+
+### Important
+- **I11**: N+1 foreign key traversal in Action CSV export (`ManagementReviewActions.py:300, 336`).
+  - **Details**: Accesses `act.spawned_capa.number` in loop without `spawned_capa` in `select_related`.
+  - **Fix**: Add `"spawned_capa"` to `select_related`.
+
+- **I12**: Redundant duplicate `qs.count()` in all four list views (`QualityObjectives.py`, `ManagementReviews.py`, `ManagementReviewInputs.py`, `ManagementReviewActions.py`).
+  - **Details**: Views run `total_count = qs.count()`, then `paginator.get_page()` immediately runs `count()` again.
+  - **Fix**: Use `total_count = paginator.count`.
+
+- **I13**: Repeated queries via uncached model properties on Management Review detail (`detail.html:86-96`).
+  - **Details**: Calls `review.total_inputs_count`, `review.total_actions_count`, and `review.open_actions_count` when view already loaded `inputs` and `actions` lists.
+  - **Fix**: Pass `total_inputs_count = len(inputs)`, `total_actions_count = len(actions)`, and `open_actions_count` in context.
+
+- **I14**: Missing composite index for active workflow and due date slices on `ManagementReviewAction`.
+  - **Details**: Active queries filter by `(tenant, status, due_date)`.
+  - **Fix**: Add composite index `models.Index(fields=["tenant", "status", "due_date"], name="idx_qmra_ten_stat_due")` (20 chars).
+
+### Minor
+- **M10**: Redundant single-column `db_index=True` on fields already covered by `(tenant, <field>)` composite indexes.
+- **M11**: Missing composite sort indexes for default pagination on `QualityObjective` (`tenant, -period_year, -created_at`) and `ManagementReview` (`tenant, -scheduled_date, -created_at`).
+- **M12**: Seeder query lookups in `_seed_submodule_12_14` fetching full model instances rather than `.only("id")`.
