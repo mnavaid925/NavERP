@@ -72,11 +72,16 @@ def regulatory_report_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+    filter_querystring = query_params.urlencode()
+
     context = {
         "reports": page_obj,
         "page_obj": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "filter_querystring": filter_querystring,
         "total_count": total_count,
         "pending_submission_count": pending_submission_count,
         "overdue_count": overdue_count,
