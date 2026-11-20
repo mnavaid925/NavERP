@@ -147,7 +147,9 @@ class RegulatoryReport(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "submission_status"], name="idx_qrpt_ten_status"),
             models.Index(fields=["tenant", "agency"], name="idx_qrpt_ten_agency"),
+            models.Index(fields=["tenant", "report_type"], name="idx_qrpt_ten_rtype"),
             models.Index(fields=["tenant", "statutory_due_date"], name="idx_qrpt_ten_due"),
+            models.Index(fields=["tenant", "submission_status", "statutory_due_date"], name="idx_qrpt_ten_st_due"),
             models.Index(fields=["tenant", "complaint"], name="idx_qrpt_ten_cmp"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qrpt_ten_created"),
         ]
