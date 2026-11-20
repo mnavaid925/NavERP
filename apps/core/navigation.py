@@ -3461,6 +3461,13 @@ LIVE_LINKS = {
         "Corrective Action Tracking": "quality:audit_action_tracker",
         "Regulatory & Certification Audits": "quality:regulatory_inspection_host_list",
     },
+    "12.12": {
+        "Training Needs Analysis": "quality:competency_matrix_list",
+        "Course Development & Delivery": "quality:training_course_list",
+        "Training Scheduling & Enrollment": "quality:training_enrollment_list",
+        "Competency Assessment & Certification": "quality:competency_certification_list",
+        "Training Records & Compliance": "quality:training_compliance_dashboard",
+    },
 
 
 
