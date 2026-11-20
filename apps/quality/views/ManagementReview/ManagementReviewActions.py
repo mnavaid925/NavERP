@@ -343,7 +343,7 @@ def management_review_action_escalate_capa(request, pk):
 @login_required
 def management_review_action_export_csv(request):
     qs = quality_scope(ManagementReviewAction.objects.all(), request).select_related(
-        "management_review", "assignee", "verified_by"
+        "management_review", "assignee", "verified_by", "spawned_capa"
     )
 
     response = HttpResponse(content_type="text/csv")
