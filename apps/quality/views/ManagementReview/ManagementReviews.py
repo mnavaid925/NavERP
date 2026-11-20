@@ -331,8 +331,13 @@ def management_review_cancel(request, pk):
 
 @login_required
 def management_review_export_csv(request):
-    qs = quality_scope(ManagementReview.objects.all(), request).select_related(
-        "executive_sponsor", "lead_facilitator", "org_unit"
+    qs = (
+        quality_scope(ManagementReview.objects.all(), request)
+        .select_related("executive_sponsor", "lead_facilitator", "org_unit")
+        .annotate(
+            inputs_cnt=Count("inputs", distinct=True),
+            actions_cnt=Count("actions", distinct=True),
+        )
     )
 
     response = HttpResponse(content_type="text/csv")
@@ -369,8 +374,8 @@ def management_review_export_csv(request):
             _csv_safe(r.lead_facilitator.get_full_name() or r.lead_facilitator.username if r.lead_facilitator else ""),
             _csv_safe(r.org_unit.name if r.org_unit else ""),
             _csv_safe("Yes" if r.quorum_met else "No"),
-            _csv_safe(r.total_inputs_count),
-            _csv_safe(r.total_actions_count),
+            _csv_safe(r.inputs_cnt),
+            _csv_safe(r.actions_cnt),
         ])
 
     return response
