@@ -57,6 +57,8 @@ class TrainingCompletionForm(forms.Form):
     score = forms.DecimalField(
         max_digits=5,
         decimal_places=2,
+        min_value=0,
+        max_value=100,
         required=False,
         widget=forms.NumberInput(attrs={"class": "form-input", "placeholder": "e.g. 95.00", "min": "0", "max": "100"}),
         help_text="Exam score percentage achieved (if exam was administered).",
