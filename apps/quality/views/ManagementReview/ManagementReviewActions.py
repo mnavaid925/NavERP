@@ -269,20 +269,32 @@ def management_review_action_verify(request, pk):
 @login_required
 @require_POST
 def management_review_action_escalate_capa(request, pk):
-    action_item = quality_object(request, ManagementReviewAction, pk)
-    if action_item.spawned_capa:
-        messages.info(request, f"Action already escalated to CAPA {action_item.spawned_capa.number}.")
-        return redirect("quality:management_review_action_detail", pk=action_item.pk)
-
     with transaction.atomic():
+        action_item = quality_object(
+            request,
+            ManagementReviewAction,
+            pk,
+            queryset=ManagementReviewAction.objects.select_for_update(),
+            select_related=("management_review", "spawned_capa"),
+        )
+        if action_item.spawned_capa:
+            messages.info(request, f"Action already escalated to CAPA {action_item.spawned_capa.number}.")
+            return redirect("quality:management_review_action_detail", pk=action_item.pk)
+
+        if action_item.status in ["completed", "cancelled"]:
+            messages.error(request, f"Cannot escalate an action that is already {action_item.get_status_display().lower()}.")
+            return redirect("quality:management_review_action_detail", pk=action_item.pk)
+
         capa = CapaInvestigation.objects.create(
             tenant=request.tenant,
             title=f"Management Review Action: {action_item.title}",
             source_type="management_review",
+            source_reference=action_item.number,
             lead_investigator=request.user,
-            description=f"Escalated from Management Review Action {action_item.number} (Review {action_item.management_review.number}).\n\n{action_item.description}",
-            containment_action="Executive action item escalated into formal systemic CAPA investigation.",
-            status="investigation",
+            quality_owner=request.user,
+            issue_summary=f"Escalated from Management Review Action {action_item.number} (Review {action_item.management_review.number}).\n\n{action_item.description}",
+            containment_actions="Executive action item escalated into formal systemic CAPA investigation.",
+            status="under_investigation",
         )
         action_item.spawned_capa = capa
         action_item.status = "in_progress"
