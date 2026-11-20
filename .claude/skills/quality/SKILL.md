@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); and 12.11 Audit Management — Audit Programs [QPRG-], Quality Audits [QAUD-], Graded Audit Findings & Observations [QFND-], Regulatory & Certification Inspection Hosts [QHST-], Audit Action Tracker, and Inspection War Room Command Center). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.11), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management — Audit Programs [QPRG-], Quality Audits [QAUD-], Graded Audit Findings & Observations [QFND-], Regulatory & Certification Inspection Hosts [QHST-], Audit Action Tracker, and Inspection War Room Command Center; and 12.13 Customer Complaint Handling — Customer Complaints [QCMP-], Complaint Investigations [QCIN-], Regulatory Vigilance Reports [QRPT-], Field Actions & Recalls [QFMA-], and Complaint Intelligence & Trending Command Center). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.13), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -95,6 +95,13 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Audit Action Tracker**: Cross-audit compliance workbench monitoring open findings, CAPA escalations, remediation response milestones, and overdue SLAs across 4 aging tiers (`0-30`, `31-60`, `61-90`, `>90 days`) with status badges and CSV export.
   - **Inspection War Room Command Center**: Real-time operational hosting interface featuring Front Room / Back Room live request dispatching (`war_room_requests`), document staging tracking, SME runner assignments, and scribe audit logs.
 
+- **12.13 Customer Complaint Handling**:
+  - **Customer Complaint Intake & Triage** [`QCMP-`]: FDA 21 CFR § 820.198, ISO 13485:2016 Clause 8.2.2, and ISO 10002 compliant customer allegation logging across intake channels (`phone`, `email`, `web_portal`, `sales_rep`, `service_tech`, `distributor`, `regulatory_agency`, `other`). Tracks customer link (`core.Party`), sales orders (`scm.SalesOrder`), return material authorizations (`scm.ReturnAuthorization`), product/lot/serial data, patient involvement, adverse event screening, severity triage (`critical_safety`, `major_malfunction`, `minor_cosmetic`, `service_inconvenience`, `unspecified`), validity determination (`pending_triage`, `valid_complaint`, `invalid_allegation`, `commercial_inquiry`), regulatory reportability classification (`undetermined`, `reportable_event`, `non_reportable`, `exempt`), sample return tracking, non-reportable justification mandate, formal closure letter dispatch, and multi-tenant isolation.
+  - **Complaint Technical Investigations & Root Cause Analysis** [`QCIN-`]: Technical problem-solving investigations verifying whether non-conformances occurred. Tracks DHR (Device History Record) batch manufacturing reviews, physical sample examinations, laboratory analytical methods (`visual_microscopy`, `dimensional_metrology`, `mechanical_stress`, `electrical_functional`, `chemical_spectroscopy`, `software_code_audit`, `historical_data_review`, `other`), clinical Health Hazard Evaluations (HHE), ISO 14971 residual risk escalation check (`risk_exceeds_threshold`), Ishikawa/5-Whys root cause categories (`component_defect`, `assembly_workmanship`, `process_deviation`, `design_flaw`, `software_bug`, `packaging_barrier`, `transit_damage`, `user_error_misuse`, `unconfirmed_no_defect`, `other`), direct cross-module CAPA (`QCAP-`) and NCR (`QNCR-`) escalations, and formal QA approval workflows.
+  - **Regulatory Vigilance Reporting & MDR** [`QRPT-`]: Mandatory adverse event vigilance reporting satisfying FDA 21 CFR Part 803 (Medical Device Reporting / MedWatch 3500A), EU MDR Article 87 (Manufacturer Incident Report / MIR), Health Canada, PMDA, and TGA regulations. Governs regulatory agency targets, adverse event classification (`death`, `serious_injury`, `malfunction_death_injury_potential`, `malfunction_recurrent`, `use_error_harm`), statutory urgency timeline clocks (`5_day_remedial`, `10_day_death_deterioration`, `15_day_serious_incident`, `30_day_standard_mdr`), dynamic countdown badges (`urgency_badge_css` with critical <=3 day warning), XML gateway transmission tracking, agency case file numbers, acknowledgement receipt capture, and statutory due date enforcement.
+  - **Field Actions, Recalls & Safety Alerts** [`QFMA-`]: 21 CFR Part 7 and Part 806 compliant market correction and removal governance across action types (`recall_removal`, `fsca_safety_notice`, `field_correction_rework`, `safety_advisory_alert`, `market_withdrawal`), FDA recall classes (`class_i_critical`, `class_ii_moderate`, `class_iii_minor`, `fsca_safety_alert`, `not_classified`), Field Safety Notice (FSN) document linkages (`ControlledDocument`), affected lot scope, consignee notification dispatch tracking, response rate monitoring, unit quarantine/recovery reconciliation progress tracking, regulatory recall numbers, and formal termination justification.
+  - **Complaint Intelligence & Trending Command Center**: Post-market surveillance executive dashboard (`complaint_trending_dashboard`) tracking YTD complaints, active investigations, statutory regulatory clocks, active field recalls, average cycle time (days to close), Pareto defect category distributions, severity distribution charts, and recall reconciliation recovery progress.
+
 ---
 
 ## App Layout & Architecture
@@ -160,6 +167,11 @@ apps/quality/
       QualityAudits.py                        <- QualityAudit [QAUD-]
       AuditFindings.py                        <- AuditFinding [QFND-]
       RegulatoryInspections.py                <- RegulatoryInspectionHost [QHST-]
+    CustomerComplaints/                       <- Sub-module 12.13 models
+      CustomerComplaints.py                   <- CustomerComplaint [QCMP-]
+      ComplaintInvestigations.py              <- ComplaintInvestigation [QCIN-]
+      RegulatoryReports.py                    <- RegulatoryReport [QRPT-]
+      FieldActions.py                         <- FieldAction [QFMA-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -218,6 +230,11 @@ apps/quality/
       QualityAudits.py                        <- QualityAuditForm, QualityAuditScoreForm
       AuditFindings.py                        <- AuditFindingForm, AuditFindingResponseForm, AuditFindingVerifyForm
       RegulatoryInspections.py                <- RegulatoryInspectionHostForm, RegulatoryInspectionLogEntryForm
+    CustomerComplaints/                       <- Sub-module 12.13 forms
+      CustomerComplaints.py                   <- CustomerComplaintForm, ComplaintTriageForm
+      ComplaintInvestigations.py              <- ComplaintInvestigationForm
+      RegulatoryReports.py                    <- RegulatoryReportForm
+      FieldActions.py                         <- FieldActionForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -287,6 +304,12 @@ apps/quality/
       RegulatoryInspections.py                <- List, Detail, Create, Edit, Delete, Advance Status, Add Log, Export
       AuditActionTracker.py                   <- Audit Action Tracker, Tracker Export
       AuditWarRoom.py                         <- Inspection War Room Command Center, War Room Export
+    CustomerComplaints/                       <- Sub-module 12.13 views
+      CustomerComplaints.py                   <- List, Detail, Create, Edit, Delete, Triage, Close, Export
+      ComplaintInvestigations.py              <- List, Detail, Create, Edit, Delete, Complete, Export
+      RegulatoryReports.py                    <- List, Detail, Create, Edit, Delete, Submit, Acknowledge, Export
+      FieldActions.py                         <- List, Detail, Create, Edit, Delete, Close, Export
+      ComplaintTrendingDashboard.py           <- Quality Executive Complaint Intelligence & Post-Market Surveillance Dashboard
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -355,12 +378,22 @@ apps/quality/
       RegulatoryInspections.py
       AuditActionTracker.py
       AuditWarRoom.py
+    CustomerComplaints/                       <- Sub-module 12.13 URLs
+      CustomerComplaints.py
+      ComplaintInvestigations.py
+      RegulatoryReports.py
+      FieldActions.py
+      ComplaintTrendingDashboard.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.11)
-  tests/                                      <- Pytest test suite (100% green, 1,895+ passing tests)
-    conftest.py                               <- Shared 12.1 through 12.11 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.13)
+  tests/                                      <- Pytest test suite (100% green, 2,001+ passing tests)
+    conftest.py                               <- Shared 12.1 through 12.13 fixtures
+    test_customercomplaints_models.py         <- Sub-module 12.13 model tests (6 tests)
+    test_customercomplaints_forms.py          <- Sub-module 12.13 form tests (9 tests)
+    test_customercomplaints_views.py          <- Sub-module 12.13 view tests (10 tests)
+    test_customercomplaints_security.py       <- Sub-module 12.13 security tests (9 tests)
     test_auditmanagement_models.py           <- Sub-module 12.11 model tests (10 tests)
     test_auditmanagement_forms.py            <- Sub-module 12.11 form tests (13 tests)
     test_auditmanagement_views.py            <- Sub-module 12.11 view tests (16 tests)
@@ -866,6 +899,41 @@ All routes use the `quality:` namespace:
 | `/quality/audits/inspections/<pk>/war-room/` | `audit_war_room` | Live Inspection War Room command center with request dispatching |
 | `/quality/audits/inspections/<pk>/war-room/export/` | `audit_war_room_export` | CSV export of War Room request manifest |
 
+### Sub-module 12.13 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/complaints/` | `customer_complaint_list` | Complaints register with severity, status, validity, channel filters and KPI summaries |
+| `/quality/complaints/create/` | `customer_complaint_create` | Log customer allegation with intake channel, severity, and product data |
+| `/quality/complaints/<pk>/` | `customer_complaint_detail` | Detailed complaint dossier with linked investigations, reports, and field actions |
+| `/quality/complaints/<pk>/edit/` | `customer_complaint_edit` | Edit complaint record (locked when closed/cancelled) |
+| `/quality/complaints/<pk>/delete/` | `customer_complaint_delete` | POST-only delete (requires tenant admin, blocked if filed reports exist) |
+| `/quality/complaints/<pk>/triage/` | `customer_complaint_triage` | Triage determination (validity, severity, reportability, investigation requirement) |
+| `/quality/complaints/<pk>/close/` | `customer_complaint_close` | Formal resolution sign-off and closure letter dispatch recording |
+| `/quality/complaints/export/csv/` | `customer_complaint_export_csv` | CSV export of customer complaints with active filter preservation |
+| `/quality/investigations/` | `complaint_investigation_list` | Technical investigations register with analytical method and root cause filters |
+| `/quality/investigations/create/` | `complaint_investigation_create` | Initiate failure analysis and DHR review investigation |
+| `/quality/investigations/<pk>/` | `complaint_investigation_detail` | Detailed investigation report with lab findings, HHE, and CAPA/NCR links |
+| `/quality/investigations/<pk>/edit/` | `complaint_investigation_edit` | Edit investigation findings (locked when approved) |
+| `/quality/investigations/<pk>/delete/` | `complaint_investigation_delete` | POST-only delete (requires tenant admin, blocked if approved) |
+| `/quality/investigations/<pk>/complete/` | `complaint_investigation_complete` | Formal completion and quality sign-off action |
+| `/quality/investigations/export/csv/` | `complaint_investigation_export_csv` | CSV export of complaint investigations |
+| `/quality/regulatory-reports/` | `regulatory_report_list` | Vigilance reporting tracker with agency, report type, timeline, and status filters |
+| `/quality/regulatory-reports/create/` | `regulatory_report_create` | Draft MedWatch 3500A / EU MIR adverse event report |
+| `/quality/regulatory-reports/<pk>/` | `regulatory_report_detail` | Regulatory report dossier with statutory countdown clock and acknowledgement info |
+| `/quality/regulatory-reports/<pk>/edit/` | `regulatory_report_edit` | Edit regulatory report (locked when submitted/acknowledged) |
+| `/quality/regulatory-reports/<pk>/delete/` | `regulatory_report_delete` | POST-only delete (requires tenant admin, blocked if submitted) |
+| `/quality/regulatory-reports/<pk>/submit/` | `regulatory_report_submit` | Record gateway transmission date and agency case identifier |
+| `/quality/regulatory-reports/<pk>/acknowledge/` | `regulatory_report_acknowledge` | Record agency acceptance and receipt acknowledgement number |
+| `/quality/regulatory-reports/export/csv/` | `regulatory_report_export_csv` | CSV export of regulatory vigilance reports |
+| `/quality/field-actions/` | `field_action_list` | Field actions & recalls register with action type, class, and status filters |
+| `/quality/field-actions/create/` | `field_action_create` | Declare voluntary recall or Field Safety Corrective Action (FSCA) |
+| `/quality/field-actions/<pk>/` | `field_action_detail` | Product recall command center with consignee response and recovery progress |
+| `/quality/field-actions/<pk>/edit/` | `field_action_edit` | Edit field action strategy and affected lot scope |
+| `/quality/field-actions/<pk>/delete/` | `field_action_delete` | POST-only delete (requires tenant admin) |
+| `/quality/field-actions/<pk>/close/` | `field_action_close` | Terminate recall and record agency concurrence justification |
+| `/quality/field-actions/export/csv/` | `field_action_export_csv` | CSV export of field actions |
+| `/quality/trending/` | `complaint_trending_dashboard` | Executive complaint intelligence command center with cycle time and Pareto charts |
+
 ---
 
 ## Seeder (`seed_quality`)
@@ -1142,6 +1210,13 @@ LIVE_LINKS = {
         "Audit Findings & Reporting": "quality:audit_finding_list",
         "Corrective Action Tracking": "quality:audit_action_tracker",
         "Regulatory & Certification Audits": "quality:regulatory_inspection_host_list",
+    },
+    "12.13": {
+        "Complaint Intake & Triage": "quality:customer_complaint_list",
+        "Investigation & Root Cause Analysis": "quality:complaint_investigation_list",
+        "Regulatory Reporting & Vigilance": "quality:regulatory_report_list",
+        "Field Action & Recall Management": "quality:field_action_list",
+        "Complaint Trending & Closure": "quality:complaint_trending_dashboard",
     },
 }
 ```
