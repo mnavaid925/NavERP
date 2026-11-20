@@ -216,6 +216,17 @@ def quality_audit_publish_report(request, pk):
 @require_POST
 def quality_audit_close(request, pk):
     audit = quality_object(request, QualityAudit, pk)
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "role", "") == "admin"
+    is_lead = (audit.lead_auditor_id == request.user.id)
+    if not (is_lead or is_admin):
+        messages.error(request, "Only the lead auditor or a tenant administrator can close this audit.")
+        return redirect("quality:quality_audit_detail", pk=audit.pk)
+
+    open_critical_count = audit.findings.filter(severity="critical").exclude(status="closed").count()
+    if open_critical_count > 0:
+        messages.error(request, f"Cannot close audit: There are {open_critical_count} open Critical non-conformance findings that must be verified closed first.")
+        return redirect("quality:quality_audit_detail", pk=audit.pk)
+
     audit.status = "closed"
     if not audit.actual_end_date:
         audit.actual_end_date = timezone.now().date()
