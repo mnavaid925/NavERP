@@ -226,6 +226,10 @@ def customer_complaint_delete(request, pk):
 @require_POST
 def customer_complaint_triage(request, pk):
     complaint = quality_object(request, CustomerComplaint, pk)
+    if complaint.status not in ["intake_received", "under_triage"]:
+        messages.error(request, f"Complaint {complaint.number} is already triaged ({complaint.get_status_display()}).")
+        return redirect("quality:customer_complaint_detail", pk=complaint.pk)
+
     form = ComplaintTriageForm(request.POST, instance=complaint, tenant=request.tenant)
     if form.is_valid():
         with transaction.atomic():
@@ -247,7 +251,8 @@ def customer_complaint_triage(request, pk):
             write_audit_log(request.user, obj, "triage", tenant=request.tenant)
         messages.success(request, f"Complaint {obj.number} triage completed.")
     else:
-        messages.error(request, "Triage submission contained validation errors.")
+        err_msg = "; ".join(f"{f}: {e[0]}" for f, e in form.errors.items())
+        messages.error(request, f"Triage validation error: {err_msg}")
     return redirect("quality:customer_complaint_detail", pk=complaint.pk)
 
 
@@ -255,6 +260,18 @@ def customer_complaint_triage(request, pk):
 @require_POST
 def customer_complaint_close(request, pk):
     complaint = quality_object(request, CustomerComplaint, pk)
+    if complaint.status in ["closed", "cancelled"]:
+        messages.error(request, f"Complaint {complaint.number} is already closed.")
+        return redirect("quality:customer_complaint_detail", pk=complaint.pk)
+
+    if complaint.has_active_regulatory_report:
+        messages.error(request, f"Complaint {complaint.number} cannot be closed while active regulatory reports are pending.")
+        return redirect("quality:customer_complaint_detail", pk=complaint.pk)
+
+    if complaint.investigations.filter(status__in=["pending_assignment", "in_progress", "dhr_review", "hhe_review"]).exists():
+        messages.error(request, f"Complaint {complaint.number} cannot be closed with unresolved investigations.")
+        return redirect("quality:customer_complaint_detail", pk=complaint.pk)
+
     resolution_summary = request.POST.get("resolution_summary", "").strip()
     customer_letter_sent = request.POST.get("customer_letter_sent") == "on"
 
