@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Complaint Investigations — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Investigations & RCA</span>
+        </div>
+        <h1 class="page-title">Complaint Investigations & Failure Analysis</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:complaint_investigation_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:complaint_investigation_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Investigation
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="microscope"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Investigations</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">In Active Analysis</div>
+            <div class="stat-value">{{ in_progress_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="git-branch"></i>
+        </div>
+        <div>
+            <div class="stat-label">CAPA Escalations</div>
+            <div class="stat-value">{{ capa_triggered_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Investigation #, complaint #, lot, narrative..." class="form-input">
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="analytical_method" class="form-label text-xs">Analytical Method</label>
+                <select name="analytical_method" id="analytical_method" class="form-select">
+                    <option value="">All Methods</option>
+                    {% for val, label in analytical_method_choices %}
+                    <option value="{{ val }}" {% if request.GET.analytical_method == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="root_cause_category" class="form-label text-xs">Root Cause Category</label>
+                <select name="root_cause_category" id="root_cause_category" class="form-select">
+                    <option value="">All Root Causes</option>
+                    {% for val, label in root_cause_category_choices %}
+                    <option value="{{ val }}" {% if request.GET.root_cause_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if request.GET.urlencode %}
+                <a href="{% url 'quality:complaint_investigation_list' %}" class="btn btn-ghost" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Investigation #</th>
+                    <th>Linked Complaint</th>
+                    <th>Lead Investigator</th>
+                    <th>Analytical Method</th>
+                    <th>DHR Audit</th>
+                    <th>Sample Lab</th>
+                    <th>Root Cause</th>
+                    <th>Status</th>
+                    <th>Target Date</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in investigations %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'quality:complaint_investigation_detail' inv.pk %}" class="text-blue-600 hover:underline">
+                            {{ inv.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'quality:customer_complaint_detail' inv.complaint.pk %}" class="text-slate-800 hover:text-blue-600 font-medium text-sm">
+                            {{ inv.complaint.number }}
+                        </a>
+                        <div class="text-xs text-slate-500 truncate max-w-xs">{{ inv.complaint.title }}</div>
+                    </td>
+                    <td class="text-sm">
+                        {% if inv.lead_investigator %}{{ inv.lead_investigator.get_full_name|default:inv.lead_investigator.username }}{% else %}—{% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">{{ inv.get_analytical_method_display }}</td>
+                    <td>
+                        {% if inv.dhr_reviewed %}
+                        <span class="badge badge-info">DHR Verified</span>
+                        {% if inv.dhr_anomalies_identified %}<span class="badge badge-amber">Anomalies</span>{% endif %}
+                        {% else %}
+                        <span class="badge badge-slate">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if inv.physical_sample_examined %}
+                        <span class="badge badge-green">Tested</span>
+                        {% if inv.failure_reproduced %}<span class="badge badge-red">Reproduced</span>{% endif %}
+                        {% else %}
+                        <span class="badge badge-muted">Not Tested</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium text-slate-800">{{ inv.get_root_cause_category_display }}</div>
+                        {% if inv.capa_required %}<span class="badge badge-purple text-[10px]">CAPA Req</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if inv.status == "approved" %}
+                        <span class="badge badge-green">Approved & Closed</span>
+                        {% elif inv.status == "rejected_rework" %}
+                        <span class="badge badge-red">Rework Required</span>
+                        {% elif inv.status == "hhe_review" %}
+                        <span class="badge badge-purple">HHE Review</span>
+                        {% elif inv.status == "pending_qa_review" %}
+                        <span class="badge badge-amber">Pending QA</span>
+                        {% elif inv.status == "pending_sample" %}
+                        <span class="badge badge-slate">Pending Sample</span>
+                        {% elif inv.status == "in_progress" %}
+                        <span class="badge badge-amber">In Progress</span>
+                        {% else %}
+                        <span class="badge badge-info">Assigned</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs {% if inv.is_overdue %}text-red-600 font-bold{% else %}text-slate-600{% endif %}">
+                        {{ inv.target_completion_date|date:"M d, Y"|default:"—" }}
+                    </td>
+                    <td class="table-actions">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'quality:complaint_investigation_detail' inv.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:complaint_investigation_edit' inv.pk %}" class="btn btn-icon" title="Edit investigation">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'quality:complaint_investigation_delete' inv.pk %}" onsubmit="return confirm('Permanently delete investigation {{ inv.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete investigation">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="microscope"></i>
+                            </div>
+                            <div class="empty-state-title">No investigations found</div>
+                            <div class="empty-state-text">
+                                {% if request.GET.urlencode %}
+                                No investigations match the current filter parameters.
+                                {% else %}
+                                There are no complaint failure investigations logged yet.
+                                {% endif %}
+                            </div>
+                            <div class="mt-4">
+                                <a href="{% url 'quality:complaint_investigation_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i> New Investigation
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} investigations
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i> Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i> Previous
+            </span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm font-medium text-slate-700">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Next <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                Next <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
