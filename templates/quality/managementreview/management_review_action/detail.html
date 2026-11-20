@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action_item.number }} — Review Action — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_planning_dashboard' %}">Quality Planning</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:management_review_detail' action_item.management_review.pk %}">{{ action_item.management_review.number }}</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:management_review_action_list' %}">Actions</a>
+            <span class="sep">/</span>
+            <span>{{ action_item.number }}</span>
+        </div>
+        <h1 class="page-title">{{ action_item.title }}</h1>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <a href="{% url 'quality:management_review_detail' action_item.management_review.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Review
+        </a>
+
+        {% if can_start %}
+        <form method="post" action="{% url 'quality:management_review_action_start' action_item.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-700 bg-amber-50 hover:bg-amber-100">
+                <i data-lucide="play"></i> Start Action
+            </button>
+        </form>
+        {% endif %}
+
+        {% if can_escalate_capa %}
+        <form method="post" action="{% url 'quality:management_review_action_escalate_capa' action_item.pk %}" class="inline" onsubmit="return confirm('Escalate this review action item into a formal systemic CAPA investigation?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-purple-700 bg-purple-50 hover:bg-purple-100">
+                <i data-lucide="shield-alert"></i> Escalate to CAPA
+            </button>
+        </form>
+        {% endif %}
+
+        {% if action_item.status != 'completed' and action_item.status != 'cancelled' %}
+        <a href="{% url 'quality:management_review_action_edit' action_item.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+        <form method="post" action="{% url 'quality:management_review_action_delete' action_item.pk %}" class="inline" onsubmit="return confirm('Delete action item {{ action_item.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon {% if action_item.priority == 'critical' %}red{% elif action_item.priority == 'high' %}orange{% else %}blue{% endif %}">
+            <i data-lucide="flame"></i>
+        </div>
+        <div>
+            <div class="stat-label">Priority Level</div>
+            <div class="stat-value text-base mt-1">
+                <span class="badge {{ action_item.priority_badge_class }}">{{ action_item.get_priority_display }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if action_item.is_overdue %}red{% else %}blue{% endif %}">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="stat-label">Target Due Date</div>
+            <div class="stat-value text-base mt-1 font-semibold {% if action_item.is_overdue %}text-rose-600{% else %}text-slate-900{% endif %}">
+                {{ action_item.due_date|date:"M d, Y" }}
+                {% if action_item.is_overdue %}<span class="badge badge-red text-xs ml-1">Overdue</span>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Lifecycle Elapsed</div>
+            <div class="stat-value">{{ days_open }} <span class="text-xs font-normal text-slate-500">days</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if action_item.status == 'completed' %}green{% elif action_item.status == 'in_progress' %}orange{% else %}slate{% endif %}">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Action Status</div>
+            <div class="stat-value text-base mt-1">
+                <span class="badge {{ action_item.status_badge_class }}">{{ action_item.get_status_display }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Action Specifications & Output Class</h3>
+                <span class="badge {{ action_item.action_type_badge_class }}">{{ action_item.get_action_type_display }}</span>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Action Number</dt>
+                        <dd class="font-mono font-semibold">{{ action_item.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Parent Review Session</dt>
+                        <dd>
+                            <a href="{% url 'quality:management_review_detail' action_item.management_review.pk %}" class="text-blue-600 hover:underline font-semibold">
+                                {{ action_item.management_review.number }}
+                            </a>
+                            <div class="text-xs text-slate-500">{{ action_item.management_review.title }}</div>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Assignee / Owner</dt>
+                        <dd>
+                            {% if action_item.assignee %}
+                            {{ action_item.assignee.get_full_name|default:action_item.assignee.username }}
+                            <div class="text-xs text-slate-500">{{ action_item.assignee.email }}</div>
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Allocated Budget</dt>
+                        <dd class="font-semibold text-slate-900">
+                            {% if action_item.budget_allocated is not None %}
+                            ${{ action_item.budget_allocated }}
+                            {% else %}
+                            <span class="text-slate-400 font-normal">None allocated</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Completion Date</dt>
+                        <dd>{{ action_item.completion_date|date:"M d, Y"|default:"Not completed yet" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>QA Verified By</dt>
+                        <dd>
+                            {% if action_item.verified_by %}
+                            {{ action_item.verified_by.get_full_name|default:action_item.verified_by.username }}
+                            {% else %}
+                            <span class="text-slate-400">Pending Verification</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                <div class="mt-6 border-t border-slate-100 pt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Requirement & Scope Description</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                        {{ action_item.description }}
+                    </div>
+                </div>
+
+                {% if action_item.resolution_summary %}
+                <div class="mt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Implementation Resolution Summary</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-emerald-50 p-4 rounded border border-emerald-200">
+                        {{ action_item.resolution_summary }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if action_item.verification_notes %}
+                <div class="mt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">QA Verification & Effectiveness Confirmation</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-blue-50 p-4 rounded border border-blue-200">
+                        {{ action_item.verification_notes }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if action_item.notes %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Internal Action Notes</h3>
+            </div>
+            <div class="card-body">
+                <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                    {{ action_item.notes }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        {% if can_complete %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Record Implementation Complete</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:management_review_action_complete' action_item.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="id_resolution_summary" class="form-label text-xs">Resolution Narrative & Objective Evidence *</label>
+                        {{ complete_form.resolution_summary }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="check"></i> Submit for QA Verification
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if can_verify %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">QA Effectiveness Verification</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:management_review_action_verify' action_item.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div class="p-3 bg-blue-50 rounded border border-blue-200 text-blue-900 text-xs">
+                        Independent QA verification is required before this management action item can be formally closed.
+                    </div>
+                    <div class="form-group">
+                        <label for="id_verification_notes" class="form-label text-xs">Verification Evidence *</label>
+                        {{ verify_form.verification_notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="shield-check"></i> Verify & Close Action
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Escalated Governance Links</h3>
+            </div>
+            <div class="card-body space-y-4 text-sm">
+                <div>
+                    <span class="text-xs text-slate-500 block">Spawned CAPA Investigation (12.4)</span>
+                    {% if action_item.spawned_capa %}
+                    <a href="{% url 'quality:capa_investigation_detail' action_item.spawned_capa.pk %}" class="font-mono text-purple-600 hover:underline font-semibold flex items-center gap-1 mt-0.5">
+                        <i data-lucide="shield-alert" class="w-4 h-4"></i> {{ action_item.spawned_capa.number }}
+                    </a>
+                    <div class="text-xs text-slate-500">{{ action_item.spawned_capa.title }}</div>
+                    {% else %}
+                    <span class="text-slate-400">None spawned</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-xs text-slate-500 block">Spawned Change Order / DCO (12.1)</span>
+                    {% if action_item.spawned_change_order %}
+                    <a href="{% url 'quality:document_change_order_detail' action_item.spawned_change_order.pk %}" class="font-mono text-blue-600 hover:underline font-semibold flex items-center gap-1 mt-0.5">
+                        <i data-lucide="file-diff" class="w-4 h-4"></i> {{ action_item.spawned_change_order.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">None spawned</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Lifecycle Details</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-slate-500">Created</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ action_item.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500">Last Modified</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ action_item.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
