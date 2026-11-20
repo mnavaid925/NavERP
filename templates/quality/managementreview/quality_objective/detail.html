@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}{{ objective.number }} — Quality Objective — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_planning_dashboard' %}">Quality Planning</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_objective_list' %}">Objectives & KPIs</a>
+            <span class="sep">/</span>
+            <span>{{ objective.number }}</span>
+        </div>
+        <h1 class="page-title">{{ objective.title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:quality_objective_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to List
+        </a>
+        <a href="{% url 'quality:quality_objective_edit' objective.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Objective
+        </a>
+        <form method="post" action="{% url 'quality:quality_objective_delete' objective.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete objective {{ objective.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="crosshair"></i>
+        </div>
+        <div>
+            <div class="stat-label">Target Goal</div>
+            <div class="stat-value text-slate-800">{{ objective.target_value }} {{ objective.metric_unit }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if objective.rag_status == 'green' %}green{% elif objective.rag_status == 'amber' %}orange{% elif objective.rag_status == 'red' %}red{% else %}slate{% endif %}">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-label">Current Actual</div>
+            <div class="stat-value">
+                {% if objective.current_value is not None %}
+                {{ objective.current_value }} {{ objective.metric_unit }}
+                {% else %}
+                <span class="text-slate-400 font-normal text-sm">Not recorded</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if objective.is_achieved %}green{% else %}orange{% endif %}">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="stat-label">Variance</div>
+            <div class="stat-value">
+                {% if variance is not None %}
+                {% if variance > 0 %}+{% endif %}{{ variance }} {{ objective.metric_unit }}
+                {% else %}
+                <span class="text-slate-400 font-normal text-sm">—</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="stat-label">Goal Attainment</div>
+            <div class="stat-value">{{ objective.progress_percent }}%</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900">Objective Overview & Specification</h3>
+                <div class="flex items-center gap-2">
+                    <span class="badge {{ objective.rag_badge_class }}">{{ objective.get_rag_status_display }}</span>
+                    <span class="badge {{ objective.status_badge_class }}">{{ objective.get_status_display }}</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Objective Number</dt>
+                        <dd class="font-mono font-semibold">{{ objective.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Category</dt>
+                        <dd>
+                            <span class="badge {{ objective.category_badge_class }}">{{ objective.get_category_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Planning Year</dt>
+                        <dd>{{ objective.period_year }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Evaluation Cadence</dt>
+                        <dd>{{ objective.get_cadence_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Direction</dt>
+                        <dd>{{ objective.get_target_direction_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Completion Date</dt>
+                        <dd>{{ objective.target_date|default:"Not specified" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Baseline Value</dt>
+                        <dd>{{ objective.baseline_value|default:"None" }} {{ objective.metric_unit }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Evaluated</dt>
+                        <dd>{{ objective.last_evaluated_date|default:"Never evaluated" }}</dd>
+                    </div>
+                </dl>
+
+                <div class="mt-6 border-t border-slate-100 pt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Description & Rationale</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                        {{ objective.description }}
+                    </div>
+                </div>
+
+                {% if objective.action_plan_summary %}
+                <div class="mt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Action Plan & Initiatives</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                        {{ objective.action_plan_summary }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if objective.notes %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Evaluation Notes & Audit Commentary</h3>
+            </div>
+            <div class="card-body">
+                <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded border border-slate-200">
+                    {{ objective.notes }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Governance & Ownership</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-slate-500">Responsible Owner</dt>
+                        <dd class="font-medium text-slate-900 mt-0.5">
+                            {% if objective.owner %}
+                            {{ objective.owner.get_full_name|default:objective.owner.username }}
+                            <div class="text-xs text-slate-500">{{ objective.owner.email }}</div>
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500">Department / Org Unit</dt>
+                        <dd class="font-medium text-slate-900 mt-0.5">
+                            {{ objective.org_unit.name|default:"Enterprise-Wide" }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500">Created</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ objective.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500">Last Modified</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ objective.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Record Performance Evaluation</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'quality:quality_objective_evaluate' objective.pk %}">
+                    {% csrf_token %}
+                    <div class="form-group mb-3">
+                        <label for="id_current_value" class="form-label text-xs">Current Actual Value ({{ objective.metric_unit }})</label>
+                        {{ evaluate_form.current_value }}
+                    </div>
+                    <div class="form-group mb-4">
+                        <label for="id_notes" class="form-label text-xs">Evaluation Note / Commentary</label>
+                        {{ evaluate_form.notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="check"></i> Update Performance
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
