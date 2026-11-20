@@ -255,6 +255,30 @@ def quality_audit_export_csv(request):
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(number__icontains=q))
 
+    audit_type = request.GET.get("audit_type", "").strip()
+    if audit_type:
+        qs = qs.filter(audit_type=audit_type)
+
+    framework = request.GET.get("standard_framework", "").strip()
+    if framework:
+        qs = qs.filter(standard_framework=framework)
+
+    status = request.GET.get("status", "").strip()
+    if status:
+        qs = qs.filter(status=status)
+
+    outcome = request.GET.get("outcome", "").strip()
+    if outcome:
+        qs = qs.filter(outcome=outcome)
+
+    program_param = request.GET.get("program", "").strip()
+    if program_param.isdigit():
+        qs = qs.filter(program_id=int(program_param))
+
+    org_unit_param = request.GET.get("org_unit", "").strip()
+    if org_unit_param.isdigit():
+        qs = qs.filter(target_org_unit_id=int(org_unit_param))
+
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="quality_audits.csv"'
     response["X-Content-Type-Options"] = "nosniff"
