@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ matrix.number }}{% else %}New Competency Matrix{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:competency_matrix_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:competency_matrix_list' %}">Competency Matrices</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ matrix.number }}{% else %}New Matrix{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Competency Matrix: {{ matrix.number }}{% else %}New Competency Matrix{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger mb-6">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Matrix Title <span class="text-red-500">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.role_title.id_for_label }}" class="form-label">Target Role Title <span class="text-red-500">*</span></label>
+                        {{ form.role_title }}
+                        {% if form.role_title.errors %}<div class="form-error">{{ form.role_title.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.department.id_for_label }}" class="form-label">Target Department</label>
+                        {{ form.department }}
+                        {% if form.department.errors %}<div class="form-error">{{ form.department.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.qualification_tier.id_for_label }}" class="form-label">Qualification Tier <span class="text-red-500">*</span></label>
+                        {{ form.qualification_tier }}
+                        {% if form.qualification_tier.errors %}<div class="form-error">{{ form.qualification_tier.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.criticality.id_for_label }}" class="form-label">Criticality Level <span class="text-red-500">*</span></label>
+                        {{ form.criticality }}
+                        {% if form.criticality.errors %}<div class="form-error">{{ form.criticality.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.revision.id_for_label }}" class="form-label">Curriculum Revision <span class="text-red-500">*</span></label>
+                        {{ form.revision }}
+                        {% if form.revision.errors %}<div class="form-error">{{ form.revision.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.minimum_passing_score.id_for_label }}" class="form-label">Minimum Passing Score (%)</label>
+                        {{ form.minimum_passing_score }}
+                        {% if form.minimum_passing_score.errors %}<div class="form-error">{{ form.minimum_passing_score.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.validity_period_months.id_for_label }}" class="form-label">Validity Period (Months)</label>
+                        {{ form.validity_period_months }}
+                        {% if form.validity_period_months.errors %}<div class="form-error">{{ form.validity_period_months.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.prerequisite_experience_months.id_for_label }}" class="form-label">Prerequisite Experience (Months)</label>
+                        {{ form.prerequisite_experience_months }}
+                        {% if form.prerequisite_experience_months.errors %}<div class="form-error">{{ form.prerequisite_experience_months.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">Curriculum Scope & Competencies</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.approved_by.id_for_label }}" class="form-label">Quality Approver</label>
+                        {{ form.approved_by }}
+                        {% if form.approved_by.errors %}<div class="form-error">{{ form.approved_by.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.approval_date.id_for_label }}" class="form-label">Approval Date</label>
+                        {{ form.approval_date }}
+                        {% if form.approval_date.errors %}<div class="form-error">{{ form.approval_date.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">Administrative Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'quality:competency_matrix_detail' matrix.pk %}{% else %}{% url 'quality:competency_matrix_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i> Save Matrix
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
