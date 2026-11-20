@@ -155,7 +155,7 @@
                     </td>
                     <td>
                         <div class="text-xs font-medium text-slate-800">{{ inv.get_root_cause_category_display }}</div>
-                        {% if inv.capa_required %}<span class="badge badge-purple text-[10px]">CAPA Req</span>{% endif %}
+                        {% if inv.capa_required %}<span class="badge badge-amber text-[10px]">CAPA Req</span>{% endif %}
                     </td>
                     <td>
                         {% if inv.status == "approved" %}
@@ -163,7 +163,7 @@
                         {% elif inv.status == "rejected_rework" %}
                         <span class="badge badge-red">Rework Required</span>
                         {% elif inv.status == "hhe_review" %}
-                        <span class="badge badge-purple">HHE Review</span>
+                        <span class="badge badge-amber">HHE Review</span>
                         {% elif inv.status == "pending_qa_review" %}
                         <span class="badge badge-amber">Pending QA</span>
                         {% elif inv.status == "pending_sample" %}
