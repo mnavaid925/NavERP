@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ investigation.number }}{% else %}New Investigation{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:complaint_investigation_list' %}">Investigations</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ investigation.number }}{% else %}New Investigation{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Investigation {{ investigation.number }}{% else %}Initiate Failure Analysis & Investigation{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Assignment Section -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">1. Scope & Ownership</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.complaint.id_for_label }}" class="form-label">Customer Complaint <span class="text-red-500">*</span></label>
+                        {{ form.complaint }}
+                        {% if form.complaint.errors %}<div class="form-error">{{ form.complaint.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.lead_investigator.id_for_label }}" class="form-label">Lead Investigator <span class="text-red-500">*</span></label>
+                        {{ form.lead_investigator }}
+                        {% if form.lead_investigator.errors %}<div class="form-error">{{ form.lead_investigator.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Investigation Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.target_completion_date.id_for_label }}" class="form-label">Target Completion Date</label>
+                        {{ form.target_completion_date }}
+                        {% if form.target_completion_date.errors %}<div class="form-error">{{ form.target_completion_date.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.actual_completion_date.id_for_label }}" class="form-label">Actual Completion Date</label>
+                        {{ form.actual_completion_date }}
+                        {% if form.actual_completion_date.errors %}<div class="form-error">{{ form.actual_completion_date.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- DHR Review Section -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">2. Device History Record (DHR) Review</h3>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.dhr_reviewed }}
+                            <label for="{{ form.dhr_reviewed.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                DHR / Batch Record Examined
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.dhr_anomalies_identified }}
+                            <label for="{{ form.dhr_anomalies_identified.id_for_label }}" class="text-sm font-medium text-red-700">
+                                Historical Batch Anomalies Identified
+                            </label>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="{{ form.dhr_lot_number.id_for_label }}" class="form-label">Examined Lot / Batch #</label>
+                            {{ form.dhr_lot_number }}
+                            {% if form.dhr_lot_number.errors %}<div class="form-error">{{ form.dhr_lot_number.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label for="{{ form.dhr_quantity_produced.id_for_label }}" class="form-label">Total Units Shipped in Lot</label>
+                            {{ form.dhr_quantity_produced }}
+                            {% if form.dhr_quantity_produced.errors %}<div class="form-error">{{ form.dhr_quantity_produced.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <label for="{{ form.dhr_review_summary.id_for_label }}" class="form-label">DHR Review Summary Notes</label>
+                        {{ form.dhr_review_summary }}
+                        {% if form.dhr_review_summary.errors %}<div class="form-error">{{ form.dhr_review_summary.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lab Diagnostics Section -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">3. Laboratory Testing & Sample Diagnostics</h3>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.physical_sample_examined }}
+                            <label for="{{ form.physical_sample_examined.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Returned Physical Sample Tested
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.failure_reproduced }}
+                            <label for="{{ form.failure_reproduced.id_for_label }}" class="text-sm font-medium text-red-700">
+                                Alleged Failure Mode Reproduced in Lab
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="{{ form.analytical_method.id_for_label }}" class="form-label">Primary Analytical Method</label>
+                        {{ form.analytical_method }}
+                        {% if form.analytical_method.errors %}<div class="form-error">{{ form.analytical_method.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.sample_testing_findings.id_for_label }}" class="form-label">Sample Diagnostics Findings</label>
+                        {{ form.sample_testing_findings }}
+                        {% if form.sample_testing_findings.errors %}<div class="form-error">{{ form.sample_testing_findings.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clinical HHE & Risk Alignment -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">4. Clinical Health Hazard & ISO 14971 FMEA</h3>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.hhe_required }}
+                            <label for="{{ form.hhe_required.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Clinical Health Hazard Evaluation (HHE) Mandated
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.risk_exceeds_threshold }}
+                            <label for="{{ form.risk_exceeds_threshold.id_for_label }}" class="text-sm font-medium text-red-700">
+                                Observed Risk Exceeds FMEA Threshold
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="{{ form.risk_assessment.id_for_label }}" class="form-label">Linked ISO 14971 Risk Assessment</label>
+                        {{ form.risk_assessment }}
+                        {% if form.risk_assessment.errors %}<div class="form-error">{{ form.risk_assessment.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.health_hazard_evaluation.id_for_label }}" class="form-label">Health Hazard Assessment Narrative</label>
+                        {{ form.health_hazard_evaluation }}
+                        {% if form.health_hazard_evaluation.errors %}<div class="form-error">{{ form.health_hazard_evaluation.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Root Cause & CAPA Escalation -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-800 mb-3">5. Root Cause & CAPA Disposition</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.root_cause_category.id_for_label }}" class="form-label">Root Cause Category</label>
+                        {{ form.root_cause_category }}
+                        {% if form.root_cause_category.errors %}<div class="form-error">{{ form.root_cause_category.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.root_cause_narrative.id_for_label }}" class="form-label">5 Whys / Failure Tree Narrative</label>
+                        {{ form.root_cause_narrative }}
+                        {% if form.root_cause_narrative.errors %}<div class="form-error">{{ form.root_cause_narrative.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.investigation_conclusion.id_for_label }}" class="form-label">Formal Engineering Conclusion</label>
+                        {{ form.investigation_conclusion }}
+                        {% if form.investigation_conclusion.errors %}<div class="form-error">{{ form.investigation_conclusion.errors }}</div>{% endif %}
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 space-y-4">
+                        <div class="flex items-center gap-2">
+                            {{ form.capa_required }}
+                            <label for="{{ form.capa_required.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Corrective / Preventive Action (CAPA) Mandated
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="{{ form.capa.id_for_label }}" class="form-label">Linked CAPA Investigation</label>
+                                {{ form.capa }}
+                                {% if form.capa.errors %}<div class="form-error">{{ form.capa.errors }}</div>{% endif %}
+                            </div>
+                            <div>
+                                <label for="{{ form.ncr.id_for_label }}" class="form-label">Linked Non-Conformance Report</label>
+                                {{ form.ncr }}
+                                {% if form.ncr.errors %}<div class="form-error">{{ form.ncr.errors }}</div>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:complaint_investigation_detail' investigation.pk %}{% else %}{% url 'quality:complaint_investigation_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Create Investigation{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
