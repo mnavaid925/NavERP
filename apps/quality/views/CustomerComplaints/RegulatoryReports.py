@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -59,14 +59,20 @@ def regulatory_report_list(request):
     total_count = qs.count()
 
     base_tenant_qs = RegulatoryReport.objects.filter(tenant=request.tenant)
-    pending_submission_count = base_tenant_qs.filter(
-        submission_status__in=["draft", "under_internal_review", "ready_to_transmit"]
-    ).count()
-
     today = timezone.now().date()
-    overdue_count = base_tenant_qs.filter(
-        statutory_due_date__lt=today
-    ).exclude(submission_status__in=["acknowledged", "submitted", "withdrawn"]).count()
+    stats = base_tenant_qs.aggregate(
+        pending_submission_count=Count(
+            "id",
+            filter=Q(submission_status__in=["draft", "under_internal_review", "ready_to_transmit"]),
+        ),
+        overdue_count=Count(
+            "id",
+            filter=Q(statutory_due_date__lt=today)
+            & ~Q(submission_status__in=["acknowledged", "submitted", "withdrawn"]),
+        ),
+    )
+    pending_submission_count = stats["pending_submission_count"]
+    overdue_count = stats["overdue_count"]
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
