@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Competency Certifications — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:competency_certification_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Competency Certifications</span>
+        </div>
+        <h1 class="page-title">Competency Certifications</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:competency_certification_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:competency_certification_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Issue Certificate
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Issued</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Certifications</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Expiring Soon (<30 Days)</div>
+            <div class="stat-value">{{ expiring_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Title, number, trainee..." class="form-input">
+            </div>
+            <div>
+                <label for="qualification_level" class="form-label text-xs">Qualification Level</label>
+                <select name="qualification_level" id="qualification_level" class="form-select">
+                    <option value="">All Levels</option>
+                    {% for val, label in level_choices %}
+                    <option value="{{ val }}" {% if selected_level == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="trainee" class="form-label text-xs">Trainee</label>
+                <select name="trainee" id="trainee" class="form-select">
+                    <option value="">All Trainees</option>
+                    {% for u in trainees %}
+                    <option value="{{ u.pk }}" {% if selected_trainee == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="course" class="form-label text-xs">Course</label>
+                <select name="course" id="course" class="form-select">
+                    <option value="">All Courses</option>
+                    {% for c in courses %}
+                    <option value="{{ c.pk }}" {% if selected_course == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} - {{ c.title|truncatechars:25 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="expiring_soon" class="form-label text-xs">Validity</label>
+                <select name="expiring_soon" id="expiring_soon" class="form-select">
+                    <option value="">All Validity</option>
+                    <option value="1" {% if selected_expiring == "1" %}selected{% endif %}>Expiring Soon (<30d)</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'quality:competency_certification_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Certificate Number</th>
+                    <th>Qualification Title</th>
+                    <th>Certified Personnel</th>
+                    <th>Qualification Level</th>
+                    <th>Course</th>
+                    <th>Issue Date</th>
+                    <th>Valid Until</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cert in certifications %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:competency_certification_detail' cert.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ cert.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ cert.qualification_title }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ cert.trainee.get_full_name|default:cert.trainee.username }}</div>
+                        <div class="text-xs text-slate-500">@{{ cert.trainee.username }}</div>
+                    </td>
+                    <td><span class="badge {{ cert.level_badge }}">{{ cert.get_qualification_level_display }}</span></td>
+                    <td>
+                        <a href="{% url 'quality:training_course_detail' cert.course.pk %}" class="text-xs text-blue-600 hover:underline">
+                            {{ cert.course.number }}
+                        </a>
+                    </td>
+                    <td>{{ cert.issue_date }}</td>
+                    <td>
+                        {% if cert.valid_until %}
+                        <span class="{% if cert.is_expired %}text-red-600 font-bold{% elif cert.is_expiring_soon %}text-amber-600 font-bold{% endif %}">
+                            {{ cert.valid_until }}
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400">Permanent</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ cert.status_badge }}">{{ cert.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'quality:competency_certification_detail' cert.pk %}" class="btn btn-icon" title="View Diploma">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:competency_certification_edit' cert.pk %}" class="btn btn-icon" title="Edit Certificate">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'quality:competency_certification_delete' cert.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Certificate {{ cert.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600" title="Delete Certificate">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="award" class="empty-icon"></i>
+                            <div class="empty-text">No competency certifications found</div>
+                            <div class="empty-subtext">Issue employee qualification certificates upon successful course completion.</div>
+                            <a href="{% url 'quality:competency_certification_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> Issue Certificate
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} certificates
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_level %}&qualification_level={{ selected_level }}{% endif %}{% if selected_trainee %}&trainee={{ selected_trainee }}{% endif %}{% if selected_course %}&course={{ selected_course }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_expiring %}&expiring_soon={{ selected_expiring }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Previous</span>
+            {% endif %}
+
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_level %}&qualification_level={{ selected_level }}{% endif %}{% if selected_trainee %}&trainee={{ selected_trainee }}{% endif %}{% if selected_course %}&course={{ selected_course }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_expiring %}&expiring_soon={{ selected_expiring }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
