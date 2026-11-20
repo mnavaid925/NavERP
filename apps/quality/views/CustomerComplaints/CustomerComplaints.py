@@ -3,7 +3,7 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import models, transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -187,9 +187,34 @@ def customer_complaint_edit(request, pk):
 def customer_complaint_delete(request, pk):
     complaint = quality_object(request, CustomerComplaint, pk)
     number = complaint.number
-    with transaction.atomic():
-        write_audit_log(request.user, complaint, "delete", tenant=request.tenant)
-        complaint.delete()
+
+    if complaint.regulatory_reports.exclude(submission_status="draft").exists():
+        messages.error(
+            request,
+            f"Cannot delete complaint {number}: active statutory regulatory reports have been filed with authorities.",
+        )
+        return redirect("quality:customer_complaint_detail", pk=complaint.pk)
+
+    if complaint.investigations.filter(status="approved").exists():
+        messages.error(
+            request,
+            f"Cannot delete complaint {number}: approved quality investigations exist.",
+        )
+        return redirect("quality:customer_complaint_detail", pk=complaint.pk)
+
+    try:
+        with transaction.atomic():
+            complaint.regulatory_reports.filter(submission_status="draft").delete()
+            complaint.investigations.exclude(status="approved").delete()
+            write_audit_log(request.user, complaint, "delete", tenant=request.tenant)
+            complaint.delete()
+    except models.ProtectedError:
+        messages.error(
+            request,
+            f"Cannot delete complaint {number}: protected linked records exist.",
+        )
+        return redirect("quality:customer_complaint_detail", pk=complaint.pk)
+
     messages.success(request, f"Complaint {number} has been deleted.")
     return redirect("quality:customer_complaint_list")
 
