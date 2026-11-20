@@ -91,6 +91,18 @@ from apps.quality.models.CustomerComplaints.CustomerComplaints import CustomerCo
 from apps.quality.models.CustomerComplaints.ComplaintInvestigations import ComplaintInvestigation
 from apps.quality.models.CustomerComplaints.RegulatoryReports import RegulatoryReport
 from apps.quality.models.CustomerComplaints.FieldActions import FieldAction
+from apps.quality.models.ManagementReview.ManagementReviewActions import (
+    ManagementReviewAction,
+)
+from apps.quality.models.ManagementReview.ManagementReviewInputs import (
+    ManagementReviewInput,
+)
+from apps.quality.models.ManagementReview.ManagementReviews import (
+    ManagementReview,
+)
+from apps.quality.models.ManagementReview.QualityObjectives import (
+    QualityObjective,
+)
 
 
 User = get_user_model()
@@ -109,6 +121,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            ManagementReviewAction.objects.all().delete()
+            ManagementReviewInput.objects.all().delete()
+            ManagementReview.objects.all().delete()
+            QualityObjective.objects.all().delete()
             FieldAction.objects.all().delete()
             RegulatoryReport.objects.all().delete()
             ComplaintInvestigation.objects.all().delete()
@@ -184,6 +200,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_11(tenant)
             self._seed_submodule_12_12(tenant)
             self._seed_submodule_12_13(tenant)
+            self._seed_submodule_12_14(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -4311,6 +4328,280 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.13 Customer Complaint Handling seeded successfully."))
+
+    def _seed_submodule_12_14(self, tenant):
+        """Seed demo data for Sub-module 12.14: Management Review & Quality Planning."""
+        if QualityObjective.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.14 Management Review data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.14 Management Review & Quality Planning...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+            or User.objects.filter(tenant=tenant).first()
+        )
+        quality_lead = (
+            User.objects.filter(tenant=tenant, username__icontains="quality").first()
+            or User.objects.filter(tenant=tenant, is_staff=True).first()
+            or admin_user
+        )
+        executive_sponsor = admin_user
+
+        org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        today = timezone.now().date()
+        year = today.year
+
+        with transaction.atomic():
+            # 1. Quality Objectives
+            obj1 = QualityObjective.objects.create(
+                tenant=tenant,
+                title="Maintain First Pass Inspection Yield >= 98.5%",
+                description="Target overall finished goods operational yield across all cleanroom assembly lines to prevent costly rework and batch deviations per ISO 9001:2015 Clause 6.2.",
+                category="product_quality",
+                period_year=year,
+                cadence="annual",
+                metric_unit="%",
+                baseline_value=Decimal("96.200"),
+                target_value=Decimal("98.500"),
+                current_value=Decimal("98.700"),
+                target_direction="higher_better",
+                status="achieved",
+                rag_status="green",
+                owner=quality_lead,
+                org_unit=org_unit,
+                target_date=datetime.date(year, 12, 31),
+                last_evaluated_date=today,
+                action_plan_summary="Standardized IPC-A-610 Class 3 soldering criteria, continuous operator retraining, and automated optical inspection calibration.",
+            )
+
+            obj2 = QualityObjective.objects.create(
+                tenant=tenant,
+                title="Reduce Manufacturing Scrap & Rework Rate <= 1.20%",
+                description="Lower scrap generated from defective injection molding tool wear and dimensional drift in production cells per ISO 13485:2016 Clause 5.4.1.",
+                category="process_performance",
+                period_year=year,
+                cadence="quarterly",
+                metric_unit="%",
+                baseline_value=Decimal("2.400"),
+                target_value=Decimal("1.200"),
+                current_value=Decimal("1.350"),
+                target_direction="lower_better",
+                status="at_risk",
+                rag_status="amber",
+                owner=admin_user,
+                org_unit=org_unit,
+                target_date=datetime.date(year, 9, 30),
+                last_evaluated_date=today - datetime.timedelta(days=15),
+                action_plan_summary="Implemented real-time cavity pressure transducer telemetry on Molding Press 4 and enhanced preventive tool maintenance cycles.",
+            )
+
+            obj3 = QualityObjective.objects.create(
+                tenant=tenant,
+                title="Timely Resolution of Audit Findings <= 30 Days >= 95%",
+                description="Ensure all internal and supplier audit non-conformances have root cause analysis and action plans completed within the statutory 30-day window.",
+                category="compliance_regulatory",
+                period_year=year,
+                cadence="quarterly",
+                metric_unit="%",
+                baseline_value=Decimal("88.000"),
+                target_value=Decimal("95.000"),
+                current_value=Decimal("96.500"),
+                target_direction="higher_better",
+                status="achieved",
+                rag_status="green",
+                owner=quality_lead,
+                org_unit=org_unit,
+                target_date=datetime.date(year, 12, 31),
+                last_evaluated_date=today - datetime.timedelta(days=5),
+                action_plan_summary="Automated SLA notification workflow dispatching reminder alerts at day 15 and day 25.",
+            )
+
+            obj4 = QualityObjective.objects.create(
+                tenant=tenant,
+                title="Customer Allegation & Complaint Rate <= 0.15 PPM",
+                description="Reduce post-market field complaint frequency related to packaging seal integrity and labeling clarity per FDA 21 CFR 820.198 and QMSR.",
+                category="customer_satisfaction",
+                period_year=year,
+                cadence="monthly",
+                metric_unit="PPM",
+                baseline_value=Decimal("0.350"),
+                target_value=Decimal("0.150"),
+                current_value=Decimal("0.220"),
+                target_direction="lower_better",
+                status="behind",
+                rag_status="red",
+                owner=quality_lead,
+                org_unit=org_unit,
+                target_date=datetime.date(year, 12, 31),
+                last_evaluated_date=today - datetime.timedelta(days=2),
+                action_plan_summary="Tyvek heat sealer continuous thermal validation and 100% burst test sampling per ASTM F1140.",
+            )
+
+            # 2. Management Reviews
+            rev_approved = ManagementReview.objects.create(
+                tenant=tenant,
+                title="Q3 2026 Executive Management Review",
+                cadence="quarterly",
+                period_start=today - datetime.timedelta(days=180),
+                period_end=today - datetime.timedelta(days=90),
+                scheduled_date=today - datetime.timedelta(days=85),
+                actual_meeting_date=today - datetime.timedelta(days=85),
+                location="Executive Conference Room & Virtual Teams Bridge",
+                executive_sponsor=executive_sponsor,
+                lead_facilitator=quality_lead,
+                org_unit=org_unit,
+                attendees_roster="Executive Management Sponsor: John Davis (VP Operations)\nLead Quality Facilitator: Sarah Jenkins (Quality Director)\nManufacturing Manager: Robert Chen\nRegulatory Affairs Director: Elena Rostova\nDesign Engineering Lead: Marcus Vance",
+                quorum_met=True,
+                status="approved",
+                qms_suitability_conclusion="suitable_effective",
+                executive_summary="The Quality Management System has been thoroughly evaluated against ISO 13485:2016, ISO 9001:2015, and FDA QMSR. Operational yields have exceeded target thresholds (98.7% FPY). Internal audit program is fully on schedule with zero critical findings. Corrective actions show sustained effectiveness.",
+                minutes_discussion="1. Internal Audit Results: Reviewed 8 audits; 12 minor findings, all closed on schedule.\n2. Customer Complaints: Volume down 18% YoY. No statutory adverse events reported in Q3.\n3. CAPA Status: 4 open investigations progressing within SLA.\n4. Process Performance: Line 2 packaging seal drift detected and contained under NCR-2026-004.\n5. Supplier Performance: Top 10 critical component suppliers average 98.2 score.",
+                resource_decisions="Authorized $45,000 capital expenditure for automated vision inspection system on SMT Line 2. Approved headcount for one additional validation specialist in Q4.",
+                approved_by=executive_sponsor,
+                approved_at=timezone.now() - datetime.timedelta(days=85),
+            )
+
+            rev_scheduled = ManagementReview.objects.create(
+                tenant=tenant,
+                title="Q4 2026 Executive Management Review",
+                cadence="quarterly",
+                period_start=today - datetime.timedelta(days=90),
+                period_end=today,
+                scheduled_date=today + datetime.timedelta(days=14),
+                location="Boardroom Alpha",
+                executive_sponsor=executive_sponsor,
+                lead_facilitator=quality_lead,
+                org_unit=org_unit,
+                attendees_roster="Executive Sponsor, Quality Director, Operations VP, Regulatory Manager, R&D Director",
+                quorum_met=True,
+                status="scheduled",
+                qms_suitability_conclusion="pending",
+                executive_summary="",
+                minutes_discussion="",
+                resource_decisions="",
+            )
+
+            # Sibling quality records to link (if available)
+            linked_audit = QualityAudit.objects.filter(tenant=tenant).first()
+            linked_capa = CapaInvestigation.objects.filter(tenant=tenant).first()
+            linked_complaint = CustomerComplaint.objects.filter(tenant=tenant).first()
+            linked_ncr = NonConformanceReport.objects.filter(tenant=tenant).first()
+
+            # 3. Review Inputs for rev_approved
+            inp1 = ManagementReviewInput.objects.create(
+                tenant=tenant,
+                management_review=rev_approved,
+                agenda_order=1,
+                title="Q3 Internal & Supplier Quality Audit Findings Rollup",
+                category="audit_results",
+                presenter=quality_lead,
+                summary_findings="Conducted 6 internal QMS system audits and 2 critical tier-1 supplier on-site audits. 14 minor findings logged, zero major non-conformances. Supplier AVL compliance stands at 97.4%.",
+                metrics_data="Total Audits: 8 | Minor Findings: 14 | Major Findings: 0 | Closed on Time: 100%",
+                status="accepted",
+                linked_audit=linked_audit,
+                attachments_summary="Presentation Deck Slides 4-9 & Audit Summary Pack",
+            )
+
+            inp2 = ManagementReviewInput.objects.create(
+                tenant=tenant,
+                management_review=rev_approved,
+                agenda_order=2,
+                title="Q3 Post-Market Customer Complaint Trending & Reportability",
+                category="customer_feedback",
+                presenter=quality_lead,
+                summary_findings="Total customer complaints logged: 12. Average investigation closure cycle time reduced from 28 to 19 days. Zero complaints met FDA 21 CFR 803 / EU MDR Article 87 reportability criteria.",
+                metrics_data="Complaints: 12 | Valid: 8 | Invalid: 4 | Reportable: 0 | Avg Days to Close: 19.2",
+                status="accepted",
+                linked_complaint=linked_complaint,
+                attachments_summary="Post-Market Surveillance Quarterly Trends Report",
+            )
+
+            inp3 = ManagementReviewInput.objects.create(
+                tenant=tenant,
+                management_review=rev_approved,
+                agenda_order=3,
+                title="Process Performance, Yield Analysis & Scrap Reduction",
+                category="process_conformity",
+                presenter=admin_user,
+                summary_findings="Finished good First Pass Yield reached 98.7% against 98.5% goal. In-process scrap dropped from 2.4% baseline to 1.35%, driven by molding telemetry and tooling refurbishments.",
+                metrics_data="FPY: 98.7% | In-Process Scrap: 1.35% | MRB Dispositions: 6 lots released with rework",
+                status="accepted",
+                linked_ncr=linked_ncr,
+                attachments_summary="Manufacturing KPI Dashboard Q3 Data Package",
+            )
+
+            inp4 = ManagementReviewInput.objects.create(
+                tenant=tenant,
+                management_review=rev_approved,
+                agenda_order=4,
+                title="CAPA System Health, Aging & Effectiveness Verification",
+                category="capa_status",
+                presenter=quality_lead,
+                summary_findings="Reviewed 5 active CAPAs. Two completed 90-day post-implementation effectiveness verifications with zero recurrence. Average CAPA aging is 38 days, well within the 60-day policy ceiling.",
+                metrics_data="Active CAPAs: 5 | Verified & Closed: 2 | Overdue: 0 | Recurrence Rate: 0.0%",
+                status="accepted",
+                linked_capa=linked_capa,
+                attachments_summary="CAPA Log Sheet & Verification Files",
+            )
+
+            # 4. Review Actions for rev_approved
+            act1 = ManagementReviewAction.objects.create(
+                tenant=tenant,
+                management_review=rev_approved,
+                title="Procure automated optical inspection (AOI) vision system for SMT Line 2",
+                action_type="resource_allocation",
+                priority="high",
+                description="Acquire and qualify an in-line 3D AOI inspection system for high-density surface mount PCBs to eliminate micro-bridging escapes prior to conformal coating.",
+                assignee=admin_user,
+                due_date=today + datetime.timedelta(days=30),
+                budget_allocated=Decimal("45000.00"),
+                status="in_progress",
+            )
+
+            act2 = ManagementReviewAction.objects.create(
+                tenant=tenant,
+                management_review=rev_approved,
+                title="Revise raw material incoming acceptance criteria for medical-grade resin",
+                action_type="procedure_revision",
+                priority="medium",
+                description="Update SOP-QC-204 to include melt-flow index testing and spectrophotometric color tolerance verification upon lot receiving.",
+                assignee=quality_lead,
+                due_date=today - datetime.timedelta(days=15),
+                completion_date=today - datetime.timedelta(days=14),
+                resolution_summary="SOP-QC-204 Rev 3 was updated and routed through Document Change Order vault. Quality control receiving inspectors trained and certified on the updated test method.",
+                verified_by=admin_user,
+                verification_notes="Reviewed training logs and verified first article inspection on Resin Lot #R-8820. Test method executed per revised SOP.",
+                status="completed",
+            )
+
+            act3 = ManagementReviewAction.objects.create(
+                tenant=tenant,
+                management_review=rev_approved,
+                title="Establish supplier corrective action for sub-assembly solder bridging",
+                action_type="capa_initiation",
+                priority="critical",
+                description="Formal supplier corrective action requested from Board Assembly Partner for repetitive defect pattern identified in incoming lot IQC-2026-012.",
+                assignee=quality_lead,
+                due_date=today + datetime.timedelta(days=15),
+                status="open",
+                spawned_capa=linked_capa,
+            )
+
+            act4 = ManagementReviewAction.objects.create(
+                tenant=tenant,
+                management_review=rev_approved,
+                title="Conduct cleanroom gowning and particulate control retraining for operators",
+                action_type="training_competency",
+                priority="medium",
+                description="Schedule mandatory refresher training for Cleanroom Suite B manufacturing operators following periodic particulate count trend variance.",
+                assignee=admin_user,
+                due_date=today + datetime.timedelta(days=45),
+                status="open",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.14 Management Review & Quality Planning seeded successfully."))
+
 
 
 
