@@ -315,17 +315,29 @@ def training_compliance_dashboard(request):
         tenant=tenant, status="active", valid_until__gte=today, valid_until__lte=today + timedelta(days=30)
     ).select_related("trainee", "course").order_by("valid_until")[:6]
 
-    # Department qualification breakdown
-    departments = OrgUnit.objects.filter(tenant=tenant)
+    # Department qualification breakdown consolidated into single aggregation query
+    dept_rows = (
+        TrainingEnrollment.objects.filter(
+            tenant=tenant,
+            course__competency_matrix__department__isnull=False,
+        )
+        .values(
+            "course__competency_matrix__department__id",
+            "course__competency_matrix__department__name",
+        )
+        .annotate(
+            assigned=Count("id"),
+            qualified=Count("id", filter=Q(status="verified")),
+        )
+        .order_by("-assigned")[:6]
+    )
     dept_metrics = []
-    for dept in departments[:6]:
-        matrices = CompetencyMatrix.objects.filter(tenant=tenant, department=dept)
-        course_ids = QualityTrainingCourse.objects.filter(tenant=tenant, competency_matrix__in=matrices).values_list("id", flat=True)
-        assigned = TrainingEnrollment.objects.filter(tenant=tenant, course_id__in=course_ids).count()
-        qualified = TrainingEnrollment.objects.filter(tenant=tenant, course_id__in=course_ids, status="verified").count()
+    for row in dept_rows:
+        assigned = row["assigned"]
+        qualified = row["qualified"]
         rate = round((qualified / assigned * 100), 1) if assigned > 0 else 100.0
         dept_metrics.append({
-            "name": dept.name,
+            "name": row["course__competency_matrix__department__name"],
             "assigned": assigned,
             "qualified": qualified,
             "rate": rate,
