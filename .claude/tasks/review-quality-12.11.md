@@ -49,4 +49,25 @@ Changeset: `e052bfb46552937ccf9713c99c1f4e2d31fca73e...HEAD`
 - [ ] `templates/quality/auditmanagement/audit_finding/detail.html:211-219`, `regulatory_inspection_host/detail.html:186-194`, `audit_war_room.html:121-130` — Missing `<label for="...">` bindings and missing label on request description. Fix: Add explicit `for` attributes bound to `id_for_label` and missing label tag.
 - [ ] `templates/quality/auditmanagement/{audit_program,quality_audit,audit_finding,regulatory_inspection_host}/list.html` — Icon-only action buttons have `title` but lack explicit `aria-label`. Fix: Add `aria-label` matching title for screen reader accessibility.
 
+---
+
+## 4. Performance Reviewer Findings
+
+### Critical
+- [ ] `templates/quality/auditmanagement/audit_program/list.html:175-177` & `AuditPrograms.py:100-117` — N+1 SQL query explosion in audit program list loop: rendering `prog.progress_percentage` invokes `self.total_audits_count` and `self.completed_audits_count` 4 times per row. Fix: Annotate `annotated_total` and `annotated_completed` with `Count("audits")` in `audit_program_list` view, and have model properties reuse annotations when present.
+
+### Important
+- [ ] `apps/quality/models/AuditManagement/QualityAudits.py:215-228` — `sync_findings_counts` fires 5 separate `COUNT` queries per finding save. Fix: Replace with single `.aggregate(Count("id", filter=Q(...)))`.
+- [ ] `apps/quality/views/AuditManagement/{QualityAudits,AuditPrograms,AuditFindings,RegulatoryInspectionHosts}.py` — Sequential unaggregated `SELECT COUNT(*)` queries for KPI stat cards across all 4 list views (14 queries total). Fix: Consolidate into single `.aggregate()` calls per list view.
+- [ ] `apps/quality/views/AuditManagement/AuditWarRoom.py:11-32` — Wasted database query evaluating `total_active_count` which is never rendered in template, and multiple queryset evaluations. Fix: Remove dead query and evaluate `list(active_qs)` once.
+- [ ] `apps/quality/views/AuditManagement/AuditActionTracker.py:17-25` — Dead queries (`escalated_findings`) and in-memory list comprehension over all tenant findings for overdue calculations. Fix: Remove unused query and filter `overdue_findings` at the ORM level.
+- [ ] `apps/quality/models/AuditManagement/AuditFindings.py:116` — Cross-table default ordering `ordering = ["-audit__planned_start_date", "finding_number_in_audit"]` forces SQL INNER JOIN on all queries. Fix: Change default ordering to local fields `["-created_at", "finding_number_in_audit"]`.
+- [ ] `apps/quality/views/AuditManagement/AuditFindings.py:226-250` — Missing `transaction.atomic` in multi-model write `audit_finding_create_capa`. Fix: Wrap in `with transaction.atomic():`.
+
+### Minor
+- [ ] `templates/quality/auditmanagement/audit_program/detail.html` & `quality_audit/detail.html` — Bypassing prefetched relations in detail templates causing extra SQL counts. Fix: Precompute in view from prefetched querysets.
+- [ ] `apps/quality/models/AuditManagement/QualityAudits.py:113` — Missing composite tenant index on `(tenant, standard_framework)`. Fix: Add `models.Index(fields=["tenant", "standard_framework"], name="idx_qaud_ten_framework")`.
+- [ ] `apps/quality/views/AuditManagement/AuditFindings.py:78-80` — Unrestricted column loading for dropdown filter querysets. Fix: Add `.only("id", "number", "title")` to `audits` queryset.
+
+
 
