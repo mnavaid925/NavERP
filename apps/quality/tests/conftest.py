@@ -59,6 +59,10 @@ from apps.quality.models import (
     QualityTrainingCourse,
     TrainingEnrollment,
     CompetencyCertification,
+    QualityObjective,
+    ManagementReview,
+    ManagementReviewInput,
+    ManagementReviewAction,
 )
 
 
@@ -2560,3 +2564,149 @@ def field_action_b(db, tenant_b, customer_complaint_b, admin_b):
 
 
 
+
+
+# ==============================================================================
+# Sub-module 12.14: Management Review & Quality Planning Fixtures
+# ==============================================================================
+
+@pytest.fixture
+def quality_objective_a(db, tenant_a, admin_user, quality_department):
+    today = timezone.now().date()
+    return QualityObjective.objects.create(
+        tenant=tenant_a,
+        title="Reduce Customer RMA Incident Rate < 0.50%",
+        description="Continuous improvement initiative to lower device return authorizations.",
+        category="product_quality",
+        period_year=today.year,
+        cadence="quarterly",
+        metric_unit="%",
+        baseline_value=Decimal("1.200"),
+        target_value=Decimal("0.500"),
+        current_value=Decimal("0.450"),
+        target_direction="lower_better",
+        status="achieved",
+        rag_status="green",
+        owner=admin_user,
+        org_unit=quality_department,
+        target_date=today + timedelta(days=90),
+        action_plan_summary="Automated in-circuit testing enhancement on sub-assembly lines.",
+    )
+
+
+@pytest.fixture
+def quality_objective_b(db, tenant_b, admin_b, quality_department_b):
+    today = timezone.now().date()
+    return QualityObjective.objects.create(
+        tenant=tenant_b,
+        title="Globex First Pass Yield >= 98.0%",
+        description="Manufacturing line yield optimization program.",
+        category="process_performance",
+        period_year=today.year,
+        cadence="monthly",
+        metric_unit="%",
+        baseline_value=Decimal("94.000"),
+        target_value=Decimal("98.000"),
+        current_value=Decimal("95.500"),
+        target_direction="higher_better",
+        status="at_risk",
+        rag_status="amber",
+        owner=admin_b,
+        org_unit=quality_department_b,
+        target_date=today + timedelta(days=60),
+    )
+
+
+@pytest.fixture
+def management_review_a(db, tenant_a, admin_user, staff_user, quality_department):
+    today = timezone.now().date()
+    return ManagementReview.objects.create(
+        tenant=tenant_a,
+        title="Q3 Executive QMS Suitability & Performance Review",
+        description="Formal quarterly management review per ISO 13485:2016 §5.6.",
+        cadence="quarterly",
+        period_year=today.year,
+        period_quarter="Q3",
+        scheduled_date=today + timedelta(days=14),
+        executive_sponsor=admin_user,
+        lead_facilitator=staff_user,
+        org_unit=quality_department,
+        status="scheduled",
+        qms_suitability_conclusion="pending",
+    )
+
+
+@pytest.fixture
+def management_review_b(db, tenant_b, admin_b, quality_department_b):
+    today = timezone.now().date()
+    return ManagementReview.objects.create(
+        tenant=tenant_b,
+        title="Globex Annual Management Quality Review",
+        cadence="annual",
+        period_year=today.year,
+        scheduled_date=today + timedelta(days=30),
+        executive_sponsor=admin_b,
+        lead_facilitator=admin_b,
+        org_unit=quality_department_b,
+        status="scheduled",
+        qms_suitability_conclusion="pending",
+    )
+
+
+@pytest.fixture
+def management_review_input_a(db, tenant_a, management_review_a, admin_user):
+    return ManagementReviewInput.objects.create(
+        tenant=tenant_a,
+        management_review=management_review_a,
+        category="audit_results",
+        title="Internal & Supplier Quality Audit Performance Summary",
+        agenda_order=1,
+        presenter=admin_user,
+        data_summary="12 internal audits executed; 3 minor findings identified and resolved.",
+        status="compiled",
+    )
+
+
+@pytest.fixture
+def management_review_input_b(db, tenant_b, management_review_b, admin_b):
+    return ManagementReviewInput.objects.create(
+        tenant=tenant_b,
+        management_review=management_review_b,
+        category="customer_feedback",
+        title="Globex Field Complaints Trending Analysis",
+        agenda_order=1,
+        presenter=admin_b,
+        data_summary="Complaint volume declined by 18% over prior quarter.",
+        status="compiled",
+    )
+
+
+@pytest.fixture
+def management_review_action_a(db, tenant_a, management_review_a, staff_user):
+    today = timezone.now().date()
+    return ManagementReviewAction.objects.create(
+        tenant=tenant_a,
+        management_review=management_review_a,
+        title="Procure Automated Optical Inspection (AOI) Station",
+        description="Capital expenditure approval for surface-mount line inspection upgrade.",
+        action_type="resource_allocation",
+        priority="high",
+        assignee=staff_user,
+        due_date=today + timedelta(days=45),
+        status="open",
+    )
+
+
+@pytest.fixture
+def management_review_action_b(db, tenant_b, management_review_b, admin_b):
+    today = timezone.now().date()
+    return ManagementReviewAction.objects.create(
+        tenant=tenant_b,
+        management_review=management_review_b,
+        title="Globex Packaging SOP Revision",
+        action_type="procedure_revision",
+        priority="medium",
+        assignee=admin_b,
+        due_date=today + timedelta(days=30),
+        status="open",
+    )
