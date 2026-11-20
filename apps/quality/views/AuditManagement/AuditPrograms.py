@@ -97,12 +97,23 @@ def audit_program_detail(request, pk):
         select_related=("program_manager", "approved_by"),
         prefetch_related=("audits", "audits__lead_auditor", "audits__target_org_unit", "audits__external_entity"),
     )
-    audits = program.audits.all()
+    audits = list(program.audits.all())
+    total_audits = len(audits)
+    completed_audits = sum(1 for a in audits if a.status == "closed")
+    open_audits = sum(1 for a in audits if a.status not in ("closed", "cancelled"))
+    completion_rate = int((completed_audits / total_audits) * 100) if total_audits else 0
+    program.annotated_total = total_audits
+    program.annotated_completed = completed_audits
+    program.annotated_open = open_audits
+
     context = {
         "audit_program": program,
         "obj": program,
         "audits": audits,
-        "completion_rate": program.progress_percentage,
+        "completion_rate": completion_rate,
+        "total_audits": total_audits,
+        "completed_audits": completed_audits,
+        "open_audits": open_audits,
     }
     return render(request, "quality/auditmanagement/audit_program/detail.html", context)
 
