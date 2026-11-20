@@ -90,7 +90,7 @@
             </div>
             <div class="flex items-end gap-2">
                 <button type="submit" class="btn btn-primary w-full">Filter</button>
-                <a href="{% url 'quality:audit_program_list' %}" class="btn btn-outline" title="Clear Filters">
+                <a href="{% url 'quality:audit_program_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="rotate-ccw"></i>
                 </a>
             </div>
@@ -178,15 +178,15 @@
                         </div>
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'quality:audit_program_detail' prog.pk %}" class="btn btn-icon" title="View Details">
+                        <a href="{% url 'quality:audit_program_detail' prog.pk %}" class="btn btn-icon" title="View Details" aria-label="View Details">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'quality:audit_program_edit' prog.pk %}" class="btn btn-icon" title="Edit Program">
+                        <a href="{% url 'quality:audit_program_edit' prog.pk %}" class="btn btn-icon" title="Edit Program" aria-label="Edit Program">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'quality:audit_program_delete' prog.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Audit Program {{ prog.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-danger" title="Delete Program">
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete Program" aria-label="Delete Program">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
