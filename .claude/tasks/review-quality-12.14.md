@@ -2,7 +2,7 @@
 
 **Changeset**: `BASE` (`ed5bf098c22bd035a09707951ecc3e17152533ad`) to `HEAD`  
 **Target**: `apps/quality/` (Sub-module 12.14)  
-**Status**: Review in progress (Reviewer 4 of 6 completed)
+**Status**: Review in progress (Reviewer 5 of 6 completed)
 
 ---
 
@@ -169,3 +169,22 @@
 - **M10**: Redundant single-column `db_index=True` on fields already covered by `(tenant, <field>)` composite indexes.
 - **M11**: Missing composite sort indexes for default pagination on `QualityObjective` (`tenant, -period_year, -created_at`) and `ManagementReview` (`tenant, -scheduled_date, -created_at`).
 - **M12**: Seeder query lookups in `_seed_submodule_12_14` fetching full model instances rather than `.only("id")`.
+
+
+---
+
+## 5. QA Smoke Tester Pass (`qa-smoke-tester`)
+
+### Critical
+- **C1 (runtime verified 500)**: `POST /quality/actions/<pk>/escalate-capa/` crashes with HTTP 500 (`TypeError: CapaInvestigation() got unexpected keyword arguments: 'description', 'containment_action'`).
+  - **Details**: Confirmed in test client execution. Invalid parameters (`description`, `containment_action`, missing required `quality_owner`, invalid `status="investigation"`).
+
+### Important
+- **C2 (runtime verified silent failure)**: `POST /quality/reviews/<pk>/approve/` silently fails to create `ElectronicSignatureRecord`.
+  - **Details**: Confirmed in test client execution. Swallowed exception results in `review.electronic_signature` permanently `None`.
+
+### Verification Summary
+- **Total Endpoints Tested**: 62 (GET views, filtered lists, junk params, pagination, CSV exports, PDF dossier, workflow action POSTs, and cross-tenant IDOR).
+- **Pass Rate**: 61 / 62 PASSED (1 HTTP 500, 1 silent integrity failure).
+- **Zero Comment Leaks**: No `{#`, `{%`, or unrendered `{{` template tags leaked in rendered HTML.
+- **Tenant Isolation**: 15 / 15 cross-tenant IDOR checks returned strict HTTP 404 on Globex records.
