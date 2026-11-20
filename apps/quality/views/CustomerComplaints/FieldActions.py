@@ -144,6 +144,9 @@ def field_action_create(request):
 @login_required
 def field_action_edit(request, pk):
     field_action = quality_object(request, FieldAction, pk)
+    if field_action.status in ["closed_terminated", "cancelled"]:
+        messages.error(request, f"Field Action {field_action.number} is {field_action.get_status_display()} and cannot be modified.")
+        return redirect("quality:field_action_detail", pk=field_action.pk)
 
     if request.method == "POST":
         form = FieldActionForm(request.POST, instance=field_action, tenant=request.tenant)
