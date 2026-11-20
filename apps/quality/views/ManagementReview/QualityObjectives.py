@@ -62,8 +62,6 @@ def quality_objective_list(request):
     if year_filter and year_filter.isdigit():
         qs = qs.filter(period_year=int(year_filter))
 
-    total_count = qs.count()
-
     base_tenant_qs = QualityObjective.objects.filter(tenant=request.tenant)
     stats = base_tenant_qs.aggregate(
         on_track_count=Count("id", filter=Q(rag_status="green") | Q(status__in=["on_track", "achieved"])),
@@ -75,6 +73,7 @@ def quality_objective_list(request):
     behind_count = stats["behind_count"]
 
     paginator = Paginator(qs, PAGE_SIZE)
+    total_count = paginator.count
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
