@@ -26,13 +26,16 @@ from apps.quality.views.ManagementReview.ManagementReviews import (
     management_review_create,
     management_review_delete,
     management_review_detail,
-    management_review_dossier,
     management_review_draft_minutes,
     management_review_edit,
     management_review_export_csv,
+    management_review_export_pdf,
     management_review_list,
-    management_review_start_meeting,
+    management_review_start,
 )
+
+management_review_dossier = management_review_export_pdf
+management_review_start_meeting = management_review_start
 from apps.quality.views.ManagementReview.QualityObjectives import (
     quality_objective_create,
     quality_objective_delete,
@@ -60,10 +63,12 @@ __all__ = [
     "management_review_detail",
     "management_review_edit",
     "management_review_delete",
+    "management_review_start",
     "management_review_start_meeting",
     "management_review_draft_minutes",
     "management_review_approve",
     "management_review_cancel",
+    "management_review_export_pdf",
     "management_review_dossier",
     "management_review_export_csv",
     "management_review_input_list",
