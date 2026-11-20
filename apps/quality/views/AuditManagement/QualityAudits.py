@@ -203,6 +203,10 @@ def quality_audit_delete(request, pk):
 @require_POST
 def quality_audit_publish_report(request, pk):
     audit = quality_object(request, QualityAudit, pk)
+    if audit.status == "cancelled":
+        messages.warning(request, f"Quality Audit {audit.number} is cancelled and cannot publish a report.")
+        return redirect("quality:quality_audit_detail", pk=audit.pk)
+
     audit.report_published_date = timezone.now().date()
     if audit.status in ("scheduled", "in_preparation", "in_progress"):
         audit.status = "reporting"
@@ -216,6 +220,10 @@ def quality_audit_publish_report(request, pk):
 @require_POST
 def quality_audit_close(request, pk):
     audit = quality_object(request, QualityAudit, pk)
+    if audit.status == "cancelled":
+        messages.warning(request, f"Quality Audit {audit.number} is cancelled and cannot be closed.")
+        return redirect("quality:quality_audit_detail", pk=audit.pk)
+
     is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "role", "") == "admin"
     is_lead = (audit.lead_auditor_id == request.user.id)
     if not (is_lead or is_admin):
