@@ -19,7 +19,7 @@
             {% elif investigation.status == "rejected_rework" %}
             <span class="badge badge-red">Rework Required</span>
             {% elif investigation.status == "hhe_review" %}
-            <span class="badge badge-purple">HHE Review</span>
+            <span class="badge badge-amber">HHE Review</span>
             {% elif investigation.status == "pending_qa_review" %}
             <span class="badge badge-amber">Pending QA Sign-Off</span>
             {% elif investigation.status == "in_progress" %}
@@ -30,7 +30,7 @@
 
             <span class="badge badge-slate">{{ investigation.get_analytical_method_display }}</span>
             {% if investigation.capa_required %}
-            <span class="badge badge-purple"><i data-lucide="alert-circle" class="w-3 h-3 inline"></i> CAPA Triggered</span>
+            <span class="badge badge-amber"><i data-lucide="alert-circle" class="w-3 h-3 inline"></i> CAPA Triggered</span>
             {% endif %}
         </div>
         <div class="text-sm text-slate-500 mt-1">
@@ -260,7 +260,7 @@
                 <div class="flex items-center justify-between">
                     <span class="text-sm text-slate-600">CAPA Mandatory:</span>
                     {% if investigation.capa_required %}
-                    <span class="badge badge-purple">Yes</span>
+                    <span class="badge badge-amber">Yes</span>
                     {% else %}
                     <span class="badge badge-muted">No</span>
                     {% endif %}
