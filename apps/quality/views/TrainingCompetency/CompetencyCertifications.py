@@ -138,6 +138,8 @@ def competency_certification_create(request):
         if form.is_valid():
             cert = form.save(commit=False)
             cert.tenant = request.tenant
+            if not cert.certified_by:
+                cert.certified_by = request.user
             cert.save()
             write_audit_log(request.user, cert, "create", tenant=request.tenant)
             messages.success(request, f"Competency Certification {cert.number} issued successfully.")
@@ -146,7 +148,6 @@ def competency_certification_create(request):
         initial = {
             "issue_date": timezone.now().date(),
             "valid_until": timezone.now().date() + timedelta(days=365),
-            "certified_by": request.user.pk,
         }
         trainee_id = request.GET.get("trainee", "").strip()
         if trainee_id.isdigit():
