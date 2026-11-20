@@ -186,6 +186,10 @@ def field_action_delete(request, pk):
 @require_POST
 def field_action_close(request, pk):
     field_action = quality_object(request, FieldAction, pk)
+    if field_action.status in ["closed_terminated", "cancelled"]:
+        messages.error(request, f"Field action {field_action.number} is already closed or cancelled.")
+        return redirect("quality:field_action_detail", pk=field_action.pk)
+
     closure_summary = request.POST.get("closure_summary", "").strip()
 
     with transaction.atomic():
