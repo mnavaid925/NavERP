@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Complaints — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:customer_complaint_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Customer Complaints</span>
+        </div>
+        <h1 class="page-title">Customer Complaints</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:customer_complaint_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:customer_complaint_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> Log Complaint
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="message-square-warning"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Intake</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Open Complaints</div>
+            <div class="stat-value">{{ open_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-label">Reportable Events</div>
+            <div class="stat-value">{{ reportable_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-label">Critical Safety</div>
+            <div class="stat-value">{{ critical_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Title, #, item, lot, complainant..." class="form-input">
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="severity" class="form-label text-xs">Severity</label>
+                <select name="severity" id="severity" class="form-select">
+                    <option value="">All Severities</option>
+                    {% for val, label in severity_choices %}
+                    <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="reportability" class="form-label text-xs">Reportability</label>
+                <select name="reportability" id="reportability" class="form-select">
+                    <option value="">All Vigilance</option>
+                    {% for val, label in reportability_choices %}
+                    <option value="{{ val }}" {% if request.GET.reportability == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="intake_channel" class="form-label text-xs">Channel</label>
+                <select name="intake_channel" id="intake_channel" class="form-select">
+                    <option value="">All Channels</option>
+                    {% for val, label in intake_channel_choices %}
+                    <option value="{{ val }}" {% if request.GET.intake_channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if request.GET.urlencode %}
+                <a href="{% url 'quality:customer_complaint_list' %}" class="btn btn-ghost" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Complaint #</th>
+                    <th>Title & Allegation</th>
+                    <th>Product / Item</th>
+                    <th>Lot / Serial</th>
+                    <th>Customer / Complainant</th>
+                    <th>Severity</th>
+                    <th>Reportability</th>
+                    <th>Status</th>
+                    <th>Date Received</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in complaints %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'quality:customer_complaint_detail' c.pk %}" class="text-blue-600 hover:underline">
+                            {{ c.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ c.title }}</div>
+                        <div class="text-xs text-slate-500">{{ c.get_intake_channel_display }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ c.item_name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ c.item_code }}</div>
+                    </td>
+                    <td class="font-mono text-xs">
+                        {% if c.lot_number %}<div>Lot: {{ c.lot_number }}</div>{% endif %}
+                        {% if c.serial_number %}<div>SN: {{ c.serial_number }}</div>{% endif %}
+                        {% if not c.lot_number and not c.serial_number %}<span class="text-slate-400">—</span>{% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ c.complainant_name }}</div>
+                        <div class="text-xs text-slate-500">
+                            {% if c.customer %}{{ c.customer.name }}{% elif c.complainant_organization %}{{ c.complainant_organization }}{% else %}—{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if c.severity == "critical_safety" %}
+                        <span class="badge badge-red">{{ c.get_severity_display }}</span>
+                        {% elif c.severity == "major_malfunction" %}
+                        <span class="badge badge-amber">{{ c.get_severity_display }}</span>
+                        {% elif c.severity == "minor_cosmetic" %}
+                        <span class="badge badge-info">{{ c.get_severity_display }}</span>
+                        {% elif c.severity == "service_inconvenience" %}
+                        <span class="badge badge-slate">{{ c.get_severity_display }}</span>
+                        {% else %}
+                        <span class="badge badge-muted">{{ c.get_severity_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.reportability == "reportable_event" %}
+                        <span class="badge badge-red">MDR Reportable</span>
+                        {% elif c.reportability == "non_reportable" %}
+                        <span class="badge badge-green">Non-Reportable</span>
+                        {% elif c.reportability == "exempt" %}
+                        <span class="badge badge-muted">Exempt</span>
+                        {% else %}
+                        <span class="badge badge-amber">Undetermined</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.status == "closed" %}
+                        <span class="badge badge-muted">Closed</span>
+                        {% elif c.status == "resolved" %}
+                        <span class="badge badge-green">Resolved</span>
+                        {% elif c.status == "under_investigation" %}
+                        <span class="badge badge-amber">Investigation</span>
+                        {% elif c.status == "pending_regulatory" %}
+                        <span class="badge badge-red">Regulatory Pending</span>
+                        {% elif c.status == "capa_pending" %}
+                        <span class="badge badge-purple">CAPA Pending</span>
+                        {% elif c.status == "under_triage" %}
+                        <span class="badge badge-amber">Under Triage</span>
+                        {% elif c.status == "cancelled" %}
+                        <span class="badge badge-slate">Cancelled</span>
+                        {% else %}
+                        <span class="badge badge-info">Intake Received</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        {{ c.date_received|date:"M d, Y" }}
+                        <div class="text-xs text-slate-400">{{ c.days_open }}d open</div>
+                    </td>
+                    <td class="table-actions">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'quality:customer_complaint_detail' c.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:customer_complaint_edit' c.pk %}" class="btn btn-icon" title="Edit complaint">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'quality:customer_complaint_delete' c.pk %}" onsubmit="return confirm('Permanently delete complaint {{ c.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete complaint">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="message-square-check"></i>
+                            </div>
+                            <div class="empty-state-title">No customer complaints found</div>
+                            <div class="empty-state-text">
+                                {% if request.GET.urlencode %}
+                                No complaints match the active filter criteria. Try adjusting your query.
+                                {% else %}
+                                There are no logged complaints. Click below to initiate an intake record.
+                                {% endif %}
+                            </div>
+                            <div class="mt-4">
+                                <a href="{% url 'quality:customer_complaint_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i> Log First Complaint
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} complaints
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i> Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i> Previous
+            </span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm font-medium text-slate-700">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Next <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                Next <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
