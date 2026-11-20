@@ -23,7 +23,7 @@ def audit_program_list(request):
             annotated_total=Count("audits"),
             annotated_completed=Count("audits", filter=Q(audits__status="closed")),
             annotated_open=Count("audits", filter=~Q(audits__status__in=["closed", "cancelled"])),
-        ),
+        ).order_by("-program_year", "-created_at"),
         request,
     )
 
