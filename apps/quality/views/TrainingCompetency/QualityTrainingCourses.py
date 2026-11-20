@@ -181,6 +181,15 @@ def training_course_delete(request, pk):
 @require_POST
 def training_course_activate(request, pk):
     course = quality_object(request, QualityTrainingCourse, pk)
+
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)):
+        messages.error(request, "Permission denied. Only authorized quality managers or tenant administrators can activate training courses.")
+        return redirect("quality:training_course_detail", pk=course.pk)
+
+    if course.status not in ("draft", "under_revision"):
+        messages.error(request, f"Only draft or under-revision training courses can be activated (current status: {course.get_status_display()}).")
+        return redirect("quality:training_course_detail", pk=course.pk)
+
     course.status = "active"
     course.save()
     write_audit_log(request.user, course, "activate", tenant=request.tenant)
@@ -192,6 +201,15 @@ def training_course_activate(request, pk):
 @require_POST
 def training_course_retire(request, pk):
     course = quality_object(request, QualityTrainingCourse, pk)
+
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)):
+        messages.error(request, "Permission denied. Only authorized quality managers or tenant administrators can retire training courses.")
+        return redirect("quality:training_course_detail", pk=course.pk)
+
+    if course.status != "active":
+        messages.error(request, "Only active training courses can be retired.")
+        return redirect("quality:training_course_detail", pk=course.pk)
+
     course.status = "retired"
     course.save()
     write_audit_log(request.user, course, "retire", tenant=request.tenant)
