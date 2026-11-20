@@ -130,3 +130,41 @@
   - **Fix:**
     Add `"customer__name"` to `CustomerComplaintAdmin.search_fields`.
 
+---
+
+## 3. Frontend Reviewer Findings
+
+### Important
+- **I6: Missing `for` attributes on form labels in QA Triage card**
+  - **File:** `templates/quality/customercomplaints/customer_complaint/detail.html:411, 415, 419, 423, 427, 437, 441, 445`
+  - **Problem:**
+    Eight form field labels in the QA Intake Triage card lack `for` attributes referencing the field input IDs, failing WCAG accessibility criteria and preventing focus on click.
+  - **Fix:**
+    Add `for="{{ triage_form.<field>.id_for_label }}"` to all eight labels.
+
+### Minor
+- **M6: Dark mode missing on narrative container boxes**
+  - **Files:**
+    - `templates/quality/customercomplaints/complaint_investigation/detail.html:71`
+    - `templates/quality/customercomplaints/regulatory_report/detail.html:63`
+    - `templates/quality/customercomplaints/complaint_trending_dashboard.html:91`
+  - **Problem:**
+    Narrative boxes use `bg-white` without dark mode overrides (`dark:bg-slate-800`).
+  - **Fix:**
+    Add `dark:bg-slate-800 dark:border-slate-700` to the containers.
+
+- **M7: Icon and dot collision inside `.badge`**
+  - **File:** `templates/quality/customercomplaints/customer_complaint/detail.html:42` & `templates/quality/customercomplaints/complaint_investigation/detail.html:33`
+  - **Problem:**
+    `.badge` automatically prepends a 6px dot via `::before`. Nesting an `<i>` icon causes visual clutter with both dot and icon.
+  - **Fix:**
+    Remove the inner `<i>` icon from `.badge` tags or render standard text.
+
+- **M8: Breadcrumb separator class discrepancy**
+  - **Files:** All 13 templates
+  - **Problem:**
+    Templates use `<span class="breadcrumb-separator">/</span>` instead of `.sep`.
+  - **Fix:**
+    Use `<span class="sep">/</span>` per `theme.css:247`.
+
+
