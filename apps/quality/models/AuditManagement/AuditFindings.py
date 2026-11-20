@@ -113,7 +113,7 @@ class AuditFinding(TenantNumbered):
     closure_notes = models.TextField(blank=True, help_text="Lead auditor verification rationale and objective evidence of closure")
 
     class Meta:
-        ordering = ["-audit__planned_start_date", "finding_number_in_audit"]
+        ordering = ["-created_at", "finding_number_in_audit"]
         verbose_name = "Audit Finding"
         verbose_name_plural = "Audit Findings"
         constraints = [
