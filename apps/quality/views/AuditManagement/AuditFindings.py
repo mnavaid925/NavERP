@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -65,14 +65,16 @@ def audit_finding_list(request):
     if assignee_param.isdigit():
         qs = qs.filter(assignee_id=int(assignee_param))
 
-    total_count = AuditFinding.objects.filter(tenant=request.tenant).count()
-    open_count = AuditFinding.objects.filter(tenant=request.tenant).exclude(status="closed").count()
-    critical_count = AuditFinding.objects.filter(tenant=request.tenant, severity__in=["critical", "major"]).count()
-    overdue_count = AuditFinding.objects.filter(
-        tenant=request.tenant,
-        response_due_date__lt=date.today(),
-        status__in=["draft", "issued", "escalated"],
-    ).count()
+    finding_stats = AuditFinding.objects.filter(tenant=request.tenant).aggregate(
+        total_count=Count("id"),
+        open_count=Count("id", filter=~Q(status="closed")),
+        critical_count=Count("id", filter=Q(severity__in=["critical", "major"])),
+        overdue_count=Count("id", filter=Q(response_due_date__lt=date.today(), status__in=["draft", "issued", "escalated"])),
+    )
+    total_count = finding_stats["total_count"]
+    open_count = finding_stats["open_count"]
+    critical_count = finding_stats["critical_count"]
+    overdue_count = finding_stats["overdue_count"]
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
