@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Training & Competency Compliance Dashboard — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_enrollment_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Training Compliance Dashboard</span>
+        </div>
+        <h1 class="page-title">Training & Competency Compliance Dashboard</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:employee_training_dossier' %}" class="btn btn-outline">
+            <i data-lucide="user-check"></i> Employee Dossier
+        </a>
+        <a href="{% url 'quality:training_enrollment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Assignment
+        </a>
+    </div>
+</div>
+
+<!-- Executive KPI Summary Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="pie-chart"></i>
+        </div>
+        <div>
+            <div class="stat-label">Training Compliance Rate</div>
+            <div class="stat-value text-green-600">{{ kpis.compliance_rate }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Certifications</div>
+            <div class="stat-value">{{ kpis.active_certifications }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-label">Overdue Assignments</div>
+            <div class="stat-value text-red-600">{{ kpis.overdue_enrollments }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Expiring Soon (<30 Days)</div>
+            <div class="stat-value text-amber-600">{{ kpis.expiring_certifications }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Department Qualification Matrix Breakdown -->
+    <div class="lg:col-span-2">
+        <div class="card mb-6">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Department Competency & Qualification Breakdown</h2>
+                <a href="{% url 'quality:competency_matrix_list' %}" class="text-xs text-blue-600 hover:underline">
+                    View Role Matrices →
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Department / Org Unit</th>
+                            <th>Assigned</th>
+                            <th>Qualified</th>
+                            <th>Compliance Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in dept_metrics %}
+                        <tr>
+                            <td class="font-medium text-slate-900">{{ d.name }}</td>
+                            <td>{{ d.assigned }}</td>
+                            <td><span class="text-green-600 font-semibold">{{ d.qualified }}</span></td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-24 bg-slate-200 rounded-full h-2 overflow-hidden">
+                                        <div class="bg-blue-600 h-2 rounded-full" style="width: {{ d.rate }}%"></div>
+                                    </div>
+                                    <span class="text-xs font-semibold text-slate-700">{{ d.rate }}%</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-slate-500">
+                                No department qualification records recorded yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Enrollment Activity -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Recent Training Assignments & Progress</h2>
+                <a href="{% url 'quality:training_enrollment_list' %}" class="text-xs text-blue-600 hover:underline">
+                    All Assignments ({{ kpis.total_enrollments }}) →
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Course</th>
+                            <th>Trainee</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for enr in recent_enrollments %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'quality:training_enrollment_detail' enr.pk %}" class="font-medium text-blue-600 hover:underline">
+                                    {{ enr.number }}
+                                </a>
+                            </td>
+                            <td>{{ enr.course.title|truncatechars:30 }}</td>
+                            <td>{{ enr.trainee.get_full_name|default:enr.trainee.username }}</td>
+                            <td>
+                                <span class="{% if enr.is_overdue %}text-red-600 font-bold{% endif %}">
+                                    {{ enr.due_date }}
+                                </span>
+                            </td>
+                            <td><span class="badge {{ enr.status_badge }}">{{ enr.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-slate-500">No training activity recorded.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar Attention Cards -->
+    <div>
+        <div class="card mb-6">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title text-amber-900">Expiring Certifications Attention List</h2>
+                <a href="{% url 'quality:competency_certification_list' %}?expiring_soon=1" class="text-xs text-amber-700 hover:underline">
+                    View All →
+                </a>
+            </div>
+            <div class="card-body">
+                {% if expiring_list %}
+                <ul class="divide-y divide-slate-100">
+                    {% for cert in expiring_list %}
+                    <li class="py-3 flex items-center justify-between text-sm">
+                        <div>
+                            <div class="font-medium text-slate-900">{{ cert.trainee.get_full_name|default:cert.trainee.username }}</div>
+                            <div class="text-xs text-slate-500">{{ cert.course.title|truncatechars:25 }}</div>
+                            <div class="text-xs text-amber-600 font-semibold mt-0.5">Expires {{ cert.valid_until }}</div>
+                        </div>
+                        <a href="{% url 'quality:competency_certification_detail' cert.pk %}" class="btn btn-outline btn-sm">
+                            Renew
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-sm text-slate-500">No certifications are expiring within the next 30 days.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Curriculum Catalog Status</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-slate-600">Total Quality Courses:</span>
+                    <span class="font-semibold">{{ kpis.total_courses }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-600">Active Published Courses:</span>
+                    <span class="font-semibold text-green-600">{{ kpis.active_courses }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-600">Competency Matrices:</span>
+                    <span class="font-semibold">{{ kpis.total_matrices }}</span>
+                </div>
+                <div class="pt-2">
+                    <a href="{% url 'quality:training_course_list' %}" class="btn btn-outline w-full text-center">
+                        <i data-lucide="book-open"></i> Browse Course Catalog
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
