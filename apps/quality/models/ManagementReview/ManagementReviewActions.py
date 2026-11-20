@@ -118,6 +118,7 @@ class ManagementReviewAction(TenantNumbered):
             models.Index(fields=["tenant", "priority"], name="idx_qmra_ten_pri"),
             models.Index(fields=["tenant", "due_date"], name="idx_qmra_ten_duedate"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qmra_ten_created"),
+            models.Index(fields=["tenant", "status", "due_date"], name="idx_qmra_ten_stat_due"),
         ]
 
     def __str__(self):
