@@ -111,7 +111,7 @@
                     <i data-lucide="filter"></i> Filter
                 </button>
                 {% if q or selected_category or selected_status or selected_review or selected_presenter %}
-                <a href="{% url 'quality:management_review_input_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters">
+                <a href="{% url 'quality:management_review_input_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -181,15 +181,15 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'quality:management_review_input_detail' inp.pk %}" class="btn btn-icon btn-outline" title="View Input">
+                            <a href="{% url 'quality:management_review_input_detail' inp.pk %}" class="btn btn-icon btn-outline" title="View Input" aria-label="View Input">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'quality:management_review_input_edit' inp.pk %}" class="btn btn-icon btn-outline" title="Edit Input">
+                            <a href="{% url 'quality:management_review_input_edit' inp.pk %}" class="btn btn-icon btn-outline" title="Edit Input" aria-label="Edit Input">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'quality:management_review_input_delete' inp.pk %}" class="inline" onsubmit="return confirm('Delete input topic {{ inp.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Input">
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Input" aria-label="Delete Input">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
