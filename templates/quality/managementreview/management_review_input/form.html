@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ review_input.number }}{% else %}Compile Review Input{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:quality_planning_dashboard' %}">Quality Planning</a>
+            <span class="sep">/</span>
+            {% if parent_review %}
+            <a href="{% url 'quality:management_review_detail' parent_review.pk %}">{{ parent_review.number }}</a>
+            <span class="sep">/</span>
+            {% endif %}
+            <a href="{% url 'quality:management_review_input_list' %}">Inputs</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ review_input.number }}{% else %}New Input{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Input: {{ review_input.number }}{% else %}Compile Agenda Input Topic{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    1. Topic Classification & Review Association
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.management_review.id_for_label }}" class="form-label">Review Session *</label>
+                        {{ form.management_review }}
+                        {% if form.management_review.errors %}<div class="form-error">{{ form.management_review.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.agenda_order.id_for_label }}" class="form-label">Agenda Sequence Order *</label>
+                        {{ form.agenda_order }}
+                        {% if form.agenda_order.errors %}<div class="form-error">{{ form.agenda_order.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Agenda Topic Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.category.id_for_label }}" class="form-label">Regulatory Category (ISO 13485 § 5.6.2) *</label>
+                        {{ form.category }}
+                        {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.presenter.id_for_label }}" class="form-label">Presenter / Specialist *</label>
+                        {{ form.presenter }}
+                        {% if form.presenter.errors %}<div class="form-error">{{ form.presenter.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    2. Data Compilation & Findings Synthesis
+                </h3>
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label for="{{ form.summary_findings.id_for_label }}" class="form-label">Summary Findings & Analysis Narrative *</label>
+                        {{ form.summary_findings }}
+                        {% if form.summary_findings.errors %}<div class="form-error">{{ form.summary_findings.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.metrics_data.id_for_label }}" class="form-label">Performance Metric Figures (Tabular / Raw Values)</label>
+                        {{ form.metrics_data }}
+                        {% if form.metrics_data.errors %}<div class="form-error">{{ form.metrics_data.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.attachments_summary.id_for_label }}" class="form-label">Presentation Deck / Document Reference</label>
+                        {{ form.attachments_summary }}
+                        {% if form.attachments_summary.errors %}<div class="form-error">{{ form.attachments_summary.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    3. Traceability Links to Sibling QMS Records
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.linked_audit.id_for_label }}" class="form-label">Linked Audit (Sub-module 12.11)</label>
+                        {{ form.linked_audit }}
+                        {% if form.linked_audit.errors %}<div class="form-error">{{ form.linked_audit.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.linked_capa.id_for_label }}" class="form-label">Linked CAPA (Sub-module 12.4)</label>
+                        {{ form.linked_capa }}
+                        {% if form.linked_capa.errors %}<div class="form-error">{{ form.linked_capa.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.linked_complaint.id_for_label }}" class="form-label">Linked Customer Complaint (Sub-module 12.13)</label>
+                        {{ form.linked_complaint }}
+                        {% if form.linked_complaint.errors %}<div class="form-error">{{ form.linked_complaint.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.linked_ncr.id_for_label }}" class="form-label">Linked NCR (Sub-module 12.5)</label>
+                        {{ form.linked_ncr }}
+                        {% if form.linked_ncr.errors %}<div class="form-error">{{ form.linked_ncr.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">Additional Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'quality:management_review_input_detail' review_input.pk %}" class="btn btn-outline">Cancel</a>
+                {% elif parent_review %}
+                <a href="{% url 'quality:management_review_detail' parent_review.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'quality:management_review_input_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Compile Input Topic{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
