@@ -136,10 +136,13 @@ class CompetencyCertification(TenantNumbered):
     def __str__(self):
         return f"{self.number} - {self.qualification_title} ({self.trainee.username})"
 
+    def generate_certificate_hash(self):
+        seed = f"{getattr(self.tenant, 'pk', '')}:{self.trainee_id}:{self.course_id}:{self.issue_date}:{settings.SECRET_KEY}"
+        return hashlib.sha256(seed.encode()).hexdigest()
+
     def save(self, *args, **kwargs):
         if not self.certificate_hash:
-            seed = f"{getattr(self.tenant, 'pk', '')}:{self.trainee_id}:{self.course_id}:{self.issue_date}:{settings.SECRET_KEY}"
-            self.certificate_hash = hashlib.sha256(seed.encode()).hexdigest()
+            self.certificate_hash = self.generate_certificate_hash()
         super().save(*args, **kwargs)
 
     @property
