@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
@@ -264,10 +265,11 @@ def training_enrollment_complete(request, pk):
             write_audit_log(request.user, enrollment, "complete", tenant=request.tenant)
             messages.success(request, f"Training completed. Awaiting supervisor practical OJT verification.")
         else:
-            enrollment.status = "verified"
-            enrollment.save()
-            write_audit_log(request.user, enrollment, "complete", tenant=request.tenant)
-            _auto_issue_certification(enrollment, request.user, request)
+            with transaction.atomic():
+                enrollment.status = "verified"
+                enrollment.save()
+                write_audit_log(request.user, enrollment, "complete", tenant=request.tenant)
+                _auto_issue_certification(enrollment, request.user, request)
             messages.success(request, f"Training completed and verified. Competency certification issued.")
 
     return redirect("quality:training_enrollment_detail", pk=enrollment.pk)
@@ -287,11 +289,12 @@ def training_enrollment_verify(request, pk):
         enrollment.practical_verified_at = timezone.now()
 
         if rating in ("exceeds_standard", "meets_standard"):
-            enrollment.status = "verified"
-            enrollment.is_passed = True
-            enrollment.save()
-            write_audit_log(request.user, enrollment, "verify", tenant=request.tenant)
-            _auto_issue_certification(enrollment, request.user, request)
+            with transaction.atomic():
+                enrollment.status = "verified"
+                enrollment.is_passed = True
+                enrollment.save()
+                write_audit_log(request.user, enrollment, "verify", tenant=request.tenant)
+                _auto_issue_certification(enrollment, request.user, request)
             messages.success(request, f"Practical demonstration verified. Competency certification issued.")
         else:
             enrollment.status = "failed"
