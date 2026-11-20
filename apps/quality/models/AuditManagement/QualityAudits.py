@@ -183,6 +183,7 @@ class QualityAudit(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_qaud_ten_status"),
             models.Index(fields=["tenant", "audit_type"], name="idx_qaud_ten_type"),
+            models.Index(fields=["tenant", "standard_framework"], name="idx_qaud_ten_framework"),
             models.Index(fields=["tenant", "outcome"], name="idx_qaud_ten_outcome"),
             models.Index(fields=["tenant", "planned_start_date"], name="idx_qaud_ten_pstart"),
             models.Index(fields=["tenant", "program"], name="idx_qaud_ten_prog"),
