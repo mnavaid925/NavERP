@@ -76,6 +76,10 @@ def customer_complaint_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+    filter_querystring = query_params.urlencode()
+
     from apps.core.models import Party
     customer_options = Party.objects.filter(tenant=request.tenant).order_by("name")[:100]
 
@@ -84,6 +88,7 @@ def customer_complaint_list(request):
         "page_obj": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "filter_querystring": filter_querystring,
         "total_count": total_count,
         "open_count": open_count,
         "reportable_count": reportable_count,
