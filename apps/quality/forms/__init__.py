@@ -95,6 +95,22 @@ from apps.quality.forms.AuditManagement.RegulatoryInspectionHosts import (
     InspectionLogRequestForm,
     RegulatoryInspectionHostForm,
 )
+from apps.quality.forms.TrainingCompetency.CompetencyMatrices import (
+    CompetencyMatrixForm,
+)
+from apps.quality.forms.TrainingCompetency.QualityTrainingCourses import (
+    QualityTrainingCourseForm,
+)
+from apps.quality.forms.TrainingCompetency.TrainingEnrollments import (
+    PracticalVerificationForm,
+    TrainingCompletionForm,
+    TrainingEnrollmentForm,
+    TrainingWaiverForm,
+)
+from apps.quality.forms.TrainingCompetency.CompetencyCertifications import (
+    CertificationSuspensionForm,
+    CompetencyCertificationForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -144,5 +160,13 @@ __all__ = [
     "AuditFindingResponseForm",
     "RegulatoryInspectionHostForm",
     "InspectionLogRequestForm",
+    "CompetencyMatrixForm",
+    "QualityTrainingCourseForm",
+    "TrainingEnrollmentForm",
+    "TrainingCompletionForm",
+    "PracticalVerificationForm",
+    "TrainingWaiverForm",
+    "CompetencyCertificationForm",
+    "CertificationSuspensionForm",
 ]
 
