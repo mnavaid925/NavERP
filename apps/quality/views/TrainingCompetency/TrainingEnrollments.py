@@ -246,6 +246,17 @@ def training_enrollment_complete(request, pk):
         if notes:
             enrollment.notes = f"{enrollment.notes}\n[Completion Note]: {notes}".strip()
 
+        # If exam score failed passing score, mark enrollment as failed
+        if not enrollment.is_passed:
+            enrollment.status = "failed"
+            enrollment.save()
+            write_audit_log(request.user, enrollment, "fail", tenant=request.tenant)
+            messages.warning(
+                request,
+                f"Training score ({score}%) is below required passing score ({enrollment.course.passing_score}%). Enrollment marked failed.",
+            )
+            return redirect("quality:training_enrollment_detail", pk=enrollment.pk)
+
         # Check if practical evaluation is required
         if enrollment.course.assessment_method in ("practical_ojt", "both_exam_and_ojt"):
             enrollment.status = "completed"  # Pending practical evaluation
