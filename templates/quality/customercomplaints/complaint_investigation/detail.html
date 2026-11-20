@@ -7,9 +7,9 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'dashboard:home' %}">Home</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <a href="{% url 'quality:complaint_investigation_list' %}">Investigations</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <span>{{ investigation.number }}</span>
         </div>
         <div class="flex items-center gap-3">
@@ -55,7 +55,7 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     <div class="lg:col-span-2 space-y-6">
-        <!-- Root Cause Analysis Narrative -->
+        {# Root Cause Analysis Narrative #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Root Cause Determination & 5 Whys Analysis</h3>
@@ -82,7 +82,7 @@
             </div>
         </div>
 
-        <!-- DHR / Batch Review -->
+        {# DHR / Batch Review #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Device History Record (DHR) & Batch Audit</h3>
@@ -125,7 +125,7 @@
             </div>
         </div>
 
-        <!-- Physical Sample Lab Diagnostics -->
+        {# Physical Sample Lab Diagnostics #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Laboratory Diagnostics & Failure Reproduction</h3>
@@ -160,7 +160,7 @@
             </div>
         </div>
 
-        <!-- Health Hazard Evaluation (HHE) & Risk Alignment -->
+        {# Health Hazard Evaluation (HHE) & Risk Alignment #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Clinical Health Hazard Evaluation & ISO 14971 FMEA</h3>
@@ -208,9 +208,9 @@
         </div>
     </div>
 
-    <!-- Sidebar: Escalations & Approval -->
+    {# Sidebar: Escalations & Approval #}
     <div class="space-y-6">
-        <!-- Details Card -->
+        {# Details Card #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Investigation Metadata</h3>
@@ -251,7 +251,7 @@
             </div>
         </div>
 
-        <!-- Corrective Action Escalation Card -->
+        {# Corrective Action Escalation Card #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Corrective & Preventive Action (CAPA)</h3>
@@ -284,7 +284,7 @@
             </div>
         </div>
 
-        <!-- QA Approval Sign-Off Action -->
+        {# QA Approval Sign-Off Action #}
         {% if investigation.status != "approved" %}
         <div class="card border-blue-300">
             <div class="card-header bg-blue-50">
