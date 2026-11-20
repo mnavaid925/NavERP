@@ -80,8 +80,14 @@ def complaint_trending_dashboard(request):
         .order_by("-total")
     )
     rc_dict = dict(ComplaintInvestigation.ROOT_CAUSE_CATEGORY_CHOICES)
+    total_invs = sum(row["total"] for row in rc_counts) or 1
     root_cause_pareto = [
-        {"cause": row["root_cause_category"], "label": rc_dict.get(row["root_cause_category"], row["root_cause_category"]), "count": row["total"]}
+        {
+            "cause": row["root_cause_category"],
+            "label": rc_dict.get(row["root_cause_category"], row["root_cause_category"]),
+            "count": row["total"],
+            "percent": min(100, max(5, int((row["total"] / total_invs) * 100))),
+        }
         for row in rc_counts
     ]
 
