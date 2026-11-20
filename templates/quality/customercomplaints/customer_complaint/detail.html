@@ -125,7 +125,7 @@
         <!-- Linked Investigations -->
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h3 class="card-title">Technical Investigations & DHR Reviews ({{ investigations.count }})</h3>
+                <h3 class="card-title">Technical Investigations & DHR Reviews ({{ investigations|length }})</h3>
                 <a href="{% url 'quality:complaint_investigation_create' %}?complaint={{ complaint.pk }}" class="btn btn-sm btn-outline">
                     <i data-lucide="plus"></i> New Investigation
                 </a>
@@ -196,7 +196,7 @@
         <!-- Linked Regulatory Reports -->
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h3 class="card-title">Regulatory Vigilance & Adverse Event Reports ({{ reports.count }})</h3>
+                <h3 class="card-title">Regulatory Vigilance & Adverse Event Reports ({{ reports|length }})</h3>
                 <a href="{% url 'quality:regulatory_report_create' %}?complaint={{ complaint.pk }}" class="btn btn-sm btn-outline text-red-600">
                     <i data-lucide="plus"></i> New Report
                 </a>
@@ -260,10 +260,10 @@
         </div>
 
         <!-- Linked Field Actions -->
-        {% if field_actions.exists %}
+        {% if field_actions %}
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title text-red-700">Triggered Field Actions & Recalls ({{ field_actions.count }})</h3>
+                <h3 class="card-title text-red-700">Triggered Field Actions & Recalls ({{ field_actions|length }})</h3>
             </div>
             <div class="table-wrap">
                 <table class="table">
