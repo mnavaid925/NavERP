@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ complaint.number }}{% else %}Log New Complaint{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:customer_complaint_list' %}">Customer Complaints</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ complaint.number }}{% else %}New Intake{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Customer Complaint {{ complaint.number }}{% else %}Intake & Log Customer Complaint{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Intake Section -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">1. Allegation & Inbound Channel</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Headline / Title <span class="text-red-500">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.intake_channel.id_for_label }}" class="form-label">Intake Channel</label>
+                        {{ form.intake_channel }}
+                        {% if form.intake_channel.errors %}<div class="form-error">{{ form.intake_channel.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.date_received.id_for_label }}" class="form-label">Date Received <span class="text-red-500">*</span></label>
+                        {{ form.date_received }}
+                        {% if form.date_received.errors %}<div class="form-error">{{ form.date_received.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.date_of_occurrence.id_for_label }}" class="form-label">Date of Event / Occurrence</label>
+                        {{ form.date_of_occurrence }}
+                        {% if form.date_of_occurrence.errors %}<div class="form-error">{{ form.date_of_occurrence.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.customer.id_for_label }}" class="form-label">Customer / Facility Account</label>
+                        {{ form.customer }}
+                        {% if form.customer.errors %}<div class="form-error">{{ form.customer.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Complainant Section -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">2. Complainant / Reporter Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.complainant_name.id_for_label }}" class="form-label">Reporter Name <span class="text-red-500">*</span></label>
+                        {{ form.complainant_name }}
+                        {% if form.complainant_name.errors %}<div class="form-error">{{ form.complainant_name.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.complainant_organization.id_for_label }}" class="form-label">Facility / Hospital / Clinic</label>
+                        {{ form.complainant_organization }}
+                        {% if form.complainant_organization.errors %}<div class="form-error">{{ form.complainant_organization.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.complainant_email.id_for_label }}" class="form-label">Email Address</label>
+                        {{ form.complainant_email }}
+                        {% if form.complainant_email.errors %}<div class="form-error">{{ form.complainant_email.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.complainant_phone.id_for_label }}" class="form-label">Phone Number</label>
+                        {{ form.complainant_phone }}
+                        {% if form.complainant_phone.errors %}<div class="form-error">{{ form.complainant_phone.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product Identification -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">3. Product & Manufacturing Traceability</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="{{ form.item_code.id_for_label }}" class="form-label">Catalog / Item SKU <span class="text-red-500">*</span></label>
+                        {{ form.item_code }}
+                        {% if form.item_code.errors %}<div class="form-error">{{ form.item_code.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.item_name.id_for_label }}" class="form-label">Product Name <span class="text-red-500">*</span></label>
+                        {{ form.item_name }}
+                        {% if form.item_name.errors %}<div class="form-error">{{ form.item_name.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.lot_number.id_for_label }}" class="form-label">Lot / Batch Number</label>
+                        {{ form.lot_number }}
+                        {% if form.lot_number.errors %}<div class="form-error">{{ form.lot_number.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.serial_number.id_for_label }}" class="form-label">Serial Number</label>
+                        {{ form.serial_number }}
+                        {% if form.serial_number.errors %}<div class="form-error">{{ form.serial_number.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.udi_di_number.id_for_label }}" class="form-label">UDI-DI / GTIN</label>
+                        {{ form.udi_di_number }}
+                        {% if form.udi_di_number.errors %}<div class="form-error">{{ form.udi_di_number.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3">
+                        <label for="{{ form.sales_order.id_for_label }}" class="form-label">Associated Sales Order</label>
+                        {{ form.sales_order }}
+                        {% if form.sales_order.errors %}<div class="form-error">{{ form.sales_order.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Incident Narrative -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">4. Incident Narrative & Patient Impact</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.problem_description.id_for_label }}" class="form-label">Detailed Problem Narrative <span class="text-red-500">*</span></label>
+                        {{ form.problem_description }}
+                        {% if form.problem_description.errors %}<div class="form-error">{{ form.problem_description.errors }}</div>{% endif %}
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.patient_involved }}
+                            <label for="{{ form.patient_involved.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Patient or Clinician Directly Involved
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.adverse_event_alleged }}
+                            <label for="{{ form.adverse_event_alleged.id_for_label }}" class="text-sm font-medium text-red-700">
+                                Serious Adverse Event Alleged (Death/Injury)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Triage & Vigilance Screening -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">5. Initial Triage & Regulatory Vigilance</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Complaint Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.validity.id_for_label }}" class="form-label">Validity Determination</label>
+                        {{ form.validity }}
+                        {% if form.validity.errors %}<div class="form-error">{{ form.validity.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.severity.id_for_label }}" class="form-label">Severity Grading</label>
+                        {{ form.severity }}
+                        {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.reportability.id_for_label }}" class="form-label">Regulatory Reportability</label>
+                        {{ form.reportability }}
+                        {% if form.reportability.errors %}<div class="form-error">{{ form.reportability.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.non_reportable_justification.id_for_label }}" class="form-label">
+                            Non-Reportable Regulatory Rationale (21 CFR 820.198(a)(3))
+                        </label>
+                        {{ form.non_reportable_justification }}
+                        <div class="text-xs text-slate-500 mt-1">Required if determined Non-Reportable. Document clinical & risk rationale.</div>
+                        {% if form.non_reportable_justification.errors %}<div class="form-error">{{ form.non_reportable_justification.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.complaint_category.id_for_label }}" class="form-label">Failure Category Code</label>
+                        {{ form.complaint_category }}
+                        {% if form.complaint_category.errors %}<div class="form-error">{{ form.complaint_category.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.assigned_to.id_for_label }}" class="form-label">Assigned QA Specialist</label>
+                        {{ form.assigned_to }}
+                        {% if form.assigned_to.errors %}<div class="form-error">{{ form.assigned_to.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Investigation & Sample Return -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">6. Investigation Strategy & Sample Return</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center gap-2 md:col-span-2 p-3 bg-slate-50 rounded border border-slate-200">
+                        {{ form.investigation_required }}
+                        <label for="{{ form.investigation_required.id_for_label }}" class="text-sm font-medium text-slate-800">
+                            Formal Technical Investigation Mandated
+                        </label>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.no_investigation_rationale.id_for_label }}" class="form-label">
+                            No Investigation Justification
+                        </label>
+                        {{ form.no_investigation_rationale }}
+                        <div class="text-xs text-slate-500 mt-1">Required if formal investigation is bypassed.</div>
+                        {% if form.no_investigation_rationale.errors %}<div class="form-error">{{ form.no_investigation_rationale.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.sample_return_status.id_for_label }}" class="form-label">Sample Return Status</label>
+                        {{ form.sample_return_status }}
+                        {% if form.sample_return_status.errors %}<div class="form-error">{{ form.sample_return_status.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.return_authorization.id_for_label }}" class="form-label">Linked Return Authorization (RMA)</label>
+                        {{ form.return_authorization }}
+                        {% if form.return_authorization.errors %}<div class="form-error">{{ form.return_authorization.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.sample_tracking_number.id_for_label }}" class="form-label">Carrier Tracking Number</label>
+                        {{ form.sample_tracking_number }}
+                        {% if form.sample_tracking_number.errors %}<div class="form-error">{{ form.sample_tracking_number.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.sample_received_date.id_for_label }}" class="form-label">Sample Received Date</label>
+                        {{ form.sample_received_date }}
+                        {% if form.sample_received_date.errors %}<div class="form-error">{{ form.sample_received_date.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Customer Response -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-800 mb-3">7. Customer Communication & Closure</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.resolution_summary.id_for_label }}" class="form-label">Resolution Summary</label>
+                        {{ form.resolution_summary }}
+                        {% if form.resolution_summary.errors %}<div class="form-error">{{ form.resolution_summary.errors }}</div>{% endif %}
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                            {{ form.customer_letter_sent }}
+                            <label for="{{ form.customer_letter_sent.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Formal Customer Response Letter Dispatched
+                            </label>
+                        </div>
+                        <div>
+                            <label for="{{ form.customer_letter_date.id_for_label }}" class="form-label">Letter Dispatch Date</label>
+                            {{ form.customer_letter_date }}
+                            {% if form.customer_letter_date.errors %}<div class="form-error">{{ form.customer_letter_date.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:customer_complaint_detail' complaint.pk %}{% else %}{% url 'quality:customer_complaint_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Record Complaint{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
