@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ field_action.number }}{% else %}New Field Action{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:field_action_list' %}">Field Actions</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>{% if is_edit %}Edit {{ field_action.number }}{% else %}New Action{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Field Action {{ field_action.number }}{% else %}Initiate Field Action / Recall Protocol{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Protocol Header -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">1. Protocol Classification & Leadership</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Recall / Action Title <span class="text-red-500">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.action_type.id_for_label }}" class="form-label">Action Type <span class="text-red-500">*</span></label>
+                        {{ form.action_type }}
+                        {% if form.action_type.errors %}<div class="form-error">{{ form.action_type.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.recall_class.id_for_label }}" class="form-label">Recall Classification</label>
+                        {{ form.recall_class }}
+                        {% if form.recall_class.errors %}<div class="form-error">{{ form.recall_class.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.coordinator.id_for_label }}" class="form-label">Recall Coordinator <span class="text-red-500">*</span></label>
+                        {{ form.coordinator }}
+                        {% if form.coordinator.errors %}<div class="form-error">{{ form.coordinator.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Workflow Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.initiation_date.id_for_label }}" class="form-label">Initiation Date <span class="text-red-500">*</span></label>
+                        {{ form.initiation_date }}
+                        {% if form.initiation_date.errors %}<div class="form-error">{{ form.initiation_date.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.initiating_complaint.id_for_label }}" class="form-label">Triggering Complaint</label>
+                        {{ form.initiating_complaint }}
+                        {% if form.initiating_complaint.errors %}<div class="form-error">{{ form.initiating_complaint.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Affected Scope -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">2. Affected Product & Scope</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.affected_product_code.id_for_label }}" class="form-label">Affected Catalog / SKU <span class="text-red-500">*</span></label>
+                        {{ form.affected_product_code }}
+                        {% if form.affected_product_code.errors %}<div class="form-error">{{ form.affected_product_code.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.affected_product_name.id_for_label }}" class="form-label">Product Name <span class="text-red-500">*</span></label>
+                        {{ form.affected_product_name }}
+                        {% if form.affected_product_name.errors %}<div class="form-error">{{ form.affected_product_name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.affected_lot_numbers.id_for_label }}" class="form-label">Recalled Lot / Batch Numbers <span class="text-red-500">*</span></label>
+                        {{ form.affected_lot_numbers }}
+                        {% if form.affected_lot_numbers.errors %}<div class="form-error">{{ form.affected_lot_numbers.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.distribution_start_date.id_for_label }}" class="form-label">Distribution Start Date</label>
+                        {{ form.distribution_start_date }}
+                        {% if form.distribution_start_date.errors %}<div class="form-error">{{ form.distribution_start_date.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.distribution_end_date.id_for_label }}" class="form-label">Distribution End Date</label>
+                        {{ form.distribution_end_date }}
+                        {% if form.distribution_end_date.errors %}<div class="form-error">{{ form.distribution_end_date.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rationale & Communication -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">3. Defect Rationale & Field Safety Notice (FSN)</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.reason_for_action.id_for_label }}" class="form-label">Defect Rationale & Failure Mode <span class="text-red-500">*</span></label>
+                        {{ form.reason_for_action }}
+                        {% if form.reason_for_action.errors %}<div class="form-error">{{ form.reason_for_action.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.hhe_summary.id_for_label }}" class="form-label">Health Hazard Evaluation (HHE) Clinical Rationale</label>
+                        {{ form.hhe_summary }}
+                        {% if form.hhe_summary.errors %}<div class="form-error">{{ form.hhe_summary.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.fsn_document.id_for_label }}" class="form-label">Controlled Field Safety Notice Document</label>
+                        {{ form.fsn_document }}
+                        {% if form.fsn_document.errors %}<div class="form-error">{{ form.fsn_document.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reconciliation Metrics -->
+            <div class="border-b border-slate-200 pb-4">
+                <h3 class="text-base font-semibold text-slate-800 mb-3">4. Reconciliation & Consignee Response Tracking</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="{{ form.total_units_distributed.id_for_label }}" class="form-label">Total Units Shipped</label>
+                        {{ form.total_units_distributed }}
+                        {% if form.total_units_distributed.errors %}<div class="form-error">{{ form.total_units_distributed.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.units_quarantined_field.id_for_label }}" class="form-label">Units in Field Quarantine</label>
+                        {{ form.units_quarantined_field }}
+                        {% if form.units_quarantined_field.errors %}<div class="form-error">{{ form.units_quarantined_field.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.units_recovered_destroyed.id_for_label }}" class="form-label">Units Recovered / Destroyed</label>
+                        {{ form.units_recovered_destroyed }}
+                        {% if form.units_recovered_destroyed.errors %}<div class="form-error">{{ form.units_recovered_destroyed.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.consignees_targeted.id_for_label }}" class="form-label">Consignees Targeted</label>
+                        {{ form.consignees_targeted }}
+                        {% if form.consignees_targeted.errors %}<div class="form-error">{{ form.consignees_targeted.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.consignees_notified.id_for_label }}" class="form-label">Consignees Notified</label>
+                        {{ form.consignees_notified }}
+                        {% if form.consignees_notified.errors %}<div class="form-error">{{ form.consignees_notified.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.consignees_responded.id_for_label }}" class="form-label">Consignees Responded</label>
+                        {{ form.consignees_responded }}
+                        {% if form.consignees_responded.errors %}<div class="form-error">{{ form.consignees_responded.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agency Governance -->
+            <div>
+                <h3 class="text-base font-semibold text-slate-800 mb-3">5. Regulatory Agency Governance</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.regulatory_agency_notified.id_for_label }}" class="form-label">Regulatory Authority Contacted</label>
+                        {{ form.regulatory_agency_notified }}
+                        {% if form.regulatory_agency_notified.errors %}<div class="form-error">{{ form.regulatory_agency_notified.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.regulatory_recall_number.id_for_label }}" class="form-label">Agency Designated Recall #</label>
+                        {{ form.regulatory_recall_number }}
+                        {% if form.regulatory_recall_number.errors %}<div class="form-error">{{ form.regulatory_recall_number.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.agency_notification_date.id_for_label }}" class="form-label">Agency Notification Date</label>
+                        {{ form.agency_notification_date }}
+                        {% if form.agency_notification_date.errors %}<div class="form-error">{{ form.agency_notification_date.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.termination_date.id_for_label }}" class="form-label">Recall Termination Date</label>
+                        {{ form.termination_date }}
+                        {% if form.termination_date.errors %}<div class="form-error">{{ form.termination_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.closure_summary.id_for_label }}" class="form-label">Termination & Reconciliation Memo</label>
+                        {{ form.closure_summary }}
+                        {% if form.closure_summary.errors %}<div class="form-error">{{ form.closure_summary.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:field_action_detail' field_action.pk %}{% else %}{% url 'quality:field_action_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Initiate Field Action{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
