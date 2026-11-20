@@ -18,6 +18,7 @@ from apps.quality.forms.ManagementReview.ManagementReviews import (
     ManagementReviewForm,
     ManagementReviewMinutesForm,
 )
+from apps.quality.models.DocumentControl.ControlledDocuments import ControlledDocument
 from apps.quality.models.DocumentControl.ElectronicSignatures import ElectronicSignatureRecord
 from apps.quality.models.ManagementReview.ManagementReviews import ManagementReview
 from apps.quality.views._common import _csv_safe, quality_object, quality_scope
@@ -272,26 +273,37 @@ def management_review_approve(request, pk):
     if form.is_valid():
         with transaction.atomic():
             # Create digital signature record if supported
-            sig_record = None
-            try:
-                sig_record = ElectronicSignatureRecord.objects.create(
+            doc = ControlledDocument.objects.filter(tenant=request.tenant).first()
+            if not doc:
+                doc = ControlledDocument.objects.create(
                     tenant=request.tenant,
-                    signer=request.user,
-                    signer_name=request.user.get_full_name() or request.user.username,
-                    signer_title="Management with Executive Responsibility",
-                    meaning="management_approval",
-                    comment=form.cleaned_data.get("comment", "") or "Executive Management Review Sign-off",
+                    title="Management Review Governance Charter",
+                    document_type="policy",
+                    owner=request.user,
+                    revision="1.0",
+                    lifecycle_state="approved",
+                    description="Master governance record for executive management reviews.",
                 )
-            except Exception:
-                sig_record = None
+
+            sig_record = ElectronicSignatureRecord.objects.create(
+                tenant=request.tenant,
+                document=doc,
+                document_revision=doc.revision or "1.0",
+                signer=request.user,
+                signer_name=request.user.get_full_name() or request.user.username,
+                signer_title="Management with Executive Responsibility",
+                signature_meaning="management_approval",
+                comments=form.cleaned_data.get("comment", "") or "Executive Management Review Sign-off",
+                ip_address=request.META.get("REMOTE_ADDR"),
+            )
 
             review.status = "approved"
             review.approved_by = request.user
             review.approved_at = timezone.now()
-            if sig_record:
-                review.electronic_signature = sig_record
+            review.electronic_signature = sig_record
             review.save()
             write_audit_log(request.user, review, "approve", tenant=request.tenant)
+            write_audit_log(request.user, sig_record, "create", tenant=request.tenant)
 
         messages.success(request, f"Management Review {review.number} has been formally approved and closed.")
     else:
