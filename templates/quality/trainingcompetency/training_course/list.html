@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Training Courses — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="{% url 'quality:training_course_list' %}">Quality</a>
+            <span class="breadcrumb-separator">/</span>
+            <span>Training Courses</span>
+        </div>
+        <h1 class="page-title">Quality Training Courses</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:training_course_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:training_course_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Course
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="book-open"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Courses</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Courses</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-label">GxP Regulatory Courses</div>
+            <div class="stat-value">{{ gxp_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Title, number, code..." class="form-input">
+            </div>
+            <div>
+                <label for="category" class="form-label text-xs">Category</label>
+                <select name="category" id="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="delivery_method" class="form-label text-xs">Delivery Method</label>
+                <select name="delivery_method" id="delivery_method" class="form-select">
+                    <option value="">All Delivery Modes</option>
+                    {% for val, label in delivery_choices %}
+                    <option value="{{ val }}" {% if selected_delivery == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="assessment_method" class="form-label text-xs">Assessment Method</label>
+                <select name="assessment_method" id="assessment_method" class="form-select">
+                    <option value="">All Assessments</option>
+                    {% for val, label in assessment_choices %}
+                    <option value="{{ val }}" {% if selected_assessment == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="competency_matrix" class="form-label text-xs">Competency Matrix</label>
+                <select name="competency_matrix" id="competency_matrix" class="form-select">
+                    <option value="">All Matrices</option>
+                    {% for m in matrices %}
+                    <option value="{{ m.pk }}" {% if selected_matrix == m.pk|stringformat:"d" %}selected{% endif %}>{{ m.number }} - {{ m.role_title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                <a href="{% url 'quality:training_course_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Course Number</th>
+                    <th>Title & Code</th>
+                    <th>Category</th>
+                    <th>Delivery Method</th>
+                    <th>Assessment Method</th>
+                    <th>Bound SOP</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in courses %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quality:training_course_detail' c.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ c.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ c.title }}</div>
+                        {% if c.course_code %}<div class="text-xs text-slate-500">{{ c.course_code }}</div>{% endif %}
+                    </td>
+                    <td><span class="badge {{ c.category_badge }}">{{ c.get_category_display }}</span></td>
+                    <td><span class="badge {{ c.delivery_badge }}">{{ c.get_delivery_method_display }}</span></td>
+                    <td><span class="badge {{ c.assessment_badge }}">{{ c.get_assessment_method_display }}</span></td>
+                    <td>
+                        {% if c.controlled_document %}
+                        <a href="{% url 'quality:controlled_document_detail' c.controlled_document.pk %}" class="text-xs text-blue-600 hover:underline">
+                            {{ c.controlled_document.number }} ({{ c.document_revision|default:"Current" }})
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ c.duration_hours }}h</td>
+                    <td><span class="badge {{ c.status_badge }}">{{ c.get_status_display }}</span></td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'quality:training_course_detail' c.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'quality:training_course_edit' c.pk %}" class="btn btn-icon" title="Edit Course">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_tenant_admin %}
+                            <form method="post" action="{% url 'quality:training_course_delete' c.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete Course {{ c.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600" title="Delete Course">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="book-open" class="empty-icon"></i>
+                            <div class="empty-text">No quality training courses found</div>
+                            <div class="empty-subtext">Author training courses to qualify workforce on standard operating procedures.</div>
+                            <a href="{% url 'quality:training_course_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> New Course
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} courses
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_delivery %}&delivery_method={{ selected_delivery }}{% endif %}{% if selected_assessment %}&assessment_method={{ selected_assessment }}{% endif %}{% if selected_matrix %}&competency_matrix={{ selected_matrix }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Previous</span>
+            {% endif %}
+
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_delivery %}&delivery_method={{ selected_delivery }}{% endif %}{% if selected_assessment %}&assessment_method={{ selected_assessment }}{% endif %}{% if selected_matrix %}&competency_matrix={{ selected_matrix }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
