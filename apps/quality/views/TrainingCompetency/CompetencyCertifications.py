@@ -202,6 +202,15 @@ def competency_certification_delete(request, pk):
 @require_POST
 def competency_certification_renew(request, pk):
     cert = quality_object(request, CompetencyCertification, pk)
+
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)):
+        messages.error(request, "Permission denied. Only authorized quality managers or tenant administrators can renew certifications.")
+        return redirect("quality:competency_certification_detail", pk=cert.pk)
+
+    if cert.status not in ("active", "expired", "expiring_soon"):
+        messages.error(request, f"Certification in status '{cert.get_status_display()}' cannot be renewed.")
+        return redirect("quality:competency_certification_detail", pk=cert.pk)
+
     today = timezone.now().date()
     interval_months = cert.renewal_interval_months or 12
     cert.issue_date = today
@@ -219,6 +228,15 @@ def competency_certification_renew(request, pk):
 @require_POST
 def competency_certification_suspend(request, pk):
     cert = quality_object(request, CompetencyCertification, pk)
+
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)):
+        messages.error(request, "Permission denied. Only authorized quality managers or tenant administrators can suspend certifications.")
+        return redirect("quality:competency_certification_detail", pk=cert.pk)
+
+    if cert.status not in ("active", "expiring_soon"):
+        messages.error(request, f"Only active certifications can be suspended.")
+        return redirect("quality:competency_certification_detail", pk=cert.pk)
+
     form = CertificationSuspensionForm(request.POST)
     if form.is_valid():
         reason = form.cleaned_data.get("suspension_reason")
