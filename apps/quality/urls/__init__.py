@@ -148,6 +148,9 @@ from apps.quality.urls.FinalQuality.QualityReleaseAuthorizations import (
 from apps.quality.urls.AuditManagement import (
     urlpatterns as audit_management_urls,
 )
+from apps.quality.urls.TrainingCompetency import (
+    urlpatterns as training_competency_urls,
+)
 
 app_name = "quality"
 
@@ -202,5 +205,6 @@ urlpatterns = (
     + quality_release_authorizations_urls
     + oqc_hold_board_urls
     + audit_management_urls
+    + training_competency_urls
 )
 
