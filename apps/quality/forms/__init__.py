@@ -111,6 +111,19 @@ from apps.quality.forms.TrainingCompetency.CompetencyCertifications import (
     CertificationSuspensionForm,
     CompetencyCertificationForm,
 )
+from apps.quality.forms.CustomerComplaints.CustomerComplaints import (
+    ComplaintTriageForm,
+    CustomerComplaintForm,
+)
+from apps.quality.forms.CustomerComplaints.ComplaintInvestigations import (
+    ComplaintInvestigationForm,
+)
+from apps.quality.forms.CustomerComplaints.RegulatoryReports import (
+    RegulatoryReportForm,
+)
+from apps.quality.forms.CustomerComplaints.FieldActions import (
+    FieldActionForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -168,5 +181,10 @@ __all__ = [
     "TrainingWaiverForm",
     "CompetencyCertificationForm",
     "CertificationSuspensionForm",
+    "CustomerComplaintForm",
+    "ComplaintTriageForm",
+    "ComplaintInvestigationForm",
+    "RegulatoryReportForm",
+    "FieldActionForm",
 ]
 
