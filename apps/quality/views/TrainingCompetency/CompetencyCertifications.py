@@ -217,8 +217,7 @@ def competency_certification_renew(request, pk):
     cert.issue_date = today
     cert.valid_until = today + timedelta(days=interval_months * 30)
     cert.status = "active"
-    seed = f"{request.tenant.pk}:{cert.number}:{cert.trainee_id}:{cert.course_id}:{today}:{settings.SECRET_KEY}"
-    cert.certificate_hash = hashlib.sha256(seed.encode()).hexdigest()
+    cert.certificate_hash = cert.generate_certificate_hash()
     cert.save()
     write_audit_log(request.user, cert, "renew", tenant=request.tenant)
     messages.success(request, f"Certification {cert.number} renewed until {cert.valid_until}.")
