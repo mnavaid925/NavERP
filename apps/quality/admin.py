@@ -116,6 +116,18 @@ from apps.quality.models.CustomerComplaints.RegulatoryReports import (
 from apps.quality.models.CustomerComplaints.FieldActions import (
     FieldAction,
 )
+from apps.quality.models.ManagementReview.QualityObjectives import (
+    QualityObjective,
+)
+from apps.quality.models.ManagementReview.ManagementReviews import (
+    ManagementReview,
+)
+from apps.quality.models.ManagementReview.ManagementReviewInputs import (
+    ManagementReviewInput,
+)
+from apps.quality.models.ManagementReview.ManagementReviewActions import (
+    ManagementReviewAction,
+)
 
 
 
@@ -1129,6 +1141,85 @@ class FieldActionAdmin(admin.ModelAdmin):
     list_filter = ("action_type", "recall_class", "status", "tenant")
     search_fields = ("number", "title", "affected_product_code", "affected_product_name", "affected_lot_numbers", "regulatory_recall_number")
     list_select_related = ("tenant", "initiating_complaint", "coordinator", "fsn_document")
+
+
+@admin.register(QualityObjective)
+class QualityObjectiveAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "category",
+        "period_year",
+        "cadence",
+        "target_value",
+        "current_value",
+        "metric_unit",
+        "status",
+        "rag_status",
+        "owner",
+        "org_unit",
+        "tenant",
+    )
+    list_filter = ("category", "period_year", "cadence", "status", "rag_status", "tenant")
+    search_fields = ("number", "title", "description", "action_plan_summary")
+    list_select_related = ("tenant", "owner", "org_unit")
+
+
+@admin.register(ManagementReview)
+class ManagementReviewAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "cadence",
+        "scheduled_date",
+        "actual_meeting_date",
+        "status",
+        "qms_suitability_conclusion",
+        "executive_sponsor",
+        "lead_facilitator",
+        "quorum_met",
+        "tenant",
+    )
+    list_filter = ("cadence", "status", "qms_suitability_conclusion", "quorum_met", "tenant")
+    search_fields = ("number", "title", "executive_summary", "minutes_discussion")
+    list_select_related = ("tenant", "executive_sponsor", "lead_facilitator", "org_unit", "approved_by")
+
+
+@admin.register(ManagementReviewInput)
+class ManagementReviewInputAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "management_review",
+        "agenda_order",
+        "title",
+        "category",
+        "presenter",
+        "status",
+        "tenant",
+    )
+    list_filter = ("category", "status", "tenant")
+    search_fields = ("number", "title", "summary_findings")
+    list_select_related = ("tenant", "management_review", "presenter", "linked_audit", "linked_capa", "linked_complaint", "linked_ncr")
+
+
+@admin.register(ManagementReviewAction)
+class ManagementReviewActionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "management_review",
+        "title",
+        "action_type",
+        "priority",
+        "assignee",
+        "due_date",
+        "status",
+        "verified_by",
+        "tenant",
+    )
+    list_filter = ("action_type", "priority", "status", "tenant")
+    search_fields = ("number", "title", "description", "resolution_summary")
+    list_select_related = ("tenant", "management_review", "assignee", "verified_by", "spawned_capa", "spawned_change_order")
+
 
 
 
