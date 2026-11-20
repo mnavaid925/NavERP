@@ -4054,6 +4054,8 @@ class Command(BaseCommand):
         # 12.13 Customer Complaint Handling
         # ---------------------------------------------------------------------
         if not CustomerComplaint.objects.filter(tenant=tenant).exists():
+            now = timezone.now()
+            today = now.date()
             customer_party = Party.objects.filter(tenant=tenant).first()
 
             cmp1 = CustomerComplaint.objects.create(
