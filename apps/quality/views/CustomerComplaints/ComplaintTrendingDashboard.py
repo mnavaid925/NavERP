@@ -25,12 +25,16 @@ def complaint_trending_dashboard(request):
     active_field_recalls = base_field_actions.exclude(status__in=["closed_terminated", "cancelled"]).count()
 
     # Calculate average cycle time for closed complaints
-    closed_with_dates = base_complaints.filter(status="closed", closed_at__isnull=False, date_received__isnull=False)
-    total_closed = closed_with_dates.count()
-    avg_cycle_days = 0.0
-    if total_closed > 0:
-        total_days = sum(c.days_open for c in closed_with_dates[:200])
-        avg_cycle_days = round(total_days / total_closed, 1)
+    closed_dates = list(
+        base_complaints.filter(status="closed", closed_at__isnull=False, date_received__isnull=False).values_list(
+            "closed_at", "date_received"
+        )
+    )
+    avg_cycle_days = (
+        round(sum((ca.date() - dr).days for ca, dr in closed_dates) / len(closed_dates), 1)
+        if closed_dates
+        else 0.0
+    )
 
     # Category distribution
     cat_counts = (
