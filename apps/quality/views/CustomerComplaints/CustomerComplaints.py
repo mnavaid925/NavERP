@@ -112,9 +112,9 @@ def customer_complaint_detail(request, pk):
         select_related=("customer", "sales_order", "return_authorization", "triaged_by", "closed_by", "assigned_to"),
     )
 
-    investigations = complaint.investigations.select_related("lead_investigator", "qa_approved_by")
-    reports = complaint.regulatory_reports.select_related("prepared_by", "reviewed_by")
-    field_actions = complaint.field_actions.select_related("coordinator", "fsn_document")
+    investigations = list(complaint.investigations.select_related("lead_investigator", "qa_approved_by"))
+    reports = list(complaint.regulatory_reports.select_related("prepared_by", "reviewed_by"))
+    field_actions = list(complaint.field_actions.select_related("coordinator", "fsn_document"))
 
     triage_form = None
     if complaint.status in ["intake_received", "under_triage"]:
