@@ -54,9 +54,14 @@ def audit_program_list(request):
     if year.isdigit():
         qs = qs.filter(program_year=int(year))
 
-    total_count = AuditProgram.objects.filter(tenant=request.tenant).count()
-    active_count = AuditProgram.objects.filter(tenant=request.tenant, status="active").count()
-    completed_count = AuditProgram.objects.filter(tenant=request.tenant, status="completed").count()
+    program_stats = AuditProgram.objects.filter(tenant=request.tenant).aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(status="active")),
+        completed_count=Count("id", filter=Q(status="completed")),
+    )
+    total_count = program_stats["total_count"]
+    active_count = program_stats["active_count"]
+    completed_count = program_stats["completed_count"]
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
