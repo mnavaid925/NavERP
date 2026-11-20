@@ -90,7 +90,7 @@ def competency_matrix_detail(request, pk):
         "matrix": matrix,
         "obj": matrix,
         "courses": matrix.courses.all(),
-        "certifications": matrix.certified_holders.filter(status="active"),
+        "certifications": matrix.certified_holders.filter(status="active").select_related("trainee"),
     }
     return render(request, "quality/trainingcompetency/competency_matrix/detail.html", context)
 
