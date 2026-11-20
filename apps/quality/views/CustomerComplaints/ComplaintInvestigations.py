@@ -64,11 +64,16 @@ def complaint_investigation_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+    filter_querystring = query_params.urlencode()
+
     context = {
         "investigations": page_obj,
         "page_obj": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "filter_querystring": filter_querystring,
         "total_count": total_count,
         "in_progress_count": in_progress_count,
         "capa_triggered_count": capa_triggered_count,
