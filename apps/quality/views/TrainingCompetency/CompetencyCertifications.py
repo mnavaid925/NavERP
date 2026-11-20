@@ -138,7 +138,7 @@ def competency_certification_create(request):
         if form.is_valid():
             cert = form.save(commit=False)
             cert.tenant = request.tenant
-            if not cert.certified_by:
+            if not getattr(cert, "certified_by_id", None):
                 cert.certified_by = request.user
             cert.save()
             write_audit_log(request.user, cert, "create", tenant=request.tenant)
