@@ -92,16 +92,16 @@
         </div>
         <div>
             <div class="stat-label">Input Topics</div>
-            <div class="stat-value">{{ review.total_inputs_count }}</div>
+            <div class="stat-value">{{ total_inputs_count }}</div>
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon {% if review.open_actions_count > 0 %}orange{% else %}green{% endif %}">
+        <div class="stat-icon {% if open_actions_count > 0 %}orange{% else %}green{% endif %}">
             <i data-lucide="check-square"></i>
         </div>
         <div>
             <div class="stat-label">Action Items</div>
-            <div class="stat-value">{{ review.total_actions_count }} <span class="text-xs font-normal text-slate-500">({{ review.open_actions_count }} open)</span></div>
+            <div class="stat-value">{{ total_actions_count }} <span class="text-xs font-normal text-slate-500">({{ open_actions_count }} open)</span></div>
         </div>
     </div>
 </div>
