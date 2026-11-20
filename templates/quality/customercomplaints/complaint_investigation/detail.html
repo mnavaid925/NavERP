@@ -30,7 +30,7 @@
 
             <span class="badge badge-slate">{{ investigation.get_analytical_method_display }}</span>
             {% if investigation.capa_required %}
-            <span class="badge badge-amber"><i data-lucide="alert-circle" class="w-3 h-3 inline"></i> CAPA Triggered</span>
+            <span class="badge badge-amber">CAPA Triggered</span>
             {% endif %}
         </div>
         <div class="text-sm text-slate-500 mt-1">
@@ -68,7 +68,7 @@
 
                 <div>
                     <h4 class="text-sm font-semibold text-slate-700 mb-2">5 Whys / Failure Tree Narrative</h4>
-                    <div class="p-4 bg-white rounded border border-slate-200 text-slate-800 text-sm whitespace-pre-line leading-relaxed font-sans">
+                    <div class="p-4 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-sm whitespace-pre-line leading-relaxed font-sans">
                         {{ investigation.root_cause_narrative|default:"No root cause narrative documented yet." }}
                     </div>
                 </div>
