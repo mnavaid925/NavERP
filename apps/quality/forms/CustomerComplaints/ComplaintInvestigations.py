@@ -30,6 +30,8 @@ class ComplaintInvestigationForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and "complaint" in self.fields:
+            self.fields["complaint"].disabled = True
         if hasattr(self, "tenant") and self.tenant is not None:
             if "complaint" in self.fields:
                 from apps.quality.models.CustomerComplaints.CustomerComplaints import CustomerComplaint
@@ -45,6 +47,12 @@ class ComplaintInvestigationForm(TenantUniqueMixin, TenantModelForm):
             if "ncr" in self.fields:
                 from apps.quality.models.NonConformance.NonConformanceReports import NonConformanceReport
                 self.fields["ncr"].queryset = NonConformanceReport.objects.filter(tenant=self.tenant)
+
+    def clean_complaint(self):
+        complaint = self.cleaned_data.get("complaint")
+        if self.instance and self.instance.pk:
+            return self.instance.complaint
+        return complaint
 
     def clean(self):
         cleaned_data = super().clean()
