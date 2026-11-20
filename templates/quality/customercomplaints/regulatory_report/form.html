@@ -93,19 +93,9 @@
                 <h3 class="text-base font-semibold text-slate-800 mb-3">3. Transmission & Gateway Status</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label for="{{ form.submission_status.id_for_label }}" class="form-label">Submission Status</label>
-                        {{ form.submission_status }}
-                        {% if form.submission_status.errors %}<div class="form-error">{{ form.submission_status.errors }}</div>{% endif %}
-                    </div>
-                    <div>
                         <label for="{{ form.submission_format.id_for_label }}" class="form-label">Transmission Format / Gateway</label>
                         {{ form.submission_format }}
                         {% if form.submission_format.errors %}<div class="form-error">{{ form.submission_format.errors }}</div>{% endif %}
-                    </div>
-                    <div>
-                        <label for="{{ form.submission_date.id_for_label }}" class="form-label">Transmission Date</label>
-                        {{ form.submission_date }}
-                        {% if form.submission_date.errors %}<div class="form-error">{{ form.submission_date.errors }}</div>{% endif %}
                     </div>
                     <div>
                         <label for="{{ form.agency_report_identifier.id_for_label }}" class="form-label">Agency Case / MDR Number</label>
