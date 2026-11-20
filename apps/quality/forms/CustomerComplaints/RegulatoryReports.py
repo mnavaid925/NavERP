@@ -14,11 +14,12 @@ class RegulatoryReportForm(TenantUniqueMixin, TenantModelForm):
             "number",
             "created_at",
             "updated_at",
+            "submission_status",
+            "submission_date",
             "agency_acknowledgement_date",
         ]
         widgets = {
             "statutory_due_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
-            "submission_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             "event_summary": forms.Textarea(attrs={"rows": 4, "class": "form-textarea"}),
             "patient_remedial_action": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
             "notes": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
