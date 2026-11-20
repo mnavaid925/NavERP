@@ -7,9 +7,9 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'dashboard:home' %}">Home</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <a href="{% url 'quality:regulatory_report_list' %}">Regulatory Reports</a>
-            <span class="breadcrumb-separator">/</span>
+            <span class="sep">/</span>
             <span>{{ report.number }}</span>
         </div>
         <div class="flex items-center gap-3">
@@ -54,7 +54,7 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     <div class="lg:col-span-2 space-y-6">
-        <!-- Statutory Medical Adverse Event Narrative -->
+        {# Statutory Medical Adverse Event Narrative #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Official Adverse Event Narrative for Regulatory Submission</h3>
@@ -88,7 +88,7 @@
             </div>
         </div>
 
-        <!-- Statutory Clock & Gateway Tracking -->
+        {# Statutory Clock & Gateway Tracking #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Statutory Reporting Clock & Regulatory Milestones</h3>
@@ -130,9 +130,9 @@
         </div>
     </div>
 
-    <!-- Sidebar: Authorship & Submission Workflow -->
+    {# Sidebar: Authorship & Submission Workflow #}
     <div class="space-y-6">
-        <!-- Metadata Card -->
+        {# Metadata Card #}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Authorship & Regulatory Review</h3>
@@ -163,7 +163,7 @@
             </div>
         </div>
 
-        <!-- Submission Action Modal/Card -->
+        {# Submission Action Modal/Card #}
         {% if report.submission_status != "submitted" and report.submission_status != "acknowledged" and report.submission_status != "withdrawn" %}
         <div class="card border-blue-300">
             <div class="card-header bg-blue-50">
@@ -184,7 +184,7 @@
         </div>
         {% endif %}
 
-        <!-- Gateway Acknowledgement Card -->
+        {# Gateway Acknowledgement Card #}
         {% if report.submission_status == "submitted" or report.submission_status == "acknowledged" %}
         <div class="card border-green-300">
             <div class="card-header bg-green-50">
