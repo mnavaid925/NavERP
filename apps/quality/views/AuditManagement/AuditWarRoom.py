@@ -15,21 +15,25 @@ def audit_war_room(request):
         request,
     ).order_by("-scheduled_start_date")
 
+    active_inspections = list(active_qs)
+
     host_id = request.GET.get("host")
     selected_host = None
     if host_id and host_id.isdigit():
-        selected_host = active_qs.filter(pk=int(host_id)).first()
+        target_id = int(host_id)
+        selected_host = next((h for h in active_inspections if h.pk == target_id), None)
 
     if not selected_host:
-        selected_host = active_qs.filter(status__in=["active_inspection", "daily_wrapup"]).first() or active_qs.first()
+        selected_host = next((h for h in active_inspections if h.status in ("active_inspection", "daily_wrapup")), None)
+        if not selected_host and active_inspections:
+            selected_host = active_inspections[0]
 
     request_form = InspectionLogRequestForm(tenant=request.tenant) if selected_host else None
     fulfillment_rate = selected_host.fulfillment_rate if selected_host else 100
 
     context = {
-        "active_inspections": active_qs,
+        "active_inspections": active_inspections,
         "selected_host": selected_host,
-        "total_active_count": active_qs.filter(status__in=["active_inspection", "daily_wrapup"]).count(),
         "fulfillment_rate": fulfillment_rate,
         "request_form": request_form,
     }
