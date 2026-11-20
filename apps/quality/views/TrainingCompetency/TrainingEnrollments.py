@@ -319,6 +319,15 @@ def training_enrollment_verify(request, pk):
 @require_POST
 def training_enrollment_waive(request, pk):
     enrollment = quality_object(request, TrainingEnrollment, pk)
+
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request.user, "is_staff", False)):
+        messages.error(request, "Permission denied. Only authorized quality staff or tenant administrators can grant compliance waivers.")
+        return redirect("quality:training_enrollment_detail", pk=enrollment.pk)
+
+    if enrollment.status in ("verified", "waived"):
+        messages.error(request, f"Enrollment cannot be waived from status '{enrollment.get_status_display()}'.")
+        return redirect("quality:training_enrollment_detail", pk=enrollment.pk)
+
     form = TrainingWaiverForm(request.POST)
     if form.is_valid():
         reason = form.cleaned_data.get("waiver_reason")
