@@ -70,8 +70,9 @@ def audit_finding_list(request):
     critical_count = AuditFinding.objects.filter(tenant=request.tenant, severity__in=["critical", "major"]).count()
     overdue_count = AuditFinding.objects.filter(
         tenant=request.tenant,
-        response_due_date__lt=date.today()
-    ).exclude(status__in=["closed", "response_accepted"]).count()
+        response_due_date__lt=date.today(),
+        status__in=["draft", "issued", "escalated"],
+    ).count()
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
