@@ -53,6 +53,15 @@
             </button>
         </form>
         {% endif %}
+
+        {% if review.status == 'scheduled' and not review.inputs.exists and not review.actions.exists %}
+        <form method="post" action="{% url 'quality:management_review_delete' review.pk %}" class="inline" onsubmit="return confirm('Permanently delete this scheduled management review?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-rose-600 hover:bg-rose-50" aria-label="Delete Review">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
