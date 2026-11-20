@@ -57,6 +57,9 @@
 <div class="card mb-6">
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            {% if request.GET.complaint %}
+            <input type="hidden" name="complaint" value="{{ request.GET.complaint }}">
+            {% endif %}
             <div>
                 <label for="q" class="form-label text-xs">Search</label>
                 <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Investigation #, complaint #, lot, narrative..." class="form-input">
