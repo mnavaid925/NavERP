@@ -132,7 +132,7 @@ class ManagementReviewAction(TenantNumbered):
     def days_open(self):
         end = self.completion_date or timezone.now().date()
         start = self.created_at.date() if self.created_at else timezone.now().date()
-        return (end - start).days
+        return max(0, (end - start).days)
 
     @property
     def action_type_badge_class(self):
