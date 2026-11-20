@@ -54,7 +54,7 @@ class ComplaintInvestigation(TenantNumbered):
 
     complaint = models.ForeignKey(
         "quality.CustomerComplaint",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="investigations",
         help_text="Parent customer complaint",
     )
