@@ -183,15 +183,16 @@
                     <form method="post" action="{% url 'quality:regulatory_inspection_host_log_request' regulatory_inspection_host.pk %}" class="space-y-3">
                         {% csrf_token %}
                         <div class="form-group">
+                            <label class="form-label text-xs" for="{{ request_form.request_description.id_for_label }}">Request Description <span class="text-danger">*</span></label>
                             {{ request_form.request_description }}
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div class="form-group">
-                                <label class="form-label text-xs">Assign SME / Retriever</label>
+                                <label class="form-label text-xs" for="{{ request_form.assigned_sme.id_for_label }}">Assign SME / Retriever</label>
                                 {{ request_form.assigned_sme }}
                             </div>
                             <div class="form-group">
-                                <label class="form-label text-xs">Priority SLA</label>
+                                <label class="form-label text-xs" for="{{ request_form.priority.id_for_label }}">Priority SLA</label>
                                 {{ request_form.priority }}
                             </div>
                         </div>
