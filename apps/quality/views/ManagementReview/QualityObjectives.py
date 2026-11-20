@@ -116,12 +116,20 @@ def quality_objective_detail(request, pk):
     objective = quality_object(request, QualityObjective, pk, select_related=("owner", "org_unit"))
     evaluate_form = QualityObjectiveEvaluateForm(initial={"current_value": objective.current_value})
 
+    is_owner_or_admin = (
+        request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+        or getattr(request.user, "is_staff", False)
+        or (objective.owner_id and objective.owner_id == request.user.id)
+    )
+    can_evaluate = is_owner_or_admin and objective.status not in ["draft", "abandoned"]
+
     context = {
         "objective": objective,
         "variance": objective.variance,
         "is_achieved": objective.is_achieved,
         "evaluate_form": evaluate_form,
-        "can_evaluate": True,
+        "can_evaluate": can_evaluate,
     }
     return render(request, "quality/managementreview/quality_objective/detail.html", context)
 
@@ -193,6 +201,20 @@ def quality_objective_delete(request, pk):
 @require_POST
 def quality_objective_evaluate(request, pk):
     objective = quality_object(request, QualityObjective, pk)
+    if objective.status in ["draft", "abandoned"]:
+        messages.error(request, f"Cannot evaluate a {objective.get_status_display().lower()} quality objective.")
+        return redirect("quality:quality_objective_detail", pk=objective.pk)
+
+    is_owner_or_admin = (
+        request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+        or getattr(request.user, "is_staff", False)
+        or (objective.owner_id and objective.owner_id == request.user.id)
+    )
+    if not is_owner_or_admin:
+        messages.error(request, "Only the designated objective owner or quality administrator can evaluate performance.")
+        return redirect("quality:quality_objective_detail", pk=objective.pk)
+
     form = QualityObjectiveEvaluateForm(request.POST)
     if form.is_valid():
         with transaction.atomic():
