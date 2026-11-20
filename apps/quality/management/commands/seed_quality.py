@@ -83,6 +83,10 @@ from apps.quality.models.AuditManagement.AuditPrograms import AuditProgram
 from apps.quality.models.AuditManagement.QualityAudits import QualityAudit
 from apps.quality.models.AuditManagement.AuditFindings import AuditFinding
 from apps.quality.models.AuditManagement.RegulatoryInspectionHosts import RegulatoryInspectionHost
+from apps.quality.models.TrainingCompetency.CompetencyCertifications import CompetencyCertification
+from apps.quality.models.TrainingCompetency.CompetencyMatrices import CompetencyMatrix
+from apps.quality.models.TrainingCompetency.QualityTrainingCourses import QualityTrainingCourse
+from apps.quality.models.TrainingCompetency.TrainingEnrollments import TrainingEnrollment
 
 
 User = get_user_model()
@@ -101,6 +105,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            CompetencyCertification.objects.all().delete()
+            TrainingEnrollment.objects.all().delete()
+            QualityTrainingCourse.objects.all().delete()
+            CompetencyMatrix.objects.all().delete()
             RegulatoryInspectionHost.objects.all().delete()
             AuditFinding.objects.all().delete()
             QualityAudit.objects.all().delete()
@@ -166,6 +174,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_9(tenant)
             self._seed_submodule_12_10(tenant)
             self._seed_submodule_12_11(tenant)
+            self._seed_submodule_12_12(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -3731,6 +3740,312 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.11 Audit Management seeded successfully."))
+
+    def _seed_submodule_12_12(self, tenant):
+        """Seed demo data for Sub-module 12.12: Training & Competency Management."""
+        if CompetencyMatrix.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.12 Training & Competency Management data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.12 Training & Competency Management...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+            or User.objects.filter(tenant=tenant).first()
+        )
+        quality_lead = (
+            User.objects.filter(tenant=tenant, username__icontains="quality").first()
+            or User.objects.filter(tenant=tenant, is_staff=True).first()
+            or admin_user
+        )
+        operator_user = (
+            User.objects.filter(tenant=tenant, username__icontains="operator").first()
+            or User.objects.filter(tenant=tenant).exclude(pk=admin_user.pk).first()
+            or admin_user
+        )
+
+        qa_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="Quality").first()
+        mfg_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="Manufacturing").first()
+
+        doc1 = ControlledDocument.objects.filter(tenant=tenant).first()
+        doc2 = ControlledDocument.objects.filter(tenant=tenant).last()
+        dco = DocumentChangeOrder.objects.filter(tenant=tenant).first()
+        capa = CapaAction.objects.filter(tenant=tenant).first()
+
+        today = timezone.now().date()
+
+        with transaction.atomic():
+            # 1. Competency Matrices
+            m1 = CompetencyMatrix.objects.create(
+                tenant=tenant,
+                title="Aseptic Fill Suite Senior Operator Qualification Matrix",
+                role_title="Aseptic Cleanroom Fill Line Senior Operator",
+                qualification_tier="specialist",
+                department=mfg_dept,
+                criticality="critical_gxp",
+                revision="1.0",
+                status="approved",
+                minimum_passing_score=85,
+                validity_period_months=12,
+                prerequisite_experience_months=24,
+                description="Comprehensive qualification curriculum covering cleanroom gowning, environmental monitoring, sterility assurance, and automated vial filler operation.",
+                approved_by=quality_lead,
+                approval_date=today - datetime.timedelta(days=90),
+                notes="Mandatory for all Class A/B cleanroom operators under EU GMP Annex 1.",
+            )
+
+            m2 = CompetencyMatrix.objects.create(
+                tenant=tenant,
+                title="Quality Assurance Documentation Specialist Matrix",
+                role_title="QA Document Control Specialist",
+                qualification_tier="independent",
+                department=qa_dept,
+                criticality="high",
+                revision="2.0",
+                status="active",
+                minimum_passing_score=80,
+                validity_period_months=12,
+                prerequisite_experience_months=6,
+                description="Covers Good Documentation Practices (GDP), 21 CFR Part 11 electronic records, change order workflows, and batch record archiving.",
+                approved_by=admin_user,
+                approval_date=today - datetime.timedelta(days=120),
+                notes="Required for all document coordinators and release scribes.",
+            )
+
+            m3 = CompetencyMatrix.objects.create(
+                tenant=tenant,
+                title="Manufacturing Equipment Maintenance & Calibration Matrix",
+                role_title="Senior Calibration Technician",
+                qualification_tier="trainer",
+                department=mfg_dept,
+                criticality="medium",
+                revision="1.1",
+                status="active",
+                minimum_passing_score=80,
+                validity_period_months=24,
+                prerequisite_experience_months=18,
+                description="Covers preventive maintenance, autoclave sterilization cycles, gage calibration protocols, and lockout-tagout (LOTO) procedures.",
+                approved_by=quality_lead,
+                approval_date=today - datetime.timedelta(days=60),
+                notes="Technicians certified under this matrix can evaluate and sign off junior apprentices.",
+            )
+
+            # 2. Quality Training Courses
+            c1 = QualityTrainingCourse.objects.create(
+                tenant=tenant,
+                title="SOP-0042 Aseptic Gowning and Cleanroom Entry Protocol",
+                competency_matrix=m1,
+                course_code="TRN-SOP-042",
+                category="gxp_compliance",
+                delivery_method="on_the_job",
+                assessment_method="both_exam_and_ojt",
+                status="active",
+                controlled_document=doc1,
+                document_revision="Rev C",
+                retrain_on_revision=True,
+                duration_hours=Decimal("3.50"),
+                passing_score=85,
+                ojt_checklist_criteria="1. Hand hygiene and sterile gowning under 10 minutes without touching outer surfaces.\n2. Contact plate fingertip touch-test yielding 0 CFU.\n3. Demonstration of unidirectional laminar airflow discipline.",
+                syllabus_summary="Principles of aseptic processing, microbiological contamination vectors, cleanroom classification standards (ISO 14644-1), gowning procedures, and exit protocols.",
+                instructor=quality_lead,
+                notes="Classroom review followed by 3 supervised gowning mock sessions.",
+            )
+
+            c2 = QualityTrainingCourse.objects.create(
+                tenant=tenant,
+                title="SOP-0015 Good Documentation Practices (GDP) & 21 CFR Part 11",
+                competency_matrix=m2,
+                course_code="TRN-GDP-015",
+                category="gxp_compliance",
+                delivery_method="elearning",
+                assessment_method="written_exam",
+                status="active",
+                controlled_document=doc2,
+                document_revision="Rev B",
+                retrain_on_revision=True,
+                duration_hours=Decimal("2.00"),
+                passing_score=80,
+                syllabus_summary="ALCOA+ data integrity principles, concurrent recording rules, correction of error protocols, electronic signature non-repudiation, and audit trail review responsibilities.",
+                instructor=admin_user,
+                notes="Annual mandatory refresher for all site employees with QMS access.",
+            )
+
+            c3 = QualityTrainingCourse.objects.create(
+                tenant=tenant,
+                title="SOP-0088 Root Cause Analysis & 5-Why Investigation Methodology",
+                competency_matrix=m2,
+                course_code="TRN-RCA-088",
+                category="quality_tools",
+                delivery_method="classroom_lecture",
+                assessment_method="written_exam",
+                status="active",
+                duration_hours=Decimal("4.00"),
+                passing_score=80,
+                syllabus_summary="Problem statement formulation, Fishbone (Ishikawa) diagramming, 5-Why iterative drilldown, barrier analysis, and CAPA action plan effectiveness verification.",
+                instructor=quality_lead,
+                notes="Case study driven workshop with cross-functional deviation scenarios.",
+            )
+
+            c4 = QualityTrainingCourse.objects.create(
+                tenant=tenant,
+                title="SOP-0104 Autoclave Sterilizer Operation & Safety Procedures",
+                competency_matrix=m3,
+                course_code="TRN-EQP-104",
+                category="equipment_operation",
+                delivery_method="on_the_job",
+                assessment_method="practical_ojt",
+                status="active",
+                duration_hours=Decimal("3.00"),
+                passing_score=80,
+                ojt_checklist_criteria="1. Verify steam pressure and temperature chamber sensors prior to run.\n2. Load configuration inspection per validated loading pattern.\n3. Cycle biological indicator placement and retrieval protocol.",
+                syllabus_summary="Steam sterilization physics, cycle parameters (121°C / 15 psi), Bowie-Dick testing, emergency shutdown procedures, and chamber maintenance.",
+                instructor=quality_lead,
+                notes="Practical hands-on qualification in central sterile supply wing.",
+            )
+
+            # 3. Training Enrollments
+            e1 = TrainingEnrollment.objects.create(
+                tenant=tenant,
+                course=c1,
+                trainee=operator_user,
+                assignment_reason="annual_refresher",
+                assigned_date=today - datetime.timedelta(days=45),
+                due_date=today - datetime.timedelta(days=15),
+                status="verified",
+                completion_date=today - datetime.timedelta(days=20),
+                score=Decimal("94.00"),
+                is_passed=True,
+                self_certified=True,
+                self_certified_at=timezone.now() - datetime.timedelta(days=20),
+                practical_rating="meets_standard",
+                practical_verified_by=quality_lead,
+                practical_verified_at=timezone.now() - datetime.timedelta(days=18),
+                practical_evaluation_notes="Operator demonstrated flawless gowning technique and cleanroom laminar air behavior. All fingertip agar plates negative.",
+                notes="Annual recertification completed on schedule.",
+            )
+
+            e2 = TrainingEnrollment.objects.create(
+                tenant=tenant,
+                course=c1,
+                trainee=admin_user,
+                assignment_reason="role_transfer",
+                assigned_date=today - datetime.timedelta(days=10),
+                due_date=today + datetime.timedelta(days=20),
+                status="completed",
+                completion_date=today - datetime.timedelta(days=2),
+                score=Decimal("90.00"),
+                is_passed=True,
+                self_certified=True,
+                self_certified_at=timezone.now() - datetime.timedelta(days=2),
+                notes="Written exam passed. Practical demonstration scheduled with Lead Auditor.",
+            )
+
+            e3 = TrainingEnrollment.objects.create(
+                tenant=tenant,
+                course=c2,
+                trainee=operator_user,
+                assignment_reason="onboarding_new_hire",
+                assigned_date=today - datetime.timedelta(days=60),
+                due_date=today - datetime.timedelta(days=30),
+                status="verified",
+                completion_date=today - datetime.timedelta(days=35),
+                score=Decimal("98.00"),
+                is_passed=True,
+                self_certified=True,
+                self_certified_at=timezone.now() - datetime.timedelta(days=35),
+                notes="GDP foundational module completed with exemplary score.",
+            )
+
+            e4 = TrainingEnrollment.objects.create(
+                tenant=tenant,
+                course=c2,
+                trainee=quality_lead,
+                assignment_reason="annual_refresher",
+                assigned_date=today - datetime.timedelta(days=5),
+                due_date=today + datetime.timedelta(days=25),
+                status="assigned",
+                notes="Annual corporate data integrity recertification cycle.",
+            )
+
+            e5 = TrainingEnrollment.objects.create(
+                tenant=tenant,
+                course=c3,
+                trainee=operator_user,
+                assignment_reason="capa_corrective_action",
+                capa_action=capa,
+                assigned_date=today - datetime.timedelta(days=25),
+                due_date=today - datetime.timedelta(days=5),
+                status="assigned",
+                notes="Assigned per CAPA root cause investigation action item. Currently past due.",
+            )
+
+            e6 = TrainingEnrollment.objects.create(
+                tenant=tenant,
+                course=c4,
+                trainee=admin_user,
+                assignment_reason="manager_assignment",
+                assigned_date=today - datetime.timedelta(days=30),
+                due_date=today - datetime.timedelta(days=10),
+                status="waived",
+                waiver_reason="Grandfathered certified master mechanical engineer with documented ASME autoclave calibration history exceeding 10 years.",
+                waived_by=quality_lead,
+                waived_at=timezone.now() - datetime.timedelta(days=15),
+                notes="Formal waiver approved by Quality Assurance Director.",
+            )
+
+            # 4. Competency Certifications
+            CompetencyCertification.objects.create(
+                tenant=tenant,
+                enrollment=e1,
+                trainee=operator_user,
+                course=c1,
+                competency_matrix=m1,
+                qualification_title="Certified Aseptic Fill Suite Level 2 Independent Operator",
+                qualification_level="level_2_qualified",
+                issue_date=today - datetime.timedelta(days=18),
+                valid_until=today + datetime.timedelta(days=347),
+                renewal_interval_months=12,
+                status="active",
+                authorized_work_centers="Cleanroom Suite B (Fill-Finish Vial Line #1 and Isolator Cabinet Alpha)",
+                certified_by=quality_lead,
+                notes="Authorized for unattended aseptic production fills and environmental monitoring touch-sampling.",
+            )
+
+            CompetencyCertification.objects.create(
+                tenant=tenant,
+                enrollment=e3,
+                trainee=operator_user,
+                course=c2,
+                competency_matrix=m2,
+                qualification_title="Certified GDP & Electronic Records Operator",
+                qualification_level="level_2_qualified",
+                issue_date=today - datetime.timedelta(days=345),
+                valid_until=today + datetime.timedelta(days=20),
+                renewal_interval_months=12,
+                status="active",
+                authorized_work_centers="All Manufacturing and Packaging Lines",
+                certified_by=admin_user,
+                notes="Expiring soon within 20 days. Trainee queued for annual refresher course.",
+            )
+
+            CompetencyCertification.objects.create(
+                tenant=tenant,
+                trainee=quality_lead,
+                course=c4,
+                competency_matrix=m3,
+                qualification_title="Certified Sterilization Master Trainer & Assessor",
+                qualification_level="level_4_trainer_assessor",
+                issue_date=today - datetime.timedelta(days=100),
+                valid_until=today + datetime.timedelta(days=630),
+                renewal_interval_months=24,
+                status="active",
+                authorized_work_centers="Central Sterilization Wing & Autoclaves #1 through #4",
+                certified_by=admin_user,
+                notes="Qualified to conduct and certify junior technicians on practical OJT checklists.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.12 Training & Competency Management seeded successfully."))
+
 
 
 
