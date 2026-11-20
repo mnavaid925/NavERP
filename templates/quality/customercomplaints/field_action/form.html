@@ -52,11 +52,6 @@
                         {% if form.coordinator.errors %}<div class="form-error">{{ form.coordinator.errors }}</div>{% endif %}
                     </div>
                     <div>
-                        <label for="{{ form.status.id_for_label }}" class="form-label">Workflow Status</label>
-                        {{ form.status }}
-                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
-                    </div>
-                    <div>
                         <label for="{{ form.initiation_date.id_for_label }}" class="form-label">Initiation Date <span class="text-red-500">*</span></label>
                         {{ form.initiation_date }}
                         {% if form.initiation_date.errors %}<div class="form-error">{{ form.initiation_date.errors }}</div>{% endif %}
@@ -178,11 +173,6 @@
                         <label for="{{ form.agency_notification_date.id_for_label }}" class="form-label">Agency Notification Date</label>
                         {{ form.agency_notification_date }}
                         {% if form.agency_notification_date.errors %}<div class="form-error">{{ form.agency_notification_date.errors }}</div>{% endif %}
-                    </div>
-                    <div>
-                        <label for="{{ form.termination_date.id_for_label }}" class="form-label">Recall Termination Date</label>
-                        {{ form.termination_date }}
-                        {% if form.termination_date.errors %}<div class="form-error">{{ form.termination_date.errors }}</div>{% endif %}
                     </div>
                     <div class="md:col-span-2">
                         <label for="{{ form.closure_summary.id_for_label }}" class="form-label">Termination & Reconciliation Memo</label>
