@@ -148,6 +148,9 @@ def complaint_investigation_create(request):
 @login_required
 def complaint_investigation_edit(request, pk):
     investigation = quality_object(request, ComplaintInvestigation, pk)
+    if investigation.status == "approved":
+        messages.error(request, f"Investigation {investigation.number} is approved and cannot be modified.")
+        return redirect("quality:complaint_investigation_detail", pk=investigation.pk)
 
     if request.method == "POST":
         form = ComplaintInvestigationForm(request.POST, instance=investigation, tenant=request.tenant)
