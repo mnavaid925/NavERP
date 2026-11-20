@@ -299,6 +299,26 @@ def audit_finding_export_csv(request):
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(number__icontains=q) | Q(standard_clause__icontains=q))
 
+    severity = request.GET.get("severity", "").strip()
+    if severity:
+        qs = qs.filter(severity=severity)
+
+    status = request.GET.get("status", "").strip()
+    if status:
+        qs = qs.filter(status=status)
+
+    audit_param = request.GET.get("audit", "").strip()
+    if audit_param.isdigit():
+        qs = qs.filter(audit_id=int(audit_param))
+
+    org_unit_param = request.GET.get("org_unit", "").strip()
+    if org_unit_param.isdigit():
+        qs = qs.filter(audited_org_unit_id=int(org_unit_param))
+
+    assignee_param = request.GET.get("assignee", "").strip()
+    if assignee_param.isdigit():
+        qs = qs.filter(assignee_id=int(assignee_param))
+
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="audit_findings.csv"'
     response["X-Content-Type-Options"] = "nosniff"
