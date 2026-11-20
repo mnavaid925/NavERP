@@ -97,3 +97,30 @@ Commit after fixing Critical and Important findings (2 Critical, 2 Important, 3 
 - Zero multi-line `{# ... #}` comment leaks (L2).
 - All list pages guard pagination with `has_previous`/`has_next` (L9) and preserve search/filter query parameters.
 - All FK filter comparisons use `|stringformat:"d"`. All tables wrapped in `.table-wrap`.
+
+
+## 4. Performance Reviewer Pass
+
+### Verdict
+Commit after fixing Critical and Important findings (1 Critical, 4 Important, 4 Minor).
+
+### Critical
+1. `apps/quality/views/TrainingCompetency/CompetencyCertifications.py:321-332` — Dashboard department breakdown executes 4 queries per department in a Python loop (24 queries for 6 departments). Fix: Consolidate into a single SQL query using `.values("course__competency_matrix__department__id", "course__competency_matrix__department__name")` and conditional aggregation (`Count("id")`, `Count("id", filter=Q(status="verified"))`) on `TrainingEnrollment`.
+
+### Important
+1. `apps/quality/views/TrainingCompetency/QualityTrainingCourses.py:112` — N+1 query in `training_course_detail` on `issued_certifications` trainee rendering: calling `.filter(status="active")` bypasses prefetch cache. Fix: Add `.select_related("trainee")` on the filtered queryset.
+2. `apps/quality/views/TrainingCompetency/CompetencyMatrices.py:93` — N+1 query in `competency_matrix_detail` on `certified_holders` trainee rendering: calling `.filter(status="active")` bypasses prefetch cache. Fix: Add `.select_related("trainee")` on the filtered queryset.
+3. `apps/quality/views/TrainingCompetency/TrainingEnrollments.py:231, 267` — Multi-table mutations in `training_enrollment_complete` and `training_enrollment_verify` lack `transaction.atomic`. Fix: Wrap mutations in `transaction.atomic()`.
+4. `apps/quality/views/TrainingCompetency/` — KPI stat card queries in list views and dashboard not consolidated via `.aggregate()`. Fix: Consolidate separate count queries into single `.aggregate()` calls with conditional `Count('id', filter=Q(...))`.
+
+### Minor
+1. `apps/quality/models/TrainingCompetency/` — Missing composite indexes for model default ordering and hot filter combinations (`(tenant, -assigned_date, -created_at)`, `(tenant, status, due_date)`, `(tenant, -issue_date, -created_at)`, `(tenant, status, valid_until)`).
+2. `apps/quality/views/TrainingCompetency/CompetencyCertifications.py:365` — Heavy User model query in `employee_training_dossier` without column deferral. Fix: Add `.only("id", "username", "first_name", "last_name")`.
+3. `templates/quality/trainingcompetency/` — Redundant `.count` calls in templates on evaluated querysets instead of `|length`. Fix: Use `|length` on querysets iterated in the same template.
+4. `templates/quality/trainingcompetency/training_course/detail.html` — Repeated property count queries on `QualityTrainingCourse` in detail template. Fix: Precompute in view and pass as context dict.
+
+### Done well
+- Strict multi-tenancy scoping across all queries.
+- Proper pagination (`Paginator(qs, 15)`) applied after filters.
+- Primary list `select_related` coverage on foreign keys.
+- Safe idempotent seeding within transaction.atomic.
