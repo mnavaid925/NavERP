@@ -141,6 +141,18 @@ from apps.quality.forms.ManagementReview.ManagementReviewActions import (
     ManagementReviewActionForm,
     ManagementReviewActionVerifyForm,
 )
+from apps.quality.forms.ProcessValidation.ValidationProtocols import (
+    ValidationProtocolForm,
+)
+from apps.quality.forms.ProcessValidation.ProcessCapabilityStudies import (
+    ProcessCapabilityStudyForm,
+)
+from apps.quality.forms.ProcessValidation.ComputerSystemValidations import (
+    ComputerSystemValidationForm,
+)
+from apps.quality.forms.ProcessValidation.CleaningValidations import (
+    CleaningValidationForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -212,5 +224,9 @@ __all__ = [
     "ManagementReviewActionForm",
     "ManagementReviewActionCompleteForm",
     "ManagementReviewActionVerifyForm",
+    "ValidationProtocolForm",
+    "ProcessCapabilityStudyForm",
+    "ComputerSystemValidationForm",
+    "CleaningValidationForm",
 ]
 
