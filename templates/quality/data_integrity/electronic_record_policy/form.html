@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Policy {{ policy.number }}{% else %}New Electronic Record Policy{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:electronic_record_policy_list' %}">Record Policies</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ policy.number }}{% else %}New Policy{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Electronic Record Policy — {{ policy.number }}{% else %}New 21 CFR Part 11 Electronic Record Policy{% endif %}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6 max-w-4xl">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200 p-4">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-red-700">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Policy Identification</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Policy Title *</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.record_type_name.id_for_label }}">Record Type Name *</label>
+                {{ form.record_type_name }}
+                {% if form.record_type_name.errors %}<div class="form-error">{{ form.record_type_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.record_category.id_for_label }}">Record Category *</label>
+                {{ form.record_category }}
+                {% if form.record_category.errors %}<div class="form-error">{{ form.record_category.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_model_name.id_for_label }}">Target Model / Entity</label>
+                {{ form.target_model_name }}
+                {% if form.target_model_name.errors %}<div class="form-error">{{ form.target_model_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Policy Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.system.id_for_label }}">Computerized System</label>
+                {{ form.system }}
+                {% if form.system.errors %}<div class="form-error">{{ form.system.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.governing_sop.id_for_label }}">Governing SOP Document</label>
+                {{ form.governing_sop }}
+                {% if form.governing_sop.errors %}<div class="form-error">{{ form.governing_sop.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Regulatory & Electronic Signature Requirements</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.signature_requirement.id_for_label }}">Electronic Signature Requirement *</label>
+                {{ form.signature_requirement }}
+                {% if form.signature_requirement.errors %}<div class="form-error">{{ form.signature_requirement.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.is_part_11_regulated }}
+                <label class="form-label mb-0" for="{{ form.is_part_11_regulated.id_for_label }}">21 CFR Part 11 Regulated Record</label>
+            </div>
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.is_annex_11_regulated }}
+                <label class="form-label mb-0" for="{{ form.is_annex_11_regulated.id_for_label }}">EU Annex 11 Regulated Record</label>
+            </div>
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.reauthentication_required }}
+                <label class="form-label mb-0" for="{{ form.reauthentication_required.id_for_label }}">Re-authentication Required (Password/MFA)</label>
+            </div>
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.dual_signature_required }}
+                <label class="form-label mb-0" for="{{ form.dual_signature_required.id_for_label }}">Dual Signature Gate Required</label>
+            </div>
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.audit_trail_mandatory }}
+                <label class="form-label mb-0" for="{{ form.audit_trail_mandatory.id_for_label }}">Audit Trail Mandatory (Immutable)</label>
+            </div>
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.legal_hold }}
+                <label class="form-label mb-0" for="{{ form.legal_hold.id_for_label }}">Legal Hold Freeze Active</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Storage, Archival & Ownership</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.retention_period_years.id_for_label }}">Retention Period (Years) *</label>
+                {{ form.retention_period_years }}
+                {% if form.retention_period_years.errors %}<div class="form-error">{{ form.retention_period_years.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.storage_format.id_for_label }}">Storage Format *</label>
+                {{ form.storage_format }}
+                {% if form.storage_format.errors %}<div class="form-error">{{ form.storage_format.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.backup_frequency.id_for_label }}">Backup Frequency *</label>
+                {{ form.backup_frequency }}
+                {% if form.backup_frequency.errors %}<div class="form-error">{{ form.backup_frequency.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.approval_date.id_for_label }}">QA Approval Date</label>
+                {{ form.approval_date }}
+                {% if form.approval_date.errors %}<div class="form-error">{{ form.approval_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.system_owner.id_for_label }}">System Owner</label>
+                {{ form.system_owner }}
+                {% if form.system_owner.errors %}<div class="form-error">{{ form.system_owner.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.qa_approver.id_for_label }}">QA Approver</label>
+                {{ form.qa_approver }}
+                {% if form.qa_approver.errors %}<div class="form-error">{{ form.qa_approver.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Policy Description & Governance Scope</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-4">
+        <button type="submit" class="btn btn-primary">
+            {% if is_edit %}Save Changes{% else %}Create Policy{% endif %}
+        </button>
+        <a href="{% if is_edit %}{% url 'quality:electronic_record_policy_detail' policy.pk %}{% else %}{% url 'quality:electronic_record_policy_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</form>
+{% endblock %}
