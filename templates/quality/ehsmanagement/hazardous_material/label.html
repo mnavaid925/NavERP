@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GHS Secondary Container Label — {{ hazardous_material.number }}</title>
+    <style>
+        @page {
+            size: 6in 4in;
+            margin: 0.2in;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background: #f8fafc;
+            color: #0f172a;
+        }
+        .label-container {
+            width: 5.6in;
+            height: 3.6in;
+            border: 3px solid #000;
+            padding: 12px;
+            box-sizing: border-box;
+            background: #fff;
+            position: relative;
+            margin: 0 auto;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        .header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+        }
+        .chemical-name {
+            font-size: 20px;
+            font-weight: 900;
+            text-transform: uppercase;
+            line-height: 1.1;
+            margin: 0;
+        }
+        .sub-name {
+            font-size: 11px;
+            color: #334155;
+            font-weight: 600;
+        }
+        .signal-banner {
+            background: #dc2626;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 900;
+            text-align: center;
+            letter-spacing: 2px;
+            padding: 3px 0;
+            margin-bottom: 8px;
+        }
+        .signal-banner.warning {
+            background: #d97706;
+        }
+        .signal-banner.none {
+            background: #475569;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 10px;
+        }
+        .statements {
+            font-size: 9px;
+            line-height: 1.25;
+        }
+        .statements h4 {
+            margin: 2px 0;
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+        .diamond-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+        }
+        /* Mini NFPA Diamond */
+        .nfpa-mini {
+            position: relative;
+            width: 70px;
+            height: 70px;
+            margin: 10px 0;
+        }
+        .sq {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            border: 1px solid #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 14px;
+            transform: rotate(45deg);
+        }
+        .sq span {
+            transform: rotate(-45deg);
+        }
+        .sq-flam {
+            top: 2px; left: 19px;
+            background: #ef4444; color: #fff;
+        }
+        .sq-health {
+            top: 19px; left: 2px;
+            background: #3b82f6; color: #fff;
+        }
+        .sq-instab {
+            top: 19px; left: 36px;
+            background: #eab308; color: #000;
+        }
+        .sq-spec {
+            top: 36px; left: 19px;
+            background: #fff; color: #000;
+            font-size: 9px;
+        }
+        .pictograms {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+        .pic-badge {
+            border: 2px solid #ef4444;
+            padding: 2px 6px;
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            transform: rotate(45deg);
+            display: inline-block;
+            margin: 6px;
+        }
+        .footer {
+            position: absolute;
+            bottom: 8px;
+            left: 12px;
+            right: 12px;
+            border-top: 1px solid #94a3b8;
+            padding-top: 4px;
+            font-size: 8px;
+            display: flex;
+            justify-content: space-between;
+            color: #475569;
+        }
+        .no-print {
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        .btn-print {
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        @media print {
+            body {
+                background: #fff;
+                padding: 0;
+            }
+            .label-container {
+                box-shadow: none;
+                margin: 0;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button onclick="window.print()" class="btn-print">Print GHS Secondary Container Label</button>
+    </div>
+
+    <div class="label-container">
+        <div class="header">
+            <h1 class="chemical-name">{{ hazardous_material.material_name }}</h1>
+            <div class="sub-name">{{ hazardous_material.trade_name|default:hazardous_material.chemical_formula }} | CAS: {{ hazardous_material.cas_number|default:"N/A" }} | UN: {{ hazardous_material.un_number|default:"N/A" }}</div>
+        </div>
+
+        <div class="signal-banner {% if hazardous_material.ghs_signal_word == 'warning' %}warning{% elif hazardous_material.ghs_signal_word == 'none' %}none{% endif %}">
+            {{ hazardous_material.get_ghs_signal_word_display|upper }}
+        </div>
+
+        <div class="grid">
+            <div class="statements">
+                <h4>Hazard Warnings:</h4>
+                <div>{{ hazardous_material.hazard_statements|default:"Standard hazardous chemical precautions apply. Avoid contact."|truncatewords:25 }}</div>
+
+                <h4 style="margin-top: 6px;">Precautionary Measures:</h4>
+                <div>{{ hazardous_material.precautionary_statements|default:"Wear appropriate PPE. Store in designated chemical locker."|truncatewords:25 }}</div>
+
+                <h4 style="margin-top: 6px;">PPE Required:</h4>
+                <div>{{ hazardous_material.ppe_requirements|default:"Safety glasses, lab coat, nitrile gloves." }}</div>
+            </div>
+
+            <div class="diamond-box">
+                <!-- NFPA 704 Mini Diamond -->
+                <div class="nfpa-mini">
+                    <div class="sq sq-flam"><span>{{ hazardous_material.nfpa_flammability }}</span></div>
+                    <div class="sq sq-health"><span>{{ hazardous_material.nfpa_health }}</span></div>
+                    <div class="sq sq-instab"><span>{{ hazardous_material.nfpa_instability }}</span></div>
+                    <div class="sq sq-spec"><span>{{ hazardous_material.get_nfpa_special_hazard_display|slice:":3" }}</span></div>
+                </div>
+
+                <div style="font-size: 8px; font-weight: 700; text-align: center; text-transform: uppercase;">
+                    {% for pic in hazardous_material.pictograms_list %}
+                    <span style="border: 1px solid #ef4444; color: #dc2626; padding: 1px 3px; margin: 1px; display: inline-block;">{{ pic }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>NavERP QMS # {{ hazardous_material.number }} | Location: {{ hazardous_material.storage_location_code|default:"General Hazmat" }}</span>
+            <span>Safety Officer: {{ hazardous_material.managed_by.get_full_name|default:hazardous_material.managed_by.username }}</span>
+            <span>SDS Current: {% if hazardous_material.is_sds_expired %}EXPIRED{% else %}VERIFIED{% endif %}</span>
+        </div>
+    </div>
+</body>
+</html>
