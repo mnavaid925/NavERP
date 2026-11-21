@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 6 | 3 | 0 |
+| **Important** | 9 | 5 | 4 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 20 | 5 | 0 |
+| **Total** | 25 | 19 | 6 | 0 |
 
 ---
 
@@ -66,7 +66,7 @@
   - **Issue**: All 4 delete views allow any authenticated user in the tenant to permanently delete regulatory submissions and certificates. In accordance with QMS governance, deletion must be restricted to tenant admins.
   - **Fix**: Import `tenant_admin_required` from `apps.core.decorators` and apply to all 4 deletion views.
 
-- [ ] **I4: KPI Stat Cards Computed on Filtered Queryset Instead of Tenant Base Queryset**
+- [x] **I4: KPI Stat Cards Computed on Filtered Queryset Instead of Tenant Base Queryset**
   - **Files**:
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:54-58`
     - `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py:54-62`
