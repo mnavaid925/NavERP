@@ -128,6 +128,18 @@ from apps.quality.models.ManagementReview.ManagementReviewInputs import (
 from apps.quality.models.ManagementReview.ManagementReviewActions import (
     ManagementReviewAction,
 )
+from apps.quality.models.ProcessValidation.ValidationProtocols import (
+    ValidationProtocol,
+)
+from apps.quality.models.ProcessValidation.ProcessCapabilityStudies import (
+    ProcessCapabilityStudy,
+)
+from apps.quality.models.ProcessValidation.ComputerSystemValidations import (
+    ComputerSystemValidation,
+)
+from apps.quality.models.ProcessValidation.CleaningValidations import (
+    CleaningValidation,
+)
 
 
 
@@ -1219,6 +1231,87 @@ class ManagementReviewActionAdmin(admin.ModelAdmin):
     list_filter = ("action_type", "priority", "status", "tenant")
     search_fields = ("number", "title", "description", "resolution_summary")
     list_select_related = ("tenant", "management_review", "assignee", "verified_by", "spawned_capa", "spawned_change_order")
+
+
+@admin.register(ValidationProtocol)
+class ValidationProtocolAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "protocol_stage",
+        "target_type",
+        "status",
+        "revalidation_trigger",
+        "equipment_tag",
+        "target_completion_date",
+        "lead_author",
+        "qa_reviewer",
+        "tenant",
+    )
+    list_filter = ("protocol_stage", "target_type", "status", "revalidation_trigger", "tenant")
+    search_fields = ("number", "title", "equipment_tag", "process_name", "item_code")
+    list_select_related = ("tenant", "lead_author", "qa_reviewer", "final_approver", "department")
+
+
+@admin.register(ProcessCapabilityStudy)
+class ProcessCapabilityStudyAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "parameter_name",
+        "parameter_category",
+        "mean_value",
+        "cpk_index",
+        "ppk_index",
+        "capability_determination",
+        "status",
+        "investigator",
+        "tenant",
+    )
+    list_filter = ("capability_determination", "parameter_category", "status", "tenant")
+    search_fields = ("number", "title", "parameter_name", "equipment_tag", "process_name")
+    list_select_related = ("tenant", "investigator", "approved_by", "validation_protocol")
+
+
+@admin.register(ComputerSystemValidation)
+class ComputerSystemValidationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "system_name",
+        "version_release",
+        "vendor_name",
+        "gamp_category",
+        "gxp_impact",
+        "status",
+        "is_part_11_compliant",
+        "next_review_due",
+        "system_owner",
+        "tenant",
+    )
+    list_filter = ("gamp_category", "gxp_impact", "status", "is_part_11_compliant", "tenant")
+    search_fields = ("number", "system_name", "vendor_name", "version_release")
+    list_select_related = ("tenant", "system_owner", "quality_lead", "validation_protocol")
+
+
+@admin.register(CleaningValidation)
+class CleaningValidationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "equipment_train_tag",
+        "target_residue",
+        "calculated_maco_mg",
+        "calculated_swab_limit_ug",
+        "cleaning_status",
+        "is_visually_clean",
+        "next_revalidation_date",
+        "analytical_lead",
+        "tenant",
+    )
+    list_filter = ("cleaning_status", "calculation_basis", "analytical_method", "is_visually_clean", "tenant")
+    search_fields = ("number", "title", "equipment_train_tag", "target_residue", "cleaning_agent_used")
+    list_select_related = ("tenant", "analytical_lead", "qa_approver", "validation_protocol", "cleaning_sop")
+
 
 
 
