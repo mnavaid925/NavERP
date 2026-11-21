@@ -3482,6 +3482,13 @@ LIVE_LINKS = {
         "Management Review Outputs & Decisions": "quality:management_review_action_list",
         "Quality Planning & Continuous Improvement": "quality:quality_planning_dashboard",
     },
+    "12.15": {
+        "Process Validation Planning (IQ/OQ/PQ)": "quality:validation_protocol_list",
+        "Process Capability Studies (Cp/Cpk)": "quality:process_capability_study_list",
+        "Computer System Validation (CSV)": "quality:computer_system_validation_list",
+        "Cleaning Validation": "quality:cleaning_validation_list",
+        "Revalidation & Periodic Review": "quality:process_validation_dashboard",
+    },
 
 
 
