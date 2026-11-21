@@ -128,6 +128,7 @@ class ProcessCapabilityStudy(TenantNumbered):
         verbose_name = "Process Capability Study"
         verbose_name_plural = "Process Capability Studies"
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_qcpk_ten_created"),
             models.Index(fields=["tenant", "status"], name="idx_qcpk_ten_status"),
             models.Index(fields=["tenant", "capability_determination"], name="idx_qcpk_ten_determ"),
             models.Index(fields=["tenant", "parameter_category"], name="idx_qcpk_ten_param_cat"),
