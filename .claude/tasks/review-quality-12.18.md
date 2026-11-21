@@ -68,3 +68,17 @@
 ### Minor
 - **[PR-M1]** `apps/quality/views/TraceabilitySerialization/TraceabilityDashboard.py:24-30`: Unconsolidated separate count queries in Dashboard KPIs. Consolidate into `.aggregate(Count(..., filter=...))`.
 - **[PR-M2]** `traceability_dashboard.html:123` & `serialized_item/detail.html:138`: Redundant extra count queries on querysets iterated immediately after (`.count` -> `|length`).
+
+---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+- **[QA-C1]** Duplicate of CR-C1 / FR-C1. `templates/quality/traceabilityserialization/product_recall/detail.html:211`: Confirmed empirical 500 crash (`django.urls.exceptions.NoReverseMatch: Reverse for 'complaint_detail' not found`) when rendering product recall linked to `CustomerComplaint`.
+- **[QA-C2]** Duplicate of CR-C2 / FR-C2. `templates/quality/traceabilityserialization/product_recall/detail.html:223`: Confirmed empirical 500 crash (`django.urls.exceptions.NoReverseMatch: Reverse for 'capa_detail' not found`) when rendering product recall linked to `CapaInvestigation`.
+
+### Important
+- None. (Cross-tenant IDOR confirmed safe: all 4 entities return HTTP 404 when queried across tenants).
+
+### Minor
+- None. (26 core routes return HTTP 200/302, CSV export returns `text/csv`, zero comment leaks).
