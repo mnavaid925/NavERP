@@ -160,6 +160,14 @@ environmental_monitoring_log_edit = environmental_monitoring_log_update
 @require_POST
 def environmental_monitoring_log_delete(request, pk):
     obj = quality_object(request, EnvironmentalMonitoringLog, pk)
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)):
+        messages.error(request, "Only tenant administrators can delete environmental monitoring logs.")
+        return redirect("quality:environmental_monitoring_log_detail", pk=obj.pk)
+
+    if obj.evaluation_status in ("alert_exceeded", "action_exceeded"):
+        messages.error(request, "Environmental logs with recorded alert or action excursions cannot be deleted.")
+        return redirect("quality:environmental_monitoring_log_detail", pk=obj.pk)
+
     num = obj.number
     write_audit_log(request.user, obj, "delete", tenant=request.tenant)
     obj.delete()
