@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Lab Specifications — Laboratory Information Management (LIMS) — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <span>Lab Specifications</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="book-open-check" class="w-6 h-6 text-blue-600"></i>
+        Test Method & Specification Management
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Analytical specifications, acceptance limits, test methods, and method validation records across quality control.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:lims_dashboard' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>LIMS Command Center</span>
+      </a>
+      <a href="{% url 'quality:lab_specification_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Specification</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Card -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+      <div class="form-group md:col-span-2">
+        <label for="q" class="form-label text-xs font-semibold text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            name="q"
+            id="q"
+            value="{{ query }}"
+            placeholder="Search by title, spec #, product code/name, method #, parameter..."
+            class="form-input w-full pl-9"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="specification_type" class="form-label text-xs font-semibold text-slate-600 mb-1">Spec Type</label>
+        <select name="specification_type" id="specification_type" class="form-select w-full">
+          <option value="">All Types</option>
+          {% for val, label in spec_type_choices %}
+            <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="test_category" class="form-label text-xs font-semibold text-slate-600 mb-1">Test Category</label>
+        <select name="test_category" id="test_category" class="form-select w-full">
+          <option value="">All Categories</option>
+          {% for val, label in test_category_choices %}
+            <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group flex gap-2">
+        <div class="flex-1">
+          <label for="status" class="form-label text-xs font-semibold text-slate-600 mb-1">Status</label>
+          <select name="status" id="status" class="form-select w-full">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary self-end">Filter</button>
+        {% if query or selected_type or selected_category or selected_status %}
+          <a href="{% url 'quality:lab_specification_list' %}" class="btn btn-outline self-end" title="Clear Filters">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Specifications Table -->
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table w-full text-left text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+            <th class="py-3 px-4">Spec ID</th>
+            <th class="py-3 px-4">Title / Method</th>
+            <th class="py-3 px-4">Product Code / Name</th>
+            <th class="py-3 px-4">Category</th>
+            <th class="py-3 px-4">Primary Parameter & Limits</th>
+            <th class="py-3 px-4">Version</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for s in specifications %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-slate-900">
+                <a href="{% url 'quality:lab_specification_detail' s.pk %}" class="text-blue-600 hover:underline">
+                  {{ s.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ s.title }}</div>
+                {% if s.analytical_method_number %}
+                  <div class="text-xs text-slate-500 font-mono">Method: {{ s.analytical_method_number }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ s.product_name }}</div>
+                <div class="text-xs text-slate-500 font-mono">{{ s.product_code }}</div>
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ s.get_test_category_badge }}">{{ s.get_test_category_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-xs">
+                <div class="font-semibold text-slate-800">{{ s.target_parameter_name }}</div>
+                <div class="text-slate-600 mt-0.5">
+                  {% if s.lower_limit is not None and s.upper_limit is not None %}
+                    {{ s.lower_limit }} – {{ s.upper_limit }} {{ s.parameter_unit }}
+                  {% elif s.lower_limit is not None %}
+                    ≥ {{ s.lower_limit }} {{ s.parameter_unit }}
+                  {% elif s.upper_limit is not None %}
+                    ≤ {{ s.upper_limit }} {{ s.parameter_unit }}
+                  {% elif s.text_acceptance_criteria %}
+                    <span class="italic text-slate-500 truncate max-w-xs block">{{ s.text_acceptance_criteria }}</span>
+                  {% else %}
+                    <span class="text-slate-400">Not specified</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td class="py-3 px-4 text-xs font-mono font-medium text-slate-700">
+                v{{ s.version }}
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ s.get_status_badge }}">{{ s.get_status_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-right table-actions">
+                <div class="flex items-center justify-end gap-1">
+                  <a href="{% url 'quality:lab_specification_detail' s.pk %}" class="btn btn-icon" title="View Detail">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'quality:lab_specification_edit' s.pk %}" class="btn btn-icon" title="Edit">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'quality:lab_specification_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete specification {{ s.number|escapejs }}?');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" class="text-center py-12">
+                <div class="empty-state flex flex-col items-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="book-open-check" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800">No Lab Specifications Found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">Establish analytical method specifications and numerical acceptance limits.</p>
+                  <a href="{% url 'quality:lab_specification_create' %}" class="btn btn-primary text-sm">
+                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Specification
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+      <div class="p-4 border-t border-slate-200 flex items-center justify-between">
+        <div class="text-xs text-slate-500">
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} specifications
+        </div>
+        <div class="pagination flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_type %}&specification_type={{ selected_type }}{% endif %}{% if selected_category %}&test_category={{ selected_category }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">Previous</a>
+          {% endif %}
+          <span class="py-1 px-3 text-xs text-slate-600 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_type %}&specification_type={{ selected_type }}{% endif %}{% if selected_category %}&test_category={{ selected_category }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">Next</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
