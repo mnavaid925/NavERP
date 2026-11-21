@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; 12.14 Management Review & Quality Planning — Quality Objectives [QOBJ-], Management Reviews [QMRV-], Review Inputs [QMRI-], Review Actions [QMRA-], Quality Planning Dashboard, and FDA/ISO Audit Dossier; 12.15 Process Validation & Verification — Validation Protocols [QVAL-], Process Capability Studies [QCPK-], Computer System Validation [QCSV-], Cleaning Validation [QCLN-], and Process Validation Dashboard; and 12.16 Environmental, Health & Safety (EHS) — Hazardous Materials [QHAZ-], Workplace Safety Incidents [QSIR-], Environmental Monitoring Logs [QENV-], Waste Disposal Manifests [QWST-], and EHS Command Center Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.16), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; 12.14 Management Review & Quality Planning; 12.15 Process Validation & Verification; 12.16 Environmental, Health & Safety (EHS); 12.17 Regulatory Compliance & Post-Market Surveillance (Product Registrations [QREG-], Regulatory Submissions [QSUB-], Regulatory Commitments [QCOM-], PMS Reports [QPMS-], and Regulatory Command Center); and 12.18 Traceability & Serialization (Electronic Batch Records [QBMR-], Unique Device Identification [QUDI-], Serialized Items & GS1 Aggregation [QSER-], Product Recalls [QRCL-], and Traceability Command Center Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.18), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -132,6 +132,20 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Hazardous Waste Manifests & 90-Day Accumulation Tracking** [`QWST-`]: Hazardous waste disposal conforming to EPA RCRA 40 CFR 262/263/264 and DOT 49 CFR. Governs manifest types (`hazardous_chemical`, `universal_waste`, `biohazard_infectious`, `radioactive`, `non_hazardous_industrial`, `electronic_weee`), EPA Form 8700-22 regulatory manifest IDs, generator EPA IDs, RCRA waste characteristics (D001 Ignitable, D002 Corrosive, D003 Reactive, D004-D043 Toxic), F/K/P/U waste codes, originating hazardous material linkage (`HazardousMaterial`), container packaging types, certified net weights/volumes, licensed hazardous waste transporters (`core.Party`), designated Treatment, Storage, & Disposal Facilities (TSDF `core.Party`), 90-day generator accumulation clock with overdue warning alarms, TSDF receipt confirmations, final Certificate of Disposal / Destruction verification, and active shipment deletion locks.
   - **EHS Command Center & Analytics Dashboard**: Executive EHS management portal (`ehs_dashboard`) tracking active chemical inventories, expiring SDS renewals (<=90 days), YTD incident counts, OSHA recordable cases, DART incident rates, total lost and restricted workdays, active cleanroom alert/action excursions, pending and in-transit waste manifests, overdue RCRA 90-day accumulation warnings, incident severity distribution charts, waste type distribution, and downloadable executive KPI summary CSV exports.
 
+- **12.17 Regulatory Compliance & Post-Market Surveillance**:
+  - **Product Registrations & Market Clearances** [`QREG-`]: Global regulatory market authorization directory conforming to FDA 510(k)/PMA/De Novo, EU MDR/IVDR CE-Mark, Health Canada, PMDA, and NMPA requirements. Tracks registration numbers, regulatory pathways, issuing agencies, application/approval/expiry dates, renewal lead-time alerts, authorized markets/regions, licensed indications for use, device classifications, responsible regulatory affairs leads (`accounts.User`), and registration lifecycle (`draft` -> `submitted` -> `under_review` -> `approved` / `conditional` / `rejected` -> `expired` / `withdrawn`).
+  - **Regulatory Submissions & Dossier Management** [`QSUB-`]: Formal submission dossier workflows across submission types (`510k_premarket_notification`, `pma_application`, `ce_mark_technical_file`, `investigational_device_exemption`, `annual_report`, `substantial_equivalence`, `regulatory_response`). Tracks target regulatory bodies, submission lead, target filing dates, actual submission dates, submission dossier versioning, eCopy/eSTAR submission tracking numbers, review status milestones (`drafting` -> `internal_review` -> `submitted_to_agency` -> `agency_review` -> `ai_additional_information_requested` -> `approved` / `cleared` / `rejected`), agency questions log, and controlled document attachments (`ControlledDocument`).
+  - **Regulatory Correspondence & Commitments** [`QCOM-`]: Post-market commitments, agency inquiries, and post-approval mandates. Tracks agency source, reference numbers, commitment categories (`post_market_study`, `manufacturing_change_reporting`, `labeling_update`, `phase_4_clinical`, `annual_safety_report`), priority triage (`low`, `medium`, `high`, `critical`), due dates, statutory regulatory deadline clocks, responsible assignees (`accounts.User`), progress percentage, fulfillment evidence verification, and completion sign-offs preventing premature closure.
+  - **Post-Market Surveillance (PMS) Plans & Periodic Safety Reports** [`QPMS-`]: EU MDR Article 86 PSUR, Article 85 PMS Report, and FDA post-market surveillance plans. Tracks product family, surveillance periods, market sales volume exposure, complaint frequency rates, vigilance incident tally, clinical benefit-risk profile conclusions, literature review findings, state machine (`draft` -> `in_progress` -> `under_review` -> `approved` -> `submitted`), and Notified Body / agency submission milestones.
+  - **Regulatory Intelligence & Tracking Command Center**: Executive regulatory affairs dashboard (`regulatory_dashboard`) monitoring active market authorizations, expiring registrations (<=90 days), pending regulatory submissions, upcoming agency commitment deadlines, and post-market report due dates.
+
+- **12.18 Traceability & Serialization**:
+  - **Electronic Batch Records (eBR) & Master Batch Records** [`QBMR-`]: Pharmaceutical and medical device batch production and control records satisfying FDA 21 CFR § 211.188 and § 820.184 (DHR). Tracks batch/lot numbers, manufacturing and expiry dates, linked items (`core.Item`), planned vs. actual yield quantities, yield percentage calculation ($Actual / Planned \times 100$), critical process parameter logs, line clearance certifications, in-process inspection links (`InProcessInspection`), environmental monitoring records (`EnvironmentalMonitoringLog`), deviation linkages (`ProcessDeviation`), multi-gate release workflows (`draft` -> `in_production` -> `quarantine_hold` -> `released` / `rejected`), tenant-admin release gating with 21 CFR Part 11 electronic signature binding (`ElectronicSignatureRecord`), and GMP preservation deletion locks.
+  - **Unique Device Identification (UDI) Registry** [`QUDI-`]: Medical device identification compliant with FDA 21 CFR Part 830, EU MDR 2017/745 Article 27, and GUDID/EUDAMED standards. Tracks Device Identifiers (DI / GTIN-14), issuing agencies (`gs1`, `hibcc`, `iccbba`), device nomenclature, FDA/EU risk classifications (`class_i`, `class_iia`, `class_iib`, `class_iii`), commercial distribution status (`commercially_distributed`, `investigational`, `export_only`, `discontinued`), MRI safety ratings (`mri_safe`, `mri_conditional`, `mri_unsafe`), single-use flags, sterile package indicators, GUDID/EUDAMED regulatory sync timestamps, and direct linkages to engineering items (`core.Item`).
+  - **Serialized Item & Aggregation Hierarchy (GS1 / DSCSA EPCIS)** [`QSER-`]: Item-level serialization conforming to the US Drug Supply Chain Security Act (DSCSA) and EU Falsified Medicines Directive (FMD). Manages unique serial numbers, full GS1 Digital Link URIs, EPCIS commission/pack/ship/decommission event states, packaging aggregation levels (`primary_each`, `secondary_bundle`, `tertiary_case`, `pallet_sscc`), parent container packaging hierarchies, multi-tier tree navigation (`parent_container`, `child_items`), current storage locations, production work orders (`scm.ProductionOrder`), and high-performance composite index optimization (`idx_qser_ten_epcis`).
+  - **Product Recall Execution & Consignee Reconciliation** [`QRCL-`]: Crisis market action response satisfying FDA 21 CFR Part 7, EU Rapid Alert System (RAPEX), and ISO 13485:2016 §8.5.2. Tracks recall classes (`class_i_critical`, `class_ii_moderate`, `class_iii_minor`), initiating root cause linkages (`CustomerComplaint`, `CapaInvestigation`, `NonConformanceReport`), affected lot and serial scopes, total units distributed, units quarantined in warehouse, consignee notifications dispatched, customer notification response rates, units recovered/destroyed, reconciliation recovery percentage calculation ($Units Recovered / Units Distributed \times 100$), regulatory notification reference numbers, termination justification protocols, and tenant-admin gated deletion protections.
+  - **Track & Trace Command Center & Traceability Workbench**: Operational dashboard (`traceability_dashboard`) visualizing active batch production volumes, UDI compliance coverage, serialization throughput, packaging aggregation hierarchy graphs, real-time recall recovery rate progress gauges, streaming EPCIS CSV export (`traceability_export_csv`), and end-to-end forward/reverse trace lookups.
+
 ---
 
 ## App Layout & Architecture
@@ -217,6 +231,21 @@ apps/quality/
       ProcessCapabilityStudies.py             <- ProcessCapabilityStudy [QCPK-]
       ComputerSystemValidations.py            <- ComputerSystemValidation [QCSV-]
       CleaningValidations.py                  <- CleaningValidation [QCLN-]
+    EnvironmentalHealthSafety/                <- Sub-module 12.16 models
+      HazardousMaterials.py                   <- HazardousMaterial [QHAZ-]
+      SafetyIncidents.py                      <- SafetyIncident [QSIR-]
+      EnvironmentalMonitoringLogs.py          <- EnvironmentalMonitoringLog [QENV-]
+      WasteDisposalManifests.py               <- WasteDisposalManifest [QWST-]
+    RegulatoryCompliance/                     <- Sub-module 12.17 models
+      ProductRegistrations.py                 <- ProductRegistration [QREG-]
+      RegulatorySubmissions.py                <- RegulatorySubmission [QSUB-]
+      RegulatoryCommitments.py                <- RegulatoryCommitment [QCOM-]
+      PostMarketSurveillanceReports.py        <- PostMarketSurveillanceReport [QPMS-]
+    TraceabilitySerialization/                <- Sub-module 12.18 models
+      BatchRecords.py                         <- BatchRecord [QBMR-]
+      DeviceIdentifiers.py                    <- DeviceIdentifier [QUDI-]
+      SerializedItems.py                      <- SerializedItem [QSER-]
+      ProductRecalls.py                       <- ProductRecall [QRCL-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -295,6 +324,21 @@ apps/quality/
       ProcessCapabilityStudies.py             <- ProcessCapabilityStudyForm
       ComputerSystemValidations.py            <- ComputerSystemValidationForm
       CleaningValidations.py                  <- CleaningValidationForm
+    EnvironmentalHealthSafety/                <- Sub-module 12.16 forms
+      HazardousMaterials.py                   <- HazardousMaterialForm
+      SafetyIncidents.py                      <- SafetyIncidentForm
+      EnvironmentalMonitoringLogs.py          <- EnvironmentalMonitoringLogForm
+      WasteDisposalManifests.py               <- WasteDisposalManifestForm
+    RegulatoryCompliance/                     <- Sub-module 12.17 forms
+      ProductRegistrations.py                 <- ProductRegistrationForm
+      RegulatorySubmissions.py                <- RegulatorySubmissionForm
+      RegulatoryCommitments.py                <- RegulatoryCommitmentForm
+      PostMarketSurveillanceReports.py        <- PostMarketSurveillanceReportForm
+    TraceabilitySerialization/                <- Sub-module 12.18 forms
+      BatchRecords.py                         <- BatchRecordForm, BatchRecordReleaseForm
+      DeviceIdentifiers.py                    <- DeviceIdentifierForm
+      SerializedItems.py                      <- SerializedItemForm
+      ProductRecalls.py                       <- ProductRecallForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -387,6 +431,24 @@ apps/quality/
       ComputerSystemValidations.py            <- List, Detail, Create, Edit, Delete, Export
       CleaningValidations.py                  <- List, Detail, Create, Edit, Delete, Export
       ProcessValidationDashboard.py           <- Operational Process Validation & Verification Command Center
+    EnvironmentalHealthSafety/                <- Sub-module 12.16 views
+      HazardousMaterials.py                   <- List, Detail, Create, Edit, Delete, Export
+      SafetyIncidents.py                      <- List, Detail, Create, Edit, Delete, Export
+      EnvironmentalMonitoringLogs.py          <- List, Detail, Create, Edit, Delete, Export
+      WasteDisposalManifests.py               <- List, Detail, Create, Edit, Delete, Export
+      EhsDashboard.py                         <- EHS Command Center Dashboard
+    RegulatoryCompliance/                     <- Sub-module 12.17 views
+      ProductRegistrations.py                 <- List, Detail, Create, Edit, Delete, Export
+      RegulatorySubmissions.py                <- List, Detail, Create, Edit, Delete, Export
+      RegulatoryCommitments.py                <- List, Detail, Create, Edit, Delete, Export
+      PostMarketSurveillanceReports.py        <- List, Detail, Create, Edit, Delete, Export
+      RegulatoryDashboard.py                  <- Regulatory Intelligence & Tracking Command Center
+    TraceabilitySerialization/                <- Sub-module 12.18 views
+      BatchRecords.py                         <- List, Detail, Create, Edit, Delete, Release, Export
+      DeviceIdentifiers.py                    <- List, Detail, Create, Edit, Delete, Export
+      SerializedItems.py                      <- List, Detail, Create, Edit, Delete, Export
+      ProductRecalls.py                       <- List, Detail, Create, Edit, Delete, Close, Export
+      TraceabilityDashboard.py                <- Track & Trace Command Center, EPCIS CSV Export
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -478,12 +540,34 @@ apps/quality/
       ComputerSystemValidations.py
       CleaningValidations.py
       ProcessValidationDashboard.py
+    EnvironmentalHealthSafety/                <- Sub-module 12.16 URLs
+      HazardousMaterials.py
+      SafetyIncidents.py
+      EnvironmentalMonitoringLogs.py
+      WasteDisposalManifests.py
+      EhsDashboard.py
+    RegulatoryCompliance/                     <- Sub-module 12.17 URLs
+      ProductRegistrations.py
+      RegulatorySubmissions.py
+      RegulatoryCommitments.py
+      PostMarketSurveillanceReports.py
+      RegulatoryDashboard.py
+    TraceabilitySerialization/                <- Sub-module 12.18 URLs
+      BatchRecords.py
+      DeviceIdentifiers.py
+      SerializedItems.py
+      ProductRecalls.py
+      TraceabilityDashboard.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.16)
-  tests/                                      <- Pytest test suite (100% green, 2,367+ passing tests)
-    conftest.py                               <- Shared 12.1 through 12.16 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.18)
+  tests/                                      <- Pytest test suite (100% green, 2,400+ passing tests)
+    conftest.py                               <- Shared 12.1 through 12.18 fixtures
+    test_traceabilityserialization_models.py  <- Sub-module 12.18 model tests (7 tests)
+    test_traceabilityserialization_forms.py   <- Sub-module 12.18 form tests (6 tests)
+    test_traceabilityserialization_views.py   <- Sub-module 12.18 view tests (6 tests)
+    test_traceabilityserialization_security.py <- Sub-module 12.18 security tests (5 tests)
     test_processvalidation_models.py          <- Sub-module 12.15 model tests (15 tests)
     test_processvalidation_forms.py           <- Sub-module 12.15 form tests (12 tests)
     test_processvalidation_views.py           <- Sub-module 12.15 view tests (25 tests)
@@ -1363,6 +1447,24 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
   - 2 Computer System Validations per tenant (`MasterQMS Document Management System` [GAMP Category 4], `Empower 3 Chromatography Data System` [FDA CSA Risk-Based]) with 21 CFR Part 11 compliance checklists and periodic reviews.
   - 2 Cleaning Validations per tenant (`Solid Dose Granulation Train Cleaning Validation`, `Packaging Line Aseptic Fill Train Cleaning Validation`) with automated MACO, swab limit, and rinse concentration calculations.
 
+- **12.16 Data**:
+  - 4 Hazardous Materials per tenant (`Acetone HPLC Grade`, `Isopropyl Alcohol 70%`, `Hydrochloric Acid 1N`, `Sodium Hydroxide 10M`) with GHS classifications, NFPA fire diamonds, and SDS links.
+  - 3 Workplace Safety Incidents per tenant across injury, near miss, and chemical splash categories with OSHA 300 classification and lost/restricted day tracking.
+  - 4 Environmental Monitoring Logs per tenant across ISO Class 5 and 7 cleanrooms with real-time alert and action limit excursion detection.
+  - 2 Hazardous Waste Disposal Manifests per tenant (one active under 90-day accumulation clock, one verified completed with Certificate of Destruction).
+
+- **12.17 Data**:
+  - 2 Product Registrations per tenant (`CardioFlow Infusion Pump System` [510(k)], `EndoGlide Steerable Catheter` [CE-Mark]) with validity tracking and renewal alerts.
+  - 2 Regulatory Submissions per tenant (`CardioFlow 510(k) Premarket Notification`, `EndoGlide Technical File Dossier`) with eSTAR/eCopy tracking and agency questions.
+  - 2 Regulatory Commitments per tenant (post-market clinical study, packaging labeling update) with statutory due date clocks and fulfillment tracking.
+  - 2 Post-Market Surveillance Reports per tenant (Annual PSUR, Post-Market Clinical Follow-up) with benefit-risk conclusions.
+
+- **12.18 Data**:
+  - 2 Master & Electronic Batch Records per tenant (`BMR-2026-00001` [Aseptic Epinephrine Injections, Released with e-signature], `BMR-2026-00002` [Sterile Saline Solution, In Production]) with planned vs. actual yield metrics, line clearances, and environmental logs.
+  - 2 Unique Device Identifiers (UDI) per tenant (`UDI-2026-00001` [Vascular Access Catheter, Class IIa, GTIN-14 `00850012345012`], `UDI-2026-00002` [Implantable Pacemaker Lead, Class III, GTIN-14 `00850012345029`]) with MRI safety, single-use flags, and GUDID sync timestamps.
+  - 4 Serialized Items per tenant (`SER-2026-00001` to `SER-2026-00004`) demonstrating multi-tier GS1 packaging aggregation hierarchies (primary each -> tertiary shipper carton) across commissioned, packed, shipped, and recalled EPCIS states.
+  - 2 Product Recalls per tenant (`RCL-2026-00001` [Class I Urgent Medical Device Recall, In Progress with 65% consignee recovery], `RCL-2026-00002` [Class II Labeling Market Withdrawal, Completed with 100% recovery]).
+
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
 ---
@@ -1455,6 +1557,20 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - **Closed-Loop Systemic Escalation**: Executive action items demanding systemic intervention support direct escalation to `CapaInvestigation` (`QCAP-`) via `management_review_action_escalate_capa`, with concurrency locking (`select_for_update`), duplicate escalation protection, and bi-directional record linking.
     - **KPI Variance and Clamped Progress**: `QualityObjective.progress_percent` property clamps progress scores between $0\%$ and $100\%$ across higher-is-better, lower-is-better, and exact target directions, eliminating negative or inverted variance percentages.
     - **Optimized Dashboard Aggregation**: `quality_planning_dashboard` consolidates 23 separate database queries into 6 high-performance SQL queries using conditional `.aggregate()` filtering and category `GROUP BY` annotations.
+20. **Environmental, Health & Safety (EHS) Invariants (OSHA 1910.1200 / 1904 / EPA RCRA / ISO 14644):**
+    - **SDS 3-Year Re-certification Cycle**: Hazardous material records automatically evaluate expiration based on 3-year compliance cycles (`is_sds_expired`), alerting on materials with expiring or overdue SDS sheets.
+    - **OSHA 300 Preservation Lock**: Regulatory workplace safety incidents involving lost workdays or OSHA recordability cannot be hard-deleted, enforcing statutory 5-year retention rules.
+    - **Cleanroom Excursion Gating**: Environmental readings exceeding Upper Action Limits automatically flag excursions, mandating documented immediate containment and product quarantine triggers.
+    - **RCRA 90-Day Generator Clock**: Hazardous waste manifests track cumulative days from accumulation date to shipment, sounding alerts at 75 days and triggering overdue warnings past 90 days.
+21. **Regulatory Compliance & Post-Market Surveillance Invariants (FDA 21 CFR / EU MDR):**
+    - **Market Authorization Gating**: Product registrations approaching expiry within 90 days trigger high-visibility alerts across regulatory dashboards to prevent market disruption.
+    - **Statutory Commitment Deadline Enforcement**: Regulatory commitments are bound to agency reference numbers and statutory completion clocks; assignees cannot self-close commitments without independent regulatory affairs sign-off and attached verification artifacts.
+22. **Traceability & Serialization Invariants (FDA 21 CFR § 211.188 / § 820.184 / DSCSA / GS1 EPCIS / 21 CFR Part 7):**
+    - **Multi-Gate Batch Record Release Gate**: Releasing an electronic batch record (`batch_record_release`) requires tenant-admin permissions, validates that the batch is in production or quarantine status, captures 21 CFR Part 11 dual-credential electronic signatures, and atomically transitions status to `released`.
+    - **GMP Batch Record Immutability & Retention**: Under 21 CFR § 211.180/188, batch records in `released` status are locked against deletion or modification to ensure uncompromised Device History Record (DHR) data integrity.
+    - **GS1 Multi-Tier Aggregation Trees**: `SerializedItem` models tree parent-child container hierarchies (`parent_container`, `child_items`). Packaging levels (`primary_each`, `secondary_bundle`, `tertiary_case`, `pallet_sscc`) and EPCIS event states (`commissioned`, `packed`, `shipped`, `recalled`) are strictly indexed via composite index `idx_qser_ten_epcis` on `(tenant, epcis_state)`.
+    - **Recall Reconciliation & Scope Containment**: Product recall records calculate real-time reconciliation recovery rates ($Units Recovered / Units Distributed \times 100$). Closing a recall requires tenant-admin authority and documented regulatory closure justification. Released batch records linked to an active recall automatically display containment warning badges.
+    - **Streaming EPCIS Export & CSV Injection Defense**: Traceability and serialization export (`traceability_export_csv`) utilizes Django `.iterator(chunk_size=1000)` streaming to prevent memory bloat on large serial catalogs, while enforcing `_csv_safe` formula sanitization and `X-Content-Type-Options: nosniff`.
 
 ---
 
@@ -1576,6 +1692,20 @@ LIVE_LINKS = {
         "Environmental Monitoring": "quality:environmental_monitoring_log_list",
         "Waste Management & Disposal": "quality:waste_disposal_manifest_list",
         "Occupational Health & Ergonomics": "quality:ehs_dashboard",
+    },
+    "12.17": {
+        "Regulatory Intelligence & Tracking": "quality:regulatory_dashboard",
+        "Submission Document Management": "quality:regulatory_submission_list",
+        "Regulatory Correspondence & Commitments": "quality:regulatory_commitment_list",
+        "Registration & Listing Management": "quality:product_registration_list",
+        "Post-Market Surveillance (PMS)": "quality:post_market_surveillance_report_list",
+    },
+    "12.18": {
+        "Batch & Lot Record Management": "quality:batch_record_list",
+        "Unique Device Identification (UDI)": "quality:device_identifier_list",
+        "Serialization & Aggregation": "quality:serialized_item_list",
+        "Track & Trace / Supply Chain Integrity": "quality:traceability_dashboard",
+        "Recall & Withdrawal Execution": "quality:product_recall_list",
     },
 }
 ```
