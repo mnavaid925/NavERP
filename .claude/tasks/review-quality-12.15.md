@@ -34,7 +34,7 @@
   - **Issue**: Sequential `else: limits.append(...)` appends alternate calculations when a specific basis is chosen, causing `min(limits)` to take the minimum across all formulas rather than strictly honoring the selected calculation basis (`ten_ppm_limit`, `therapeutic_dose`, `toxicological_pde`).
   - **Fix**: Restructure `calculate_limits()` using explicit `if/elif/elif/else` branches for `"ten_ppm_limit"`, `"therapeutic_dose"`, `"toxicological_pde"`, and `"most_stringent"`.
 
-- [ ] **[C3] None-Safety Filter Crashes on Nullable User Foreign Keys in Detail Templates**
+- [x] **[C3] None-Safety Filter Crashes on Nullable User Foreign Keys in Detail Templates** — fixed in 713174c1, 1acdbf3e, 3b407674
   - **Location**:
     - `templates/quality/processvalidation/validation_protocol/detail.html:191` (`final_approver`)
     - `templates/quality/processvalidation/process_capability_study/detail.html:238` (`approved_by`)
