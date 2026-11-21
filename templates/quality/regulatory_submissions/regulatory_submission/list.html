@@ -169,15 +169,15 @@
                         {% endif %}
                     </td>
                     <td class="table-actions">
-                        <a href="{% url 'quality:regulatory_submission_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                        <a href="{% url 'quality:regulatory_submission_detail' item.pk %}" class="btn btn-icon" title="View Details" aria-label="View {{ item.number }}">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'quality:regulatory_submission_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                        <a href="{% url 'quality:regulatory_submission_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit {{ item.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'quality:regulatory_submission_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this submission?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete" aria-label="Delete {{ item.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
