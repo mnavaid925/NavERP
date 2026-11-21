@@ -160,6 +160,9 @@ from apps.quality.urls.ManagementReview import (
 from apps.quality.urls.ProcessValidation import (
     urlpatterns as process_validation_urls,
 )
+from apps.quality.urls.EhsManagement import (
+    urlpatterns as ehs_management_urls,
+)
 
 app_name = "quality"
 
@@ -218,5 +221,6 @@ urlpatterns = (
     + customer_complaints_urls
     + management_review_urls
     + process_validation_urls
+    + ehs_management_urls
 )
 
