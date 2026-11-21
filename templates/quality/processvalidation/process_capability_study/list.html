@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Process Capability Studies (Cp/Cpk) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_validation_dashboard' %}">Process Validation</a>
+            <span class="sep">/</span>
+            <span>Capability Studies</span>
+        </div>
+        <h1 class="page-title">Process Capability Studies (Cp/Cpk)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:process_capability_study_export' %}?{{ query_string }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:process_capability_study_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Study
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="bar-chart-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Studies</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Capable (Cpk &ge; 1.33)</div>
+            <div class="stat-value">{{ capable_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Marginally Capable</div>
+            <div class="stat-value">{{ marginal_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-label">Incapable / CAPA</div>
+            <div class="stat-value">{{ incapable_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Study #, parameter, asset..." class="form-input">
+            </div>
+            <div>
+                <label for="determination" class="form-label text-xs">Capability Determination</label>
+                <select name="determination" id="determination" class="form-select">
+                    <option value="">All Determinations</option>
+                    {% for val, label in determination_choices %}
+                    <option value="{{ val }}" {% if request.GET.determination == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="category" class="form-label text-xs">Parameter Category</label>
+                <select name="category" id="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Study Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if search_query or request.GET.determination or request.GET.category or request.GET.status %}
+                <a href="{% url 'quality:process_capability_study_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters" aria-label="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Study & Parameter</th>
+                    <th>Specification (LSL / USL)</th>
+                    <th>Mean (X-bar)</th>
+                    <th>Cp / Cpk</th>
+                    <th>Pp / Ppk</th>
+                    <th>Determination</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in page_obj %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'quality:process_capability_study_detail' s.pk %}" class="text-blue-600 hover:underline">
+                            {{ s.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ s.parameter_name }}</div>
+                        <div class="text-xs text-slate-500">{{ s.title }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">{{ s.get_parameter_category_display }}</div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-mono text-slate-800">
+                            [{{ s.lower_spec_limit }} to {{ s.upper_spec_limit }}] {{ s.unit_of_measure }}
+                        </div>
+                        {% if s.target_nominal %}
+                        <div class="text-xs text-slate-500">Nominal: {{ s.target_nominal }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm font-semibold text-slate-800">{{ s.mean_value }} {{ s.unit_of_measure }}</div>
+                        <div class="text-xs text-slate-500">s: {{ s.overall_stdev }}</div>
+                    </td>
+                    <td>
+                        {% if s.cpk_index is not None %}
+                        <div class="text-sm font-bold text-slate-900">Cpk: {{ s.cpk_index }}</div>
+                        <div class="text-xs text-slate-500">Cp: {{ s.cp_index|default:"—" }}</div>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if s.ppk_index is not None %}
+                        <div class="text-sm font-semibold text-slate-800">Ppk: {{ s.ppk_index }}</div>
+                        <div class="text-xs text-slate-500">Pp: {{ s.pp_index|default:"—" }}</div>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ s.determination_css }}">{{ s.get_capability_determination_display }}</span>
+                        {% if s.expected_ppm %}
+                        <div class="text-xs text-slate-500 mt-1">{{ s.expected_ppm }} PPM</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ s.status_css }}">{{ s.get_status_display }}</span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'quality:process_capability_study_detail' s.pk %}" class="btn-icon" title="View Study">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:process_capability_study_edit' s.pk %}" class="btn-icon" title="Edit Study">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:process_capability_study_delete' s.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete study {{ s.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete Study">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="bar-chart-2" class="empty-icon"></i>
+                            <div class="empty-title">No Capability Studies Found</div>
+                            <div class="empty-desc">Create a statistical capability study to compute Cp, Cpk, Pp, and Ppk against tolerance limits.</div>
+                            <a href="{% url 'quality:process_capability_study_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> New Study
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} studies
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page=1{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">First</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Last</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
