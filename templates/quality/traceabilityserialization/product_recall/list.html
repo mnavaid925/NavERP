@@ -121,7 +121,7 @@
                 {% elif recall.recall_class == "class_iii" %}
                   <span class="badge badge-info">{{ recall.get_recall_class_display }}</span>
                 {% elif recall.recall_class == "safety_alert" %}
-                  <span class="badge badge-purple">{{ recall.get_recall_class_display }}</span>
+                  <span class="badge badge-amber">{{ recall.get_recall_class_display }}</span>
                 {% else %}
                   <span class="badge badge-slate">{{ recall.get_recall_class_display }}</span>
                 {% endif %}
