@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Batch Record {{ batch_record.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Traceability & Serialization</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:batch_record_list' %}" class="hover:underline">Batch Records</a>
+        <span class="mx-1">/</span>
+        <span class="font-mono">{{ batch_record.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">
+          {{ batch_record.number }}: {{ batch_record.batch_number }}
+        </h1>
+        {% if batch_record.status == "released" %}
+          <span class="badge badge-green">{{ batch_record.get_status_display }}</span>
+        {% elif batch_record.status == "rejected" %}
+          <span class="badge badge-red">{{ batch_record.get_status_display }}</span>
+        {% elif batch_record.status == "qa_review" or batch_record.status == "quarantined" %}
+          <span class="badge badge-amber">{{ batch_record.get_status_display }}</span>
+        {% elif batch_record.status == "in_production" or batch_record.status == "production_complete" %}
+          <span class="badge badge-info">{{ batch_record.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ batch_record.get_status_display }}</span>
+        {% endif %}
+
+        {% if batch_record.release_status == "approved_full" %}
+          <span class="badge badge-green">{{ batch_record.get_release_status_display }}</span>
+        {% elif batch_record.release_status == "approved_concession" %}
+          <span class="badge badge-amber">{{ batch_record.get_release_status_display }}</span>
+        {% elif batch_record.release_status == "rejected" or batch_record.release_status == "on_hold" %}
+          <span class="badge badge-red">{{ batch_record.get_release_status_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ batch_record.get_release_status_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">{{ batch_record.title }} — {{ batch_record.product_name }} ({{ batch_record.product_code }})</p>
+    </div>
+
+    <div class="page-actions flex items-center gap-2">
+      {% if batch_record.status != "released" and can_release %}
+        <form method="post" action="{% url 'quality:batch_record_release' batch_record.pk %}" class="inline" onsubmit="return confirm('Authorize final QA release for batch {{ batch_record.batch_number }}?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            <span>Authorize QA Release</span>
+          </button>
+        </form>
+      {% endif %}
+
+      <a href="{% url 'quality:batch_record_edit' batch_record.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+
+      <form method="post" action="{% url 'quality:batch_record_delete' batch_record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete batch record {{ batch_record.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Info Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Details & Genealogy -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Batch Overview Card -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+          Manufacturing & Product Information
+        </h2>
+        <dl class="detail-grid grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Batch Number</dt>
+            <dd class="text-sm font-medium text-slate-900 mt-0.5">{{ batch_record.batch_number }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product Code</dt>
+            <dd class="text-sm font-mono font-medium text-slate-900 mt-0.5">{{ batch_record.product_code }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product Name</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ batch_record.product_name }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Production Order #</dt>
+            <dd class="text-sm font-mono text-slate-900 mt-0.5">{{ batch_record.production_order_number|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Work Order</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ batch_record.work_order|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Master Document / Recipe</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ batch_record.master_document|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Manufacturing Date</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ batch_record.manufacturing_date|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Expiration Date</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ batch_record.expiration_date|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Retest Date</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ batch_record.retest_date|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Production Supervisor</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ batch_record.supervisor|default:"—" }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Yield & Reconciliation Card -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="scale" class="w-4 h-4 text-blue-600"></i>
+          Batch Quantity & Yield Reconciliation
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="p-4 bg-slate-50 rounded-lg">
+            <div class="text-xs text-slate-500 uppercase font-semibold">Planned Quantity</div>
+            <div class="text-xl font-bold text-slate-900 mt-1">
+              {{ batch_record.planned_quantity }} <span class="text-sm font-normal text-slate-500">{{ batch_record.unit_of_measure }}</span>
+            </div>
+          </div>
+          <div class="p-4 bg-slate-50 rounded-lg">
+            <div class="text-xs text-slate-500 uppercase font-semibold">Actual Quantity</div>
+            <div class="text-xl font-bold text-slate-900 mt-1">
+              {{ batch_record.actual_quantity }} <span class="text-sm font-normal text-slate-500">{{ batch_record.unit_of_measure }}</span>
+            </div>
+          </div>
+          <div class="p-4 bg-slate-50 rounded-lg">
+            <div class="text-xs text-slate-500 uppercase font-semibold">Yield Percentage</div>
+            <div class="text-xl font-bold mt-1 {% if batch_record.yield_percentage >= 95 %}text-green-600{% elif batch_record.yield_percentage >= 80 %}text-slate-900{% else %}text-red-600{% endif %}">
+              {{ batch_record.yield_percentage }}%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Component Genealogy Table -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="git-merge" class="w-4 h-4 text-blue-600"></i>
+          Component Lot Genealogy & Raw Material Trace
+        </h2>
+        {% if batch_record.component_genealogy %}
+          <div class="table-wrap">
+            <table class="table w-full text-left text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase">
+                  <th class="py-2 px-3">Component / Material</th>
+                  <th class="py-2 px-3">Item Code</th>
+                  <th class="py-2 px-3">Supplier Lot #</th>
+                  <th class="py-2 px-3 text-right">Quantity Used</th>
+                  <th class="py-2 px-3">CoA / Cert #</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                {% for comp in batch_record.component_genealogy %}
+                  <tr>
+                    <td class="py-2 px-3 font-medium text-slate-900">{{ comp.component_name|default:"Raw Ingredient" }}</td>
+                    <td class="py-2 px-3 font-mono text-xs text-slate-600">{{ comp.item_code|default:"—" }}</td>
+                    <td class="py-2 px-3 font-mono text-xs text-slate-900">{{ comp.supplier_lot|default:"—" }}</td>
+                    <td class="py-2 px-3 text-right text-slate-700">{{ comp.quantity_used|default:"—" }}</td>
+                    <td class="py-2 px-3 text-xs text-slate-500">{{ comp.cert_number|default:"Verified" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-sm text-slate-500 italic">No bill of material component lots captured for this batch record.</p>
+        {% endif %}
+      </div>
+
+      <!-- Linked Serialized Units -->
+      {% if serialized_items %}
+        <div class="card p-5">
+          <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="barcode" class="w-4 h-4 text-blue-600"></i>
+              <span>Associated Serialized Units</span>
+            </div>
+            <a href="{% url 'quality:serialized_item_list' %}?q={{ batch_record.batch_number }}" class="text-xs text-blue-600 hover:underline">
+              View All
+            </a>
+          </h2>
+          <div class="table-wrap">
+            <table class="table w-full text-left text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase">
+                  <th class="py-2 px-3">Serial Number</th>
+                  <th class="py-2 px-3">Packaging Level</th>
+                  <th class="py-2 px-3">Commissioning</th>
+                  <th class="py-2 px-3">EPCIS State</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                {% for item in serialized_items %}
+                  <tr>
+                    <td class="py-2 px-3 font-mono font-medium text-blue-600">
+                      <a href="{% url 'quality:serialized_item_detail' item.pk %}" class="hover:underline">
+                        {{ item.serial_number }}
+                      </a>
+                    </td>
+                    <td class="py-2 px-3">{{ item.get_packaging_level_display }}</td>
+                    <td class="py-2 px-3">
+                      <span class="badge badge-info">{{ item.get_commissioning_status_display }}</span>
+                    </td>
+                    <td class="py-2 px-3">
+                      <span class="badge badge-green">{{ item.get_epcis_state_display }}</span>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Right Col: Review-by-Exception Release Gate -->
+    <div class="space-y-6">
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-blue-600"></i>
+          Review-by-Exception QA Release Gate
+        </h2>
+
+        <div class="space-y-3">
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <span class="text-sm text-slate-700">Checklist Passed</span>
+            {% if batch_record.checklist_passed %}
+              <span class="badge badge-green">Passed</span>
+            {% else %}
+              <span class="badge badge-red">Pending</span>
+            {% endif %}
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <span class="text-sm text-slate-700">Quarantine Hold</span>
+            {% if batch_record.is_quarantined %}
+              <span class="badge badge-red">On Hold</span>
+            {% else %}
+              <span class="badge badge-green">Clear</span>
+            {% endif %}
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <span class="text-sm text-slate-700">Linked NCR Status</span>
+            {% if batch_record.linked_ncr %}
+              {% if batch_record.linked_ncr.status == "closed" %}
+                <span class="badge badge-green">Closed</span>
+              {% else %}
+                <span class="badge badge-amber">Open ({{ batch_record.linked_ncr.number }})</span>
+              {% endif %}
+            {% else %}
+              <span class="badge badge-green">None</span>
+            {% endif %}
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <span class="text-sm text-slate-700">Process Deviation</span>
+            {% if batch_record.linked_deviation %}
+              <span class="badge badge-info">{{ batch_record.linked_deviation.number }}</span>
+            {% else %}
+              <span class="badge badge-slate">None</span>
+            {% endif %}
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <span class="text-sm text-slate-700">Final QC Acceptance</span>
+            {% if batch_record.linked_fqc %}
+              <span class="badge badge-green">{{ batch_record.linked_fqc.number }}</span>
+            {% else %}
+              <span class="badge badge-slate">Unlinked</span>
+            {% endif %}
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <span class="text-sm text-slate-700">Electronic Signature</span>
+            {% if batch_record.electronic_signature %}
+              <span class="badge badge-green">21 CFR 11 Signed</span>
+            {% else %}
+              <span class="badge badge-slate">Pending</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="border-t border-slate-100 pt-4 mt-4">
+          <div class="text-xs text-slate-500 uppercase font-semibold">QA Release Reviewer</div>
+          <div class="text-sm font-medium text-slate-900 mt-1">{{ batch_record.qa_reviewer|default:"Unassigned" }}</div>
+          {% if batch_record.qa_decision_at %}
+            <div class="text-xs text-slate-400 mt-0.5">Decision Date: {{ batch_record.qa_decision_at|date:"Y-m-d H:i" }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Notes Card -->
+      {% if batch_record.notes %}
+        <div class="card p-5">
+          <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-3">Notes & Observations</h2>
+          <p class="text-sm text-slate-600 whitespace-pre-line">{{ batch_record.notes }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
