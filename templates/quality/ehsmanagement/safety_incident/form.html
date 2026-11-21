@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ safety_incident.title }}{% else %}Report Safety Incident{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:safety_incident_list' %}">Safety Incidents</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ safety_incident.number }}{% else %}Report New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Safety Incident: {{ safety_incident.title }}{% else %}Report Safety Incident / Near-Miss{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:safety_incident_detail' safety_incident.pk %}{% else %}{% url 'quality:safety_incident_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="card p-4 bg-red-50 border-red-200">
+        <div class="flex items-center gap-2 text-red-700 font-semibold mb-2">
+            <i data-lucide="alert-octagon" class="w-5 h-5"></i> Please correct the errors below:
+        </div>
+        <ul class="list-disc list-inside text-sm text-red-600">
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- 1. Event Overview & Classification -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i> Event Overview & Classification
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_title">Incident Title <span class="text-danger">*</span></label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_status">Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_incident_date">Incident Occurrence Date & Time <span class="text-danger">*</span></label>
+                {{ form.incident_date }}
+                {% if form.incident_date.errors %}<div class="form-error">{{ form.incident_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_report_date">Report Date <span class="text-danger">*</span></label>
+                {{ form.report_date }}
+                {% if form.report_date.errors %}<div class="form-error">{{ form.report_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_incident_type">Incident Type</label>
+                {{ form.incident_type }}
+                {% if form.incident_type.errors %}<div class="form-error">{{ form.incident_type.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_severity">Severity Level</label>
+                {{ form.severity }}
+                {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_org_unit">Facility / Org Unit</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_location_details">Specific Physical Location</label>
+                {{ form.location_details }}
+                {% if form.location_details.errors %}<div class="form-error">{{ form.location_details.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_reported_by">Reported By <span class="text-danger">*</span></label>
+                {{ form.reported_by }}
+                {% if form.reported_by.errors %}<div class="form-error">{{ form.reported_by.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_lead_investigator">Lead Safety Investigator</label>
+                {{ form.lead_investigator }}
+                {% if form.lead_investigator.errors %}<div class="form-error">{{ form.lead_investigator.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Involved Party & Injury Classification -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="user-x" class="w-5 h-5 text-red-500"></i> Affected Individual & Injury Classification
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_affected_person">Affected Employee (Company User)</label>
+                {{ form.affected_person }}
+                {% if form.affected_person.errors %}<div class="form-error">{{ form.affected_person.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_affected_party_name">Affected Person Name (If Non-User / Visitor)</label>
+                {{ form.affected_party_name }}
+                {% if form.affected_party_name.errors %}<div class="form-error">{{ form.affected_party_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_affected_party_type">Party Type</label>
+                {{ form.affected_party_type }}
+                {% if form.affected_party_type.errors %}<div class="form-error">{{ form.affected_party_type.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_nature_of_injury">Nature of Injury / Illness</label>
+                {{ form.nature_of_injury }}
+                {% if form.nature_of_injury.errors %}<div class="form-error">{{ form.nature_of_injury.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_body_part_affected">Body Part Affected</label>
+                {{ form.body_part_affected }}
+                {% if form.body_part_affected.errors %}<div class="form-error">{{ form.body_part_affected.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_medical_treatment_level">Medical Treatment Level</label>
+                {{ form.medical_treatment_level }}
+                {% if form.medical_treatment_level.errors %}<div class="form-error">{{ form.medical_treatment_level.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-3">
+                <label class="form-label" for="id_immediate_actions_taken">Immediate First Aid & Containment Actions Taken</label>
+                {{ form.immediate_actions_taken }}
+                {% if form.immediate_actions_taken.errors %}<div class="form-error">{{ form.immediate_actions_taken.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. OSHA 300 Recordkeeping & DART Metrics -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="file-check" class="w-5 h-5 text-blue-600"></i> OSHA 29 CFR 1904 Recordability & DART
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group md:col-span-2 flex items-center gap-3 pt-6">
+                {{ form.is_osha_recordable }}
+                <label class="form-label mb-0 cursor-pointer" for="id_is_osha_recordable">
+                    <strong>Meets OSHA 29 CFR 1904 Recordability Criteria</strong>
+                    <div class="text-xs text-slate-500 font-normal">Medical treatment beyond first aid, days away, restricted duty, or loss of consciousness.</div>
+                </label>
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_osha_classification">OSHA Classification</label>
+                {{ form.osha_classification }}
+                {% if form.osha_classification.errors %}<div class="form-error">{{ form.osha_classification.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_lost_workdays_count">Days Away From Work (Count)</label>
+                {{ form.lost_workdays_count }}
+                {% if form.lost_workdays_count.errors %}<div class="form-error">{{ form.lost_workdays_count.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_restricted_workdays_count">Restricted Workdays (Count)</label>
+                {{ form.restricted_workdays_count }}
+                {% if form.restricted_workdays_count.errors %}<div class="form-error">{{ form.restricted_workdays_count.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_date_returned_to_work">Date Returned to Full Duty</label>
+                {{ form.date_returned_to_work }}
+                {% if form.date_returned_to_work.errors %}<div class="form-error">{{ form.date_returned_to_work.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. PPE & Root Cause Analysis -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="search" class="w-5 h-5 text-primary"></i> PPE Compliance & Root Cause Investigation
+            </h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_ppe_compliance_status">PPE Compliance Status</label>
+                    {{ form.ppe_compliance_status }}
+                    {% if form.ppe_compliance_status.errors %}<div class="form-error">{{ form.ppe_compliance_status.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_root_cause_category">Root Cause Category</label>
+                    {{ form.root_cause_category }}
+                    {% if form.root_cause_category.errors %}<div class="form-error">{{ form.root_cause_category.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_ppe_notes">PPE Observations & Notes</label>
+                {{ form.ppe_notes }}
+                {% if form.ppe_notes.errors %}<div class="form-error">{{ form.ppe_notes.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_investigation_findings">Detailed Investigation Findings & Root Cause</label>
+                {{ form.investigation_findings }}
+                {% if form.investigation_findings.errors %}<div class="form-error">{{ form.investigation_findings.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_capa_investigation">Escalate / Link CAPA Investigation</label>
+                    {{ form.capa_investigation }}
+                    {% if form.capa_investigation.errors %}<div class="form-error">{{ form.capa_investigation.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_non_conformance_report">Link Non-Conformance Report (NCR)</label>
+                    {{ form.non_conformance_report }}
+                    {% if form.non_conformance_report.errors %}<div class="form-error">{{ form.non_conformance_report.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_notes">General Internal Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'quality:safety_incident_detail' safety_incident.pk %}{% else %}{% url 'quality:safety_incident_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Submit Report{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
