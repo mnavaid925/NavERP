@@ -220,7 +220,7 @@
             <div class="text-xs text-slate-500 uppercase font-semibold">CAPA Investigation</div>
             <div class="text-sm text-slate-900 mt-0.5">
               {% if product_recall.capa_investigation %}
-                <a href="{% url 'quality:capa_detail' product_recall.capa_investigation.pk %}" class="text-blue-600 hover:underline">
+                <a href="{% url 'quality:capa_investigation_detail' product_recall.capa_investigation.pk %}" class="text-blue-600 hover:underline">
                   {{ product_recall.capa_investigation.number }}
                 </a>
               {% else %}
