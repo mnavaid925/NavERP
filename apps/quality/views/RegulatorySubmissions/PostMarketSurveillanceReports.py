@@ -168,8 +168,10 @@ def post_market_surveillance_report_delete(request, pk):
 
 @login_required
 def post_market_surveillance_report_export(request):
-    qs = quality_scope(PostMarketSurveillanceReport.objects.all(), request).select_related(
-        "product_registration", "prepared_by"
+    qs = (
+        quality_scope(PostMarketSurveillanceReport.objects.all(), request)
+        .select_related("product_registration", "prepared_by")
+        .defer("benefit_risk_rationale", "pmcf_action_summary", "notes")
     )
 
     response = HttpResponse(content_type="text/csv")
@@ -195,7 +197,7 @@ def post_market_surveillance_report_export(request):
         "Next Due Date",
     ])
 
-    for item in qs:
+    for item in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(item.number),
             _csv_safe(item.report_title),
