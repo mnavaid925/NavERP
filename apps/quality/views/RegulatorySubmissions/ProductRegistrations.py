@@ -104,8 +104,8 @@ def product_registration_detail(request, pk):
         pk,
         select_related=("regulatory_authority", "authorized_representative", "regulatory_lead", "linked_submission"),
     )
-    linked_commitments = registration.regulatory_commitments.all().order_by("due_date")
-    linked_pms_reports = registration.pms_reports.all().order_by("-reporting_period_end")
+    linked_commitments = registration.regulatory_commitments.filter(tenant=request.tenant).order_by("due_date")
+    linked_pms_reports = registration.pms_reports.filter(tenant=request.tenant).order_by("-reporting_period_end")
 
     context = {
         "product_registration": registration,
