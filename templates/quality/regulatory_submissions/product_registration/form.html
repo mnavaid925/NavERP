@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ product_registration.number }}{% else %}New Product Registration{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_dashboard' %}">Regulatory Compliance</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:product_registration_list' %}">Registrations</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ product_registration.number }}{% else %}New Registration{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Product Registration {{ product_registration.number }}{% else %}Register Product or Establishment License{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:product_registration_detail' product_registration.pk %}{% else %}{% url 'quality:product_registration_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Registration Identity & Jurisdiction</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.registration_title.id_for_label }}">Registration Record Title *</label>
+                            {{ form.registration_title }}
+                            {% if form.registration_title.errors %}<div class="form-error">{{ form.registration_title.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.registration_type.id_for_label }}">Registration / License Type *</label>
+                            {{ form.registration_type }}
+                            {% if form.registration_type.errors %}<div class="form-error">{{ form.registration_type.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.jurisdiction_country.id_for_label }}">Target Country / Jurisdiction *</label>
+                            {{ form.jurisdiction_country }}
+                            {% if form.jurisdiction_country.errors %}<div class="form-error">{{ form.jurisdiction_country.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.regulatory_authority.id_for_label }}">Regulatory Authority</label>
+                            {{ form.regulatory_authority }}
+                            {% if form.regulatory_authority.errors %}<div class="form-error">{{ form.regulatory_authority.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.authorized_representative.id_for_label }}">Authorized Representative / In-Country Sponsor</label>
+                            {{ form.authorized_representative }}
+                            {% if form.authorized_representative.errors %}<div class="form-error">{{ form.authorized_representative.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Device Details & License Numbers</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.product_name.id_for_label }}">Registered Medical Device / Product Name *</label>
+                            {{ form.product_name }}
+                            {% if form.product_name.errors %}<div class="form-error">{{ form.product_name.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.product_code.id_for_label }}">Product / Model Code</label>
+                            {{ form.product_code }}
+                            {% if form.product_code.errors %}<div class="form-error">{{ form.product_code.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.license_certificate_number.id_for_label }}">License / Certificate Number</label>
+                            {{ form.license_certificate_number }}
+                            {% if form.license_certificate_number.errors %}<div class="form-error">{{ form.license_certificate_number.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.establishment_id.id_for_label }}">Establishment ID (FEI / SRN / DUNS)</label>
+                            {{ form.establishment_id }}
+                            {% if form.establishment_id.errors %}<div class="form-error">{{ form.establishment_id.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Authorization Status *</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group md:col-span-3">
+                            <label class="form-label" for="{{ form.intended_purpose.id_for_label }}">Authorized Intended Purpose / Indication</label>
+                            {{ form.intended_purpose }}
+                            {% if form.intended_purpose.errors %}<div class="form-error">{{ form.intended_purpose.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Lifecycle, Expiration & Renewal Schedule</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.initial_approval_date.id_for_label }}">Initial Approval Date</label>
+                            {{ form.initial_approval_date }}
+                            {% if form.initial_approval_date.errors %}<div class="form-error">{{ form.initial_approval_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.effective_date.id_for_label }}">Effective Date</label>
+                            {{ form.effective_date }}
+                            {% if form.effective_date.errors %}<div class="form-error">{{ form.effective_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.expiration_date.id_for_label }}">Expiration Date</label>
+                            {{ form.expiration_date }}
+                            {% if form.expiration_date.errors %}<div class="form-error">{{ form.expiration_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.renewal_due_date.id_for_label }}">Target Renewal Date</label>
+                            {{ form.renewal_due_date }}
+                            {% if form.renewal_due_date.errors %}<div class="form-error">{{ form.renewal_due_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.renewal_lead_days.id_for_label }}">Lead Warning Days</label>
+                            {{ form.renewal_lead_days }}
+                            {% if form.renewal_lead_days.errors %}<div class="form-error">{{ form.renewal_lead_days.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.linked_submission.id_for_label }}">Linked Regulatory Submission</label>
+                            {{ form.linked_submission }}
+                            {% if form.linked_submission.errors %}<div class="form-error">{{ form.linked_submission.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.regulatory_lead.id_for_label }}">RA Country Lead</label>
+                            {{ form.regulatory_lead }}
+                            {% if form.regulatory_lead.errors %}<div class="form-error">{{ form.regulatory_lead.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Regulatory Notes</h3>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.notes.id_for_label }}">Country Specific Requirements & Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3 border-t pt-4">
+                <a href="{% if is_edit %}{% url 'quality:product_registration_detail' product_registration.pk %}{% else %}{% url 'quality:product_registration_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Register Authorization{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
