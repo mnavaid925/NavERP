@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}{{ policy.number }} — Electronic Record Policy — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:electronic_record_policy_list' %}">Record Policies</a>
+            <span class="sep">/</span>
+            <span>{{ policy.number }}</span>
+        </div>
+        <h1 class="page-title">{{ policy.number }} — {{ policy.record_type_name }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:electronic_record_policy_edit' policy.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Policy
+        </a>
+        <form method="post" action="{% url 'quality:electronic_record_policy_delete' policy.pk %}" onsubmit="return confirm('Delete policy {{ policy.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Policy Identification & Scope</h3>
+                {% if policy.status == 'active' %}
+                <span class="badge badge-green">Active</span>
+                {% elif policy.status == 'under_revision' %}
+                <span class="badge badge-amber">Under Revision</span>
+                {% elif policy.status == 'archived' %}
+                <span class="badge badge-muted">Archived</span>
+                {% else %}
+                <span class="badge badge-slate">Draft</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Policy Title</dt>
+                        <dd>{{ policy.title }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Record Type Name</dt>
+                        <dd class="font-medium">{{ policy.record_type_name }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Record Category</dt>
+                        <dd>
+                            <span class="badge badge-slate">{{ policy.get_record_category_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Model / Entity</dt>
+                        <dd>{{ policy.target_model_name|default:"Not specified" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Computerized System</dt>
+                        <dd>
+                            {% if policy.system %}
+                            <span class="font-medium">{{ policy.system.system_name }} ({{ policy.system.number }})</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Governing SOP Document</dt>
+                        <dd>
+                            {% if policy.governing_sop %}
+                            <span class="font-medium">{{ policy.governing_sop.title }} ({{ policy.governing_sop.number }})</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Regulatory & Electronic Signature Requirements</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>21 CFR Part 11 Regulated</dt>
+                        <dd>
+                            {% if policy.is_part_11_regulated %}
+                            <span class="badge badge-green">Yes — 21 CFR Part 11 Enforced</span>
+                            {% else %}
+                            <span class="badge badge-muted">No</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>EU Annex 11 Regulated</dt>
+                        <dd>
+                            {% if policy.is_annex_11_regulated %}
+                            <span class="badge badge-green">Yes — EU Annex 11 Enforced</span>
+                            {% else %}
+                            <span class="badge badge-muted">No</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Signature Requirement</dt>
+                        <dd>
+                            <span class="badge badge-info">{{ policy.get_signature_requirement_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Re-authentication at Sign-off</dt>
+                        <dd>
+                            {% if policy.reauthentication_required %}
+                            <span class="badge badge-amber">Required (Password/MFA)</span>
+                            {% else %}
+                            <span class="badge badge-slate">Standard Session</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Dual Signature Gate</dt>
+                        <dd>
+                            {% if policy.dual_signature_required %}
+                            <span class="badge badge-amber">Dual Authorization Required</span>
+                            {% else %}
+                            <span class="text-muted">Single Signer</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Audit Trail Mandatory</dt>
+                        <dd>
+                            {% if policy.audit_trail_mandatory %}
+                            <span class="badge badge-green">Yes — Immutable Logging</span>
+                            {% else %}
+                            <span class="badge badge-red">Disabled</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        {% if policy.description %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Policy Description & Control Specifications</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-sm whitespace-pre-wrap">{{ policy.description }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Storage & Archival Governance</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Retention Period</dt>
+                        <dd class="text-lg font-semibold">{{ policy.retention_period_years }} Years</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Storage Format</dt>
+                        <dd class="font-medium text-sm">{{ policy.get_storage_format_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Backup Frequency</dt>
+                        <dd class="font-medium text-sm">{{ policy.get_backup_frequency_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Legal Hold Status</dt>
+                        <dd>
+                            {% if policy.legal_hold %}
+                            <span class="badge badge-red">Active Legal Hold Freeze</span>
+                            {% else %}
+                            <span class="badge badge-slate">Normal Retention Cycle</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Ownership & QA Approvals</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-xs text-muted uppercase">System Owner</dt>
+                        <dd class="font-medium text-sm">
+                            {% if policy.system_owner %}
+                            {{ policy.system_owner.get_full_name|default:policy.system_owner.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">QA Approver</dt>
+                        <dd class="font-medium text-sm">
+                            {% if policy.qa_approver %}
+                            {{ policy.qa_approver.get_full_name|default:policy.qa_approver.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Approval Date</dt>
+                        <dd class="text-sm">{{ policy.approval_date|default:"Pending" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Created</dt>
+                        <dd class="text-xs text-muted">{{ policy.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Last Updated</dt>
+                        <dd class="text-xs text-muted">{{ policy.updated_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
