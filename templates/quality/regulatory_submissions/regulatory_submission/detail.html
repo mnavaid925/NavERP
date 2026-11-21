@@ -137,7 +137,7 @@
 
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h2 class="card-title">Linked Regulatory Commitments & Deficiencies ({{ linked_commitments.count }})</h2>
+                <h2 class="card-title">Linked Regulatory Commitments & Deficiencies ({{ linked_commitments|length }})</h2>
                 <a href="{% url 'quality:regulatory_commitment_create' %}?submission={{ regulatory_submission.pk }}" class="btn btn-outline btn-sm">
                     <i data-lucide="plus"></i> Add Commitment
                 </a>
@@ -180,7 +180,7 @@
 
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h2 class="card-title">Linked Global Product Registrations ({{ linked_registrations.count }})</h2>
+                <h2 class="card-title">Linked Global Product Registrations ({{ linked_registrations|length }})</h2>
                 <a href="{% url 'quality:product_registration_create' %}?submission={{ regulatory_submission.pk }}" class="btn btn-outline btn-sm">
                     <i data-lucide="plus"></i> Register License
                 </a>
