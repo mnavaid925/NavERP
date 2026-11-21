@@ -100,4 +100,8 @@ class HazardousMaterialForm(TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["org_unit", "sds_document", "supplier", "managed_by"])
+        for field in ("nfpa_health", "nfpa_flammability", "nfpa_instability"):
+            val = cleaned_data.get(field)
+            if val is not None and (val < 0 or val > 4):
+                self.add_error(field, "NFPA ratings must be between 0 and 4.")
         return cleaned_data
