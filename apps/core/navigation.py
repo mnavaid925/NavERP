@@ -3510,6 +3510,13 @@ LIVE_LINKS = {
         "Track & Trace / Supply Chain Integrity": "quality:traceability_dashboard",
         "Recall & Withdrawal Execution": "quality:product_recall_list",
     },
+    "12.19": {
+        "Sample Management & Chain of Custody": "quality:lab_sample_list",
+        "Test Method & Specification Management": "quality:lab_specification_list",
+        "Test Execution & Result Capture": "quality:lab_test_worksheet_list",
+        "Out-of-Specification (OOS) Investigation": "quality:oos_investigation_list",
+        "Laboratory Equipment & Reagent Management": "quality:lims_dashboard",
+    },
     "12.20": {
         "Electronic Records & Signatures (ER/ES) — 21 CFR Part 11": "quality:electronic_record_policy_list",
         "Data Integrity (ALCOA+)": "quality:data_integrity_assessment_list",
