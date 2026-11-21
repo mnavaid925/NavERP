@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Sample {{ sample.number }}{% else %}Log New Lab Sample{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lab_sample_list' %}" class="hover:underline">Lab Samples</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ sample.number }}{% else %}New Sample{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="test-tube" class="w-6 h-6 text-blue-600"></i>
+        {% if is_edit %}Edit Sample: {{ sample.sample_name }}{% else %}Register & Accession New Lab Sample{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Log sample metadata, storage environmental conditions, and custodial ownership for analytical testing.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Identification & Specimen Matrix -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          1. Sample Identification & Matrix
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.sample_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sample Name / Identifier <span class="text-red-500">*</span></label>
+            {{ form.sample_name }}
+            {% if form.sample_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sample_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.sample_type.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sample Type <span class="text-red-500">*</span></label>
+            {{ form.sample_type }}
+            {% if form.sample_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sample_type.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Status <span class="text-red-500">*</span></label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.matrix_description.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Matrix Description</label>
+            {{ form.matrix_description }}
+            <p class="text-xs text-slate-500 mt-0.5">e.g. Aqueous solution, lyophilized powder, cell culture harvest, environmental swab.</p>
+            {% if form.matrix_description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.matrix_description.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Origin, Batch & Product Correlation -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i>
+          2. Batch, Item & Source Traceability
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Product / Item Code</label>
+            {{ form.item_code }}
+            {% if form.item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_code.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Product / Material Name</label>
+            {{ form.item_name }}
+            {% if form.item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.source_batch_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Source Batch / Lot #</label>
+            {{ form.source_batch_number }}
+            {% if form.source_batch_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.source_batch_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.sampling_point.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sampling Point / Station</label>
+            {{ form.sampling_point }}
+            {% if form.sampling_point.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sampling_point.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.work_order.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Shop-Floor Work Order</label>
+            {{ form.work_order }}
+            {% if form.work_order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_order.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.batch_record.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Batch Record (eBR)</label>
+            {{ form.batch_record }}
+            {% if form.batch_record.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.batch_record.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Quantity, Storage & Barcode -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="archive" class="w-4 h-4 text-blue-600"></i>
+          3. Quantities, Storage Conditions & Labeling
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.quantity_collected.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Quantity Collected <span class="text-red-500">*</span></label>
+            {{ form.quantity_collected }}
+            {% if form.quantity_collected.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.quantity_collected.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.unit_of_measure.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Unit of Measure <span class="text-red-500">*</span></label>
+            {{ form.unit_of_measure }}
+            {% if form.unit_of_measure.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.unit_of_measure.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.barcode_identifier.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Barcode Identifier</label>
+            {{ form.barcode_identifier }}
+            {% if form.barcode_identifier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.barcode_identifier.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.storage_condition.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Storage Condition <span class="text-red-500">*</span></label>
+            {{ form.storage_condition }}
+            {% if form.storage_condition.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.storage_condition.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.storage_location.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Storage Location (Room/Freezer/Shelf)</label>
+            {{ form.storage_location }}
+            {% if form.storage_location.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.storage_location.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.retest_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Retest Date</label>
+            {{ form.retest_date }}
+            {% if form.retest_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.retest_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.expiry_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Expiry Date</label>
+            {{ form.expiry_date }}
+            {% if form.expiry_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.expiry_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.facility.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lab Facility Unit</label>
+            {{ form.facility }}
+            {% if form.facility.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.facility.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Custody, Personnel & Notes -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="user-check" class="w-4 h-4 text-blue-600"></i>
+          4. Chain of Custody Ownership & Log
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.sampled_by.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sampled By</label>
+            {{ form.sampled_by }}
+            {% if form.sampled_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sampled_by.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.received_by.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Received By</label>
+            {{ form.received_by }}
+            {% if form.received_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.received_by.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.current_custodian.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Current Custodian</label>
+            {{ form.current_custodian }}
+            {% if form.current_custodian.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.current_custodian.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-3">
+            <label for="{{ form.chain_of_custody_log.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Chain of Custody Log</label>
+            {{ form.chain_of_custody_log }}
+            {% if form.chain_of_custody_log.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.chain_of_custody_log.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-3">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Notes & Special Handling</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'quality:lab_sample_detail' sample.pk %}{% else %}{% url 'quality:lab_sample_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>{% if is_edit %}Save Changes{% else %}Register Sample{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
