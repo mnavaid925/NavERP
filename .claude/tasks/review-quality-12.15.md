@@ -73,7 +73,7 @@
   - **Issue**: If a user selects `calculation_basis="therapeutic_dose"` or `"toxicological_pde"` and leaves dose/PDE fields empty, form passes validation but limits silently cannot be computed.
   - **Fix**: Enforce required fields for the chosen `calculation_basis` in `CleaningValidationForm.clean()`.
 
-- [ ] **[I4] Form Validation Failure on Model Fields with `default` but Lacking `blank=True` in Forms**
+- [x] **[I4] Form Validation Failure on Model Fields with `default` but Lacking `blank=True` in Forms** — fixed in 3eeda911, 37bfcafe
   - **Location**:
     - `apps/quality/forms/ProcessValidation/ValidationProtocols.py:14-44` (`deviations_encountered`, `test_runs_completed`)
     - `apps/quality/forms/ProcessValidation/ComputerSystemValidations.py:13-43` (`urs_requirements_count`, `test_scripts_count`, `deviations_found_count`, `periodic_review_frequency_months`)
