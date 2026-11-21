@@ -316,7 +316,7 @@
                             <div>{{ man.get_manifest_type_display }}</div>
                             <div class="font-mono font-bold">{{ man.quantity_value }} {{ man.get_quantity_uom_display }}</div>
                         </td>
-                        <td class="text-xs text-slate-600">{{ man.transporter.name }}</td>
+                        <td class="text-xs text-slate-600">{{ man.transporter.name|default:"—" }}</td>
                         <td>
                             <span class="badge {{ man.status_css }}">{{ man.get_status_display }}</span>
                         </td>
