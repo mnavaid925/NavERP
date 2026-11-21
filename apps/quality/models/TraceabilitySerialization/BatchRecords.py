@@ -139,9 +139,10 @@ class BatchRecord(TenantNumbered):
 
     def save(self, *args, **kwargs):
         if self.planned_quantity and self.planned_quantity > Decimal("0.00"):
-            self.yield_percentage = (
+            calc_yield = (
                 (self.actual_quantity / self.planned_quantity) * Decimal("100.00")
             ).quantize(Decimal("0.01"))
+            self.yield_percentage = min(Decimal("999.99"), calc_yield)
         else:
             self.yield_percentage = Decimal("0.00")
         super().save(*args, **kwargs)
