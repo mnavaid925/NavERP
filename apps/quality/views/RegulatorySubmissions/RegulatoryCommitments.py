@@ -3,7 +3,7 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -24,10 +24,25 @@ PAGE_SIZE = 15
 
 @login_required
 def regulatory_commitment_list(request):
-    qs = quality_scope(
+    base_qs = quality_scope(
         RegulatoryCommitment.objects.all(),
         request,
-    ).select_related(
+    )
+
+    today = timezone.now().date()
+    stats = base_qs.aggregate(
+        total=Count("id"),
+        open_items=Count("id", filter=Q(status__in=["open", "in_progress"])),
+        overdue=Count(
+            "id",
+            filter=Q(status="overdue") | (Q(status__in=["open", "in_progress"]) & Q(due_date__lt=today)),
+        ),
+    )
+    total_commitments = stats["total"]
+    open_count = stats["open_items"]
+    overdue_count = stats["overdue"]
+
+    qs = base_qs.select_related(
         "regulatory_agency", "linked_submission", "linked_registration", "linked_inspection", "responsible_owner"
     )
 
@@ -51,13 +66,6 @@ def regulatory_commitment_list(request):
     regulatory_agency_id = request.GET.get("regulatory_agency", "").strip()
     if regulatory_agency_id.isdigit():
         qs = qs.filter(regulatory_agency_id=int(regulatory_agency_id))
-
-    total_commitments = qs.count()
-    open_count = qs.filter(status__in=["open", "in_progress"]).count()
-    today = timezone.now().date()
-    overdue_count = qs.filter(
-        Q(status="overdue") | (Q(status__in=["open", "in_progress"]) & Q(due_date__lt=today))
-    ).count()
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page", 1)
