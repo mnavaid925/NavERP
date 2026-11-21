@@ -60,7 +60,7 @@
   - **Issue**: `target_index = self.cpk_index or self.ppk_index` treats `Decimal("0.000")` as falsy, falling back to `ppk_index` when `cpk_index` is zero.
   - **Fix**: Use `self.cpk_index if self.cpk_index is not None else self.ppk_index`.
 
-- [ ] **[I2] Missing Package `__init__.py` Files in `models/ProcessValidation`, `forms/ProcessValidation`, `views/ProcessValidation`**
+- [x] **[I2] Missing Package `__init__.py` Files in `models/ProcessValidation`, `forms/ProcessValidation`, `views/ProcessValidation`** — fixed in 70bbf859, acd9e02d, b1fa564e
   - **Location**:
     - `apps/quality/models/ProcessValidation/__init__.py`
     - `apps/quality/forms/ProcessValidation/__init__.py`
