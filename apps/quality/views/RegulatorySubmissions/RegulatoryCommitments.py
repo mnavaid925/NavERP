@@ -195,6 +195,7 @@ def regulatory_commitment_delete(request, pk):
 
 @login_required
 def regulatory_commitment_export(request):
+    write_audit_log(request.user, RegulatoryCommitment(), "export", tenant=request.tenant)
     qs = (
         quality_scope(RegulatoryCommitment.objects.all(), request)
         .select_related("regulatory_agency", "responsible_owner")
