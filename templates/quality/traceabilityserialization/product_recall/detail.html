@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Product Recall {{ product_recall.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Traceability & Serialization</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:product_recall_list' %}" class="hover:underline">Product Recalls</a>
+        <span class="mx-1">/</span>
+        <span class="font-mono">{{ product_recall.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">
+          {{ product_recall.number }}: {{ product_recall.title }}
+        </h1>
+        {% if product_recall.recall_class == "class_i" %}
+          <span class="badge badge-red">{{ product_recall.get_recall_class_display }}</span>
+        {% elif product_recall.recall_class == "class_ii" %}
+          <span class="badge badge-amber">{{ product_recall.get_recall_class_display }}</span>
+        {% elif product_recall.recall_class == "class_iii" %}
+          <span class="badge badge-info">{{ product_recall.get_recall_class_display }}</span>
+        {% elif product_recall.recall_class == "safety_alert" %}
+          <span class="badge badge-purple">{{ product_recall.get_recall_class_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ product_recall.get_recall_class_display }}</span>
+        {% endif %}
+
+        {% if product_recall.status == "completed" %}
+          <span class="badge badge-green">{{ product_recall.get_status_display }}</span>
+        {% elif product_recall.status == "containment_hold" %}
+          <span class="badge badge-red">{{ product_recall.get_status_display }}</span>
+        {% elif product_recall.status == "recovery_in_progress" or product_recall.status == "initiated" %}
+          <span class="badge badge-amber">{{ product_recall.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ product_recall.get_status_display }}</span>
+        {% endif %}
+
+        {% if product_recall.is_mock_recall %}
+          <span class="badge badge-info">Simulated Mock Drill</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Target Item: {{ product_recall.item_name }} ({{ product_recall.item_code }})
+      </p>
+    </div>
+
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:product_recall_edit' product_recall.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+
+      <form method="post" action="{% url 'quality:product_recall_delete' product_recall.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete recall case {{ product_recall.number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Scope & Quantities -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Recovery Reconciliation KPI Box -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="pie-chart" class="w-4 h-4 text-blue-600"></i>
+          Product Recovery & Containment Reconciliation
+        </h2>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div class="p-3 bg-slate-50 rounded-lg">
+            <div class="text-xs text-slate-500 uppercase font-semibold">Distributed</div>
+            <div class="text-xl font-bold text-slate-900 mt-1">{{ product_recall.total_distributed_qty }}</div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded-lg">
+            <div class="text-xs text-slate-500 uppercase font-semibold">Quarantined</div>
+            <div class="text-xl font-bold text-amber-600 mt-1">{{ product_recall.total_quarantined_qty }}</div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded-lg">
+            <div class="text-xs text-slate-500 uppercase font-semibold">Recovered</div>
+            <div class="text-xl font-bold text-blue-600 mt-1">{{ product_recall.total_recovered_qty }}</div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded-lg">
+            <div class="text-xs text-slate-500 uppercase font-semibold">Destroyed</div>
+            <div class="text-xl font-bold text-slate-700 mt-1">{{ product_recall.total_destroyed_qty }}</div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded-lg">
+            <div class="text-xs text-slate-500 uppercase font-semibold">Recovery Rate</div>
+            <div class="text-xl font-bold mt-1 {% if product_recall.recovery_rate_pct >= 95 %}text-green-600{% elif product_recall.recovery_rate_pct >= 80 %}text-slate-900{% else %}text-red-600{% endif %}">
+              {{ product_recall.recovery_rate_pct }}%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scope & Affected Lots -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i>
+          Affected Product & Lot Identification Scope
+        </h2>
+        <dl class="detail-grid grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Item Name / SKU</dt>
+            <dd class="text-sm font-medium text-slate-900 mt-0.5">{{ product_recall.item_name }} ({{ product_recall.item_code }})</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Serial Number Range</dt>
+            <dd class="text-sm font-mono text-slate-900 mt-0.5">{{ product_recall.affected_serial_range|default:"Entire Lot / All Serials" }}</dd>
+          </div>
+          <div class="detail-item sm:col-span-2">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Affected Batch & Lot Numbers</dt>
+            <dd class="text-sm font-mono text-slate-900 mt-0.5 bg-slate-50 p-2.5 rounded border border-slate-100 whitespace-pre-line">
+              {{ product_recall.affected_lot_numbers }}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Hazard & Root Cause -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i>
+          Health Hazard Evaluation & Root Cause Analysis
+        </h2>
+        <div class="space-y-4">
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Hazard Summary / Reason for Recall</div>
+            <p class="text-sm text-slate-800 mt-1 whitespace-pre-line bg-red-50/50 p-3 rounded-lg border border-red-100">
+              {{ product_recall.hazard_summary }}
+            </p>
+          </div>
+          {% if product_recall.root_cause %}
+            <div>
+              <div class="text-xs text-slate-500 uppercase font-semibold">Identified Root Cause</div>
+              <p class="text-sm text-slate-700 mt-1 whitespace-pre-line bg-slate-50 p-3 rounded-lg border border-slate-100">
+                {{ product_recall.root_cause }}
+              </p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Col: Regulatory Governance & Drill Performance -->
+    <div class="space-y-6">
+      <!-- Drill Performance Card (if mock recall) -->
+      {% if product_recall.is_mock_recall %}
+        <div class="card p-5 bg-blue-50/30 border-blue-200">
+          <h2 class="text-base font-semibold text-slate-900 border-b border-blue-100 pb-3 mb-3 flex items-center gap-2">
+            <i data-lucide="timer" class="w-4 h-4 text-blue-600"></i>
+            Mock Recall Drill Performance
+          </h2>
+          <div class="space-y-3">
+            <div>
+              <div class="text-xs text-slate-500 uppercase font-semibold">Trace Elapsed Time</div>
+              <div class="text-2xl font-bold mt-1 {% if product_recall.mock_drill_hours and product_recall.mock_drill_hours <= 4.0 %}text-green-600{% else %}text-amber-600{% endif %}">
+                {{ product_recall.mock_drill_hours|default:"—" }} <span class="text-sm font-normal text-slate-500">hours</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">Benchmark Target: &lt; 4.0 hours (ISO 13485 / BRCGS)</div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      <!-- Regulatory Notification Card -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="landmark" class="w-4 h-4 text-blue-600"></i>
+          Health Authority Notification
+        </h2>
+        <div class="space-y-3">
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Regulatory Agency</div>
+            <div class="text-sm font-medium text-slate-900 mt-0.5">{{ product_recall.regulatory_agency_notified|default:"Internal / Not Reported" }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Notification Date</div>
+            <div class="text-sm text-slate-900 mt-0.5">{{ product_recall.regulatory_notification_date|default:"—" }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Governance & Escalation -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-blue-600"></i>
+          Quality Governance & Escalation
+        </h2>
+        <div class="space-y-3">
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Recall Coordinator</div>
+            <div class="text-sm font-medium text-slate-900 mt-0.5">{{ product_recall.coordinator|default:"Unassigned" }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Customer Complaint</div>
+            <div class="text-sm text-slate-900 mt-0.5">
+              {% if product_recall.customer_complaint %}
+                <a href="{% url 'quality:complaint_detail' product_recall.customer_complaint.pk %}" class="text-blue-600 hover:underline">
+                  {{ product_recall.customer_complaint.number }}
+                </a>
+              {% else %}
+                <span class="text-slate-400">—</span>
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">CAPA Investigation</div>
+            <div class="text-sm text-slate-900 mt-0.5">
+              {% if product_recall.capa_investigation %}
+                <a href="{% url 'quality:capa_detail' product_recall.capa_investigation.pk %}" class="text-blue-600 hover:underline">
+                  {{ product_recall.capa_investigation.number }}
+                </a>
+              {% else %}
+                <span class="text-slate-400">—</span>
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Closure Approved By</div>
+            <div class="text-sm text-slate-900 mt-0.5">{{ product_recall.closure_approved_by|default:"Pending Closure" }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes Card -->
+      {% if product_recall.notes %}
+        <div class="card p-5">
+          <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-3">Notes & Observations</h2>
+          <p class="text-sm text-slate-600 whitespace-pre-line">{{ product_recall.notes }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
