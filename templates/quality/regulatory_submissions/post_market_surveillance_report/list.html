@@ -195,7 +195,7 @@
         </div>
         <div class="pagination-links">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.report_type %}&report_type={{ request.GET.report_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.report_type %}&report_type={{ request.GET.report_type }}{% endif %}{% if request.GET.benefit_risk_conclusion %}&benefit_risk_conclusion={{ request.GET.benefit_risk_conclusion }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.product_registration %}&product_registration={{ request.GET.product_registration }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
             {% else %}
             <span class="btn btn-outline btn-sm disabled">Previous</span>
             {% endif %}
@@ -203,7 +203,7 @@
             <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.report_type %}&report_type={{ request.GET.report_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.report_type %}&report_type={{ request.GET.report_type }}{% endif %}{% if request.GET.benefit_risk_conclusion %}&benefit_risk_conclusion={{ request.GET.benefit_risk_conclusion }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.product_registration %}&product_registration={{ request.GET.product_registration }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% else %}
             <span class="btn btn-outline btn-sm disabled">Next</span>
             {% endif %}
