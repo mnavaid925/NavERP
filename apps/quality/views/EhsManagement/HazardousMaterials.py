@@ -160,6 +160,37 @@ def hazardous_material_delete(request, pk):
 @login_required
 def hazardous_material_export(request):
     qs = quality_scope(HazardousMaterial.objects.all(), request).select_related("org_unit", "supplier", "managed_by")
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(material_name__icontains=q)
+            | Q(trade_name__icontains=q)
+            | Q(cas_number__icontains=q)
+            | Q(un_number__icontains=q)
+            | Q(storage_location_code__icontains=q)
+        )
+
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    physical_state_filter = request.GET.get("physical_state", "").strip()
+    if physical_state_filter:
+        qs = qs.filter(physical_state=physical_state_filter)
+
+    signal_word_filter = request.GET.get("ghs_signal_word", "").strip()
+    if signal_word_filter:
+        qs = qs.filter(ghs_signal_word=signal_word_filter)
+
+    org_unit_filter = request.GET.get("org_unit", "").strip()
+    if org_unit_filter and org_unit_filter.isdigit():
+        qs = qs.filter(org_unit_id=int(org_unit_filter))
+
+    supplier_filter = request.GET.get("supplier", "").strip()
+    if supplier_filter and supplier_filter.isdigit():
+        qs = qs.filter(supplier_id=int(supplier_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="hazardous_materials_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
     response["X-Content-Type-Options"] = "nosniff"
