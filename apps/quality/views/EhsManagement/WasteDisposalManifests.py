@@ -22,7 +22,7 @@ PAGE_SIZE = 15
 @login_required
 def waste_disposal_manifest_list(request):
     qs = quality_scope(WasteDisposalManifest.objects.all(), request).select_related(
-        "generator_org_unit", "transporter", "tsdf_facility", "associated_hazardous_material"
+        "generator_org_unit", "transporter", "tsdf_facility", "associated_hazardous_material", "certifying_officer"
     )
 
     q = request.GET.get("q", "").strip()
