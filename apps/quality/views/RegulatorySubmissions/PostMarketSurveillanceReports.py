@@ -170,7 +170,6 @@ def post_market_surveillance_report_delete(request, pk):
 def post_market_surveillance_report_export(request):
     qs = (
         quality_scope(PostMarketSurveillanceReport.objects.all(), request)
-        .select_related("product_registration", "prepared_by")
         .defer("benefit_risk_rationale", "pmcf_action_summary", "notes")
     )
 
