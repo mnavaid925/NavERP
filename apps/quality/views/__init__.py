@@ -675,6 +675,39 @@ from apps.quality.views.RegulatorySubmissions.PostMarketSurveillanceReports impo
 from apps.quality.views.RegulatorySubmissions.RegulatoryDashboard import (
     regulatory_dashboard,
 )
+from apps.quality.views.TraceabilitySerialization.BatchRecords import (
+    batch_record_create,
+    batch_record_delete,
+    batch_record_detail,
+    batch_record_edit,
+    batch_record_list,
+    batch_record_release,
+)
+from apps.quality.views.TraceabilitySerialization.DeviceIdentifiers import (
+    device_identifier_create,
+    device_identifier_delete,
+    device_identifier_detail,
+    device_identifier_edit,
+    device_identifier_list,
+)
+from apps.quality.views.TraceabilitySerialization.SerializedItems import (
+    serialized_item_create,
+    serialized_item_delete,
+    serialized_item_detail,
+    serialized_item_edit,
+    serialized_item_list,
+)
+from apps.quality.views.TraceabilitySerialization.ProductRecalls import (
+    product_recall_create,
+    product_recall_delete,
+    product_recall_detail,
+    product_recall_edit,
+    product_recall_list,
+)
+from apps.quality.views.TraceabilitySerialization.TraceabilityDashboard import (
+    traceability_dashboard,
+    traceability_export_csv,
+)
 
 __all__ = [
     "controlled_document_list",
@@ -1186,5 +1219,28 @@ __all__ = [
     "post_market_surveillance_report_edit",
     "post_market_surveillance_report_delete",
     "regulatory_dashboard",
+    "batch_record_list",
+    "batch_record_detail",
+    "batch_record_create",
+    "batch_record_edit",
+    "batch_record_delete",
+    "batch_record_release",
+    "device_identifier_list",
+    "device_identifier_detail",
+    "device_identifier_create",
+    "device_identifier_edit",
+    "device_identifier_delete",
+    "serialized_item_list",
+    "serialized_item_detail",
+    "serialized_item_create",
+    "serialized_item_edit",
+    "serialized_item_delete",
+    "product_recall_list",
+    "product_recall_detail",
+    "product_recall_create",
+    "product_recall_edit",
+    "product_recall_delete",
+    "traceability_dashboard",
+    "traceability_export_csv",
 ]
 
