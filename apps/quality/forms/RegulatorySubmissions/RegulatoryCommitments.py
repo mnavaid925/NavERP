@@ -65,7 +65,7 @@ class RegulatoryCommitmentForm(TenantModelForm):
             ).order_by("product_name")
             self.fields["linked_inspection"].queryset = RegulatoryInspectionHost.objects.filter(
                 tenant=self.tenant
-            ).order_by("-inspection_start_date")
+            ).order_by("-scheduled_start_date")
             self.fields["responsible_owner"].queryset = User.objects.filter(
                 tenant=self.tenant, is_active=True
             ).order_by("first_name", "last_name", "username")
