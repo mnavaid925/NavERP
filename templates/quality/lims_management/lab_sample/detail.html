@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}Lab Sample {{ sample.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lab_sample_list' %}" class="hover:underline">Lab Samples</a>
+        <span class="mx-1">/</span>
+        <span>{{ sample.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="test-tube" class="w-6 h-6 text-blue-600"></i>
+          {{ sample.sample_name }}
+        </h1>
+        <span class="badge {{ sample.get_status_badge }}">{{ sample.get_status_display }}</span>
+        <span class="badge {{ sample.get_sample_type_badge }}">{{ sample.get_sample_type_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 font-mono mt-1">Sample ID: {{ sample.number }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      {% if sample.status == "registered" %}
+        <form method="post" action="{% url 'quality:lab_sample_receive' sample.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary flex items-center gap-1.5 text-sm">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Receive in Lab</span>
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'quality:lab_test_worksheet_create' %}?sample={{ sample.pk }}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+        <span>Create Worksheet</span>
+      </a>
+      <a href="{% url 'quality:lab_sample_edit' sample.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      {% if sample.status not in "approved in_testing testing_completed" %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'quality:lab_sample_delete' sample.pk %}" class="inline" onsubmit="return confirm('Delete lab sample {{ sample.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+              <span>Delete</span>
+            </button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Primary Metadata Grid -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+      Sample Details & Specimen Characterization
+    </h2>
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sample Name</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">{{ sample.sample_name }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sample Type</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          <span class="badge {{ sample.get_sample_type_badge }}">{{ sample.get_sample_type_display }}</span>
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Matrix Description</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.matrix_description|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Quantity Collected</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">{{ sample.quantity_collected }} {{ sample.unit_of_measure }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product / Item Code</dt>
+        <dd class="text-sm font-mono text-slate-800 mt-1">{{ sample.item_code|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product / Material Name</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.item_name|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Source Batch / Lot #</dt>
+        <dd class="text-sm font-mono font-medium text-slate-900 mt-1">{{ sample.source_batch_number|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sampling Point / Station</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.sampling_point|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Barcode / RFID Identifier</dt>
+        <dd class="text-sm font-mono text-slate-800 mt-1">{{ sample.barcode_identifier|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Storage Condition</dt>
+        <dd class="text-sm font-medium text-slate-800 mt-1">{{ sample.get_storage_condition_display }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Storage Location</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.storage_location|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Testing Facility / Unit</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.facility|default:"Central QC Laboratory" }}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Chain of Custody & Timeline Card -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="shield-check" class="w-4 h-4 text-blue-600"></i>
+      Chain of Custody & Lifecycle Audit Trail
+    </h2>
+    <dl class="detail-grid mb-6">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sampled By</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          {{ sample.sampled_by.get_full_name|default:sample.sampled_by.username|default:"—" }}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sampled Date & Time</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.sampled_at|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Received By</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          {{ sample.received_by.get_full_name|default:sample.received_by.username|default:"Pending Receipt" }}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Received Timestamp</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.received_at|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Current Custodian</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          {{ sample.current_custodian.get_full_name|default:sample.current_custodian.username|default:"Unassigned" }}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Retest Date</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.retest_date|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Expiration Date</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ sample.expiry_date|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Linked Batch Record</dt>
+        <dd class="text-sm text-slate-700 mt-1">
+          {% if sample.batch_record %}
+            <a href="{% url 'quality:batch_record_detail' sample.batch_record.pk %}" class="text-blue-600 hover:underline">
+              {{ sample.batch_record.number }}
+            </a>
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+
+    {% if sample.chain_of_custody_log %}
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Custody Handoff Log</h3>
+        <pre class="bg-slate-50 p-3 rounded text-xs text-slate-700 font-mono whitespace-pre-wrap border border-slate-200">{{ sample.chain_of_custody_log }}</pre>
+      </div>
+    {% endif %}
+
+    {% if sample.notes %}
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Analytical Notes</h3>
+        <p class="text-sm text-slate-700">{{ sample.notes }}</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Related Test Worksheets -->
+  <div class="card p-6">
+    <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+      <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+        <i data-lucide="clipboard-list" class="w-4 h-4 text-blue-600"></i>
+        Analytical Test Worksheets ({{ test_worksheets|length }})
+      </h2>
+      <a href="{% url 'quality:lab_test_worksheet_create' %}?sample={{ sample.pk }}" class="btn btn-outline text-xs">
+        <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Add Worksheet
+      </a>
+    </div>
+
+    {% if test_worksheets %}
+      <div class="table-wrap">
+        <table class="table w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+              <th class="py-2.5 px-3">Worksheet #</th>
+              <th class="py-2.5 px-3">Specification / Method</th>
+              <th class="py-2.5 px-3">Analyst</th>
+              <th class="py-2.5 px-3">Scheduled</th>
+              <th class="py-2.5 px-3">Result</th>
+              <th class="py-2.5 px-3">Status</th>
+              <th class="py-2.5 px-3">Disposition</th>
+              <th class="py-2.5 px-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for w in test_worksheets %}
+              <tr class="hover:bg-slate-50/80">
+                <td class="py-2.5 px-3 font-mono font-medium">
+                  <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="text-blue-600 hover:underline">
+                    {{ w.number }}
+                  </a>
+                </td>
+                <td class="py-2.5 px-3">
+                  <div class="font-medium text-slate-900">{{ w.specification.title }}</div>
+                  <div class="text-xs text-slate-400 font-mono">{{ w.specification.analytical_method_number }}</div>
+                </td>
+                <td class="py-2.5 px-3 text-xs text-slate-700">
+                  {{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username|default:"Unassigned" }}
+                </td>
+                <td class="py-2.5 px-3 text-xs text-slate-600">{{ w.scheduled_date|default:"—" }}</td>
+                <td class="py-2.5 px-3 font-medium">
+                  {% if w.numeric_result is not None %}
+                    {{ w.numeric_result }} {{ w.specification.parameter_unit }}
+                  {% elif w.qualitative_result %}
+                    {{ w.qualitative_result }}
+                  {% else %}
+                    <span class="text-slate-400">Pending</span>
+                  {% endif %}
+                </td>
+                <td class="py-2.5 px-3">
+                  <span class="badge {{ w.get_status_badge }}">{{ w.get_status_display }}</span>
+                </td>
+                <td class="py-2.5 px-3">
+                  <span class="badge {{ w.get_disposition_badge }}">{{ w.get_disposition_display }}</span>
+                </td>
+                <td class="py-2.5 px-3 text-right table-actions">
+                  <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="btn btn-icon">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-sm text-slate-400 py-3">No analytical worksheets created yet for this sample.</p>
+    {% endif %}
+  </div>
+
+  <!-- Related OOS Investigations -->
+  {% if oos_investigations %}
+    <div class="card p-6 border-l-4 border-red-500">
+      <h2 class="text-base font-semibold text-red-900 mb-4 pb-2 border-b border-red-100 flex items-center gap-2">
+        <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i>
+        Out-of-Specification (OOS) Investigations ({{ oos_investigations|length }})
+      </h2>
+      <div class="table-wrap">
+        <table class="table w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 bg-red-50/50 text-slate-700 font-semibold text-xs uppercase tracking-wider">
+              <th class="py-2.5 px-3">OOS #</th>
+              <th class="py-2.5 px-3">Title</th>
+              <th class="py-2.5 px-3">Phase</th>
+              <th class="py-2.5 px-3">Severity</th>
+              <th class="py-2.5 px-3">Status</th>
+              <th class="py-2.5 px-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for oos in oos_investigations %}
+              <tr class="hover:bg-slate-50/80">
+                <td class="py-2.5 px-3 font-mono font-medium">
+                  <a href="{% url 'quality:oos_investigation_detail' oos.pk %}" class="text-red-600 hover:underline">
+                    {{ oos.number }}
+                  </a>
+                </td>
+                <td class="py-2.5 px-3 font-medium text-slate-900">{{ oos.title }}</td>
+                <td class="py-2.5 px-3"><span class="badge {{ oos.get_phase_badge }}">{{ oos.get_investigation_phase_display }}</span></td>
+                <td class="py-2.5 px-3"><span class="badge {{ oos.get_severity_badge }}">{{ oos.get_severity_display }}</span></td>
+                <td class="py-2.5 px-3"><span class="badge {{ oos.get_status_badge }}">{{ oos.get_status_display }}</span></td>
+                <td class="py-2.5 px-3 text-right table-actions">
+                  <a href="{% url 'quality:oos_investigation_detail' oos.pk %}" class="btn btn-icon">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
