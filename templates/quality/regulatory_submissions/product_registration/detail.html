@@ -294,7 +294,7 @@
                         <dd class="font-mono font-medium">
                             {% if product_registration.days_to_expiration is not None %}
                                 {% if product_registration.days_to_expiration < 0 %}
-                                <span class="text-red-600 font-bold">Expired ({{ product_registration.days_to_expiration }}d)</span>
+                                <span class="text-red-600 font-bold">Expired {{ product_registration.days_to_expiration|stringformat:"d"|slice:"1:" }}d ago</span>
                                 {% else %}
                                 <span>{{ product_registration.days_to_expiration }} days</span>
                                 {% endif %}
