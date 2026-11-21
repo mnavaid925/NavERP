@@ -71,6 +71,10 @@ from apps.quality.models import (
     ProcessCapabilityStudy,
     ComputerSystemValidation,
     CleaningValidation,
+    BatchRecord,
+    DeviceIdentifier,
+    SerializedItem,
+    ProductRecall,
 )
 
 
@@ -3190,3 +3194,174 @@ def cleaning_validation_b(db, tenant_b, admin_b, validation_protocol_b, doc_b):
         cleaning_sop=doc_b,
         analytical_lead=admin_b,
     )
+
+
+# ---------------------------------------------------------------------------
+# 12.18 Traceability & Serialization Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def batch_record_a(db, tenant_a, admin_user):
+    return BatchRecord.objects.create(
+        tenant=tenant_a,
+        title="Ventilator Control PCB Batch A",
+        batch_number="BATCH-TEST-A-01",
+        product_code="VENT-PCB-01",
+        product_name="Ventilator Control Board",
+        status="draft",
+        release_status="pending",
+        production_order_number="PO-2026-001",
+        planned_quantity=Decimal("500.00"),
+        actual_quantity=Decimal("495.00"),
+        unit_of_measure="EA",
+        yield_percentage=Decimal("99.00"),
+        manufacturing_date=timezone.now().date(),
+        supervisor=admin_user,
+        qa_reviewer=admin_user,
+        checklist_passed=False,
+        is_quarantined=False,
+    )
+
+
+@pytest.fixture
+def batch_record_b(db, tenant_b, admin_b):
+    return BatchRecord.objects.create(
+        tenant=tenant_b,
+        title="Ventilator Control PCB Batch B",
+        batch_number="BATCH-TEST-B-01",
+        product_code="VENT-PCB-02",
+        product_name="Ventilator Control Board B",
+        status="draft",
+        release_status="pending",
+        production_order_number="PO-2026-B01",
+        planned_quantity=Decimal("300.00"),
+        actual_quantity=Decimal("290.00"),
+        unit_of_measure="EA",
+        yield_percentage=Decimal("96.67"),
+        manufacturing_date=timezone.now().date(),
+        supervisor=admin_b,
+        qa_reviewer=admin_b,
+        checklist_passed=False,
+        is_quarantined=False,
+    )
+
+
+@pytest.fixture
+def device_identifier_a(db, tenant_a, admin_user):
+    return DeviceIdentifier.objects.create(
+        tenant=tenant_a,
+        device_name="ApexVent V500 Ventilator",
+        model_number="MOD-V500-A",
+        primary_di="00850012345001",
+        issuing_agency="gs1",
+        device_class="class_ii",
+        basic_udi_di="00850012345BASICUDI1",
+        gudid_status="draft",
+        eudamed_status="draft",
+        brand_name="ApexVent",
+        commercial_distribution_status="in_commercial_distribution",
+        catalog_number="CAT-V500",
+        barcode_format="gs1_datamatrix",
+        is_sterile=False,
+        contains_latex=False,
+        is_single_use=False,
+        mri_safety_status="mr_conditional",
+        regulatory_contact=admin_user,
+    )
+
+
+@pytest.fixture
+def device_identifier_b(db, tenant_b, admin_b):
+    return DeviceIdentifier.objects.create(
+        tenant=tenant_b,
+        device_name="Globex Infusion Pump",
+        model_number="MOD-GLX-INF01",
+        primary_di="00850012345002",
+        issuing_agency="gs1",
+        device_class="class_iia",
+        basic_udi_di="00850012345BASICUDI2",
+        gudid_status="draft",
+        eudamed_status="draft",
+        brand_name="GlobexMed",
+        commercial_distribution_status="in_commercial_distribution",
+        catalog_number="CAT-GLX-INF",
+        barcode_format="gs1_datamatrix",
+        is_sterile=False,
+        contains_latex=False,
+        is_single_use=False,
+        mri_safety_status="mr_safe",
+        regulatory_contact=admin_b,
+    )
+
+
+@pytest.fixture
+def serialized_item_a(db, tenant_a, batch_record_a, device_identifier_a):
+    return SerializedItem.objects.create(
+        tenant=tenant_a,
+        serial_number="SN-TEST-A-1001",
+        gtin_or_di="00850012345001",
+        item_code="VENT-PCB-01",
+        item_name="Ventilator Control Board",
+        lot_number="LOT-2026-A1",
+        packaging_level="unit",
+        commissioning_status="allocated",
+        epcis_state="active",
+        batch_record=batch_record_a,
+        device_identifier=device_identifier_a,
+    )
+
+
+@pytest.fixture
+def serialized_item_b(db, tenant_b, batch_record_b, device_identifier_b):
+    return SerializedItem.objects.create(
+        tenant=tenant_b,
+        serial_number="SN-TEST-B-2001",
+        gtin_or_di="00850012345002",
+        item_code="VENT-PCB-02",
+        item_name="Ventilator Control Board B",
+        lot_number="LOT-2026-B1",
+        packaging_level="unit",
+        commissioning_status="allocated",
+        epcis_state="active",
+        batch_record=batch_record_b,
+        device_identifier=device_identifier_b,
+    )
+
+
+@pytest.fixture
+def product_recall_a(db, tenant_a, admin_user):
+    return ProductRecall.objects.create(
+        tenant=tenant_a,
+        title="ApexVent Power Supply Recall",
+        recall_class="class_ii",
+        status="initiated",
+        is_mock_recall=False,
+        item_code="VENT-PCB-01",
+        item_name="Ventilator Control Board",
+        affected_lot_numbers="LOT-2026-A1",
+        hazard_summary="Potential capacitor degradation under high humidity",
+        total_distributed_qty=100,
+        total_recovered_qty=10,
+        recovery_rate_pct=Decimal("10.00"),
+        coordinator=admin_user,
+    )
+
+
+@pytest.fixture
+def product_recall_b(db, tenant_b, admin_b):
+    return ProductRecall.objects.create(
+        tenant=tenant_b,
+        title="Globex Infusion Pump Recall",
+        recall_class="class_ii",
+        status="initiated",
+        is_mock_recall=False,
+        item_code="VENT-PCB-02",
+        item_name="Ventilator Control Board B",
+        affected_lot_numbers="LOT-2026-B1",
+        hazard_summary="Battery firmware issue",
+        total_distributed_qty=50,
+        total_recovered_qty=5,
+        recovery_rate_pct=Decimal("10.00"),
+        coordinator=admin_b,
+    )
+
