@@ -186,8 +186,10 @@ def regulatory_commitment_delete(request, pk):
 
 @login_required
 def regulatory_commitment_export(request):
-    qs = quality_scope(RegulatoryCommitment.objects.all(), request).select_related(
-        "regulatory_agency", "responsible_owner"
+    qs = (
+        quality_scope(RegulatoryCommitment.objects.all(), request)
+        .select_related("regulatory_agency", "responsible_owner")
+        .defer("commitment_description", "verification_method", "agency_feedback", "notes")
     )
 
     response = HttpResponse(content_type="text/csv")
@@ -209,7 +211,7 @@ def regulatory_commitment_export(request):
         "Days Remaining",
     ])
 
-    for item in qs:
+    for item in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(item.number),
             _csv_safe(item.title),
