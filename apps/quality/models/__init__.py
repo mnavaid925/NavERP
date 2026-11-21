@@ -175,6 +175,18 @@ from apps.quality.models.TraceabilitySerialization.SerializedItems import (
 from apps.quality.models.TraceabilitySerialization.ProductRecalls import (
     ProductRecall,
 )
+from apps.quality.models.DataIntegrity.ElectronicRecordPolicies import (
+    ElectronicRecordPolicy,
+)
+from apps.quality.models.DataIntegrity.DataIntegrityAssessments import (
+    DataIntegrityAssessment,
+)
+from apps.quality.models.DataIntegrity.AuditTrailReviews import (
+    AuditTrailReview,
+)
+from apps.quality.models.DataIntegrity.SystemChangeControls import (
+    SystemChangeControl,
+)
 
 __all__ = [
     "TenantOwned",
@@ -251,5 +263,9 @@ __all__ = [
     "DeviceIdentifier",
     "SerializedItem",
     "ProductRecall",
+    "ElectronicRecordPolicy",
+    "DataIntegrityAssessment",
+    "AuditTrailReview",
+    "SystemChangeControl",
 ]
 
