@@ -49,7 +49,7 @@
 
     <div class="page-actions flex items-center gap-2">
       {% if batch_record.status != "released" and can_release %}
-        <form method="post" action="{% url 'quality:batch_record_release' batch_record.pk %}" class="inline" onsubmit="return confirm('Authorize final QA release for batch {{ batch_record.batch_number }}?');">
+        <form method="post" action="{% url 'quality:batch_record_release' batch_record.pk %}" class="inline" onsubmit="return confirm('Authorize final QA release for batch {{ batch_record.batch_number|escapejs }}?');">
           {% csrf_token %}
           <button type="submit" class="btn btn-primary flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700">
             <i data-lucide="check-circle-2" class="w-4 h-4"></i>
@@ -65,7 +65,7 @@
 
       {% if batch_record.status != "released" %}
         {% if request.user.is_superuser or request.user.is_tenant_admin %}
-        <form method="post" action="{% url 'quality:batch_record_delete' batch_record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete batch record {{ batch_record.number }}?');">
+        <form method="post" action="{% url 'quality:batch_record_delete' batch_record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete batch record {{ batch_record.number|escapejs }}?');">
           {% csrf_token %}
           <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
