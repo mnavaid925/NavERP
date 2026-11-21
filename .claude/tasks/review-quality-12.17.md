@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 5 | 4 | 0 |
+| **Important** | 9 | 4 | 5 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 19 | 6 | 0 |
+| **Total** | 25 | 18 | 7 | 0 |
 
 ---
 
@@ -75,7 +75,7 @@
   - **Issue**: Filtering by status (e.g. `status=draft`) resets the summary cards (e.g. "Approved" shows 0 even if approved items exist).
   - **Fix**: Compute top-level summary metrics from `base_qs` before applying filter expressions.
 
-- [ ] **I5: Redundant Standalone B-Tree Indexes on Fields Covered by Composite Indexes**
+- [x] **I5: Redundant Standalone B-Tree Indexes on Fields Covered by Composite Indexes**
   - **Files**:
     - `apps/quality/models/RegulatorySubmissions/RegulatorySubmissions.py:60, 77, 85`
     - `apps/quality/models/RegulatorySubmissions/ProductRegistrations.py:42, 45, 70, 74`
