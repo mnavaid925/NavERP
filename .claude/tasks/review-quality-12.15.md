@@ -42,7 +42,7 @@
   - **Issue**: `{{ fk.get_full_name|default:fk.username }}` evaluates `fk.username` in filter argument when `fk` is `None`, raising `VariableDoesNotExist` and crashing with HTTP 500 per Lesson L10.
   - **Fix**: Wrap all three in `{% if fk %}` guards.
 
-- [ ] **[C4] Unfiltered Full-Table CSV Export DoS & Memory Inefficiency**
+- [x] **[C4] Unfiltered Full-Table CSV Export DoS & Memory Inefficiency** — fixed in 99afadfb, 0f622dc3, 72875547, 013be67e
   - **Location**:
     - `apps/quality/views/ProcessValidation/ValidationProtocols.py:173`
     - `apps/quality/views/ProcessValidation/ProcessCapabilityStudies.py:152`
