@@ -131,6 +131,7 @@ class HazardousMaterial(TenantNumbered):
             models.Index(fields=["tenant", "org_unit"], name="idx_qhaz_ten_org"),
             models.Index(fields=["tenant", "supplier"], name="idx_qhaz_ten_sup"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qhaz_ten_created"),
+            models.Index(fields=["tenant", "material_name"], name="idx_qhaz_ten_name"),
         ]
 
     def __str__(self):
