@@ -3510,6 +3510,11 @@ LIVE_LINKS = {
         "Track & Trace / Supply Chain Integrity": "quality:traceability_dashboard",
         "Recall & Withdrawal Execution": "quality:product_recall_list",
     },
+    "12.20": {
+        "Electronic Records & Signatures (ER/ES) — 21 CFR Part 11": "quality:electronic_record_policy_list",
+        "Data Integrity (ALCOA+)": "quality:data_integrity_assessment_list",
+        "System Validation & Change Control (CSV)": "quality:system_change_control_list",
+    },
 
 
 
