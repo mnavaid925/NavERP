@@ -121,6 +121,7 @@ class RegulatorySubmission(TenantNumbered):
             UniqueConstraint(fields=["tenant", "number"], name="quality_qsub_ten_num_uniq"),
         ]
         indexes = [
+            Index(fields=["tenant", "-created_at"], name="idx_qsub_ten_created"),
             Index(fields=["tenant", "status"], name="idx_qsub_ten_status"),
             Index(fields=["tenant", "submission_type"], name="idx_qsub_ten_subtype"),
             Index(fields=["tenant", "product_code"], name="idx_qsub_ten_prod"),
