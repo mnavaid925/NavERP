@@ -172,7 +172,7 @@
                     </td>
                     <td>
                         <div class="text-xs font-medium">{{ p.test_runs_completed }} / {{ p.test_runs_planned }} runs</div>
-                        <div class="w-24 bg-slate-200 rounded-full h-1.5 mt-1">
+                        <div class="w-24 bg-slate-200 rounded-full h-1.5 mt-1" role="progressbar" aria-valuenow="{{ p.progress_percentage }}" aria-valuemin="0" aria-valuemax="100" aria-label="Runs completed progress">
                             <div class="bg-blue-600 h-1.5 rounded-full" style="width: {{ p.progress_percentage }}%"></div>
                         </div>
                     </td>
