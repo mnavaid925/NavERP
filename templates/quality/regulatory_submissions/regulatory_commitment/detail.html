@@ -198,6 +198,8 @@
                             <span class="text-red-600 font-bold">Overdue by {{ regulatory_commitment.days_remaining|stringformat:"d"|slice:"1:" }} days</span>
                             {% elif regulatory_commitment.status == "agency_accepted" %}
                             <span class="text-green-600">Accepted & Closed</span>
+                            {% elif regulatory_commitment.status == "waived" %}
+                            <span class="text-slate-500">Waived</span>
                             {% else %}
                             <span>{{ regulatory_commitment.days_remaining }} days remaining</span>
                             {% endif %}
