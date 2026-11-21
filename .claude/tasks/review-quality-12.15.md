@@ -142,7 +142,7 @@
   - **Location**: `templates/quality/processvalidation/cleaning_validation/detail.html:267-270`
   - **Fix**: Link to `quality:process_deviation_detail` when present.
 
-- [ ] **[M6] Awkward Null Display Concatenating "None mm"**
+- [x] **[M6] Awkward Null Display Concatenating "None mm"** — fixed in 58bbf440
   - **Location**: `templates/quality/processvalidation/process_capability_study/detail.html:102`
   - **Fix**: Guard with `{% if capability_study.target_nominal %}`.
 
