@@ -106,4 +106,14 @@ class EnvironmentalMonitoringLogForm(TenantModelForm):
                 "capa_investigation",
             ],
         )
+        lower_alert = cleaned_data.get("lower_alert_limit")
+        upper_alert = cleaned_data.get("upper_alert_limit")
+        if lower_alert is not None and upper_alert is not None and lower_alert > upper_alert:
+            self.add_error("lower_alert_limit", "Lower alert limit cannot exceed upper alert limit.")
+
+        lower_action = cleaned_data.get("lower_action_limit")
+        upper_action = cleaned_data.get("upper_action_limit")
+        if lower_action is not None and upper_action is not None and lower_action > upper_action:
+            self.add_error("lower_action_limit", "Lower action limit cannot exceed upper action limit.")
+
         return cleaned_data
