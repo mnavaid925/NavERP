@@ -126,6 +126,9 @@ def batch_record_edit(request, pk):
 @require_POST
 def batch_record_delete(request, pk):
     obj = quality_object(request, BatchRecord, pk)
+    if obj.status == "released":
+        messages.error(request, f"Batch Record {obj.number} is released and cannot be deleted under GMP retention rules.")
+        return redirect("quality:batch_record_detail", pk=obj.pk)
     number = obj.number
     write_audit_log(request.user, obj, "delete", tenant=request.tenant)
     obj.delete()
