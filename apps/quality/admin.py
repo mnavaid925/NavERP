@@ -140,6 +140,18 @@ from apps.quality.models.ProcessValidation.ComputerSystemValidations import (
 from apps.quality.models.ProcessValidation.CleaningValidations import (
     CleaningValidation,
 )
+from apps.quality.models.EhsManagement.HazardousMaterials import (
+    HazardousMaterial,
+)
+from apps.quality.models.EhsManagement.SafetyIncidents import (
+    SafetyIncident,
+)
+from apps.quality.models.EhsManagement.EnvironmentalMonitoringLogs import (
+    EnvironmentalMonitoringLog,
+)
+from apps.quality.models.EhsManagement.WasteDisposalManifests import (
+    WasteDisposalManifest,
+)
 
 
 
@@ -1311,6 +1323,80 @@ class CleaningValidationAdmin(admin.ModelAdmin):
     list_filter = ("cleaning_status", "calculation_basis", "analytical_method", "is_visually_clean", "tenant")
     search_fields = ("number", "title", "equipment_train_tag", "target_residue", "cleaning_agent_used")
     list_select_related = ("tenant", "analytical_lead", "qa_approver", "validation_protocol", "cleaning_sop")
+
+
+@admin.register(HazardousMaterial)
+class HazardousMaterialAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "material_name",
+        "trade_name",
+        "cas_number",
+        "ghs_hazard_class",
+        "physical_state",
+        "storage_temperature_class",
+        "current_stock_quantity",
+        "unit_of_measure",
+        "status",
+        "tenant",
+    )
+    list_filter = ("ghs_hazard_class", "physical_state", "storage_temperature_class", "status", "tenant")
+    search_fields = ("number", "material_name", "trade_name", "cas_number", "storage_location")
+    list_select_related = ("tenant", "org_unit", "supplier", "managed_by")
+
+
+@admin.register(SafetyIncident)
+class SafetyIncidentAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "incident_title",
+        "incident_type",
+        "severity_level",
+        "incident_date",
+        "is_osha_recordable",
+        "lost_workdays",
+        "status",
+        "tenant",
+    )
+    list_filter = ("incident_type", "severity_level", "is_osha_recordable", "status", "tenant")
+    search_fields = ("number", "incident_title", "location_details", "osha_case_number")
+    list_select_related = ("tenant", "org_unit", "reported_by", "lead_investigator")
+
+
+@admin.register(EnvironmentalMonitoringLog)
+class EnvironmentalMonitoringLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "sampling_point_name",
+        "cleanroom_classification",
+        "monitoring_type",
+        "sample_timestamp",
+        "measured_value",
+        "action_limit",
+        "compliance_status",
+        "tenant",
+    )
+    list_filter = ("cleanroom_classification", "monitoring_type", "compliance_status", "tenant")
+    search_fields = ("number", "sampling_point_name", "sampling_point_code", "equipment_tag")
+    list_select_related = ("tenant", "org_unit", "sampled_by", "reviewed_by")
+
+
+@admin.register(WasteDisposalManifest)
+class WasteDisposalManifestAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "epa_manifest_tracking_number",
+        "waste_stream_name",
+        "dot_hazard_class",
+        "waste_quantity",
+        "unit_of_measure",
+        "shipment_date",
+        "status",
+        "tenant",
+    )
+    list_filter = ("dot_hazard_class", "physical_form", "management_method", "status", "tenant")
+    search_fields = ("number", "epa_manifest_tracking_number", "waste_stream_name", "transporter_epa_id", "tsdf_epa_id")
+    list_select_related = ("tenant", "hazardous_material", "org_unit", "transporter", "tsdf_facility", "ehs_officer")
 
 
 
