@@ -156,6 +156,7 @@ class ValidationProtocol(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_qval_ten_status"),
             models.Index(fields=["tenant", "protocol_stage"], name="idx_qval_ten_stage"),
             models.Index(fields=["tenant", "target_type"], name="idx_qval_ten_target"),
+            models.Index(fields=["tenant", "target_completion_date"], name="idx_qval_ten_target_due"),
             models.Index(fields=["tenant", "revalidation_due_date"], name="idx_qval_ten_reval_due"),
         ]
         constraints = [
