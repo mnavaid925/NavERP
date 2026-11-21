@@ -172,6 +172,9 @@ from apps.quality.urls.TraceabilitySerialization import (
 from apps.quality.urls.DataIntegrity import (
     urlpatterns as data_integrity_urls,
 )
+from apps.quality.urls.LimsManagement import (
+    urlpatterns as lims_management_urls,
+)
 
 app_name = "quality"
 
@@ -234,5 +237,6 @@ urlpatterns = (
     + regulatory_submissions_urls
     + traceability_serialization_urls
     + data_integrity_urls
+    + lims_management_urls
 )
 
