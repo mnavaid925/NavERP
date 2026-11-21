@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 8 | 1 | 0 |
+| **Important** | 9 | 7 | 2 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 22 | 3 | 0 |
+| **Total** | 25 | 21 | 4 | 0 |
 
 ---
 
@@ -52,7 +52,7 @@
   - **Issue**: Pagination links only preserve `q`, `status`, and primary type; navigating to page 2 strips authority, agency, device class, and benefit-risk filters.
   - **Fix**: Append all active GET filter parameters to previous/next pagination links.
 
-- [ ] **I2: Core Spine Attribute Mismatch: `ControlledDocument.revision_number` Does Not Exist**
+- [x] **I2: Core Spine Attribute Mismatch: `ControlledDocument.revision_number` Does Not Exist**
   - **File**: `templates/quality/regulatory_submissions/regulatory_submission/detail.html:112`
   - **Issue**: Template references `technical_dossier.revision_number`, but the attribute on `ControlledDocument` is `revision`. Resolves silently to empty string `(Rev )`.
   - **Fix**: Update template expression to `{{ regulatory_submission.technical_dossier.revision }}`.
