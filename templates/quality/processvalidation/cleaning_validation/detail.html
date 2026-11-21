@@ -258,7 +258,7 @@
                     </div>
                     <div class="detail-item">
                         <dt>QA Approving Authority</dt>
-                        <dd>{{ cleaning_validation.qa_approver.get_full_name|default:cleaning_validation.qa_approver.username|default:"Pending Approval" }}</dd>
+                        <dd>{% if cleaning_validation.qa_approver %}{{ cleaning_validation.qa_approver.get_full_name|default:cleaning_validation.qa_approver.username }}{% else %}Pending Approval{% endif %}</dd>
                     </div>
                     <div class="detail-item">
                         <dt>Linked Deviation / OOS</dt>
