@@ -3496,6 +3496,13 @@ LIVE_LINKS = {
         "Waste Management & Disposal": "quality:waste_disposal_manifest_list",
         "Occupational Health & Ergonomics": "quality:ehs_dashboard",
     },
+    "12.17": {
+        "Regulatory Intelligence & Tracking": "quality:regulatory_dashboard",
+        "Submission Document Management": "quality:regulatory_submission_list",
+        "Regulatory Correspondence & Commitments": "quality:regulatory_commitment_list",
+        "Registration & Listing Management": "quality:product_registration_list",
+        "Post-Market Surveillance (PMS)": "quality:post_market_surveillance_report_list",
+    },
 
 
 
