@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 1 | 13 | 0 |
-| **Total** | 25 | 1 | 24 | 0 |
+| **Minor** | 14 | 0 | 14 | 0 |
+| **Total** | 25 | 0 | 25 | 0 |
 
 ---
 
@@ -211,7 +211,7 @@
   - **Issue**: When `status == "overdue"` but `due_date >= today`, `slice:"1:"` strips the first digit of a positive number.
   - **Fix**: Only apply slice if `days_remaining < 0`.
 
-- [ ] **M14: Unused Variable in Form Validation**
+- [x] **M14: Unused Variable in Form Validation**
   - **File**: `apps/quality/forms/RegulatorySubmissions/RegulatorySubmissions.py:80`
   - **Issue**: `planned = cleaned_data.get("planned_submission_date")` is extracted but unused.
   - **Fix**: Remove unused variable extraction.
