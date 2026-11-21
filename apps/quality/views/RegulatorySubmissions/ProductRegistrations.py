@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.models import Party
 from apps.core.utils import write_audit_log
 from apps.quality.forms.RegulatorySubmissions.ProductRegistrations import ProductRegistrationForm
@@ -174,6 +175,7 @@ def product_registration_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def product_registration_delete(request, pk):
     registration = quality_object(request, ProductRegistration, pk)
     num = registration.number
