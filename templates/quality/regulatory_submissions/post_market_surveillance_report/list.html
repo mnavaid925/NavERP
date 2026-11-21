@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Post-Market Surveillance & PSUR Reports — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_dashboard' %}">Regulatory Compliance</a>
+            <span class="sep">/</span>
+            <span>PMS Reports</span>
+        </div>
+        <h1 class="page-title">Post-Market Surveillance (PMS) & PSUR Reports</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:post_market_surveillance_report_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:post_market_surveillance_report_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New PMS Report
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Surveillance Reports</div>
+            <div class="stat-value">{{ total_reports }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Approved & Submitted to Authority</div>
+            <div class="stat-value">{{ approved_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Search by number, title, device family..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="report_type">Report Type</label>
+                <select name="report_type" id="report_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in report_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.report_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="benefit_risk_conclusion">Benefit-Risk Ratio</label>
+                <select name="benefit_risk_conclusion" id="benefit_risk_conclusion" class="form-select">
+                    <option value="">All Conclusions</option>
+                    {% for val, label in benefit_risk_choices %}
+                    <option value="{{ val }}" {% if request.GET.benefit_risk_conclusion == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group lg:col-span-3">
+                <label class="form-label" for="product_registration">Product Registration</label>
+                <select name="product_registration" id="product_registration" class="form-select">
+                    <option value="">All Registered Devices</option>
+                    {% for reg in registrations %}
+                    <option value="{{ reg.pk }}" {% if request.GET.product_registration == reg.pk|stringformat:"d" %}selected{% endif %}>{{ reg.product_name }} ({{ reg.jurisdiction_country }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-2 flex items-end justify-end gap-2">
+                <a href="{% url 'quality:post_market_surveillance_report_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Report Title & Family</th>
+                    <th>Type</th>
+                    <th>Period End</th>
+                    <th>Units Sold</th>
+                    <th>Complaint %</th>
+                    <th>Incidents</th>
+                    <th>Benefit-Risk</th>
+                    <th>Status</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in post_market_surveillance_reports %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'quality:post_market_surveillance_report_detail' item.pk %}" class="text-primary hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ item.report_title }}</div>
+                        <div class="text-xs text-slate-500">{{ item.device_model_family }}</div>
+                    </td>
+                    <td>
+                        <span class="text-xs">{{ item.get_report_type_display }}</span>
+                    </td>
+                    <td class="text-xs font-mono">
+                        {{ item.reporting_period_end|date:"Y-m-d" }}
+                    </td>
+                    <td class="text-xs font-mono">
+                        {{ item.units_distributed }}
+                    </td>
+                    <td class="text-xs font-mono">
+                        {{ item.complaint_rate_pct }}%
+                        <div class="text-slate-400">({{ item.total_complaints_count }})</div>
+                    </td>
+                    <td class="text-xs font-mono">
+                        {% if item.serious_incidents_count > 0 %}
+                        <span class="text-red-600 font-bold">{{ item.serious_incidents_count }}</span>
+                        {% else %}
+                        <span class="text-slate-500">0</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.benefit_risk_css }}">
+                            {{ item.get_benefit_risk_conclusion_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_css }}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:post_market_surveillance_report_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:post_market_surveillance_report_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:post_market_surveillance_report_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this PMS report?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i data-lucide="activity" class="empty-icon"></i>
+                            <h3>No PMS or PSUR reports recorded</h3>
+                            <p class="text-slate-500">Track Periodic Safety Update Reports, PMCF clinical follow-ups, and vigilance trend assessments.</p>
+                            <a href="{% url 'quality:post_market_surveillance_report_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> Compile First PMS Report
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} records
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.report_type %}&report_type={{ request.GET.report_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Previous</span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.report_type %}&report_type={{ request.GET.report_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
