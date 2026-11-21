@@ -126,7 +126,7 @@
   - **Location**: `apps/quality/models/ProcessValidation/ValidationProtocols.py:174-177`, `apps/quality/views/ProcessValidation/ProcessValidationDashboard.py:23`
   - **Fix**: Exclude `"rejected"` and `"superseded"` protocols.
 
-- [ ] **[M2] HTML Entity Usage in Template Stat Tiles**
+- [x] **[M2] HTML Entity Usage in Template Stat Tiles** — fixed in ddbea69d, 96d5960f
   - **Location**: `templates/quality/processvalidation/process_capability_study/list.html:43`, `templates/quality/processvalidation/process_validation_dashboard.html:49`
   - **Fix**: Replace `&ge;` with `>=`.
 
