@@ -176,6 +176,7 @@ def post_market_surveillance_report_delete(request, pk):
 
 @login_required
 def post_market_surveillance_report_export(request):
+    write_audit_log(request.user, PostMarketSurveillanceReport(), "export", tenant=request.tenant)
     qs = (
         quality_scope(PostMarketSurveillanceReport.objects.all(), request)
         .defer("benefit_risk_rationale", "pmcf_action_summary", "notes")
