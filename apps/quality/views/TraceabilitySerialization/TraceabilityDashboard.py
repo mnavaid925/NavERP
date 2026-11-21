@@ -21,12 +21,22 @@ def traceability_dashboard(request):
     recall_qs = quality_scope(ProductRecall.objects.all(), request)
     udi_qs = quality_scope(DeviceIdentifier.objects.all(), request)
 
-    total_batches = batch_qs.count()
-    released_batches = batch_qs.filter(status="released").count()
-    quarantined_batches = batch_qs.filter(Q(status="quarantined") | Q(is_quarantined=True)).count()
+    batch_stats = batch_qs.aggregate(
+        total=Count("id"),
+        released=Count("id", filter=Q(status="released")),
+        quarantined=Count("id", filter=Q(status="quarantined") | Q(is_quarantined=True)),
+    )
+    total_batches = batch_stats["total"]
+    released_batches = batch_stats["released"]
+    quarantined_batches = batch_stats["quarantined"]
 
-    total_serialized = serialized_qs.count()
-    commissioned_units = serialized_qs.filter(commissioning_status="commissioned").count()
+    serialized_stats = serialized_qs.aggregate(
+        total=Count("id"),
+        commissioned=Count("id", filter=Q(commissioning_status="commissioned")),
+    )
+    total_serialized = serialized_stats["total"]
+    commissioned_units = serialized_stats["commissioned"]
+
     active_recalls = recall_qs.exclude(status__in=["completed", "terminated"]).count()
 
     recent_batch_records = batch_qs.select_related("supervisor", "qa_reviewer")[:5]
