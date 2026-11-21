@@ -187,6 +187,18 @@ from apps.quality.models.DataIntegrity.AuditTrailReviews import (
 from apps.quality.models.DataIntegrity.SystemChangeControls import (
     SystemChangeControl,
 )
+from apps.quality.models.LimsManagement.LabSamples import (
+    LabSample,
+)
+from apps.quality.models.LimsManagement.LabSpecifications import (
+    LabSpecification,
+)
+from apps.quality.models.LimsManagement.LabTestWorksheets import (
+    LabTestWorksheet,
+)
+from apps.quality.models.LimsManagement.OosInvestigations import (
+    OosInvestigation,
+)
 
 __all__ = [
     "TenantOwned",
@@ -267,5 +279,9 @@ __all__ = [
     "DataIntegrityAssessment",
     "AuditTrailReview",
     "SystemChangeControl",
+    "LabSample",
+    "LabSpecification",
+    "LabTestWorksheet",
+    "OosInvestigation",
 ]
 
