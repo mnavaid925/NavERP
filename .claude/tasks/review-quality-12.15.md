@@ -154,7 +154,7 @@
   - **Location**: `templates/quality/processvalidation/validation_protocol/list.html:166-168`
   - **Fix**: Add `role="progressbar"` and ARIA value attributes.
 
-- [ ] **[M9] Missing Database Index on `CleaningValidation.analytical_method`**
+- [x] **[M9] Missing Database Index on `CleaningValidation.analytical_method`** — fixed in ddbb042c, 20464a7d
   - **Location**: `apps/quality/models/ProcessValidation/CleaningValidations.py:61, 109, 168-171`
   - **Fix**: Add composite index `idx_qcln_ten_method` on `("tenant", "analytical_method")`.
 
