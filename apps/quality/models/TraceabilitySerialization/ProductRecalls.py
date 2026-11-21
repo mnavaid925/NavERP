@@ -32,7 +32,7 @@ class ProductRecall(TenantNumbered):
         "class_ii": "badge-amber",
         "class_iii": "badge-info",
         "market_withdrawal": "badge-slate",
-        "safety_alert": "badge-purple",
+        "safety_alert": "badge-amber",
     }
 
     RECALL_STATUS_CSS = {
