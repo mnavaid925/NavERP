@@ -163,6 +163,14 @@ safety_incident_edit = safety_incident_update
 @require_POST
 def safety_incident_delete(request, pk):
     obj = quality_object(request, SafetyIncident, pk)
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)):
+        messages.error(request, "Only tenant administrators can delete safety incident reports.")
+        return redirect("quality:safety_incident_detail", pk=obj.pk)
+
+    if obj.is_osha_recordable:
+        messages.error(request, "Statutory OSHA 300 recordable incidents cannot be deleted.")
+        return redirect("quality:safety_incident_detail", pk=obj.pk)
+
     num = obj.number
     write_audit_log(request.user, obj, "delete", tenant=request.tenant)
     obj.delete()
