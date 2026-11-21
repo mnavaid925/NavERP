@@ -708,6 +708,37 @@ from apps.quality.views.TraceabilitySerialization.TraceabilityDashboard import (
     traceability_dashboard,
     traceability_export_csv,
 )
+from apps.quality.views.DataIntegrity.ElectronicRecordPolicies import (
+    electronic_record_policy_create,
+    electronic_record_policy_delete,
+    electronic_record_policy_detail,
+    electronic_record_policy_edit,
+    electronic_record_policy_list,
+)
+from apps.quality.views.DataIntegrity.DataIntegrityAssessments import (
+    data_integrity_assessment_create,
+    data_integrity_assessment_delete,
+    data_integrity_assessment_detail,
+    data_integrity_assessment_edit,
+    data_integrity_assessment_list,
+)
+from apps.quality.views.DataIntegrity.AuditTrailReviews import (
+    audit_trail_review_create,
+    audit_trail_review_delete,
+    audit_trail_review_detail,
+    audit_trail_review_edit,
+    audit_trail_review_list,
+)
+from apps.quality.views.DataIntegrity.SystemChangeControls import (
+    system_change_control_create,
+    system_change_control_delete,
+    system_change_control_detail,
+    system_change_control_edit,
+    system_change_control_list,
+)
+from apps.quality.views.DataIntegrity.DataIntegrityDashboard import (
+    data_integrity_dashboard,
+)
 
 __all__ = [
     "controlled_document_list",
@@ -1242,5 +1273,26 @@ __all__ = [
     "product_recall_delete",
     "traceability_dashboard",
     "traceability_export_csv",
+    "electronic_record_policy_list",
+    "electronic_record_policy_detail",
+    "electronic_record_policy_create",
+    "electronic_record_policy_edit",
+    "electronic_record_policy_delete",
+    "data_integrity_assessment_list",
+    "data_integrity_assessment_detail",
+    "data_integrity_assessment_create",
+    "data_integrity_assessment_edit",
+    "data_integrity_assessment_delete",
+    "audit_trail_review_list",
+    "audit_trail_review_detail",
+    "audit_trail_review_create",
+    "audit_trail_review_edit",
+    "audit_trail_review_delete",
+    "system_change_control_list",
+    "system_change_control_detail",
+    "system_change_control_create",
+    "system_change_control_edit",
+    "system_change_control_delete",
+    "data_integrity_dashboard",
 ]
 
