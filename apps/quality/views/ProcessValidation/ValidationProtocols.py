@@ -174,6 +174,37 @@ def validation_protocol_export(request):
         "lead_author", "qa_reviewer", "final_approver", "department"
     )
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(title__icontains=q)
+            | Q(description__icontains=q)
+            | Q(equipment_tag__icontains=q)
+            | Q(process_name__icontains=q)
+            | Q(item_code__icontains=q)
+        )
+
+    stage_filter = request.GET.get("stage", "").strip()
+    if stage_filter:
+        qs = qs.filter(protocol_stage=stage_filter)
+
+    target_type_filter = request.GET.get("target_type", "").strip()
+    if target_type_filter:
+        qs = qs.filter(target_type=target_type_filter)
+
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    trigger_filter = request.GET.get("revalidation_trigger", "").strip()
+    if trigger_filter:
+        qs = qs.filter(revalidation_trigger=trigger_filter)
+
+    dept_filter = request.GET.get("department", "").strip()
+    if dept_filter and dept_filter.isdigit():
+        qs = qs.filter(department_id=int(dept_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="validation_protocols.csv"'
     response["X-Content-Type-Options"] = "nosniff"
