@@ -153,6 +153,9 @@ def environmental_monitoring_log_update(request, pk):
     return render(request, "quality/ehsmanagement/environmental_monitoring_log/form.html", context)
 
 
+environmental_monitoring_log_edit = environmental_monitoring_log_update
+
+
 @login_required
 @require_POST
 def environmental_monitoring_log_delete(request, pk):
