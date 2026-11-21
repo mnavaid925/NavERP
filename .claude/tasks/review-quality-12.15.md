@@ -146,7 +146,7 @@
   - **Location**: `templates/quality/processvalidation/process_capability_study/detail.html:102`
   - **Fix**: Guard with `{% if capability_study.target_nominal %}`.
 
-- [ ] **[M7] Accessibility: Action Icon Buttons Missing `aria-label`**
+- [x] **[M7] Accessibility: Action Icon Buttons Missing `aria-label`** — fixed in d3e2bf50, b0bed944, ff1c67a1, ae2b8280
   - **Location**: Table action columns in all 4 list templates
   - **Fix**: Add explicit `aria-label` to `.btn-icon` elements.
 
