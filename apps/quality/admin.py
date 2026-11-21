@@ -164,6 +164,18 @@ from apps.quality.models.RegulatorySubmissions.RegulatoryCommitments import (
 from apps.quality.models.RegulatorySubmissions.PostMarketSurveillanceReports import (
     PostMarketSurveillanceReport,
 )
+from apps.quality.models.TraceabilitySerialization.BatchRecords import (
+    BatchRecord,
+)
+from apps.quality.models.TraceabilitySerialization.DeviceIdentifiers import (
+    DeviceIdentifier,
+)
+from apps.quality.models.TraceabilitySerialization.SerializedItems import (
+    SerializedItem,
+)
+from apps.quality.models.TraceabilitySerialization.ProductRecalls import (
+    ProductRecall,
+)
 
 
 
@@ -1483,6 +1495,76 @@ class PostMarketSurveillanceReportAdmin(admin.ModelAdmin):
     list_filter = ("report_type", "benefit_risk_conclusion", "status", "tenant")
     search_fields = ("number", "report_title", "device_model_family", "benefit_risk_rationale")
     list_select_related = ("tenant", "product_registration", "prepared_by", "approved_by")
+
+
+@admin.register(BatchRecord)
+class BatchRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "batch_number",
+        "product_code",
+        "product_name",
+        "status",
+        "release_status",
+        "yield_percentage",
+        "tenant",
+    )
+    list_filter = ("status", "release_status", "is_quarantined", "checklist_passed", "tenant")
+    search_fields = ("number", "batch_number", "product_code", "product_name", "title")
+    list_select_related = ("tenant", "supervisor", "qa_reviewer", "work_order", "master_document")
+
+
+@admin.register(DeviceIdentifier)
+class DeviceIdentifierAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "primary_di",
+        "device_name",
+        "issuing_agency",
+        "device_class",
+        "gudid_status",
+        "eudamed_status",
+        "tenant",
+    )
+    list_filter = ("issuing_agency", "device_class", "gudid_status", "eudamed_status", "is_sterile", "tenant")
+    search_fields = ("number", "primary_di", "device_name", "basic_udi_di", "model_number")
+    list_select_related = ("tenant", "regulatory_contact", "approval_document")
+
+
+@admin.register(SerializedItem)
+class SerializedItemAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "serial_number",
+        "item_code",
+        "lot_number",
+        "packaging_level",
+        "commissioning_status",
+        "epcis_state",
+        "is_cold_chain",
+        "tenant",
+    )
+    list_filter = ("packaging_level", "commissioning_status", "epcis_state", "is_cold_chain", "tenant")
+    search_fields = ("number", "serial_number", "gtin_or_di", "sscc_code", "lot_number", "item_code")
+    list_select_related = ("tenant", "batch_record", "device_identifier", "parent_container", "custodian", "location_unit")
+
+
+@admin.register(ProductRecall)
+class ProductRecallAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "recall_class",
+        "status",
+        "is_mock_recall",
+        "recovery_rate_pct",
+        "item_code",
+        "tenant",
+    )
+    list_filter = ("recall_class", "status", "is_mock_recall", "tenant")
+    search_fields = ("number", "title", "item_code", "item_name", "affected_lot_numbers")
+    list_select_related = ("tenant", "coordinator", "closure_approved_by", "customer_complaint", "capa_investigation")
+
 
 
 
