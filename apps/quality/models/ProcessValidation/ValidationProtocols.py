@@ -174,7 +174,7 @@ class ValidationProtocol(TenantNumbered):
 
     @property
     def is_revalidation_overdue(self):
-        if self.revalidation_due_date:
+        if self.revalidation_due_date and self.status not in ("rejected", "superseded"):
             return self.revalidation_due_date < datetime.date.today()
         return False
 
