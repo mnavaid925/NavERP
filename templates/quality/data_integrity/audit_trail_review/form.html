@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Audit Review {{ review.number }}{% else %}New Audit Trail Review{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:audit_trail_review_list' %}">Audit Reviews</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ review.number }}{% else %}New Review{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Audit Trail Review — {{ review.number }}{% else %}New GxP Audit Trail Review & Log Examination{% endif %}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6 max-w-4xl">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200 p-4">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-red-700">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Review Identification & Source Scope</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Review Title *</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.system.id_for_label }}">Computerized System</label>
+                {{ form.system }}
+                {% if form.system.errors %}<div class="form-error">{{ form.system.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.review_type.id_for_label }}">Review Type *</label>
+                {{ form.review_type }}
+                {% if form.review_type.errors %}<div class="form-error">{{ form.review_type.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.audit_source.id_for_label }}">Audit Trail Log Source *</label>
+                {{ form.audit_source }}
+                {% if form.audit_source.errors %}<div class="form-error">{{ form.audit_source.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Review Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_start.id_for_label }}">Period Start Date *</label>
+                {{ form.period_start }}
+                {% if form.period_start.errors %}<div class="form-error">{{ form.period_start.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_end.id_for_label }}">Period End Date *</label>
+                {{ form.period_end }}
+                {% if form.period_end.errors %}<div class="form-error">{{ form.period_end.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.review_date.id_for_label }}">Review Execution Date</label>
+                {{ form.review_date }}
+                {% if form.review_date.errors %}<div class="form-error">{{ form.review_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.records_sampled_count.id_for_label }}">Records Sampled Count</label>
+                {{ form.records_sampled_count }}
+                {% if form.records_sampled_count.errors %}<div class="form-error">{{ form.records_sampled_count.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Anomalies, Findings & QA Disposition</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.anomalies_detected_count.id_for_label }}">Anomalies Detected Count</label>
+                {{ form.anomalies_detected_count }}
+                {% if form.anomalies_detected_count.errors %}<div class="form-error">{{ form.anomalies_detected_count.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.anomaly_severity.id_for_label }}">Anomaly Severity *</label>
+                {{ form.anomaly_severity }}
+                {% if form.anomaly_severity.errors %}<div class="form-error">{{ form.anomaly_severity.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.disposition.id_for_label }}">QA Review Disposition *</label>
+                {{ form.disposition }}
+                {% if form.disposition.errors %}<div class="form-error">{{ form.disposition.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.findings_summary.id_for_label }}">Findings Summary & Exceptions</label>
+                {{ form.findings_summary }}
+                {% if form.findings_summary.errors %}<div class="form-error">{{ form.findings_summary.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.qa_comments.id_for_label }}">QA Compliance Comments</label>
+                {{ form.qa_comments }}
+                {% if form.qa_comments.errors %}<div class="form-error">{{ form.qa_comments.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Personnel & Quality Escalations</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.reviewer.id_for_label }}">Lead Reviewer</label>
+                {{ form.reviewer }}
+                {% if form.reviewer.errors %}<div class="form-error">{{ form.reviewer.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.qa_approver.id_for_label }}">QA Approver</label>
+                {{ form.qa_approver }}
+                {% if form.qa_approver.errors %}<div class="form-error">{{ form.qa_approver.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.linked_ncr.id_for_label }}">Linked Non-Conformance (NCR)</label>
+                {{ form.linked_ncr }}
+                {% if form.linked_ncr.errors %}<div class="form-error">{{ form.linked_ncr.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.linked_capa.id_for_label }}">Linked CAPA Investigation</label>
+                {{ form.linked_capa }}
+                {% if form.linked_capa.errors %}<div class="form-error">{{ form.linked_capa.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-4">
+        <button type="submit" class="btn btn-primary">
+            {% if is_edit %}Save Changes{% else %}Create Review{% endif %}
+        </button>
+        <a href="{% if is_edit %}{% url 'quality:audit_trail_review_detail' review.pk %}{% else %}{% url 'quality:audit_trail_review_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</form>
+{% endblock %}
