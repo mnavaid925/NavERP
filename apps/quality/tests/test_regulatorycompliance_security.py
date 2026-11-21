@@ -125,6 +125,8 @@ def test_regulatorycompliance_audit_logging(client, admin_user, tenant_a, regula
         "title": "Audit Test Submission",
         "product_name": "Audit Device",
         "submission_type": "510k",
+        "device_class": "class_iib",
+        "status": "draft",
     })
     assert res.status_code == 302
     assert AuditLog.objects.filter(tenant=tenant_a, action="create").count() > 0
