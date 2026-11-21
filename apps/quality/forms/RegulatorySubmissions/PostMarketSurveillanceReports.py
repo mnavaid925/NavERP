@@ -46,7 +46,7 @@ class PostMarketSurveillanceReportForm(TenantModelForm):
             "field_actions_count": forms.NumberInput(attrs={"class": "form-input", "min": 0}),
             "benefit_risk_conclusion": forms.Select(attrs={"class": "form-select"}),
             "benefit_risk_rationale": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Summary of benefit-risk analysis, complaint rates, clinical trends, and residual risk acceptability..."}),
-            "pmcf_action_required": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "pmcf_action_required": forms.CheckboxInput(attrs={"class": "form-check"}),
             "pmcf_action_summary": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Post-market clinical follow-up activities planned, registries, survey studies..."}),
             "status": forms.Select(attrs={"class": "form-select"}),
             "prepared_by": forms.Select(attrs={"class": "form-select"}),
