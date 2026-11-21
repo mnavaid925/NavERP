@@ -57,7 +57,7 @@ class RegulatorySubmission(TenantNumbered):
 
     title = models.CharField(max_length=255)
     submission_type = models.CharField(
-        max_length=30, choices=SUBMISSION_TYPE_CHOICES, default="510k", db_index=True
+        max_length=30, choices=SUBMISSION_TYPE_CHOICES, default="510k"
     )
     target_authority = models.ForeignKey(
         "core.Party",
@@ -74,7 +74,7 @@ class RegulatorySubmission(TenantNumbered):
         related_name="regulatory_submissions",
     )
     product_name = models.CharField(max_length=255)
-    product_code = models.CharField(max_length=100, blank=True, db_index=True)
+    product_code = models.CharField(max_length=100, blank=True)
     device_class = models.CharField(
         max_length=20, choices=DEVICE_CLASS_CHOICES, default="class_iib", db_index=True
     )
@@ -82,7 +82,7 @@ class RegulatorySubmission(TenantNumbered):
         max_length=100, blank=True, db_index=True, help_text="e.g. K230123, P210045, MDR-TF-008"
     )
     status = models.CharField(
-        max_length=30, choices=STATUS_CHOICES, default="draft", db_index=True
+        max_length=30, choices=STATUS_CHOICES, default="draft"
     )
     planned_submission_date = models.DateField(null=True, blank=True)
     actual_submission_date = models.DateField(null=True, blank=True, db_index=True)
