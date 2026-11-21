@@ -20,7 +20,9 @@ PAGE_SIZE = 15
 
 @login_required
 def hazardous_material_list(request):
-    qs = quality_scope(HazardousMaterial.objects.all(), request).select_related("org_unit", "supplier", "managed_by")
+    qs = quality_scope(HazardousMaterial.objects.all(), request).select_related(
+        "org_unit", "supplier", "managed_by", "sds_document"
+    )
 
     q = request.GET.get("q", "").strip()
     if q:
