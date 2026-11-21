@@ -4957,7 +4957,7 @@ class Command(BaseCommand):
             qa_dept = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
 
         vendor = (
-            Party.objects.filter(tenant=tenant, roles__name="vendor").order_by("pk").first()
+            Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor")).order_by("pk").first()
             or Party.objects.filter(tenant=tenant).order_by("pk").first()
         )
 
