@@ -89,7 +89,7 @@ def traceability_export_csv(request):
         "Batch Record Number",
     ])
 
-    for item in serialized_qs:
+    for item in serialized_qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(item.serial_number),
             _csv_safe(item.gtin_or_di),
