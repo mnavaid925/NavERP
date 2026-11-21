@@ -40,7 +40,7 @@ class RegulatoryCommitment(TenantNumbered):
 
     title = models.CharField(max_length=255)
     commitment_type = models.CharField(
-        max_length=30, choices=COMMITMENT_TYPE_CHOICES, default="agency_deficiency", db_index=True
+        max_length=30, choices=COMMITMENT_TYPE_CHOICES, default="agency_deficiency"
     )
     regulatory_agency = models.ForeignKey(
         "core.Party",
@@ -82,10 +82,10 @@ class RegulatoryCommitment(TenantNumbered):
         blank=True,
         related_name="owned_commitments",
     )
-    due_date = models.DateField(db_index=True)
+    due_date = models.DateField()
     completion_date = models.DateField(null=True, blank=True)
     status = models.CharField(
-        max_length=25, choices=STATUS_CHOICES, default="open", db_index=True
+        max_length=25, choices=STATUS_CHOICES, default="open"
     )
     verification_method = models.TextField(
         blank=True, help_text="Test data, protocol, labeling file, or formal response package"
