@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ environmental_log.sampling_point_id }}{% else %}Record Environmental Monitoring Log{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:environmental_monitoring_log_list' %}">Environmental Logs</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ environmental_log.number }}{% else %}Record New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Environmental Log: {{ environmental_log.sampling_point_id }}{% else %}Record Environmental Sample Reading{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:environmental_monitoring_log_detail' environmental_log.pk %}{% else %}{% url 'quality:environmental_monitoring_log_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="card p-4 bg-red-50 border-red-200">
+        <div class="flex items-center gap-2 text-red-700 font-semibold mb-2">
+            <i data-lucide="alert-octagon" class="w-5 h-5"></i> Please correct the errors below:
+        </div>
+        <ul class="list-disc list-inside text-sm text-red-600">
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- 1. Sampling Location & Cleanroom Environment -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="map-pin" class="w-5 h-5 text-primary"></i> Sampling Location & Cleanroom Specification
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_sampling_point_id">Sampling Point ID <span class="text-danger">*</span></label>
+                {{ form.sampling_point_id }}
+                {% if form.sampling_point_id.errors %}<div class="form-error">{{ form.sampling_point_id.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_sampling_timestamp">Sampling Timestamp <span class="text-danger">*</span></label>
+                {{ form.sampling_timestamp }}
+                {% if form.sampling_timestamp.errors %}<div class="form-error">{{ form.sampling_timestamp.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_org_unit">Facility / Org Unit</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_cleanroom_class">Cleanroom Classification</label>
+                {{ form.cleanroom_class }}
+                {% if form.cleanroom_class.errors %}<div class="form-error">{{ form.cleanroom_class.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_operational_state">Operational State</label>
+                {{ form.operational_state }}
+                {% if form.operational_state.errors %}<div class="form-error">{{ form.operational_state.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_monitoring_category">Monitoring Category</label>
+                {{ form.monitoring_category }}
+                {% if form.monitoring_category.errors %}<div class="form-error">{{ form.monitoring_category.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Measured Values & Threshold Limits -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="sliders" class="w-5 h-5 text-blue-500"></i> Quantitative Parameter & Limit Thresholds
+            </h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_parameter_name">Parameter Name <span class="text-danger">*</span></label>
+                    {{ form.parameter_name }}
+                    {% if form.parameter_name.errors %}<div class="form-error">{{ form.parameter_name.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_measured_value">Measured Quantitative Value <span class="text-danger">*</span></label>
+                    {{ form.measured_value }}
+                    {% if form.measured_value.errors %}<div class="form-error">{{ form.measured_value.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_unit_of_measure">Unit of Measure</label>
+                    {{ form.unit_of_measure }}
+                    {% if form.unit_of_measure.errors %}<div class="form-error">{{ form.unit_of_measure.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-slate-50 rounded border border-slate-200">
+                <div class="form-group">
+                    <label class="form-label text-slate-700" for="id_target_nominal_value">Nominal Target</label>
+                    {{ form.target_nominal_value }}
+                    {% if form.target_nominal_value.errors %}<div class="form-error">{{ form.target_nominal_value.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label text-amber-700" for="id_lower_alert_limit">Lower Alert</label>
+                    {{ form.lower_alert_limit }}
+                    {% if form.lower_alert_limit.errors %}<div class="form-error">{{ form.lower_alert_limit.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label text-amber-700" for="id_upper_alert_limit">Upper Alert</label>
+                    {{ form.upper_alert_limit }}
+                    {% if form.upper_alert_limit.errors %}<div class="form-error">{{ form.upper_alert_limit.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label text-red-700" for="id_lower_action_limit">Lower Action</label>
+                    {{ form.lower_action_limit }}
+                    {% if form.lower_action_limit.errors %}<div class="form-error">{{ form.lower_action_limit.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label text-red-700" for="id_upper_action_limit">Upper Action</label>
+                    {{ form.upper_action_limit }}
+                    {% if form.upper_action_limit.errors %}<div class="form-error">{{ form.upper_action_limit.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_excursion_details">Excursion & Cause Details (If Exceeded)</label>
+                    {{ form.excursion_details }}
+                    {% if form.excursion_details.errors %}<div class="form-error">{{ form.excursion_details.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_immediate_containment_action">Immediate Containment Action Taken</label>
+                    {{ form.immediate_containment_action }}
+                    {% if form.immediate_containment_action.errors %}<div class="form-error">{{ form.immediate_containment_action.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Personnel, Instrument & Escalations -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="user-check" class="w-5 h-5 text-green-500"></i> Personnel, Instrument & Quality Escalation
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_sampled_by">QC Sampling Technician <span class="text-danger">*</span></label>
+                {{ form.sampled_by }}
+                {% if form.sampled_by.errors %}<div class="form-error">{{ form.sampled_by.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_verified_by">Quality Reviewer / Verifier</label>
+                {{ form.verified_by }}
+                {% if form.verified_by.errors %}<div class="form-error">{{ form.verified_by.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_measurement_instrument">Calibrated Gage / Counter</label>
+                {{ form.measurement_instrument }}
+                {% if form.measurement_instrument.errors %}<div class="form-error">{{ form.measurement_instrument.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_process_deviation">Link Process Deviation (QDEV)</label>
+                {{ form.process_deviation }}
+                {% if form.process_deviation.errors %}<div class="form-error">{{ form.process_deviation.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_non_conformance_report">Link Non-Conformance (QNCR)</label>
+                {{ form.non_conformance_report }}
+                {% if form.non_conformance_report.errors %}<div class="form-error">{{ form.non_conformance_report.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_capa_investigation">Link CAPA (QCAP)</label>
+                {{ form.capa_investigation }}
+                {% if form.capa_investigation.errors %}<div class="form-error">{{ form.capa_investigation.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-3">
+                <label class="form-label" for="id_notes">Internal Sampling Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'quality:environmental_monitoring_log_detail' environmental_log.pk %}{% else %}{% url 'quality:environmental_monitoring_log_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Record Log{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
