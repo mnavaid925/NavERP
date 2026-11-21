@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ waste_manifest.manifest_title }}{% else %}Author Waste Disposal Manifest{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:waste_disposal_manifest_list' %}">Waste Manifests</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ waste_manifest.number }}{% else %}Author New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Waste Manifest: {{ waste_manifest.manifest_title }}{% else %}Author EPA Form 8700-22 Waste Manifest{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:waste_disposal_manifest_detail' waste_manifest.pk %}{% else %}{% url 'quality:waste_disposal_manifest_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="card p-4 bg-red-50 border-red-200">
+        <div class="flex items-center gap-2 text-red-700 font-semibold mb-2">
+            <i data-lucide="alert-octagon" class="w-5 h-5"></i> Please correct the errors below:
+        </div>
+        <ul class="list-disc list-inside text-sm text-red-600">
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- 1. Manifest Profile & Generator Facility -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="file-text" class="w-5 h-5 text-primary"></i> Manifest Header & Generator Information
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_manifest_title">Manifest Shipment Title <span class="text-danger">*</span></label>
+                {{ form.manifest_title }}
+                {% if form.manifest_title.errors %}<div class="form-error">{{ form.manifest_title.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_regulatory_manifest_id">EPA Manifest Tracking # <span class="text-danger">*</span></label>
+                {{ form.regulatory_manifest_id }}
+                {% if form.regulatory_manifest_id.errors %}<div class="form-error">{{ form.regulatory_manifest_id.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_manifest_type">Waste Stream Category</label>
+                {{ form.manifest_type }}
+                {% if form.manifest_type.errors %}<div class="form-error">{{ form.manifest_type.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_status">Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_accumulation_start_date">Accumulation Start Date <span class="text-danger">*</span></label>
+                {{ form.accumulation_start_date }}
+                {% if form.accumulation_start_date.errors %}<div class="form-error">{{ form.accumulation_start_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_generator_org_unit">Generator Site / Org Unit</label>
+                {{ form.generator_org_unit }}
+                {% if form.generator_org_unit.errors %}<div class="form-error">{{ form.generator_org_unit.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_generator_epa_id">Generator EPA ID #</label>
+                {{ form.generator_epa_id }}
+                {% if form.generator_epa_id.errors %}<div class="form-error">{{ form.generator_epa_id.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_certifying_officer">Authorized Certifying Officer <span class="text-danger">*</span></label>
+                {{ form.certifying_officer }}
+                {% if form.certifying_officer.errors %}<div class="form-error">{{ form.certifying_officer.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Waste Description & Characteristics -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="package" class="w-5 h-5 text-amber-500"></i> Waste Stream Chemistry & RCRA Classification
+            </h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label" for="id_waste_description">DOT Proper Shipping Name & Description <span class="text-danger">*</span></label>
+                {{ form.waste_description }}
+                {% if form.waste_description.errors %}<div class="form-error">{{ form.waste_description.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_epa_waste_codes">EPA Waste Codes (comma-separated)</label>
+                    {{ form.epa_waste_codes }}
+                    {% if form.epa_waste_codes.errors %}<div class="form-error">{{ form.epa_waste_codes.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_associated_hazardous_material">Originating Chemical</label>
+                    {{ form.associated_hazardous_material }}
+                    {% if form.associated_hazardous_material.errors %}<div class="form-error">{{ form.associated_hazardous_material.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_physical_state">Physical Form</label>
+                    {{ form.physical_state }}
+                    {% if form.physical_state.errors %}<div class="form-error">{{ form.physical_state.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 rounded border border-slate-200">
+                <div class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">RCRA Hazardous Characteristics</div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="flex items-center gap-2">
+                        {{ form.is_ignitable }}
+                        <label for="id_is_ignitable" class="text-sm font-medium cursor-pointer">D001 Ignitable</label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ form.is_corrosive }}
+                        <label for="id_is_corrosive" class="text-sm font-medium cursor-pointer">D002 Corrosive</label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ form.is_reactive }}
+                        <label for="id_is_reactive" class="text-sm font-medium cursor-pointer">D003 Reactive</label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ form.is_toxic }}
+                        <label for="id_is_toxic" class="text-sm font-medium cursor-pointer">D004+ Toxicity</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_quantity_value">Quantity Value <span class="text-danger">*</span></label>
+                    {{ form.quantity_value }}
+                    {% if form.quantity_value.errors %}<div class="form-error">{{ form.quantity_value.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_quantity_uom">Quantity UOM</label>
+                    {{ form.quantity_uom }}
+                    {% if form.quantity_uom.errors %}<div class="form-error">{{ form.quantity_uom.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_container_type">Container Type</label>
+                    {{ form.container_type }}
+                    {% if form.container_type.errors %}<div class="form-error">{{ form.container_type.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_container_count">Container Count</label>
+                    {{ form.container_count }}
+                    {% if form.container_count.errors %}<div class="form-error">{{ form.container_count.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Chain of Custody & Logistics -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="truck" class="w-5 h-5 text-blue-500"></i> Cradle-to-Grave Transporter & TSDF Custody
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_transporter">Licensed Waste Transporter <span class="text-danger">*</span></label>
+                {{ form.transporter }}
+                {% if form.transporter.errors %}<div class="form-error">{{ form.transporter.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_transporter_epa_id">Transporter EPA ID</label>
+                {{ form.transporter_epa_id }}
+                {% if form.transporter_epa_id.errors %}<div class="form-error">{{ form.transporter_epa_id.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_shipment_date">Shipment Date</label>
+                {{ form.shipment_date }}
+                {% if form.shipment_date.errors %}<div class="form-error">{{ form.shipment_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_tsdf_facility">Designated TSDF Facility <span class="text-danger">*</span></label>
+                {{ form.tsdf_facility }}
+                {% if form.tsdf_facility.errors %}<div class="form-error">{{ form.tsdf_facility.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_tsdf_epa_id">TSDF EPA ID</label>
+                {{ form.tsdf_epa_id }}
+                {% if form.tsdf_epa_id.errors %}<div class="form-error">{{ form.tsdf_epa_id.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_tsdf_receipt_date">TSDF Receipt Date</label>
+                {{ form.tsdf_receipt_date }}
+                {% if form.tsdf_receipt_date.errors %}<div class="form-error">{{ form.tsdf_receipt_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_management_method_code">Disposal Method Code</label>
+                {{ form.management_method_code }}
+                {% if form.management_method_code.errors %}<div class="form-error">{{ form.management_method_code.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_certificate_of_disposal_number">Certificate of Destruction #</label>
+                {{ form.certificate_of_disposal_number }}
+                {% if form.certificate_of_disposal_number.errors %}<div class="form-error">{{ form.certificate_of_disposal_number.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_certificate_received_date">Certificate Date Received</label>
+                {{ form.certificate_received_date }}
+                {% if form.certificate_received_date.errors %}<div class="form-error">{{ form.certificate_received_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_discrepancy_details">TSDF Discrepancy Details</label>
+                {{ form.discrepancy_details }}
+                {% if form.discrepancy_details.errors %}<div class="form-error">{{ form.discrepancy_details.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_notes">General Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'quality:waste_disposal_manifest_detail' waste_manifest.pk %}{% else %}{% url 'quality:waste_disposal_manifest_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Manifest{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
