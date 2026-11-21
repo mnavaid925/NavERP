@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Specification {{ specification.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lab_specification_list' %}" class="hover:underline">Lab Specifications</a>
+        <span class="mx-1">/</span>
+        <span>{{ specification.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="book-open-check" class="w-6 h-6 text-blue-600"></i>
+          {{ specification.title }}
+        </h1>
+        <span class="badge {{ specification.get_status_badge }}">{{ specification.get_status_display }}</span>
+        <span class="badge {{ specification.get_test_category_badge }}">{{ specification.get_test_category_display }}</span>
+        <span class="text-xs font-mono font-medium bg-slate-100 text-slate-700 px-2.5 py-1 rounded">v{{ specification.version }}</span>
+      </div>
+      <p class="text-sm text-slate-500 font-mono mt-1">Specification ID: {{ specification.number }} | Product: {{ specification.product_code }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:lab_test_worksheet_create' %}?specification={{ specification.pk }}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Create Test Worksheet</span>
+      </a>
+      <a href="{% url 'quality:lab_specification_edit' specification.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'quality:lab_specification_delete' specification.pk %}" class="inline" onsubmit="return confirm('Delete specification {{ specification.number|escapejs }}?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            <span>Delete</span>
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Primary Metadata Grid -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+      Specification & Analytical Method Attributes
+    </h2>
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Specification Title</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">{{ specification.title }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Specification Type</dt>
+        <dd class="text-sm text-slate-800 mt-1">{{ specification.get_specification_type_display }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product / Item Code</dt>
+        <dd class="text-sm font-mono font-medium text-slate-900 mt-1">{{ specification.product_code }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product / Material Name</dt>
+        <dd class="text-sm text-slate-800 mt-1">{{ specification.product_name }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Analytical Method #</dt>
+        <dd class="text-sm font-mono text-slate-900 mt-1">{{ specification.analytical_method_number|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Test Category</dt>
+        <dd class="text-sm text-slate-800 mt-1">
+          <span class="badge {{ specification.get_test_category_badge }}">{{ specification.get_test_category_display }}</span>
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Testing SOP Document</dt>
+        <dd class="text-sm text-slate-800 mt-1">
+          {% if specification.sop_document %}
+            <a href="{% url 'quality:document_detail' specification.sop_document.pk %}" class="text-blue-600 hover:underline">
+              {{ specification.sop_document.number }} - {{ specification.sop_document.title }}
+            </a>
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Version</dt>
+        <dd class="text-sm font-mono text-slate-800 mt-1">v{{ specification.version }}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Acceptance Limits & Criteria Card -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+      Acceptance Limits & Numerical Bounds
+    </h2>
+    <dl class="detail-grid mb-6">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Primary Parameter Tested</dt>
+        <dd class="text-sm font-bold text-slate-900 mt-1">{{ specification.target_parameter_name }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Parameter Unit</dt>
+        <dd class="text-sm font-medium text-slate-800 mt-1">{{ specification.parameter_unit|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Lower Limit (LSL)</dt>
+        <dd class="text-sm font-mono font-medium text-slate-900 mt-1">
+          {% if specification.lower_limit is not None %}{{ specification.lower_limit }} {{ specification.parameter_unit }}{% else %}—{% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Upper Limit (USL)</dt>
+        <dd class="text-sm font-mono font-medium text-slate-900 mt-1">
+          {% if specification.upper_limit is not None %}{{ specification.upper_limit }} {{ specification.parameter_unit }}{% else %}—{% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Target / Center Value</dt>
+        <dd class="text-sm font-mono font-medium text-slate-900 mt-1">
+          {% if specification.target_value is not None %}{{ specification.target_value }} {{ specification.parameter_unit }}{% else %}—{% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Method Validation Reference</dt>
+        <dd class="text-sm font-mono text-slate-800 mt-1">{{ specification.method_validation_reference|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Validation Date</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ specification.method_validation_date|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Review Due Date</dt>
+        <dd class="text-sm text-slate-700 mt-1">
+          {{ specification.review_due_date|default:"—" }}
+          {% if specification.is_overdue_review %}
+            <span class="badge badge-red ml-1">Overdue Review</span>
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+
+    {% if specification.text_acceptance_criteria %}
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Qualitative Acceptance Criteria</h3>
+        <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200">{{ specification.text_acceptance_criteria }}</p>
+      </div>
+    {% endif %}
+
+    {% if specification.notes %}
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Notes</h3>
+        <p class="text-sm text-slate-700">{{ specification.notes }}</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Related Worksheets -->
+  <div class="card p-6">
+    <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+      <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+        <i data-lucide="clipboard-list" class="w-4 h-4 text-blue-600"></i>
+        Associated Analytical Worksheets ({{ worksheets|length }})
+      </h2>
+      <a href="{% url 'quality:lab_test_worksheet_create' %}?specification={{ specification.pk }}" class="btn btn-outline text-xs">
+        <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Add Worksheet
+      </a>
+    </div>
+
+    {% if worksheets %}
+      <div class="table-wrap">
+        <table class="table w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+              <th class="py-2.5 px-3">Worksheet #</th>
+              <th class="py-2.5 px-3">Sample</th>
+              <th class="py-2.5 px-3">Analyst</th>
+              <th class="py-2.5 px-3">Execution Date</th>
+              <th class="py-2.5 px-3">Result</th>
+              <th class="py-2.5 px-3">Status</th>
+              <th class="py-2.5 px-3">Disposition</th>
+              <th class="py-2.5 px-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for w in worksheets %}
+              <tr class="hover:bg-slate-50/80">
+                <td class="py-2.5 px-3 font-mono font-medium">
+                  <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="text-blue-600 hover:underline">
+                    {{ w.number }}
+                  </a>
+                </td>
+                <td class="py-2.5 px-3">
+                  <a href="{% url 'quality:lab_sample_detail' w.sample.pk %}" class="text-blue-600 hover:underline">
+                    {{ w.sample.number }} - {{ w.sample.sample_name }}
+                  </a>
+                </td>
+                <td class="py-2.5 px-3 text-xs text-slate-700">
+                  {{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username|default:"Unassigned" }}
+                </td>
+                <td class="py-2.5 px-3 text-xs text-slate-600">{{ w.execution_date|default:"—" }}</td>
+                <td class="py-2.5 px-3 font-medium">
+                  {% if w.numeric_result is not None %}
+                    {{ w.numeric_result }} {{ specification.parameter_unit }}
+                  {% elif w.qualitative_result %}
+                    {{ w.qualitative_result }}
+                  {% else %}
+                    <span class="text-slate-400">Pending</span>
+                  {% endif %}
+                </td>
+                <td class="py-2.5 px-3"><span class="badge {{ w.get_status_badge }}">{{ w.get_status_display }}</span></td>
+                <td class="py-2.5 px-3"><span class="badge {{ w.get_disposition_badge }}">{{ w.get_disposition_display }}</span></td>
+                <td class="py-2.5 px-3 text-right table-actions">
+                  <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="btn btn-icon">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-sm text-slate-400 py-3">No worksheets executed against this specification yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
