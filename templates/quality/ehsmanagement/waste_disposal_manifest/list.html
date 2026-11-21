@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Hazardous Waste Disposal Manifests — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <span>Waste Manifests</span>
+        </div>
+        <h1 class="page-title">Hazardous & Regulated Waste Manifests</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:waste_disposal_manifest_export' %}?{{ query_string }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:waste_disposal_manifest_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Manifest
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Search by manifest #, EPA ID, waste description..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="manifest_type">Waste Stream Type</label>
+                <select name="manifest_type" id="manifest_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in manifest_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.manifest_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="org_unit">Generator Facility</label>
+                <select name="org_unit" id="org_unit" class="form-select">
+                    <option value="">All Facilities</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'quality:waste_disposal_manifest_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Manifest #</th>
+                    <th>EPA Tracking # & Title</th>
+                    <th>Type</th>
+                    <th>Quantity & Containers</th>
+                    <th>Transporter / TSDF</th>
+                    <th>Accumulation Aging</th>
+                    <th>Status</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in waste_manifests %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'quality:waste_disposal_manifest_detail' item.pk %}" class="text-primary hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ item.manifest_title }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ item.regulatory_manifest_id }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.manifest_type_css }}">
+                            {{ item.get_manifest_type_display }}
+                        </span>
+                    </td>
+                    <td class="text-sm">
+                        <div class="font-mono font-semibold">{{ item.quantity_value }} {{ item.get_quantity_uom_display }}</div>
+                        <div class="text-xs text-slate-500">{{ item.container_count }} &times; {{ item.get_container_type_display }}</div>
+                    </td>
+                    <td class="text-sm">
+                        {% if item.transporter %}
+                        <div class="font-medium text-slate-800">{{ item.transporter.name }}</div>
+                        {% endif %}
+                        {% if item.tsdf_facility %}
+                        <div class="text-xs text-slate-500">&rarr; {{ item.tsdf_facility.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ item.accumulation_days }} days</div>
+                        {% if item.is_accumulation_overdue %}
+                        <span class="badge badge-red text-xs">Over 90-Day Limit</span>
+                        {% else %}
+                        <span class="text-xs text-slate-500">Since {{ item.accumulation_start_date|date:"M d, Y" }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_css }}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:waste_disposal_manifest_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:waste_disposal_manifest_update' item.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:waste_disposal_manifest_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete this waste disposal manifest?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="trash-2" class="empty-icon"></i>
+                            <h3>No waste disposal manifests recorded</h3>
+                            <p class="text-slate-500">Track EPA Form 8700-22 manifests, cradle-to-grave TSDF shipments, and Certificates of Destruction.</p>
+                            <a href="{% url 'quality:waste_disposal_manifest_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> Create First Manifest
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} records
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Previous</span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
