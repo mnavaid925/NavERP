@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ cleaning_validation.number }}{% else %}New Cleaning Validation Study{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_validation_dashboard' %}">Process Validation</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:cleaning_validation_list' %}">Cleaning Validation</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ cleaning_validation.number }}{% else %}New Study{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Cleaning Study: {{ cleaning_validation.number }}{% else %}New Cleaning Validation Study (MACO){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    1. Study Identification & Cleaning Recipe
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Study Protocol Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.equipment_train_tag.id_for_label }}" class="form-label">Equipment Train Identifier *</label>
+                        {{ form.equipment_train_tag }}
+                        {% if form.equipment_train_tag.errors %}<div class="form-error">{{ form.equipment_train_tag.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.target_residue.id_for_label }}" class="form-label">Target Active / Residue *</label>
+                        {{ form.target_residue }}
+                        {% if form.target_residue.errors %}<div class="form-error">{{ form.target_residue.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.cleaning_agent_used.id_for_label }}" class="form-label">Cleaning Agent / Detergent *</label>
+                        {{ form.cleaning_agent_used }}
+                        {% if form.cleaning_agent_used.errors %}<div class="form-error">{{ form.cleaning_agent_used.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.worst_case_rationale.id_for_label }}" class="form-label">Worst-Case Product Rationale *</label>
+                        {{ form.worst_case_rationale }}
+                        {% if form.worst_case_rationale.errors %}<div class="form-error">{{ form.worst_case_rationale.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.calculation_basis.id_for_label }}" class="form-label">MACO Calculation Basis *</label>
+                        {{ form.calculation_basis }}
+                        {% if form.calculation_basis.errors %}<div class="form-error">{{ form.calculation_basis.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.cleaning_status.id_for_label }}" class="form-label">Study Lifecycle Status *</label>
+                        {{ form.cleaning_status }}
+                        {% if form.cleaning_status.errors %}<div class="form-error">{{ form.cleaning_status.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    2. MACO Limit Derivation Inputs
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.min_daily_dose_active_mg.id_for_label }}" class="form-label">Min Therapeutic Dose (mg)</label>
+                        {{ form.min_daily_dose_active_mg }}
+                        {% if form.min_daily_dose_active_mg.errors %}<div class="form-error">{{ form.min_daily_dose_active_mg.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.max_daily_dose_subsequent_mg.id_for_label }}" class="form-label">Subsequent Max Daily Dose (mg)</label>
+                        {{ form.max_daily_dose_subsequent_mg }}
+                        {% if form.max_daily_dose_subsequent_mg.errors %}<div class="form-error">{{ form.max_daily_dose_subsequent_mg.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.smallest_batch_size_kg.id_for_label }}" class="form-label">Subsequent Smallest Batch (kg) *</label>
+                        {{ form.smallest_batch_size_kg }}
+                        {% if form.smallest_batch_size_kg.errors %}<div class="form-error">{{ form.smallest_batch_size_kg.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.safety_factor.id_for_label }}" class="form-label">Safety Factor Denominator *</label>
+                        {{ form.safety_factor }}
+                        {% if form.safety_factor.errors %}<div class="form-error">{{ form.safety_factor.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.toxicological_pde_mg_day.id_for_label }}" class="form-label">Toxicological PDE (mg/day)</label>
+                        {{ form.toxicological_pde_mg_day }}
+                        {% if form.toxicological_pde_mg_day.errors %}<div class="form-error">{{ form.toxicological_pde_mg_day.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.total_surface_area_sqcm.id_for_label }}" class="form-label">Train Surface Area (cm²) *</label>
+                        {{ form.total_surface_area_sqcm }}
+                        {% if form.total_surface_area_sqcm.errors %}<div class="form-error">{{ form.total_surface_area_sqcm.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    3. Sampling Plan & Analytical Testing
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.swab_sampling_area_sqcm.id_for_label }}" class="form-label">Swab Coupon Area (cm²) *</label>
+                        {{ form.swab_sampling_area_sqcm }}
+                        {% if form.swab_sampling_area_sqcm.errors %}<div class="form-error">{{ form.swab_sampling_area_sqcm.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.rinse_volume_liters.id_for_label }}" class="form-label">Final Rinse Volume (Liters)</label>
+                        {{ form.rinse_volume_liters }}
+                        {% if form.rinse_volume_liters.errors %}<div class="form-error">{{ form.rinse_volume_liters.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.analytical_method.id_for_label }}" class="form-label">Analytical Method *</label>
+                        {{ form.analytical_method }}
+                        {% if form.analytical_method.errors %}<div class="form-error">{{ form.analytical_method.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.method_recovery_percentage.id_for_label }}" class="form-label">Method Recovery (%) *</label>
+                        {{ form.method_recovery_percentage }}
+                        {% if form.method_recovery_percentage.errors %}<div class="form-error">{{ form.method_recovery_percentage.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.worst_swab_result_ug.id_for_label }}" class="form-label">Worst Swab Result (µg)</label>
+                        {{ form.worst_swab_result_ug }}
+                        {% if form.worst_swab_result_ug.errors %}<div class="form-error">{{ form.worst_swab_result_ug.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.worst_rinse_result_ppm.id_for_label }}" class="form-label">Worst Rinse Result (ppm)</label>
+                        {{ form.worst_rinse_result_ppm }}
+                        {% if form.worst_rinse_result_ppm.errors %}<div class="form-error">{{ form.worst_rinse_result_ppm.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    4. Hold Times, Verification & Approvals
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.dirty_hold_time_hours.id_for_label }}" class="form-label">Dirty Hold Time DHT (hrs) *</label>
+                        {{ form.dirty_hold_time_hours }}
+                        {% if form.dirty_hold_time_hours.errors %}<div class="form-error">{{ form.dirty_hold_time_hours.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.clean_hold_time_hours.id_for_label }}" class="form-label">Clean Hold Time CHT (hrs) *</label>
+                        {{ form.clean_hold_time_hours }}
+                        {% if form.clean_hold_time_hours.errors %}<div class="form-error">{{ form.clean_hold_time_hours.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.consecutive_successful_runs.id_for_label }}" class="form-label">Successful Consecutive Runs *</label>
+                        {{ form.consecutive_successful_runs }}
+                        {% if form.consecutive_successful_runs.errors %}<div class="form-error">{{ form.consecutive_successful_runs.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3 flex items-center gap-2">
+                        {{ form.is_visually_clean }}
+                        <label for="{{ form.is_visually_clean.id_for_label }}" class="text-sm text-slate-700 font-medium">
+                            Product-contact surfaces verified visually clean and odor-free
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.cleaning_sop.id_for_label }}" class="form-label">Governing Cleaning SOP *</label>
+                        {{ form.cleaning_sop }}
+                        {% if form.cleaning_sop.errors %}<div class="form-error">{{ form.cleaning_sop.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.analytical_lead.id_for_label }}" class="form-label">Analytical Lead Chemist *</label>
+                        {{ form.analytical_lead }}
+                        {% if form.analytical_lead.errors %}<div class="form-error">{{ form.analytical_lead.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.qa_approver.id_for_label }}" class="form-label">QA Approving Authority</label>
+                        {{ form.qa_approver }}
+                        {% if form.qa_approver.errors %}<div class="form-error">{{ form.qa_approver.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.validation_protocol.id_for_label }}" class="form-label">Qualification Protocol</label>
+                        {{ form.validation_protocol }}
+                        {% if form.validation_protocol.errors %}<div class="form-error">{{ form.validation_protocol.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.linked_deviation.id_for_label }}" class="form-label">Linked Cleaning Deviation</label>
+                        {{ form.linked_deviation }}
+                        {% if form.linked_deviation.errors %}<div class="form-error">{{ form.linked_deviation.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.next_revalidation_date.id_for_label }}" class="form-label">Next Revalidation Due</label>
+                        {{ form.next_revalidation_date }}
+                        {% if form.next_revalidation_date.errors %}<div class="form-error">{{ form.next_revalidation_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3 form-group">
+                        <label for="{{ form.notes.id_for_label }}" class="form-label">Protocol Notes & Visual Observations</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:cleaning_validation_detail' cleaning_validation.pk %}{% else %}{% url 'quality:cleaning_validation_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Update Study{% else %}Calculate Limits & Save{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
