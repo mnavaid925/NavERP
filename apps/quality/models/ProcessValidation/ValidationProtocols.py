@@ -152,6 +152,7 @@ class ValidationProtocol(TenantNumbered):
         verbose_name = "Validation Protocol"
         verbose_name_plural = "Validation Protocols"
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_qval_ten_created"),
             models.Index(fields=["tenant", "status"], name="idx_qval_ten_status"),
             models.Index(fields=["tenant", "protocol_stage"], name="idx_qval_ten_stage"),
             models.Index(fields=["tenant", "target_type"], name="idx_qval_ten_target"),
