@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit OOS Investigation {{ investigation.number }}{% else %}Log OOS Event{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:oos_investigation_list' %}" class="hover:underline">OOS Investigations</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ investigation.number }}{% else %}New OOS Event{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+        {% if is_edit %}Edit OOS Investigation: {{ investigation.title }}{% else %}Initiate Out-of-Specification (OOS) Protocol{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        FDA/MHRA compliant investigation protocol spanning Phase I laboratory error checks and Phase II manufacturing root cause analysis.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Event Identification & Specimen Linkage -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-red-600"></i>
+          1. OOS Event Identification & Specimen Association
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Investigation Title <span class="text-red-500">*</span></label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.test_worksheet.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Triggering Worksheet <span class="text-red-500">*</span></label>
+            {{ form.test_worksheet }}
+            {% if form.test_worksheet.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.test_worksheet.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.sample.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Sample Evaluated <span class="text-red-500">*</span></label>
+            {{ form.sample }}
+            {% if form.sample.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sample.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.investigation_phase.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Investigation Phase <span class="text-red-500">*</span></label>
+            {{ form.investigation_phase }}
+            {% if form.investigation_phase.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.investigation_phase.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Investigation Status <span class="text-red-500">*</span></label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.severity.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Severity Level <span class="text-red-500">*</span></label>
+            {{ form.severity }}
+            {% if form.severity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.severity.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.target_completion_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Target Completion Date</label>
+            {{ form.target_completion_date }}
+            {% if form.target_completion_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_completion_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Phase I Laboratory Investigation -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="microscope" class="w-4 h-4 text-blue-600"></i>
+          2. Phase I: Laboratory Error Check Protocol
+        </h2>
+        <div class="space-y-3 mb-4">
+          <div class="flex items-center gap-2">
+            {{ form.analyst_interview_completed }}
+            <label for="{{ form.analyst_interview_completed.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Analyst interview completed (confirmed pipetting, sample preparation, sample integrity, visual anomalies)
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2">
+            {{ form.calculation_verification_completed }}
+            <label for="{{ form.calculation_verification_completed.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Mathematical calculations and formula transformations verified
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2">
+            {{ form.instrument_verification_completed }}
+            <label for="{{ form.instrument_verification_completed.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Instrument calibration and system suitability checked (flow rate, baseline drift, pressure)
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2">
+            {{ form.reagent_verification_completed }}
+            <label for="{{ form.reagent_verification_completed.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Reagents, mobile phases, and reference standards lots and expiration dates verified
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 pt-2 border-t border-slate-100">
+          <div class="flex items-center gap-2">
+            {{ form.lab_error_identified }}
+            <label for="{{ form.lab_error_identified.id_for_label }}" class="text-xs font-bold text-amber-900 cursor-pointer">
+              Laboratory Error Identified (Check if documented lab mistake is confirmed)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.lab_error_description.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lab Error Description (if confirmed)</label>
+            {{ form.lab_error_description }}
+            <p class="text-xs text-slate-500 mt-0.5">Detail the specific laboratory error (e.g. incorrect dilution factor, wrong mobile phase pH, column blockage).</p>
+            {% if form.lab_error_description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lab_error_description.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Phase II Manufacturing Investigation -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="factory" class="w-4 h-4 text-blue-600"></i>
+          3. Phase II: Manufacturing & Process Investigation
+        </h2>
+        <div class="space-y-3 mb-4">
+          <div class="flex items-center gap-2">
+            {{ form.manufacturing_investigation_required }}
+            <label for="{{ form.manufacturing_investigation_required.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Manufacturing investigation required (Lab error ruled out or inconclusive)
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2">
+            {{ form.process_equipment_checked }}
+            <label for="{{ form.process_equipment_checked.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Manufacturing equipment parameters, sensors, and telemetry verified
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2">
+            {{ form.raw_material_lots_checked }}
+            <label for="{{ form.raw_material_lots_checked.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Raw material supplier batches and certificate of analysis evaluated
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2">
+            {{ form.environmental_conditions_checked }}
+            <label for="{{ form.environmental_conditions_checked.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Environmental monitoring, cleanroom differential pressures, and HVAC verified
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.assignable_cause.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Root Cause / Assignable Cause</label>
+            {{ form.assignable_cause }}
+            {% if form.assignable_cause.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.assignable_cause.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.hypothesis_testing_summary.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Hypothesis Testing Protocol & Outcomes</label>
+            {{ form.hypothesis_testing_summary }}
+            {% if form.hypothesis_testing_summary.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.hypothesis_testing_summary.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Retest, Batch Disposition & Escalations -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="check-square" class="w-4 h-4 text-blue-600"></i>
+          4. Retesting Authorization & Final Disposition
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group sm:col-span-2 flex items-center gap-2">
+            {{ form.retest_plan_authorized }}
+            <label for="{{ form.retest_plan_authorized.id_for_label }}" class="text-xs font-semibold text-slate-800 cursor-pointer">
+              Controlled retest plan authorized by Quality Assurance
+            </label>
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.retest_results_summary.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Retest Results Summary</label>
+            {{ form.retest_results_summary }}
+            {% if form.retest_results_summary.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.retest_results_summary.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.final_batch_disposition.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Final Batch Disposition <span class="text-red-500">*</span></label>
+            {{ form.final_batch_disposition }}
+            {% if form.final_batch_disposition.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.final_batch_disposition.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.investigation_lead.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Investigation Lead</label>
+            {{ form.investigation_lead }}
+            {% if form.investigation_lead.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.investigation_lead.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.qa_approver.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">QA Approver</label>
+            {{ form.qa_approver }}
+            {% if form.qa_approver.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.qa_approver.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.capa.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Escalate to CAPA</label>
+            {{ form.capa }}
+            {% if form.capa.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.capa.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.non_conformance.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Link to Non-Conformance Report (NCR)</label>
+            {{ form.non_conformance }}
+            {% if form.non_conformance.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.non_conformance.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.summary_and_conclusions.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Summary & QA Conclusions</label>
+            {{ form.summary_and_conclusions }}
+            {% if form.summary_and_conclusions.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.summary_and_conclusions.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'quality:oos_investigation_detail' investigation.pk %}{% else %}{% url 'quality:oos_investigation_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>{% if is_edit %}Save Changes{% else %}Log Investigation{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
