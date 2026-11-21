@@ -76,7 +76,7 @@ def product_registration_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    authorities = Party.objects.filter(tenant=request.tenant).order_by("name")
+    authorities = Party.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
