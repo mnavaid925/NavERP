@@ -86,7 +86,11 @@ def environmental_monitoring_log_create(request):
             return redirect("quality:environmental_monitoring_log_detail", pk=obj.pk)
     else:
         form = EnvironmentalMonitoringLogForm(
-            tenant=request.tenant, initial={"sampling_timestamp": timezone.now()}
+            tenant=request.tenant,
+            initial={
+                "sampling_timestamp": timezone.now(),
+                "sampled_by": request.user,
+            },
         )
 
     context = {
