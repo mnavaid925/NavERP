@@ -36776,3 +36776,814 @@ apps/quality/
   - Recorded in `.agents/tasks/gaps-quality-12.14.md`.
   - In-scope gaps: None (0 open).
   - Deferred external scope: `GAP-quality-12.14-01` (Direct Live PowerPoint PPTX Deck Exporter), `GAP-quality-12.14-02` (Automated Webhook Meeting Integration for Zoom/Teams/Meet), `GAP-quality-12.14-03` (Statistical SPC Metric Live-Streaming Feed).
+
+
+# Sub-module 12.15: Process Validation & Verification (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.15.md` (2026-11-21)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), 12.5 (Non-Conformance), 12.6 (Supplier Quality), 12.7 (Incoming Quality), 12.8 (In-Process Quality), 12.9 (Final Quality & Release), 12.10 (Calibration & MSA), 12.11 (Audit Management), 12.12 (Training & Competency), 12.13 (Customer Complaints), and 12.14 (Management Review).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0026_alter_qualityobjective_rag_status_and_more.py` (claims next incremental migration `0027_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QVAL`** (`ValidationProtocol`), **`QCPK`** (`ProcessCapabilityStudy`), **`QCSV`** (`ComputerSystemValidation`), **`QCLN`** (`CleaningValidation`).
+> Plan written from `.claude/tasks/research-quality-12.15.md` (Phase 1) and `NavERP.md` (`### 12.15 Process Validation & Verification`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/ProcessValidation/<Entity>.py` (`ValidationProtocols.py`, `ProcessCapabilityStudies.py`, `ComputerSystemValidations.py`, `CleaningValidations.py`, plus dedicated `ProcessValidationDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/processvalidation/{validation_protocol,process_capability_study,computer_system_validation,cleaning_validation}/{list,detail,form}.html` + `templates/quality/processvalidation/process_validation_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QVAL`** (`ValidationProtocol`), **`QCPK`** (`ProcessCapabilityStudy`), **`QCSV`** (`ComputerSystemValidation`), **`QCLN`** (`CleaningValidation`), all 4 model classes, and all URL stems (`validation_protocol_*`, `process_capability_study_*`, `computer_system_validation_*`, `cleaning_validation_*`, `process_validation_dashboard*`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`, manufacturing facilities, cleanrooms, operational sites, or quality departments), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - Module 12 siblings:
+    - `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`, prefix `QDOC` for linked Validation Master Plans, SOPs, URS, and VSR documents).
+    - `quality.DocumentChangeOrder` (`apps/quality/models/DocumentControl/DocumentChangeOrders.py`, prefix `QDCR` for engineering/process changes triggering revalidation).
+    - `quality.ProcessDeviation` (`apps/quality/models/NonConformance/ProcessDeviations.py`, prefix `QDEV` for protocol execution discrepancies, parameter excursions, and test failures).
+    - `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`, prefix `QCAP` for corrective actions triggered by incapable processes or validation failures).
+    - `quality.RiskAssessment` (`apps/quality/models/RiskManagement/RiskAssessments.py`, prefix `QRSK` for GAMP 5 software and process FMEA risk assessments).
+    - `quality.CalibrationGage` (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`, prefix `QGAG` for instruments and gages used during qualification and capability studies).
+    - `quality.ProcessParameterLog` (`apps/quality/models/InProcessQuality/ProcessParameterLogs.py`, prefix `QPAR` for raw operational parameter runs linked to capability studies).
+  - Stand-in fields for unbuilt Module 5 & 14 masters (`Item`, `LotSerial`, `WorkCenter`): Free-text fields `item_code`, `lot_number`, `equipment_tag`, `process_name` with clean loose-coupling (no foreign keys to unbuilt tables).
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `core.OrgUnit`, `quality.ControlledDocument`, `quality.DocumentChangeOrder`, `quality.ProcessDeviation`, `quality.CapaInvestigation`, `quality.RiskAssessment`, `quality.CalibrationGage`, `quality.ProcessParameterLog`, `quality.ValidationProtocol`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Global Regulatory Standards Conformance (FDA Stage 1-3 Process Validation, ISPE GAMP 5 2nd Ed, FDA CSA, EU GMP Annex 11 & 15, 21 CFR Part 11)**:
+  - **Stage 1-3 Process Validation Lifecycle**: Covers Process Design (Stage 1), Process Qualification (Stage 2: IQ/OQ/PQ/PPQ), and Continued Process Verification (Stage 3: CPV) with formal pre-approval, deviation tracking, and post-execution release.
+  - **Statistical Capability & CPV**: Rigorous calculation of potential within-subgroup capability ($C_p, C_{pk}$) and overall performance ($P_p, P_{pk}$) with specification limits (USL/LSL/Target), rational subgrouping, normality checks, and expected PPM defect estimation. Zero external binary dependencies (computed with standard Python `math` & `statistics`).
+  - **GAMP 5 Categorization & CSA**: Categorization (Categories 1-5), GxP impact, 21 CFR Part 11 / EU Annex 11 evaluation (audit trail, electronic records), and Computer Software Assurance (CSA) risk-based test approaches.
+  - **Cleaning Validation & MACO Multi-Criteria Engine**: Automated calculation of Maximum Allowable Carryover (MACO) across 1/1000th therapeutic dose, 10 ppm general limit, and toxicological Permitted Daily Exposure (PDE/HBEL), with translation into equipment surface area swab limits ($\mu\text{g/cm}^2$) and rinse limits ($\text{ppm}$ / $\text{mg/L}$), analytical recovery factors, and Dirty/Clean Hold Times (DHT/CHT).
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`), auto-numbers (`number`), and auto-calculated metrics MUST be excluded from `Meta.fields` in ModelForms.
+  - Computed helper properties (`tolerance_width`, `is_overdue`, `is_review_overdue`, `is_revalidation_overdue`, `status_css`, `stage_css`, `determination_css`, `gamp_css`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `ValidationProtocol` (`QVAL-`)
+- [ ] **File**: `apps/quality/models/ProcessValidation/ValidationProtocols.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QVAL"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255, help_text="Concise protocol title e.g. Autoclave 04 IQ/OQ Qualification Protocol")`
+  - `description`: `TextField(blank=True, help_text="Scope, objectives, and regulatory background of the validation protocol")`
+  - `protocol_stage`: `CharField(max_length=24, choices=STAGE_CHOICES, default="iq", db_index=True)` — `"dq"` (2), `"iq"` (2), `"oq"` (2), `"pq"` (2), `"ppq"` (3), `"cpv"` (3), `"revalidation"` (12) (longest: 12 <= 24)
+  - `target_type`: `CharField(max_length=30, choices=TARGET_TYPE_CHOICES, default="equipment", db_index=True)` — `"equipment"` (9), `"process"` (7), `"facility_utility"` (16), `"cleaning_procedure"` (18), `"computerized_system"` (19) (longest: 19 <= 30)
+  - `status`: `CharField(max_length=32, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"in_review"` (9), `"approved_for_execution"` (22), `"in_execution"` (12), `"deviation_hold"` (14), `"execution_completed"` (19), `"final_approved"` (14), `"rejected"` (8), `"superseded"` (10) (longest: 22 <= 32)
+  - `revalidation_trigger`: `CharField(max_length=25, choices=REVALIDATION_TRIGGER_CHOICES, default="initial", db_index=True)` — `"initial"` (7), `"periodic_review"` (15), `"change_control"` (14), `"deviation"` (9), `"regulatory"` (10) (longest: 15 <= 25)
+  - `equipment_tag`: `CharField(max_length=100, blank=True, help_text="Target machine, line, or instrument asset identifier")`
+  - `process_name`: `CharField(max_length=150, blank=True, help_text="Target manufacturing, packaging, or cleaning process name")`
+  - `facility_area`: `CharField(max_length=150, blank=True, help_text="Cleanroom suite, plant area, or building room location")`
+  - `item_code`: `CharField(max_length=100, blank=True, help_text="Associated product code or assembly part number stand-in")`
+  - `target_completion_date`: `DateField(null=True, blank=True, help_text="Target qualification milestone date")`
+  - `execution_start_date`: `DateField(null=True, blank=True, help_text="Actual physical testing execution start date")`
+  - `execution_end_date`: `DateField(null=True, blank=True, help_text="Actual physical testing completion date")`
+  - `acceptance_criteria_summary`: `TextField(help_text="Detailed summary of test parameters, tolerances, and pass/fail thresholds")`
+  - `execution_summary`: `TextField(blank=True, help_text="Executive summary of execution test runs, data findings, and observations")`
+  - `is_acceptance_criteria_met`: `BooleanField(default=False, help_text="Indicates whether all pre-defined protocol acceptance criteria passed")`
+  - `open_deviations_count`: `PositiveIntegerField(default=0, help_text="Number of open execution anomalies / test step deviations")`
+  - `periodic_review_frequency_months`: `PositiveIntegerField(default=12, help_text="Periodic revalidation review interval in months")`
+  - `last_review_date`: `DateField(null=True, blank=True, help_text="Date protocol was last re-evaluated")`
+  - `next_review_due`: `DateField(null=True, blank=True, db_index=True, help_text="Next scheduled periodic revalidation due date")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Foreign Keys (tenant-scoped)**:
+  - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="validation_protocols", help_text="Plant or department facility")`
+  - `lead_author`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="authored_validation_protocols", help_text="Author of validation protocol")`
+  - `lead_executor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="executed_validation_protocols", help_text="Lead engineer executing qualification protocol")`
+  - `qa_approver`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_validation_protocols", help_text="Quality Assurance release authority")`
+  - `vmp_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="validation_protocols", help_text="Governing Validation Master Plan document")`
+  - `change_order`: `ForeignKey("quality.DocumentChangeOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="triggered_validation_protocols", help_text="Triggering change control order")`
+  - `linked_deviation`: `ForeignKey("quality.ProcessDeviation", on_delete=models.SET_NULL, null=True, blank=True, related_name="validation_protocols", help_text="Execution anomaly or out-of-spec deviation")`
+  - `linked_capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="validation_protocols", help_text="Triggered CAPA investigation")`
+  - `parent_protocol`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="revalidation_cycles", help_text="Prior qualification version for revalidation cycles")`
+- [ ] **Badge CSS Dicts**:
+  - `STATUS_CSS`: `draft`: `badge-slate`, `in_review`: `badge-amber`, `approved_for_execution`: `badge-info`, `in_execution`: `badge-info`, `deviation_hold`: `badge-red`, `execution_completed`: `badge-amber`, `final_approved`: `badge-green`, `rejected`: `badge-red`, `superseded`: `badge-muted`
+  - `STAGE_CSS`: `dq`: `badge-slate`, `iq`: `badge-info`, `oq`: `badge-info`, `pq`: `badge-green`, `ppq`: `badge-green`, `cpv`: `badge-info`, `revalidation`: `badge-amber`
+- [ ] **Properties & Methods**:
+  - `is_overdue`: Returns boolean indicating if `target_completion_date` has passed without `execution_end_date`.
+  - `is_review_overdue`: Returns boolean indicating if `next_review_due` is past current date.
+  - `status_css`: CSS badge class for status.
+  - `stage_css`: CSS badge class for protocol stage.
+- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="qval_ten_num_uniq")` (17 chars)
+  - `Index(fields=["tenant", "status"], name="idx_qval_ten_status")` (19 chars)
+  - `Index(fields=["tenant", "protocol_stage"], name="idx_qval_ten_stage")` (18 chars)
+  - `Index(fields=["tenant", "target_type"], name="idx_qval_ten_target")` (19 chars)
+  - `Index(fields=["tenant", "next_review_due"], name="idx_qval_ten_rev_due")` (20 chars)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qval_ten_created")` (20 chars)
+
+---
+
+### 2. `ProcessCapabilityStudy` (`QCPK-`)
+- [ ] **File**: `apps/quality/models/ProcessValidation/ProcessCapabilityStudies.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCPK"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255, help_text="Study title e.g. Tablet Press 02 Fill Weight Capability Study")`
+  - `parameter_name`: `CharField(max_length=150, help_text="Critical Quality Attribute (CQA) or Critical Process Parameter (CPP) measured")`
+  - `parameter_category`: `CharField(max_length=30, choices=PARAMETER_CATEGORY_CHOICES, default="dimensional_thickness", db_index=True)` — `"dimensional_thickness"` (21), `"temperature"` (11), `"pressure"` (8), `"speed_feed"` (10), `"torque"` (6), `"ph_chemical"` (11), `"humidity"` (8), `"voltage_current"` (15), `"cycle_time"` (10), `"weight_mass"` (11), `"other"` (5) (longest: 21 <= 30)
+  - `unit_of_measure`: `CharField(max_length=50, default="mm", help_text="Engineering unit (e.g. mm, °C, bar, g, mL, psi)")`
+  - `upper_spec_limit`: `DecimalField(max_digits=12, decimal_places=4, help_text="Upper Specification Limit (USL)")`
+  - `lower_spec_limit`: `DecimalField(max_digits=12, decimal_places=4, help_text="Lower Specification Limit (LSL)")`
+  - `target_nominal`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="Process target or nominal aim point")`
+  - `subgroup_size`: `PositiveIntegerField(default=5, help_text="Rational subgroup sample size (n >= 1)")`
+  - `number_of_subgroups`: `PositiveIntegerField(default=25, help_text="Total number of subgroups sampled (k)")`
+  - `total_samples`: `PositiveIntegerField(default=125, help_text="Total individual sample observations (N = n * k)")`
+  - `mean_value`: `DecimalField(max_digits=12, decimal_places=4, help_text="Calculated process average (X-bar)")`
+  - `within_subgroup_stdev`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="Short-term within-subgroup variation (sigma_within)")`
+  - `overall_stdev`: `DecimalField(max_digits=12, decimal_places=4, help_text="Total overall sample standard deviation (s_overall)")`
+  - `cp_index`: `DecimalField(max_digits=8, decimal_places=3, null=True, blank=True, help_text="Potential capability index: Cp = (USL - LSL) / (6 * sigma_within)")`
+  - `cpk_index`: `DecimalField(max_digits=8, decimal_places=3, null=True, blank=True, help_text="Centering-adjusted capability index: Cpk = min(Cpu, Cpl)")`
+  - `pp_index`: `DecimalField(max_digits=8, decimal_places=3, null=True, blank=True, help_text="Overall performance index: Pp = (USL - LSL) / (6 * s_overall)")`
+  - `ppk_index`: `DecimalField(max_digits=8, decimal_places=3, null=True, blank=True, help_text="Centering-adjusted performance index: Ppk = min(Ppu, Ppl)")`
+  - `expected_ppm`: `DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Estimated non-conforming parts per million based on normal distribution")`
+  - `is_normally_distributed`: `BooleanField(default=True, help_text="Normality assumption verified via probability plot / goodness of fit")`
+  - `capability_determination`: `CharField(max_length=25, choices=CAPABILITY_DETERMINATION_CHOICES, default="undetermined", db_index=True)` — `"highly_capable"` (14), `"capable"` (7), `"marginally_capable"` (18), `"incapable"` (9), `"undetermined"` (12) (longest: 18 <= 25)
+  - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"data_collection"` (15), `"analyzed"` (8), `"approved"` (8), `"action_required"` (15) (longest: 15 <= 25)
+  - `process_name`: `CharField(max_length=150, blank=True, help_text="Manufacturing step or production operation stand-in")`
+  - `equipment_tag`: `CharField(max_length=100, blank=True, help_text="Machine or tool asset tag stand-in")`
+  - `item_code`: `CharField(max_length=100, blank=True, help_text="Manufactured item number stand-in")`
+  - `lot_number`: `CharField(max_length=100, blank=True, help_text="Batch or production run identifier stand-in")`
+  - `analysis_summary`: `TextField(blank=True, help_text="Statistical conclusions, assignable causes, and process capability assessment notes")`
+  - `study_date`: `DateField(null=True, blank=True, help_text="Date capability study data was acquired")`
+- [ ] **Foreign Keys (tenant-scoped)**:
+  - `validation_protocol`: `ForeignKey("quality.ValidationProtocol", on_delete=models.SET_NULL, null=True, blank=True, related_name="capability_studies", help_text="Associated qualification protocol (PQ/PPQ/CPV)")`
+  - `investigator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="capability_studies", help_text="Quality engineer / statistician performing study")`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_capability_studies", help_text="Quality manager approving capability determination")`
+  - `linked_parameter_log`: `ForeignKey("quality.ProcessParameterLog", on_delete=models.SET_NULL, null=True, blank=True, related_name="capability_studies", help_text="Source shop-floor parameter log run")`
+  - `linked_calibration_gage`: `ForeignKey("quality.CalibrationGage", on_delete=models.SET_NULL, null=True, blank=True, related_name="capability_studies", help_text="Measurement instrument used for data capture")`
+  - `linked_capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="capability_studies", help_text="Triggered CAPA if process is incapable (Cpk < 1.00)")`
+- [ ] **Badge CSS Dicts**:
+  - `DETERMINATION_CSS`: `highly_capable`: `badge-green`, `capable`: `badge-green`, `marginally_capable`: `badge-amber`, `incapable`: `badge-red`, `undetermined`: `badge-slate`
+  - `STATUS_CSS`: `draft`: `badge-slate`, `data_collection`: `badge-info`, `analyzed`: `badge-amber`, `approved`: `badge-green`, `action_required`: `badge-red`
+- [ ] **Properties & Methods**:
+  - `tolerance_width`: `upper_spec_limit - lower_spec_limit`
+  - `determination_css`: CSS badge class for capability classification.
+  - `status_css`: CSS badge class for status.
+  - `compute_indices()`: Python calculation routine computing $C_p, C_{pk}, P_p, P_{pk}$, normal defect PPM, and assigning `capability_determination`.
+- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="qcpk_ten_num_uniq")` (17 chars)
+  - `Index(fields=["tenant", "status"], name="idx_qcpk_ten_status")` (19 chars)
+  - `Index(fields=["tenant", "capability_determination"], name="idx_qcpk_ten_determ")` (19 chars)
+  - `Index(fields=["tenant", "parameter_category"], name="idx_qcpk_ten_param_cat")` (22 chars)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcpk_ten_created")` (20 chars)
+
+---
+
+### 3. `ComputerSystemValidation` (`QCSV-`)
+- [ ] **File**: `apps/quality/models/ProcessValidation/ComputerSystemValidations.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCSV"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `system_name`: `CharField(max_length=200, help_text="Commercial software product or internal application name")`
+  - `version_release`: `CharField(max_length=50, help_text="Software build or version identifier (e.g. v3.2.1)")`
+  - `vendor_name`: `CharField(max_length=150, help_text="Commercial software vendor or development provider")`
+  - `gamp_category`: `CharField(max_length=28, choices=GAMP_CATEGORY_CHOICES, default="cat_4_configured", db_index=True)` — `"cat_1_infrastructure"` (21), `"cat_3_non_configured"` (20), `"cat_4_configured"` (16), `"cat_5_custom"` (12) (longest: 21 <= 28)
+  - `gxp_impact`: `CharField(max_length=20, choices=GXP_IMPACT_CHOICES, default="direct_gxp", db_index=True)` — `"direct_gxp"` (10), `"indirect_gxp"` (12), `"non_gxp"` (7) (longest: 12 <= 20)
+  - `validation_approach`: `CharField(max_length=25, choices=VALIDATION_APPROACH_CHOICES, default="csa_risk_based")` — `"traditional_csv"` (15), `"csa_risk_based"` (14) (longest: 15 <= 25)
+  - `hosting_model`: `CharField(max_length=25, choices=HOSTING_MODEL_CHOICES, default="cloud_saas")` — `"cloud_saas"` (10), `"cloud_dedicated"` (15), `"on_premises"` (11), `"hybrid"` (6), `"embedded_firmware"` (17) (longest: 17 <= 25)
+  - `is_part_11_compliant`: `BooleanField(default=True, help_text="21 CFR Part 11 / EU Annex 11 electronic records & e-signatures evaluated")`
+  - `requires_audit_trail`: `BooleanField(default=True, help_text="21 CFR § 11.10(e) time-stamped, tamper-evident audit trail mandated")`
+  - `has_disaster_recovery_plan`: `BooleanField(default=True, help_text="Business continuity, backup verification, and DR procedures documented")`
+  - `traceability_status`: `CharField(max_length=25, choices=TRACEABILITY_STATUS_CHOICES, default="not_started")` — `"not_started"` (11), `"drafting"` (8), `"matrix_verified"` (15), `"gaps_identified"` (15) (longest: 15 <= 25)
+  - `urs_requirements_count`: `PositiveIntegerField(default=0, help_text="Total User Requirements Specifications (URS) verified")`
+  - `test_scripts_count`: `PositiveIntegerField(default=0, help_text="Total qualification test scripts executed (IQ/OQ/PQ)")`
+  - `deviations_found_count`: `PositiveIntegerField(default=0, help_text="Open software anomalies / bug tickets logged during validation")`
+  - `status`: `CharField(max_length=28, choices=STATUS_CHOICES, default="inventory_only", db_index=True)` — `"inventory_only"` (14), `"planning"` (8), `"in_qualification"` (16), `"validated_live"` (14), `"periodic_review_due"` (19), `"decommissioned"` (14) (longest: 19 <= 28)
+  - `validated_date`: `DateField(null=True, blank=True, help_text="Date system was formally released for live GxP production use")`
+  - `periodic_review_frequency_months`: `PositiveIntegerField(default=24, help_text="Periodic review interval in months (typically 24-36 months)")`
+  - `last_review_date`: `DateField(null=True, blank=True, help_text="Date of last formal periodic software review")`
+  - `next_review_due`: `DateField(null=True, blank=True, db_index=True, help_text="Next scheduled periodic review deadline")`
+  - `description`: `TextField(blank=True, help_text="System purpose, functional scope, and interfaces")`
+- [ ] **Foreign Keys (tenant-scoped)**:
+  - `system_owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_computer_systems", help_text="Business system owner / departmental administrator")`
+  - `quality_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="qa_computer_systems", help_text="Quality Assurance validation lead")`
+  - `validation_protocol`: `ForeignKey("quality.ValidationProtocol", on_delete=models.SET_NULL, null=True, blank=True, related_name="computer_system_validations", help_text="Associated qualification protocol")`
+  - `urs_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="csv_urs_docs", help_text="Linked User Requirements Specification (URS)")`
+  - `vsr_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="csv_vsr_docs", help_text="Linked Validation Summary Report (VSR)")`
+  - `risk_assessment`: `ForeignKey("quality.RiskAssessment", on_delete=models.SET_NULL, null=True, blank=True, related_name="computer_system_validations", help_text="GxP / GAMP 5 software risk assessment")`
+- [ ] **Badge CSS Dicts**:
+  - `GAMP_CSS`: `cat_1_infrastructure`: `badge-slate`, `cat_3_non_configured`: `badge-info`, `cat_4_configured`: `badge-green`, `cat_5_custom`: `badge-amber`
+  - `STATUS_CSS`: `inventory_only`: `badge-slate`, `planning`: `badge-info`, `in_qualification`: `badge-amber`, `validated_live`: `badge-green`, `periodic_review_due`: `badge-red`, `decommissioned`: `badge-muted`
+- [ ] **Properties & Methods**:
+  - `is_review_overdue`: Returns boolean indicating if `next_review_due` is past current date.
+  - `status_css`: CSS badge class for lifecycle status.
+  - `gamp_css`: CSS badge class for GAMP category.
+- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="qcsv_ten_num_uniq")` (17 chars)
+  - `Index(fields=["tenant", "status"], name="idx_qcsv_ten_status")` (19 chars)
+  - `Index(fields=["tenant", "gamp_category"], name="idx_qcsv_ten_gamp")` (17 chars)
+  - `Index(fields=["tenant", "gxp_impact"], name="idx_qcsv_ten_gxp")` (16 chars)
+  - `Index(fields=["tenant", "next_review_due"], name="idx_qcsv_ten_rev_due")` (20 chars)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcsv_ten_created")` (20 chars)
+
+---
+
+### 4. `CleaningValidation` (`QCLN-`)
+- [ ] **File**: `apps/quality/models/ProcessValidation/CleaningValidations.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCLN"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255, help_text="Title e.g. Solid Dose Granulation Train Cleaning Validation")`
+  - `equipment_train_tag`: `CharField(max_length=150, help_text="Equipment train or shared asset identifier (e.g. Mixer + Granulator + Coater)")`
+  - `target_residue`: `CharField(max_length=150, help_text="Target active ingredient (API), marker substance, or detergent of interest")`
+  - `cleaning_agent_used`: `CharField(max_length=150, help_text="Cleaning detergent or solvent used (e.g. CIP-100, WFI, 0.1M NaOH)")`
+  - `worst_case_rationale`: `CharField(max_length=28, choices=WORST_CASE_RATIONALE_CHOICES, default="highest_potency")` — `"lowest_solubility"` (17), `"highest_toxicity_pde"` (20), `"highest_potency"` (15), `"hardest_to_clean"` (16) (longest: 20 <= 28)
+  - `calculation_basis`: `CharField(max_length=25, choices=CALCULATION_BASIS_CHOICES, default="most_stringent")` — `"therapeutic_dose"` (16), `"ten_ppm_limit"` (13), `"toxicological_pde"` (17), `"most_stringent"` (14) (longest: 17 <= 25)
+  - `min_daily_dose_active_mg`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="Minimum therapeutic daily dose of preceding active (Product A) in mg")`
+  - `max_daily_dose_subsequent_mg`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="Maximum daily dose of next product (Product B) in mg")`
+  - `smallest_batch_size_kg`: `DecimalField(max_digits=12, decimal_places=3, help_text="Smallest commercial batch size of subsequent product (Product B) in kg")`
+  - `safety_factor`: `DecimalField(max_digits=8, decimal_places=1, default=Decimal("1000.0"), help_text="Safety factor denominator (typically 1000 for oral doses)")`
+  - `toxicological_pde_mg_day`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="Permitted Daily Exposure (PDE) limit in mg/day")`
+  - `calculated_maco_mg`: `DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="Computed Maximum Allowable Carryover (MACO) in shared train (mg)")`
+  - `total_surface_area_sqcm`: `DecimalField(max_digits=14, decimal_places=2, help_text="Total product-contact surface area of equipment train in cm²")`
+  - `swab_sampling_area_sqcm`: `DecimalField(max_digits=8, decimal_places=2, default=Decimal("25.0"), help_text="Area sampled per swab coupon in cm² (typically 25.0 cm²)")`
+  - `calculated_swab_limit_ug`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Calculated maximum residue limit per swab in µg")`
+  - `rinse_volume_liters`: `DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total final rinse solvent volume in Liters")`
+  - `calculated_rinse_limit_ppm`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Calculated allowable rinse concentration in ppm (mg/L)")`
+  - `analytical_method`: `CharField(max_length=20, choices=ANALYTICAL_METHOD_CHOICES, default="hplc")` — `"hplc"` (4), `"toc"` (3), `"uv_vis"` (6), `"conductivity"` (12), `"visual_clean"` (12) (longest: 12 <= 20)
+  - `method_recovery_percentage`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("80.00"), help_text="Analytical method swab recovery percentage (e.g. 80.0%)")`
+  - `dirty_hold_time_hours`: `DecimalField(max_digits=8, decimal_places=1, help_text="Validated Dirty Hold Time (DHT) in hours")`
+  - `clean_hold_time_hours`: `DecimalField(max_digits=8, decimal_places=1, help_text="Validated Clean Hold Time (CHT) in hours")`
+  - `consecutive_successful_runs`: `PositiveIntegerField(default=0, help_text="Count of consecutive successful validation runs completed (target >= 3)")`
+  - `is_visually_clean`: `BooleanField(default=True, help_text="Verification that all product-contact surfaces are visually clean and odor-free")`
+  - `worst_swab_result_ug`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Highest residue measured across all swab locations in µg")`
+  - `worst_rinse_result_ppm`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Highest concentration measured in rinse samples in ppm")`
+  - `cleaning_status`: `CharField(max_length=28, choices=CLEANING_STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"protocol_approved"` (17), `"sampling_in_progress"` (20), `"analytical_testing"` (18), `"validated_pass"` (14), `"failed_recleaning"` (17), `"expired"` (7) (longest: 20 <= 28)
+  - `next_revalidation_date`: `DateField(null=True, blank=True, db_index=True, help_text="Date for routine periodic revalidation")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Foreign Keys (tenant-scoped)**:
+  - `validation_protocol`: `ForeignKey("quality.ValidationProtocol", on_delete=models.SET_NULL, null=True, blank=True, related_name="cleaning_studies", help_text="Parent qualification protocol")`
+  - `cleaning_sop`: `ForeignKey("quality.ControlledDocument", on_delete=models.PROTECT, related_name="cleaning_validation_studies", help_text="Standard Operating Procedure governing the cleaning procedure")`
+  - `analytical_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="cleaning_studies", help_text="Chemist / analytical scientist performing test")`
+  - `qa_approver`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_cleaning_studies", help_text="Quality Assurance release authority")`
+  - `linked_deviation`: `ForeignKey("quality.ProcessDeviation", on_delete=models.SET_NULL, null=True, blank=True, related_name="cleaning_studies", help_text="Out of specification cleaning deviation")`
+- [ ] **Badge CSS Dicts**:
+  - `STATUS_CSS`: `draft`: `badge-slate`, `protocol_approved`: `badge-info`, `sampling_in_progress`: `badge-amber`, `analytical_testing`: `badge-amber`, `validated_pass`: `badge-green`, `failed_recleaning`: `badge-red`, `expired`: `badge-muted`
+- [ ] **Properties & Methods**:
+  - `is_revalidation_overdue`: Returns boolean indicating if `next_revalidation_date` has passed.
+  - `status_css`: CSS badge class for cleaning validation status.
+  - `compute_maco_and_limits()`: Python method evaluating therapeutic dose, 10 ppm, and PDE criteria to derive `calculated_maco_mg`, `calculated_swab_limit_ug`, and `calculated_rinse_limit_ppm`.
+- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="qcln_ten_num_uniq")` (17 chars)
+  - `Index(fields=["tenant", "cleaning_status"], name="idx_qcln_ten_status")` (19 chars)
+  - `Index(fields=["tenant", "analytical_method"], name="idx_qcln_ten_method")` (19 chars)
+  - `Index(fields=["tenant", "next_revalidation_date"], name="idx_qcln_ten_reval_dt")` (22 chars)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qcln_ten_created")` (20 chars)
+
+---
+
+## Forms (in `apps/quality/forms/ProcessValidation/`)
+
+- [ ] `ValidationProtocolForm`: ModelForm for `ValidationProtocol`.
+  - Excludes `number`, `created_at`, `updated_at`, `is_acceptance_criteria_met`, `open_deviations_count`.
+  - Tenant-scoped querysets in `__init__` for `org_unit`, `lead_author`, `lead_executor`, `qa_approver`, `vmp_document`, `change_order`, `linked_deviation`, `linked_capa`, `parent_protocol`.
+  - Enforces `reject_foreign(...)` in `clean()`.
+- [ ] `ProcessCapabilityStudyForm`: ModelForm for `ProcessCapabilityStudy`.
+  - Excludes `number`, `created_at`, `updated_at`, `cp_index`, `cpk_index`, `pp_index`, `ppk_index`, `expected_ppm`, `capability_determination`.
+  - Tenant-scoped querysets in `__init__` for `validation_protocol`, `investigator`, `approved_by`, `linked_parameter_log`, `linked_calibration_gage`, `linked_capa`.
+  - Enforces `reject_foreign(...)` in `clean()`.
+- [ ] `ComputerSystemValidationForm`: ModelForm for `ComputerSystemValidation`.
+  - Excludes `number`, `created_at`, `updated_at`.
+  - Tenant-scoped querysets in `__init__` for `system_owner`, `quality_lead`, `validation_protocol`, `urs_document`, `vsr_document`, `risk_assessment`.
+  - Enforces `reject_foreign(...)` in `clean()`.
+- [ ] `CleaningValidationForm`: ModelForm for `CleaningValidation`.
+  - Excludes `number`, `created_at`, `updated_at`, `calculated_maco_mg`, `calculated_swab_limit_ug`, `calculated_rinse_limit_ppm`.
+  - Tenant-scoped querysets in `__init__` for `validation_protocol`, `cleaning_sop`, `analytical_lead`, `qa_approver`, `linked_deviation`.
+  - Enforces `reject_foreign(...)` in `clean()`.
+
+---
+
+## Views & URLs (in `apps/quality/views/ProcessValidation/` & `urls/ProcessValidation/`)
+
+- [ ] **Validation Protocol Routes**:
+  - `validation_protocol_list`: Filterable list view by `status`, `stage`, `target_type`, `search` query with pagination.
+  - `validation_protocol_create`: Creation form view with audit log entry.
+  - `validation_protocol_detail`: Comprehensive detail view rendering metadata, scope, acceptance criteria, execution results, open deviations, and workflow action bar.
+  - `validation_protocol_edit`: Edit form view.
+  - `validation_protocol_delete`: Protected POST delete view.
+  - `validation_protocol_submit_review`: Workflow action transitioning status from `draft` -> `in_review`.
+  - `validation_protocol_approve_execution`: Workflow action transitioning status from `in_review` -> `approved_for_execution`.
+  - `validation_protocol_complete_run`: Workflow action recording execution results and transitioning to `execution_completed`.
+  - `validation_protocol_final_approval`: QA release action transitioning to `final_approved`.
+- [ ] **Process Capability Study Routes**:
+  - `process_capability_study_list`: Filterable list view by `status`, `determination`, `category`, `search` with pagination.
+  - `process_capability_study_create`: Create study view.
+  - `process_capability_study_detail`: Detail view displaying specification limits, sample counts, calculated capability indices ($C_p, C_{pk}, P_p, P_{pk}$), expected defect PPM, and visual bell-curve distribution meter.
+  - `process_capability_study_edit`: Edit study parameters.
+  - `process_capability_study_delete`: Protected POST delete view.
+  - `process_capability_study_recalculate`: POST action to trigger `compute_indices()`.
+  - `process_capability_study_approve`: Formal quality approval action.
+- [ ] **Computer System Validation Routes**:
+  - `computer_system_validation_list`: Filterable list view by `status`, `gamp_category`, `gxp_impact`, `hosting_model`, `search`.
+  - `computer_system_validation_create`: Create CSV inventory entry.
+  - `computer_system_validation_detail`: Detail view showing GAMP 5 category badge, CSA/CSV approach, 21 CFR Part 11 checklist, URS traceability, and periodic review status.
+  - `computer_system_validation_edit`: Edit CSV entry.
+  - `computer_system_validation_delete`: Protected POST delete view.
+  - `computer_system_validation_release`: Action releasing system to `validated_live`.
+- [ ] **Cleaning Validation Routes**:
+  - `cleaning_validation_list`: Filterable list view by `status`, `method`, `worst_case_rationale`, `search`.
+  - `cleaning_validation_create`: Create cleaning validation study.
+  - `cleaning_validation_detail`: Detail view showing equipment train, MACO breakdown table, swab/rinse limits, recovery factor %, hold time compliance (DHT/CHT), and consecutive run counter.
+  - `cleaning_validation_edit`: Edit study.
+  - `cleaning_validation_delete`: Protected POST delete view.
+  - `cleaning_validation_recalculate`: POST action to run `compute_maco_and_limits()`.
+  - `cleaning_validation_log_run`: Action incrementing consecutive successful cleaning runs.
+  - `cleaning_validation_approve`: QA release action setting `validated_pass`.
+- [ ] **Process Validation Dashboard / Command Center**:
+  - `process_validation_dashboard` (`ProcessValidationDashboard.py`): Integrated dashboard with telemetry cards:
+    - Active qualification protocols by stage (IQ, OQ, PQ, PPQ, CPV)
+    - Protocol execution pipeline (Draft, In Review, Ready, Running, Completed)
+    - Process capability health radar ($C_{pk} \ge 1.33$ vs Incapable $C_{pk} < 1.00$)
+    - Computer systems inventory by GAMP 5 category & CSA assurance status
+    - Cleaning validation trains and MACO status
+    - Revalidation & Periodic Review overdue alert radar
+
+---
+
+## Templates (in `templates/quality/processvalidation/`)
+
+- [ ] `process_validation_dashboard.html`: Command center with KPI metric cards, stage pipeline breakdown, capability distribution meters, and revalidation alerts.
+- [ ] `validation_protocol/list.html`: Search, filter controls (status, stage, target type), responsive table with color-named badges, paginator.
+- [ ] `validation_protocol/detail.html`: Structured `<dl class="detail-grid">`, execution summary, deviation/CAPA linking, workflow transition action buttons.
+- [ ] `validation_protocol/form.html`: Crisp Tailwind form with validation feedback and field groupings.
+- [ ] `process_capability_study/list.html`: Capability studies table with $C_p/C_{pk}$ index displays and RAG status badges.
+- [ ] `process_capability_study/detail.html`: Detail view with statistical metrics summary, USL/LSL tolerance bar, and PPM defect estimations.
+- [ ] `process_capability_study/form.html`: Form with engineering specification fields.
+- [ ] `computer_system_validation/list.html`: System inventory list with GAMP 5 category badges and 21 CFR Part 11 indicators.
+- [ ] `computer_system_validation/detail.html`: Comprehensive system dossier showing CSA/CSV methodology, URS counts, and review cadence.
+- [ ] `computer_system_validation/form.html`: Form with GAMP choices, hosting models, and regulatory compliance flags.
+- [ ] `cleaning_validation/list.html`: Cleaning studies list with equipment train tags and validation run indicators.
+- [ ] `cleaning_validation/detail.html`: Detail view displaying MACO calculation breakdown, swab/rinse limit values, and DHT/CHT hold times.
+- [ ] `cleaning_validation/form.html`: Form with toxicological, dosing, and equipment surface area inputs.
+
+---
+
+## Integration, Migration & Verification Steps
+
+- [ ] Re-export 4 models in `apps/quality/models/__init__.py`
+- [ ] Re-export forms in `apps/quality/forms/__init__.py`
+- [ ] Re-export views in `apps/quality/views/__init__.py`
+- [ ] Re-export & include urls in `apps/quality/urls/__init__.py`
+- [ ] Register 4 models in `apps/quality/admin.py`
+- [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_15`)
+- [ ] Wire `LIVE_LINKS["12.15"]` in `apps/core/navigation.py`:
+  - `"Process Validation Planning (IQ/OQ/PQ)": "quality:validation_protocol_list"`
+  - `"Process Capability Studies (Cp/Cpk)": "quality:process_capability_study_list"`
+  - `"Computer System Validation (CSV)": "quality:computer_system_validation_list"`
+  - `"Cleaning Validation": "quality:cleaning_validation_list"`
+  - `"Revalidation & Periodic Review": "quality:process_validation_dashboard"`
+- [ ] Run `makemigrations quality` -> incremental migration `0027_...`
+- [ ] Run `migrate quality`
+- [ ] Run `seed_quality` twice (verify idempotency)
+- [ ] Run `manage.py check` (0 issues)
+- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.15.md`
+- [ ] **Step 6: Code Fixer** -> burn down findings
+- [ ] **Step 7: Automated Tests** -> `test_processvalidation_models.py`, `test_processvalidation_forms.py`, `test_processvalidation_views.py`, `test_processvalidation_security.py` -> 100% green
+- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.15.md`
+
+
+---
+
+# Sub-module 12.16: Environmental, Health & Safety (EHS) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.16.md` (2026-11-21)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 through 12.14.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0026_alter_qualityobjective_rag_status_and_more.py` (claims next incremental migration `0027_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QHAZ`** (`HazardousMaterial`), **`QSIR`** (`SafetyIncident`), **`QENV`** (`EnvironmentalMonitoringLog`), **`QWST`** (`WasteDisposalManifest`).
+> Plan written from `.claude/tasks/research-quality-12.16.md` (Phase 1) and `NavERP.md` (`### 12.16 Environmental, Health & Safety (EHS)`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/EhsManagement/<Entity>.py` (`HazardousMaterials.py`, `SafetyIncidents.py`, `EnvironmentalMonitoringLogs.py`, `WasteDisposalManifests.py`, plus dedicated command center `EhsDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/ehsmanagement/{hazardous_material,safety_incident,environmental_monitoring_log,waste_disposal_manifest}/{list,detail,form}.html` + `templates/quality/ehsmanagement/ehs_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QHAZ`** (`HazardousMaterial`), **`QSIR`** (`SafetyIncident`), **`QENV`** (`EnvironmentalMonitoringLog`), **`QWST`** (`WasteDisposalManifest`), all 4 model classes, and all URL stems (`hazardous_material_*`, `safety_incident_*`, `environmental_monitoring_log_*`, `waste_disposal_manifest_*`, `ehs_dashboard*`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`, facility, laboratory, manufacturing cleanroom, warehouse), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.Party` (`apps/core/models/Party.py`, chemical suppliers, EPA-licensed transporters, certified TSDF operators).
+  - Module 12 siblings:
+    - `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`, prefix `QDOC` for SDS indexing, chemical hygiene SOPs, cleanroom procedures).
+    - `quality.ElectronicSignatureRecord` (`apps/quality/models/DocumentControl/ElectronicSignatures.py`, prefix `QSIG` for 21 CFR Part 11 electronic authorization of incident investigations, environmental releases, and waste manifests).
+    - `quality.NonConformanceReport` (`apps/quality/models/NonConformance/NonConformanceReports.py`, prefix `QNCR` for cleanroom excursions, chemical spills, and safety protocol breaches).
+    - `quality.ProcessDeviation` (`apps/quality/models/NonConformance/ProcessDeviations.py`, prefix `QDEV` for environmental excursions: temp/RH spikes, particulate breaches).
+    - `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`, prefix `QCAP` for root cause investigations and corrective actions spawned from severe safety incidents or recurring environmental excursions).
+    - `quality.CalibrationGage` (`apps/quality/models/CalibrationMsa/CalibrationGages.py`, prefix `QGAG` for calibrated optical particle counters, microbial air samplers, hygrometers, differential pressure gauges).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `UOM`, `StockMove`, `LotSerial`): Clean text fields `chemical_code`, `cas_number`, `un_number`, `storage_location_code`, `container_serial_number`, `unit_of_measure` with zero hard dependencies on unbuilt tables.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `core.OrgUnit`, `core.Party`, `quality.ControlledDocument`, `quality.CalibrationGage`, `quality.CapaInvestigation`, `quality.NonConformanceReport`, `quality.ProcessDeviation`, `quality.HazardousMaterial`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering (`org_unit`, `supplier`, `transporter`, `tsdf_facility`, `measurement_instrument`).
+- **Statutory EHS & Cleanroom Regulatory Framework Alignment (OSHA 29 CFR 1904 / 1910, ISO 14001, ISO 45001, ISO 14644-1/2, EU GMP Annex 1, EPA RCRA 40 CFR 260-273)**:
+  - **OSHA 29 CFR 1904 Injury & Illness Recordkeeping**: Recordability determinations, OSHA Form 300 / 300A / 301 criteria classification, lost workdays vs restricted workdays tracking, Days Away, Restricted, or Transferred (DART) rate metrics, and 8-hour / 24-hour statutory agency reporting flags.
+  - **OSHA 29 CFR 1910.1200 (HazCom GHS) & NFPA 704**: Standardized 16-section Safety Data Sheet (SDS) lifecycle tracking, 9 GHS pictograms, signal words (`danger`, `warning`), hazard statements, NFPA 704 standard 0-4 fire diamond rating (Health, Flammability, Instability, Special Hazard), and secondary container workplace GHS label rendering.
+  - **ISO 14644-1/2 & EU GMP Annex 1:2022 Cleanroom Environmental Monitoring (EMS)**: ISO Class 3 through 9 and EU GMP Grades A-D zone tracking in at-rest and in-operation states. Real-time logging of non-viable optical particle counts ($\ge 0.5\,\mu\text{m}$ and $\ge 5.0\,\mu\text{m}$), viable microbial monitoring (active air CFU/$\text{m}^3$, 90 mm settle plates, 55 mm surface contact plates, 5-finger glove prints), and room differential pressure (Pa), temperature ($^\circ\text{C}$), and %RH with automated dual-tier alert and action excursion calculations.
+  - **EPA RCRA Cradle-to-Grave Uniform Hazardous Waste Tracking (EPA Form 8700-22)**: Complete manifest lifecycle from accumulation start through licensed transporter custody to verified TSDF receipt and destruction certification. Captures EPA waste codes (D001–D043, F, K, P, U codes), DOT shipping profiles, container counts, net quantity, management method codes, and TSDF discrepancy tracking.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `report_date`), auto-numbers (`number`), and computed metrics MUST be excluded from `Meta.fields` in ModelForms.
+  - Computed helper properties (`is_sds_expired`, `sds_status_css`, `is_dart_incident`, `incident_status_css`, `severity_css`, `is_excursion`, `evaluation_status_css`, `accumulation_days`, `is_accumulation_overdue`, `manifest_status_css`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `HazardousMaterial` (`QHAZ-`)
+- [ ] **File**: `apps/quality/models/EhsManagement/HazardousMaterials.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QHAZ"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `material_name`: `CharField(max_length=255, help_text="Common or technical chemical name")`
+  - `trade_name`: `CharField(max_length=255, blank=True, help_text="Commercial trade name or brand identifier")`
+  - `cas_number`: `CharField(max_length=50, blank=True, db_index=True, help_text="Chemical Abstracts Service registry number (e.g. 67-64-1)")`
+  - `un_number`: `CharField(max_length=20, blank=True, help_text="UN/NA transport identification number (e.g. UN1090)")`
+  - `chemical_formula`: `CharField(max_length=100, blank=True, help_text="Empirical or structural chemical formula")`
+  - `physical_state`: `CharField(max_length=20, choices=PHYSICAL_STATE_CHOICES, default="liquid", db_index=True)` — `"liquid"` (6), `"solid"` (5), `"gas"` (3), `"aerosol"` (7), `"sludge"` (6) (longest: 7 <= 20)
+  - `ghs_signal_word`: `CharField(max_length=20, choices=GHS_SIGNAL_WORD_CHOICES, default="warning", db_index=True)` — `"danger"` (6), `"warning"` (7), `"none"` (4) (longest: 7 <= 20)
+  - `ghs_pictograms`: `CharField(max_length=255, blank=True, help_text="Comma-separated GHS pictogram codes e.g. flame,corrosion,skull_crossbones")`
+  - `hazard_statements`: `TextField(blank=True, help_text="GHS Hazard statements (H-codes and descriptions)")`
+  - `precautionary_statements`: `TextField(blank=True, help_text="GHS Precautionary statements (P-codes and instructions)")`
+  - `nfpa_health`: `PositiveSmallIntegerField(default=0, help_text="NFPA 704 Health rating 0-4")`
+  - `nfpa_flammability`: `PositiveSmallIntegerField(default=0, help_text="NFPA 704 Flammability rating 0-4")`
+  - `nfpa_instability`: `PositiveSmallIntegerField(default=0, help_text="NFPA 704 Instability/Reactivity rating 0-4")`
+  - `nfpa_special_hazard`: `CharField(max_length=20, choices=NFPA_SPECIAL_HAZARD_CHOICES, default="none")` — `"none"` (4), `"ox"` (2), `"w_slash"` (7), `"sa"` (2), `"cor"` (3), `"bio"` (3) (longest: 7 <= 20)
+  - `sds_revision`: `CharField(max_length=50, blank=True, default="Rev 1.0", help_text="SDS document revision identifier")`
+  - `sds_issue_date`: `DateField(null=True, blank=True, help_text="Date SDS was issued by manufacturer")`
+  - `sds_expiry_date`: `DateField(null=True, blank=True, db_index=True, help_text="3-year SDS renewal or expiration target date")`
+  - `sds_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="hazardous_materials", help_text="Linked controlled document in QMS Document Control")`
+  - `osha_pel`: `CharField(max_length=100, blank=True, help_text="OSHA Permissible Exposure Limit (e.g. 1000 ppm TWA)")`
+  - `acgih_tlv`: `CharField(max_length=100, blank=True, help_text="ACGIH Threshold Limit Value (e.g. 500 ppm TWA, 750 ppm STEL)")`
+  - `exposure_uom`: `CharField(max_length=50, blank=True, default="ppm", help_text="Exposure limit unit of measure (e.g. ppm, mg/m3)")`
+  - `ppe_requirements`: `TextField(blank=True, help_text="Mandatory PPE specifications (respirator type, nitrile gloves, face shield)")`
+  - `incompatible_materials`: `TextField(blank=True, help_text="Incompatible substances to segregate from (e.g. strong oxidizers, acids)")`
+  - `spill_cleanup_procedure`: `TextField(blank=True, help_text="Immediate emergency spill containment and neutralisation instructions")`
+  - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="hazardous_materials", help_text="Facility or departmental storage owner")`
+  - `storage_location_code`: `CharField(max_length=100, blank=True, help_text="Storage location code e.g. Flammable-Cabinet-A1")`
+  - `maximum_storage_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="Maximum authorized storage capacity")`
+  - `quantity_uom`: `CharField(max_length=50, default="L", help_text="Unit of measure for inventory storage (e.g. L, kg, gal)")`
+  - `supplier`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="hazardous_materials", help_text="Chemical manufacturer or commercial supplier (core.Party)")`
+  - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="active", db_index=True)` — `"active"` (6), `"restricted"` (10), `"under_review"` (12), `"discontinued"` (12) (longest: 12 <= 25)
+  - `managed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="managed_hazardous_materials", help_text="Designated Chemical Hygiene / Safety Officer")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Badge CSS Dicts**:
+  - `STATUS_CSS`: `active`: `badge-green`, `restricted`: `badge-amber`, `under_review`: `badge-info`, `discontinued`: `badge-slate`
+  - `SIGNAL_WORD_CSS`: `danger`: `badge-red`, `warning`: `badge-amber`, `none`: `badge-slate`
+- [ ] **Properties & Methods**:
+  - `is_sds_expired`: Boolean checking if `sds_expiry_date < timezone.now().date()`.
+  - `sds_status_css`: Dynamic badge class based on SDS expiry (`badge-red` if expired, `badge-amber` if expiring in 90 days, `badge-green` if current).
+  - `status_css`: Badge CSS for status.
+  - `signal_word_css`: Badge CSS for GHS signal word.
+- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qhaz_ten_num_uniq")` (26 chars)
+  - `Index(fields=["tenant", "status"], name="idx_qhaz_ten_status")` (19 chars)
+  - `Index(fields=["tenant", "physical_state"], name="idx_qhaz_ten_state")` (18 chars)
+  - `Index(fields=["tenant", "cas_number"], name="idx_qhaz_ten_cas")` (16 chars)
+  - `Index(fields=["tenant", "sds_expiry_date"], name="idx_qhaz_ten_exp_dt")` (19 chars)
+  - `Index(fields=["tenant", "org_unit"], name="idx_qhaz_ten_org")` (16 chars)
+  - `Index(fields=["tenant", "supplier"], name="idx_qhaz_ten_sup")` (16 chars)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qhaz_ten_created")` (20 chars)
+
+### 2. `SafetyIncident` (`QSIR-`)
+- [ ] **File**: `apps/quality/models/EhsManagement/SafetyIncidents.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QSIR"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255, help_text="Concise incident title e.g. Chemical splash during acid etching")`
+  - `incident_date`: `DateTimeField(db_index=True, help_text="Exact timestamp of incident occurrence")`
+  - `report_date`: `DateField(db_index=True, help_text="Date initial report was submitted")`
+  - `incident_type`: `CharField(max_length=30, choices=INCIDENT_TYPE_CHOICES, default="injury_illness", db_index=True)` — `"injury_illness"` (14), `"near_miss"` (9), `"hazardous_condition"` (19), `"chemical_spill"` (14), `"fire_explosion"` (14), `"property_damage"` (15), `"cleanroom_breach"` (16) (longest: 19 <= 30)
+  - `severity`: `CharField(max_length=20, choices=SEVERITY_CHOICES, default="minor", db_index=True)` — `"minor"` (5), `"moderate"` (8), `"severe"` (6), `"critical"` (8), `"fatal"` (5) (longest: 8 <= 20)
+  - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="reported", db_index=True)` — `"reported"` (8), `"investigating"` (13), `"under_review"` (12), `"capa_pending"` (12), `"closed"` (6), `"cancelled"` (9) (longest: 13 <= 25)
+  - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="safety_incidents", help_text="Facility, manufacturing line, or department where incident occurred")`
+  - `location_details`: `CharField(max_length=255, blank=True, help_text="Specific physical location (e.g. Cleanroom B Airlock 3)")`
+  - `reported_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="reported_safety_incidents", help_text="Person submitting first report of incident")`
+  - `affected_person`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="involved_safety_incidents", help_text="Affected employee (if company employee)")`
+  - `affected_party_name`: `CharField(max_length=255, blank=True, help_text="Name of affected person if contractor, visitor, or non-user")`
+  - `affected_party_type`: `CharField(max_length=30, choices=AFFECTED_PARTY_TYPE_CHOICES, default="employee", db_index=True)` — `"employee"` (8), `"contractor"` (10), `"visitor"` (7), `"temporary_worker"` (16) (longest: 16 <= 30)
+  - `nature_of_injury`: `CharField(max_length=35, choices=NATURE_OF_INJURY_CHOICES, default="none", db_index=True)` — `"none"` (4), `"strain_sprain"` (13), `"laceration_cut"` (14), `"burn_heat_chemical"` (18), `"fracture"` (8), `"contusion_bruise"` (16), `"eye_injury"` (10), `"inhalation_respiratory"` (21), `"skin_irritation"` (15), `"hearing_impact"` (14), `"other"` (5) (longest: 21 <= 35)
+  - `body_part_affected`: `CharField(max_length=30, choices=BODY_PART_CHOICES, default="none")` — `"none"` (4), `"head_face"` (9), `"eyes"` (4), `"hands_fingers"` (13), `"arms_shoulders"` (14), `"back_spine"` (10), `"legs_knees"` (10), `"feet_toes"` (9), `"respiratory_system"` (18), `"multiple"` (8) (longest: 18 <= 30)
+  - `medical_treatment_level`: `CharField(max_length=30, choices=MEDICAL_TREATMENT_LEVEL_CHOICES, default="none", db_index=True)` — `"none"` (4), `"first_aid_only"` (14), `"clinic_visit"` (12), `"emergency_room"` (14), `"hospitalization"` (15) (longest: 15 <= 30)
+  - `is_osha_recordable`: `BooleanField(default=False, db_index=True, help_text="Meets OSHA 29 CFR 1904 recordability criteria")`
+  - `osha_classification`: `CharField(max_length=35, choices=OSHA_CLASSIFICATION_CHOICES, default="non_recordable", db_index=True)` — `"non_recordable"` (14), `"first_aid"` (9), `"days_away_from_work"` (19), `"job_transfer_restriction"` (23), `"other_recordable_case"` (21) (longest: 23 <= 35)
+  - `lost_workdays_count`: `PositiveIntegerField(default=0, help_text="Number of full days away from work")`
+  - `restricted_workdays_count`: `PositiveIntegerField(default=0, help_text="Number of days restricted duty or job transfer")`
+  - `date_returned_to_work`: `DateField(null=True, blank=True, help_text="Date worker returned to full duty without restriction")`
+  - `ppe_compliance_status`: `CharField(max_length=25, choices=PPE_COMPLIANCE_CHOICES, default="compliant", db_index=True)` — `"compliant"` (9), `"non_compliant"` (13), `"inadequate_ppe"` (14), `"not_applicable"` (14) (longest: 14 <= 25)
+  - `ppe_notes`: `TextField(blank=True, help_text="Observations on PPE condition, fitting, or compliance")`
+  - `immediate_actions_taken`: `TextField(blank=True, help_text="Immediate emergency medical aid, evacuation, equipment lock-out, or containment")`
+  - `lead_investigator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="investigated_safety_incidents", help_text="Safety officer or supervisor leading root cause investigation")`
+  - `root_cause_category`: `CharField(max_length=35, choices=ROOT_CAUSE_CATEGORY_CHOICES, default="under_investigation", db_index=True)` — `"human_factors"` (13), `"equipment_failure"` (17), `"procedure_gap"` (13), `"training_deficiency"` (19), `"ergonomic_strain"` (16), `"environmental_hazard"` (20), `"inadequate_ppe"` (14), `"under_investigation"` (19) (longest: 20 <= 35)
+  - `investigation_findings`: `TextField(blank=True, help_text="Detailed root cause analysis narrative and sequence of events")`
+  - `capa_investigation`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="safety_incidents", help_text="Linked formal CAPA investigation spawned from incident")`
+  - `non_conformance_report`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="safety_incidents", help_text="Linked Non-Conformance Report for material/facility containment")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Badge CSS Dicts**:
+  - `STATUS_CSS`: `reported`: `badge-info`, `investigating`: `badge-amber`, `under_review`: `badge-amber`, `capa_pending`: `badge-red`, `closed`: `badge-green`, `cancelled`: `badge-muted`
+  - `SEVERITY_CSS`: `minor`: `badge-slate`, `moderate`: `badge-info`, `severe`: `badge-amber`, `critical`: `badge-red`, `fatal`: `badge-red`
+  - `OSHA_CSS`: `True`: `badge-red`, `False`: `badge-slate`
+- [ ] **Properties & Methods**:
+  - `is_dart_incident`: Boolean checking if `lost_workdays_count > 0 or restricted_workdays_count > 0`.
+  - `total_lost_and_restricted_days`: `lost_workdays_count + restricted_workdays_count`.
+  - `status_css`: Badge CSS for status.
+  - `severity_css`: Badge CSS for severity.
+  - `osha_css`: Badge CSS for OSHA recordability.
+- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qsir_ten_num_uniq")` (26 chars)
+  - `Index(fields=["tenant", "status"], name="idx_qsir_ten_status")` (19 chars)
+  - `Index(fields=["tenant", "incident_type"], name="idx_qsir_ten_type")` (17 chars)
+  - `Index(fields=["tenant", "severity"], name="idx_qsir_ten_sev")` (16 chars)
+  - `Index(fields=["tenant", "is_osha_recordable"], name="idx_qsir_ten_osha")` (17 chars)
+  - `Index(fields=["tenant", "incident_date"], name="idx_qsir_ten_date")` (17 chars)
+  - `Index(fields=["tenant", "org_unit"], name="idx_qsir_ten_org")` (16 chars)
+  - `Index(fields=["tenant", "reported_by"], name="idx_qsir_ten_rep")` (16 chars)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qsir_ten_created")` (20 chars)
+
+### 3. `EnvironmentalMonitoringLog` (`QENV-`)
+- [ ] **File**: `apps/quality/models/EhsManagement/EnvironmentalMonitoringLogs.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QENV"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `sampling_point_id`: `CharField(max_length=100, db_index=True, help_text="Sampling location ID e.g. CR-ISO7-ZONE-B4")`
+  - `sampling_timestamp`: `DateTimeField(db_index=True, help_text="Date and time sample or reading was taken")`
+  - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="environmental_logs", help_text="Facility, laboratory, or cleanroom department")`
+  - `cleanroom_class`: `CharField(max_length=35, choices=CLEANROOM_CLASS_CHOICES, default="iso_class_7", db_index=True)` — `"iso_class_3"` (11), `"iso_class_4"` (11), `"iso_class_5"` (11), `"iso_class_6"` (11), `"iso_class_7"` (11), `"iso_class_8"` (11), `"iso_class_9"` (11), `"unclassified_controlled"` (23) (longest: 23 <= 35)
+  - `operational_state`: `CharField(max_length=25, choices=OPERATIONAL_STATE_CHOICES, default="in_operation", db_index=True)` — `"at_rest"` (7), `"in_operation"` (12) (longest: 12 <= 25)
+  - `monitoring_category`: `CharField(max_length=40, choices=MONITORING_CATEGORY_CHOICES, default="airborne_particles_0_5um", db_index=True)` — `"airborne_particles_0_5um"` (25), `"airborne_particles_5_0um"` (25), `"viable_air_microbial"` (20), `"viable_settle_plate"` (19), `"viable_surface_contact"` (22), `"viable_glove_print"` (18), `"differential_pressure"` (21), `"temperature"` (11), `"relative_humidity"` (17) (longest: 25 <= 40)
+  - `parameter_name`: `CharField(max_length=255, help_text="Name of monitored parameter e.g. Differential Pressure Zone A-B")`
+  - `measured_value`: `DecimalField(max_digits=12, decimal_places=3, help_text="Measured quantitative sample value")`
+  - `unit_of_measure`: `CharField(max_length=25, choices=UNIT_OF_MEASURE_CHOICES, default="particles_m3", db_index=True)` — `"particles_m3"` (12), `"particles_ft3"` (13), `"cfu_m3"` (6), `"cfu_plate"` (9), `"pascals"` (7), `"celsius"` (7), `"percent_rh"` (10) (longest: 13 <= 25)
+  - `target_nominal_value`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Nominal target operating value")`
+  - `lower_alert_limit`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Lower alert limit threshold")`
+  - `upper_alert_limit`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Upper alert limit threshold")`
+  - `lower_action_limit`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Lower mandatory regulatory action limit")`
+  - `upper_action_limit`: `DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Upper mandatory regulatory action limit")`
+  - `evaluation_status`: `CharField(max_length=25, choices=EVALUATION_STATUS_CHOICES, default="normal", db_index=True)` — `"normal"` (6), `"alert_exceeded"` (14), `"action_exceeded"` (15), `"invalid_sample"` (14) (longest: 15 <= 25)
+  - `excursion_details`: `TextField(blank=True, help_text="Details and potential impact of alert or action limit breach")`
+  - `immediate_containment_action`: `TextField(blank=True, help_text="Immediate containment (e.g. line stop, air purge, sanitization)")`
+  - `sampled_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="sampled_environmental_logs", help_text="QC sampling technician / industrial hygienist")`
+  - `verified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="verified_environmental_logs", help_text="Quality engineer verifying reading and evaluation")`
+  - `measurement_instrument`: `ForeignKey("quality.CalibrationGage", on_delete=models.SET_NULL, null=True, blank=True, related_name="environmental_logs", help_text="Calibrated monitoring gage / particle counter")`
+  - `process_deviation`: `ForeignKey("quality.ProcessDeviation", on_delete=models.SET_NULL, null=True, blank=True, related_name="environmental_logs", help_text="Linked deviation report if action limit breached")`
+  - `non_conformance_report`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="environmental_logs", help_text="Linked NCR if product quarantine triggered")`
+  - `capa_investigation`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="environmental_logs", help_text="Linked CAPA for recurring cleanroom trends")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Badge CSS Dicts**:
+  - `EVALUATION_STATUS_CSS`: `normal`: `badge-green`, `alert_exceeded`: `badge-amber`, `action_exceeded`: `badge-red`, `invalid_sample`: `badge-slate`
+- [ ] **Properties & Methods**:
+  - `is_excursion`: Boolean checking if `evaluation_status in ("alert_exceeded", "action_exceeded")`.
+  - `evaluation_status_css`: Badge CSS for evaluation status.
+  - `cleanroom_display`: Cleanroom class and operational state formatted string.
+  - `calculate_evaluation_status()`: Computes status from measured value vs lower/upper action & alert limits.
+- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qenv_ten_num_uniq")` (26 chars)
+  - `Index(fields=["tenant", "evaluation_status"], name="idx_qenv_ten_status")` (19 chars)
+  - `Index(fields=["tenant", "monitoring_category"], name="idx_qenv_ten_cat")` (16 chars)
+  - `Index(fields=["tenant", "cleanroom_class"], name="idx_qenv_ten_class")` (18 chars)
+  - `Index(fields=["tenant", "sampling_timestamp"], name="idx_qenv_ten_time")` (17 chars)
+  - `Index(fields=["tenant", "sampling_point_id"], name="idx_qenv_ten_pt")` (15 chars)
+  - `Index(fields=["tenant", "org_unit"], name="idx_qenv_ten_org")` (16 chars)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qenv_ten_created")` (20 chars)
+
+### 4. `WasteDisposalManifest` (`QWST-`)
+- [ ] **File**: `apps/quality/models/EhsManagement/WasteDisposalManifests.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QWST"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `manifest_title`: `CharField(max_length=255, help_text="Waste shipment title e.g. Q4 Solvent and Contaminated Debris Shipment")`
+  - `regulatory_manifest_id`: `CharField(max_length=100, db_index=True, help_text="Official tracking # e.g. EPA Form 8700-22 Manifest #")`
+  - `manifest_type`: `CharField(max_length=35, choices=MANIFEST_TYPE_CHOICES, default="hazardous_chemical", db_index=True)` — `"hazardous_chemical"` (18), `"universal_waste"` (15), `"biohazard_infectious"` (20), `"radioactive"` (11), `"non_hazardous_industrial"` (24), `"electronic_weee"` (15) (longest: 24 <= 35)
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"scheduled"` (9), `"in_transit"` (10), `"received_by_tsdf"` (16), `"certified_disposed"` (18), `"discrepancy_flagged"` (19) (longest: 19 <= 30)
+  - `generator_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="waste_manifests", help_text="Generator site / facility")`
+  - `generator_epa_id`: `CharField(max_length=50, blank=True, help_text="EPA Identification number of generator site")`
+  - `accumulation_start_date`: `DateField(db_index=True, help_text="Date hazardous waste accumulation commenced")`
+  - `waste_description`: `TextField(help_text="Proper DOT Shipping Name, Hazard Class, and Waste Description")`
+  - `epa_waste_codes`: `CharField(max_length=255, blank=True, help_text="Applicable EPA waste codes e.g. D001, F003, U002")`
+  - `associated_hazardous_material`: `ForeignKey("quality.HazardousMaterial", on_delete=models.SET_NULL, null=True, blank=True, related_name="waste_manifests", help_text="Linked originating chemical from inventory")`
+  - `physical_state`: `CharField(max_length=25, choices=PHYSICAL_STATE_CHOICES, default="liquid", db_index=True)` — `"liquid"` (6), `"solid"` (5), `"sludge"` (6), `"gas_cylinder"` (12) (longest: 12 <= 25)
+  - `is_ignitable`: `BooleanField(default=False, help_text="RCRA Characteristic D001 Ignitable (flash point < 60°C)")`
+  - `is_corrosive`: `BooleanField(default=False, help_text="RCRA Characteristic D002 Corrosive (pH <= 2 or >= 12.5)")`
+  - `is_reactive`: `BooleanField(default=False, help_text="RCRA Characteristic D003 Reactive")`
+  - `is_toxic`: `BooleanField(default=False, help_text="RCRA Characteristic D004-D043 Toxicity characteristic")`
+  - `container_type`: `CharField(max_length=25, choices=CONTAINER_TYPE_CHOICES, default="drum_55gal", db_index=True)` — `"drum_55gal"` (10), `"tote_ibc"` (8), `"cylinder"` (8), `"box_fiberboard"` (14), `"tank_bulk"` (9), `"roll_off"` (8) (longest: 14 <= 25)
+  - `container_count`: `PositiveIntegerField(default=1, help_text="Number of individual containers/drums")`
+  - `quantity_value`: `DecimalField(max_digits=12, decimal_places=2, help_text="Net weight or volume of waste")`
+  - `quantity_uom`: `CharField(max_length=20, choices=QUANTITY_UOM_CHOICES, default="pounds", db_index=True)` — `"pounds"` (6), `"kilograms"` (9), `"gallons"` (7), `"liters"` (6), `"tons"` (4) (longest: 9 <= 20)
+  - `transporter`: `ForeignKey("core.Party", on_delete=models.PROTECT, related_name="transported_waste_manifests", help_text="EPA licensed hazardous waste transporter (core.Party)")`
+  - `transporter_epa_id`: `CharField(max_length=50, blank=True, help_text="Transporter EPA ID number")`
+  - `tsdf_facility`: `ForeignKey("core.Party", on_delete=models.PROTECT, related_name="received_waste_manifests", help_text="Designated Treatment, Storage, & Disposal Facility (core.Party)")`
+  - `tsdf_epa_id`: `CharField(max_length=50, blank=True, help_text="Designated TSDF EPA ID number")`
+  - `shipment_date`: `DateField(null=True, blank=True, db_index=True, help_text="Date waste left generator facility")`
+  - `tsdf_receipt_date`: `DateField(null=True, blank=True, help_text="Date received and confirmed by TSDF facility")`
+  - `management_method_code`: `CharField(max_length=50, blank=True, help_text="Disposal method code e.g. H040 Incineration, H020 Solvent Recovery")`
+  - `certificate_of_disposal_number`: `CharField(max_length=100, blank=True, help_text="TSDF Certificate of Destruction / Disposal reference number")`
+  - `certificate_received_date`: `DateField(null=True, blank=True, help_text="Date final destruction certificate was received")`
+  - `discrepancy_details`: `TextField(blank=True, help_text="Documented TSDF receipt discrepancies in weight, container count, or type")`
+  - `certifying_officer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="certified_waste_manifests", help_text="Authorized Generator Representative signing manifest")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Badge CSS Dicts**:
+  - `STATUS_CSS`: `draft`: `badge-slate`, `scheduled`: `badge-info`, `in_transit`: `badge-amber`, `received_by_tsdf`: `badge-info`, `certified_disposed`: `badge-green`, `discrepancy_flagged`: `badge-red`
+  - `MANIFEST_TYPE_CSS`: `hazardous_chemical`: `badge-red`, `universal_waste`: `badge-amber`, `biohazard_infectious`: `badge-red`, `radioactive`: `badge-red`, `non_hazardous_industrial`: `badge-slate`, `electronic_weee`: `badge-info`
+- [ ] **Properties & Methods**:
+  - `accumulation_days`: Elapsed days from accumulation start to shipment or today.
+  - `is_accumulation_overdue`: True if accumulation days > 90 for active un-shipped waste.
+  - `status_css`: Badge CSS for manifest status.
+  - `manifest_type_css`: Badge CSS for manifest type.
+- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qwst_ten_num_uniq")` (26 chars)
+  - `Index(fields=["tenant", "status"], name="idx_qwst_ten_status")` (19 chars)
+  - `Index(fields=["tenant", "manifest_type"], name="idx_qwst_ten_type")` (17 chars)
+  - `Index(fields=["tenant", "shipment_date"], name="idx_qwst_ten_ship_dt")` (20 chars)
+  - `Index(fields=["tenant", "accumulation_start_date"], name="idx_qwst_ten_acc_dt")` (19 chars)
+  - `Index(fields=["tenant", "generator_org_unit"], name="idx_qwst_ten_gen_org")` (20 chars)
+  - `Index(fields=["tenant", "transporter"], name="idx_qwst_ten_transp")` (19 chars)
+  - `Index(fields=["tenant", "tsdf_facility"], name="idx_qwst_ten_tsdf")` (17 chars)
+  - `Index(fields=["tenant", "-created_at"], name="idx_qwst_ten_created")` (20 chars)
+
+---
+
+## Forms Layout (`apps/quality/forms/EhsManagement/`)
+
+- [ ] `HazardousMaterials.py`: `HazardousMaterialForm`
+  - `Meta.model = HazardousMaterial`
+  - `fields = ["material_name", "trade_name", "cas_number", "un_number", "chemical_formula", "physical_state", "ghs_signal_word", "ghs_pictograms", "hazard_statements", "precautionary_statements", "nfpa_health", "nfpa_flammability", "nfpa_instability", "nfpa_special_hazard", "sds_revision", "sds_issue_date", "sds_expiry_date", "sds_document", "osha_pel", "acgih_tlv", "exposure_uom", "ppe_requirements", "incompatible_materials", "spill_cleanup_procedure", "org_unit", "storage_location_code", "maximum_storage_quantity", "quantity_uom", "supplier", "status", "managed_by", "notes"]`
+  - Excluded: `tenant`, `number`, `created_at`, `updated_at`.
+  - Widgets: `sds_issue_date`: `DateInput(type='date')`, `sds_expiry_date`: `DateInput(type='date')`.
+  - Scoped querysets in `__init__`: `org_unit` (`OrgUnit.objects.filter(tenant=self.tenant)`), `sds_document` (`ControlledDocument.objects.filter(tenant=self.tenant)`), `supplier` (`Party.objects.filter(tenant=self.tenant)`), `managed_by` (`User.objects.filter(tenant=self.tenant)`).
+  - Tenant validation in `clean()` (L39).
+- [ ] `SafetyIncidents.py`: `SafetyIncidentForm`
+  - `Meta.model = SafetyIncident`
+  - `fields = ["title", "incident_date", "report_date", "incident_type", "severity", "status", "org_unit", "location_details", "reported_by", "affected_person", "affected_party_name", "affected_party_type", "nature_of_injury", "body_part_affected", "medical_treatment_level", "is_osha_recordable", "osha_classification", "lost_workdays_count", "restricted_workdays_count", "date_returned_to_work", "ppe_compliance_status", "ppe_notes", "immediate_actions_taken", "lead_investigator", "root_cause_category", "investigation_findings", "capa_investigation", "non_conformance_report", "notes"]`
+  - Excluded: `tenant`, `number`, `created_at`, `updated_at`.
+  - Widgets: `incident_date`: `DateTimeInput(type='datetime-local')`, `report_date`: `DateInput(type='date')`, `date_returned_to_work`: `DateInput(type='date')`.
+  - Scoped querysets in `__init__`: `org_unit` (`OrgUnit.objects.filter(tenant=self.tenant)`), `reported_by`, `affected_person`, & `lead_investigator` (`User.objects.filter(tenant=self.tenant)`), `capa_investigation` (`CapaInvestigation.objects.filter(tenant=self.tenant)`), `non_conformance_report` (`NonConformanceReport.objects.filter(tenant=self.tenant)`).
+  - Tenant validation in `clean()` (L39).
+- [ ] `EnvironmentalMonitoringLogs.py`: `EnvironmentalMonitoringLogForm`
+  - `Meta.model = EnvironmentalMonitoringLog`
+  - `fields = ["sampling_point_id", "sampling_timestamp", "org_unit", "cleanroom_class", "operational_state", "monitoring_category", "parameter_name", "measured_value", "unit_of_measure", "target_nominal_value", "lower_alert_limit", "upper_alert_limit", "lower_action_limit", "upper_action_limit", "excursion_details", "immediate_containment_action", "sampled_by", "verified_by", "measurement_instrument", "process_deviation", "non_conformance_report", "capa_investigation", "notes"]`
+  - Excluded: `tenant`, `number`, `evaluation_status` (computed automatically in clean/save), `created_at`, `updated_at`.
+  - Widgets: `sampling_timestamp`: `DateTimeInput(type='datetime-local')`.
+  - Scoped querysets in `__init__`: `org_unit` (`OrgUnit.objects.filter(tenant=self.tenant)`), `sampled_by` & `verified_by` (`User.objects.filter(tenant=self.tenant)`), `measurement_instrument` (`CalibrationGage.objects.filter(tenant=self.tenant)`), `process_deviation` (`ProcessDeviation.objects.filter(tenant=self.tenant)`), `non_conformance_report` (`NonConformanceReport.objects.filter(tenant=self.tenant)`), `capa_investigation` (`CapaInvestigation.objects.filter(tenant=self.tenant)`).
+  - Tenant validation in `clean()` (L39).
+- [ ] `WasteDisposalManifests.py`: `WasteDisposalManifestForm`
+  - `Meta.model = WasteDisposalManifest`
+  - `fields = ["manifest_title", "regulatory_manifest_id", "manifest_type", "status", "generator_org_unit", "generator_epa_id", "accumulation_start_date", "waste_description", "epa_waste_codes", "associated_hazardous_material", "physical_state", "is_ignitable", "is_corrosive", "is_reactive", "is_toxic", "container_type", "container_count", "quantity_value", "quantity_uom", "transporter", "transporter_epa_id", "tsdf_facility", "tsdf_epa_id", "shipment_date", "tsdf_receipt_date", "management_method_code", "certificate_of_disposal_number", "certificate_received_date", "discrepancy_details", "certifying_officer", "notes"]`
+  - Excluded: `tenant`, `number`, `created_at`, `updated_at`.
+  - Widgets: `accumulation_start_date`: `DateInput(type='date')`, `shipment_date`: `DateInput(type='date')`, `tsdf_receipt_date`: `DateInput(type='date')`, `certificate_received_date`: `DateInput(type='date')`.
+  - Scoped querysets in `__init__`: `generator_org_unit` (`OrgUnit.objects.filter(tenant=self.tenant)`), `associated_hazardous_material` (`HazardousMaterial.objects.filter(tenant=self.tenant)`), `transporter` & `tsdf_facility` (`Party.objects.filter(tenant=self.tenant)`), `certifying_officer` (`User.objects.filter(tenant=self.tenant)`).
+  - Tenant validation in `clean()` (L39).
+
+---
+
+## Views & URLs Layout (`apps/quality/{views,urls}/EhsManagement/`)
+
+1. **`HazardousMaterials` (`quality:hazardous_material_*`)**:
+   - `hazardous_material_list`: `GET /quality/hazardous-materials/` (with filters: status, physical_state, ghs_signal_word, org_unit, supplier, search)
+   - `hazardous_material_create`: `GET/POST /quality/hazardous-materials/create/`
+   - `hazardous_material_detail`: `GET /quality/hazardous-materials/<int:pk>/` (SDS metadata, GHS pictograms, NFPA diamond, exposure limits, storage specs, PPE rules, linked waste manifests)
+   - `hazardous_material_update`: `GET/POST /quality/hazardous-materials/<int:pk>/edit/`
+   - `hazardous_material_delete`: `POST /quality/hazardous-materials/<int:pk>/delete/`
+   - `hazardous_material_export`: `GET /quality/hazardous-materials/export/` (CSV export)
+   - `hazardous_material_label`: `GET /quality/hazardous-materials/<int:pk>/label/` (GHS secondary container printable label view)
+2. **`SafetyIncidents` (`quality:safety_incident_*`)**:
+   - `safety_incident_list`: `GET /quality/safety-incidents/` (with filters: status, incident_type, severity, osha_recordable, org_unit, search)
+   - `safety_incident_create`: `GET/POST /quality/safety-incidents/create/`
+   - `safety_incident_detail`: `GET /quality/safety-incidents/<int:pk>/` (incident timeline, OSHA 300 classification, DART days, injury details, PPE compliance, root cause findings, linked CAPA/NCR)
+   - `safety_incident_update`: `GET/POST /quality/safety-incidents/<int:pk>/edit/`
+   - `safety_incident_delete`: `POST /quality/safety-incidents/<int:pk>/delete/`
+   - `safety_incident_export`: `GET /quality/safety-incidents/export/` (CSV export)
+   - `safety_incident_investigate`: `POST /quality/safety-incidents/<int:pk>/investigate/` (record findings and transition to under_review/closed)
+3. **`EnvironmentalMonitoringLogs` (`quality:environmental_monitoring_log_*`)**:
+   - `environmental_monitoring_log_list`: `GET /quality/environmental-logs/` (with filters: evaluation_status, cleanroom_class, monitoring_category, org_unit, search)
+   - `environmental_monitoring_log_create`: `GET/POST /quality/environmental-logs/create/`
+   - `environmental_monitoring_log_detail`: `GET /quality/environmental-logs/<int:pk>/` (cleanroom classification, target limits, measured values, excursion evaluation status, calibrated gage link, deviation/NCR links)
+   - `environmental_monitoring_log_update`: `GET/POST /quality/environmental-logs/<int:pk>/edit/`
+   - `environmental_monitoring_log_delete`: `POST /quality/environmental-logs/<int:pk>/delete/`
+   - `environmental_monitoring_log_export`: `GET /quality/environmental-logs/export/` (CSV export)
+   - `environmental_monitoring_log_evaluate`: `POST /quality/environmental-logs/<int:pk>/evaluate/` (trigger limit re-check and excursion tagging)
+4. **`WasteDisposalManifests` (`quality:waste_disposal_manifest_*`)**:
+   - `waste_disposal_manifest_list`: `GET /quality/waste-manifests/` (with filters: status, manifest_type, transporter, tsdf_facility, generator_org_unit, search)
+   - `waste_disposal_manifest_create`: `GET/POST /quality/waste-manifests/create/`
+   - `waste_disposal_manifest_detail`: `GET /quality/waste-manifests/<int:pk>/` (Uniform manifest details, EPA waste codes, generator accumulation duration, transporter & TSDF custody, destruction certificate verification)
+   - `waste_disposal_manifest_update`: `GET/POST /quality/waste-manifests/<int:pk>/edit/`
+   - `waste_disposal_manifest_delete`: `POST /quality/waste-manifests/<int:pk>/delete/`
+   - `waste_disposal_manifest_export`: `GET /quality/waste-manifests/export/` (CSV export)
+   - `waste_disposal_manifest_certify`: `POST /quality/waste-manifests/<int:pk>/certify/` (record TSDF receipt and certificate of destruction)
+5. **`EhsDashboard` (`quality:ehs_dashboard*`)**:
+   - `ehs_dashboard`: `GET /quality/ehs-dashboard/` (Executive EHS Command Center: OSHA 300A injury metrics, DART rate tracker, Cleanroom excursion radar, Hazardous chemicals inventory summary, Expiring SDS alerts, Overdue waste accumulation warnings, Incidents by Severity breakdown, Environmental readings chart)
+   - `ehs_dashboard_export`: `GET /quality/ehs-dashboard/export/` (CSV export)
+
+### Re-exports and Registrations
+- [ ] Surgical edit to `apps/quality/models/__init__.py`: re-export `HazardousMaterial`, `SafetyIncident`, `EnvironmentalMonitoringLog`, `WasteDisposalManifest`, and append to `__all__`.
+- [ ] Surgical edit to `apps/quality/forms/__init__.py`: re-export `HazardousMaterialForm`, `SafetyIncidentForm`, `EnvironmentalMonitoringLogForm`, `WasteDisposalManifestForm`, and append to `__all__`.
+- [ ] Surgical edit to `apps/quality/views/__init__.py`: re-export all view functions.
+- [ ] Surgical edit to `apps/quality/urls/__init__.py`: include `EhsManagement` urlpatterns.
+- [ ] Surgical edit to `apps/quality/admin.py`: register all 4 models with search fields, list display, filters, and readonly system fields.
+- [ ] Surgical edit to `apps/quality/management/commands/seed_quality.py`: implement `_seed_submodule_12_16` generating demo hazardous materials, safety incidents, cleanroom monitoring logs, and waste disposal manifests with full idempotency (`get_or_create`).
+- [ ] Wire-up in `apps/core/navigation.py`:
+  ```python
+  "12.16": {
+      "Hazardous Material Management": "quality:hazardous_material_list",
+      "Workplace Safety Inspections": "quality:safety_incident_list",
+      "Environmental Monitoring": "quality:environmental_monitoring_log_list",
+      "Waste Management & Disposal": "quality:waste_disposal_manifest_list",
+      "Occupational Health & Ergonomics": "quality:ehs_dashboard",
+  },
+  ```
+
+---
+
+## Templates Layout (`templates/quality/ehsmanagement/`)
+
+- [ ] `hazardous_material/list.html`: Hazardous materials register, chemical name, CAS #, physical state badge, GHS signal word badge, SDS expiry badge, storage location, filter bar, CSV export.
+- [ ] `hazardous_material/detail.html`: Chemical dossier with NFPA 704 fire diamond widget, GHS hazard pictograms, exposure limit standards (OSHA PEL, ACGIH TLV), PPE requirements, spill response procedures, linked waste manifests, printable secondary GHS container label action.
+- [ ] `hazardous_material/form.html`: Chemical entry/edit form with CAS/UN inputs, physical state selector, GHS signal word & pictogram checklist, NFPA 0-4 inputs, SDS dates & controlled document picker, storage quantity and location fields, supplier selector.
+- [ ] `safety_incident/list.html`: Safety incidents and near-misses register, incident number, title, date, incident type badge, severity badge, OSHA recordable indicator, status badge, filter bar, CSV export.
+- [ ] `safety_incident/detail.html`: Incident investigation dossier, event timeline, affected employee details, injury classification (nature and body part), medical treatment level, OSHA Form 301 metrics, lost & restricted workday counters, PPE compliance findings, root cause categorization, linked CAPA & NCR cards, investigation completion modal.
+- [ ] `safety_incident/form.html`: Incident first-report/edit form with incident date/time picker, type & severity dropdowns, affected party selectors, injury taxonomy dropdowns, OSHA recordability toggle and classification, lost workdays inputs, PPE notes, immediate containment narrative.
+- [ ] `environmental_monitoring_log/list.html`: Cleanroom environmental logs register, log number, sampling point ID, timestamp, cleanroom class, category badge, measured value with UOM, evaluation status badge (`normal`, `alert_exceeded`, `action_exceeded`), filter bar, CSV export.
+- [ ] `environmental_monitoring_log/detail.html`: Environmental sample dossier, cleanroom classification card, operational state, target and alert/action limit band visualizer, excursion status banner, calibrated measuring gage link, immediate containment narrative, linked ProcessDeviation & NCR cards.
+- [ ] `environmental_monitoring_log/form.html`: Environmental log entry form with sampling point ID, cleanroom class selector, monitoring category dropdown, measured value input, UOM dropdown, nominal target & alert/action limit inputs, technician selector, calibrated gage picker.
+- [ ] `waste_disposal_manifest/list.html`: Hazardous waste disposal manifests register, manifest number, regulatory tracking ID, manifest type badge, generator site, accumulation start date, accumulation aging badge, status badge, filter bar, CSV export.
+- [ ] `waste_disposal_manifest/detail.html`: Cradle-to-grave waste manifest dossier, EPA waste codes, RCRA characteristics (ignitable, corrosive, reactive, toxic), container type and net weight, transporter EPA ID & shipment date, TSDF facility EPA ID & receipt confirmation, Certificate of Destruction card, discrepancy notes.
+- [ ] `waste_disposal_manifest/form.html`: Manifest authoring form with EPA tracking #, manifest type selector, accumulation start date, waste description, EPA codes, RCRA characteristic checkboxes, container count & quantity inputs, transporter & TSDF party selectors, certifying officer assignment.
+- [ ] `ehs_dashboard.html`: Command center for Environmental, Health & Safety:
+  - Top KPI stat cards: Active Hazardous Materials, Expiring SDS Count, Active Safety Incidents, OSHA Recordable Cases, DART Rate, Cleanroom Excursions Count, Pending Waste Manifests, Overdue Accumulation Warnings (>90 days).
+  - Safety Incident Trending & Severity Breakdown charts/bars.
+  - Cleanroom Monitoring Excursion Radar & Parameter Compliance matrix.
+  - Hazardous Waste Stream Distribution by Manifest Type.
+  - High-Priority Action Table: Open Incidents Awaiting RCA, Excursions Needing Containment, SDS Approaching Expiry.
+
+---
+
+## Execution Checklist (Steps 1 through 9)
+
+- [ ] **Step 1: Pre-build Contract** -> Freeze `.claude/tasks/contract-quality-12.16.md` (all model fields, choices, form fields, view context vars, and URL patterns pinned).
+- [ ] **Step 2: Build Entity by Entity** (4 backend files + 3 templates per entity, strictly one by one):
+  - [ ] Entity 1: `HazardousMaterial`
+    - [ ] `apps/quality/models/EhsManagement/HazardousMaterials.py`
+    - [ ] `apps/quality/forms/EhsManagement/HazardousMaterials.py`
+    - [ ] `apps/quality/views/EhsManagement/HazardousMaterials.py`
+    - [ ] `apps/quality/urls/EhsManagement/HazardousMaterials.py`
+    - [ ] `templates/quality/ehsmanagement/hazardous_material/list.html`
+    - [ ] `templates/quality/ehsmanagement/hazardous_material/detail.html`
+    - [ ] `templates/quality/ehsmanagement/hazardous_material/form.html`
+  - [ ] Entity 2: `SafetyIncident`
+    - [ ] `apps/quality/models/EhsManagement/SafetyIncidents.py`
+    - [ ] `apps/quality/forms/EhsManagement/SafetyIncidents.py`
+    - [ ] `apps/quality/views/EhsManagement/SafetyIncidents.py`
+    - [ ] `apps/quality/urls/EhsManagement/SafetyIncidents.py`
+    - [ ] `templates/quality/ehsmanagement/safety_incident/list.html`
+    - [ ] `templates/quality/ehsmanagement/safety_incident/detail.html`
+    - [ ] `templates/quality/ehsmanagement/safety_incident/form.html`
+  - [ ] Entity 3: `EnvironmentalMonitoringLog`
+    - [ ] `apps/quality/models/EhsManagement/EnvironmentalMonitoringLogs.py`
+    - [ ] `apps/quality/forms/EhsManagement/EnvironmentalMonitoringLogs.py`
+    - [ ] `apps/quality/views/EhsManagement/EnvironmentalMonitoringLogs.py`
+    - [ ] `apps/quality/urls/EhsManagement/EnvironmentalMonitoringLogs.py`
+    - [ ] `templates/quality/ehsmanagement/environmental_monitoring_log/list.html`
+    - [ ] `templates/quality/ehsmanagement/environmental_monitoring_log/detail.html`
+    - [ ] `templates/quality/ehsmanagement/environmental_monitoring_log/form.html`
+  - [ ] Entity 4: `WasteDisposalManifest`
+    - [ ] `apps/quality/models/EhsManagement/WasteDisposalManifests.py`
+    - [ ] `apps/quality/forms/EhsManagement/WasteDisposalManifests.py`
+    - [ ] `apps/quality/views/EhsManagement/WasteDisposalManifests.py`
+    - [ ] `apps/quality/urls/EhsManagement/WasteDisposalManifests.py`
+    - [ ] `templates/quality/ehsmanagement/waste_disposal_manifest/list.html`
+    - [ ] `templates/quality/ehsmanagement/waste_disposal_manifest/detail.html`
+    - [ ] `templates/quality/ehsmanagement/waste_disposal_manifest/form.html`
+  - [ ] Dedicated Dashboard: `EhsDashboard`
+    - [ ] `apps/quality/views/EhsManagement/EhsDashboard.py`
+    - [ ] `apps/quality/urls/EhsManagement/EhsDashboard.py`
+    - [ ] `templates/quality/ehsmanagement/ehs_dashboard.html`
+- [ ] **Step 3: Single-Writer Integrate & Migrations**
+  - [ ] Re-export models in `apps/quality/models/__init__.py`
+  - [ ] Re-export forms in `apps/quality/forms/__init__.py`
+  - [ ] Re-export views in `apps/quality/views/__init__.py`
+  - [ ] Re-export & include urls in `apps/quality/urls/__init__.py`
+  - [ ] Register 4 models in `apps/quality/admin.py`
+  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_16`)
+  - [ ] Wire `LIVE_LINKS["12.16"]` in `apps/core/navigation.py`
+  - [ ] Run `makemigrations quality` -> incremental migration `0027_...`
+  - [ ] Run `migrate quality`
+  - [ ] Run `seed_quality` twice (verify idempotency)
+  - [ ] Run `manage.py check` (0 issues)
+- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.16.md`
+- [ ] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
+- [ ] **Step 7: Automated Tests** -> `test_ehsmanagement_models.py`, `test_ehsmanagement_forms.py`, `test_ehsmanagement_views.py`, `test_ehsmanagement_security.py` -> 100% green
+- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.16.md`
+
+---
+
+## Later passes / deferred
+
+1. **Standalone AI Ergonomic Video / Posture Motion Scoring Engine** — Computer vision analysis calculating RULA/REBA ergonomic angles from video footage. (`GAP-quality-12.16-01`)
+2. **Automated EPA e-Manifest XML / REST API EDI Gateway** — Direct electronic transmission to the US EPA RCRAInfo e-Manifest national database system via EPA CDX/REST APIs. (`GAP-quality-12.16-02`)
+3. **Live SCADA / IoT Particle Counter & Telemetry Feed** — Continuous real-time MQTT/OPC-UA streaming from fixed cleanroom particle counters directly into `EnvironmentalMonitoringLog`. (`GAP-quality-12.16-03`)
+4. **Standalone Occupational Medical Surveillance Clinical Registry** — Dedicated audiogram decibel curve tracking, spirometry lung volume curves, and HIPAA/GDPR clinical medical records. (`GAP-quality-12.16-04`)
+
+---
+
+## Review notes — Sub-module 12.16 Close-out (YYYY-MM-DD)
+(filled in at the end)
