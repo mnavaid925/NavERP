@@ -171,7 +171,7 @@ def regulatory_submission_delete(request, pk):
 def regulatory_submission_export(request):
     qs = (
         quality_scope(RegulatorySubmission.objects.all(), request)
-        .select_related("target_authority", "org_unit", "lead_author")
+        .select_related("target_authority", "lead_author")
         .defer("technical_sections_summary", "notes")
     )
 
