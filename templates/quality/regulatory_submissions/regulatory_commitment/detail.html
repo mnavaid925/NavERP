@@ -165,7 +165,9 @@
                         <dt>Source Regulatory Inspection (FDA 483 / Notified Body)</dt>
                         <dd>
                             {% if regulatory_commitment.linked_inspection %}
-                            <span class="font-mono text-sm">{{ regulatory_commitment.linked_inspection.number }} — {{ regulatory_commitment.linked_inspection.inspection_title }}</span>
+                            <a href="{% url 'quality:regulatory_inspection_host_detail' regulatory_commitment.linked_inspection.pk %}" class="font-mono text-sm text-primary hover:underline">
+                                {{ regulatory_commitment.linked_inspection.number }} — {{ regulatory_commitment.linked_inspection.inspection_title }}
+                            </a>
                             {% else %}
                             <span class="text-slate-400">Not linked to an inspection</span>
                             {% endif %}
