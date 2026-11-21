@@ -102,6 +102,7 @@ class RegulatoryCommitment(TenantNumbered):
         ]
         indexes = [
             Index(fields=["tenant", "status"], name="idx_qcom_ten_status"),
+            Index(fields=["tenant", "status", "due_date"], name="idx_qcom_ten_stat_due"),
             Index(fields=["tenant", "due_date"], name="idx_qcom_ten_due"),
             Index(fields=["tenant", "commitment_type"], name="idx_qcom_ten_type"),
         ]
