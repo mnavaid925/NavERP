@@ -39,10 +39,10 @@ class ProductRegistration(TenantNumbered):
 
     registration_title = models.CharField(max_length=255)
     registration_type = models.CharField(
-        max_length=30, choices=REGISTRATION_TYPE_CHOICES, default="product_license", db_index=True
+        max_length=30, choices=REGISTRATION_TYPE_CHOICES, default="product_license"
     )
     jurisdiction_country = models.CharField(
-        max_length=100, db_index=True, help_text="Target Country / Economic Region e.g. USA, European Union, Canada, Japan"
+        max_length=100, help_text="Target Country / Economic Region e.g. USA, European Union, Canada, Japan"
     )
     regulatory_authority = models.ForeignKey(
         "core.Party",
@@ -67,11 +67,11 @@ class ProductRegistration(TenantNumbered):
         max_length=100, blank=True, help_text="FEI, SRN, or National Establishment Identifier"
     )
     status = models.CharField(
-        max_length=25, choices=STATUS_CHOICES, default="in_application", db_index=True
+        max_length=25, choices=STATUS_CHOICES, default="in_application"
     )
     initial_approval_date = models.DateField(null=True, blank=True)
     effective_date = models.DateField(null=True, blank=True)
-    expiration_date = models.DateField(null=True, blank=True, db_index=True)
+    expiration_date = models.DateField(null=True, blank=True)
     renewal_due_date = models.DateField(null=True, blank=True, db_index=True)
     renewal_lead_days = models.PositiveIntegerField(default=90)
     regulatory_lead = models.ForeignKey(
@@ -99,6 +99,7 @@ class ProductRegistration(TenantNumbered):
         ]
         indexes = [
             Index(fields=["tenant", "status"], name="idx_qreg_ten_status"),
+            Index(fields=["tenant", "registration_type"], name="idx_qreg_ten_type"),
             Index(fields=["tenant", "jurisdiction_country"], name="idx_qreg_ten_juris"),
             Index(fields=["tenant", "expiration_date"], name="idx_qreg_ten_exp"),
         ]
