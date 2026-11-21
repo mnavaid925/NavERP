@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 10 | 4 | 0 |
-| **Total** | 25 | 10 | 15 | 0 |
+| **Minor** | 14 | 9 | 5 | 0 |
+| **Total** | 25 | 9 | 16 | 0 |
 
 ---
 
@@ -152,7 +152,7 @@
   - **Issue**: Mass export of regulatory records lacks an audit trail entry.
   - **Fix**: Call `write_audit_log` with action `"export"`.
 
-- [ ] **M5: Missing Pre-Population Parameter `?inspection=` on Commitment Creation**
+- [x] **M5: Missing Pre-Population Parameter `?inspection=` on Commitment Creation**
   - **File**: `apps/quality/views/RegulatorySubmissions/RegulatoryCommitments.py:112-126`
   - **Issue**: Does not handle `?inspection=` GET parameter to pre-populate `linked_inspection`.
   - **Fix**: Inspect `request.GET.get("inspection")` and pre-populate `linked_inspection` and `regulatory_agency`.
