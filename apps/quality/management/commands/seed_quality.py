@@ -163,6 +163,18 @@ from apps.quality.models.DataIntegrity.AuditTrailReviews import (
 from apps.quality.models.DataIntegrity.SystemChangeControls import (
     SystemChangeControl,
 )
+from apps.quality.models.LimsManagement.LabSamples import (
+    LabSample,
+)
+from apps.quality.models.LimsManagement.LabSpecifications import (
+    LabSpecification,
+)
+from apps.quality.models.LimsManagement.LabTestWorksheets import (
+    LabTestWorksheet,
+)
+from apps.quality.models.LimsManagement.OosInvestigations import (
+    OosInvestigation,
+)
 
 
 User = get_user_model()
@@ -181,6 +193,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            OosInvestigation.objects.all().delete()
+            LabTestWorksheet.objects.all().delete()
+            LabSample.objects.all().delete()
+            LabSpecification.objects.all().delete()
             SystemChangeControl.objects.all().delete()
             AuditTrailReview.objects.all().delete()
             DataIntegrityAssessment.objects.all().delete()
@@ -285,6 +301,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_16(tenant)
             self._seed_submodule_12_17(tenant)
             self._seed_submodule_12_18(tenant)
+            self._seed_submodule_12_19(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -6260,6 +6277,411 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.20 Data Integrity & Electronic Records seeded successfully."))
+
+    def _seed_submodule_12_19(self, tenant):
+        if LabSample.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.19 LIMS data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.19 Laboratory Information Management (LIMS)...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not admin_user:
+            self.stdout.write(f"[{tenant.name}] Warning: No user found for tenant.")
+            return
+
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
+        analyst_user = users[1] if len(users) > 1 else admin_user
+        supervisor_user = users[2] if len(users) > 2 else admin_user
+
+        org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        sop_doc = ControlledDocument.objects.filter(tenant=tenant).first()
+        batch_rec = BatchRecord.objects.filter(tenant=tenant).first()
+        gage_instrument = CalibrationGage.objects.filter(tenant=tenant).first()
+        capa_item = CapaInvestigation.objects.filter(tenant=tenant).first()
+        ncr_item = NonConformanceReport.objects.filter(tenant=tenant).first()
+
+        today = timezone.now().date()
+        now = timezone.now()
+
+        with transaction.atomic():
+            # 1. Specifications
+            spec1 = LabSpecification.objects.create(
+                tenant=tenant,
+                title="Active Pharmaceutical Ingredient (API) Assay Purity & Chromatographic Profile",
+                specification_type="raw_material",
+                status="approved",
+                version="2.0",
+                product_code="API-001",
+                product_name="Sterile Hydrocortisone Sodium Succinate API",
+                analytical_method_number="AM-QC-304 / USP <621>",
+                test_category="chromatographic",
+                sop_document=sop_doc,
+                target_parameter_name="Assay Purity",
+                parameter_unit="%",
+                lower_limit=Decimal("98.5000"),
+                upper_limit=Decimal("101.5000"),
+                target_value=Decimal("100.0000"),
+                text_acceptance_criteria="Single clear peak matching retention time of reference standard +/- 2.0%. No individual impurity > 0.10%.",
+                method_validation_reference="VAL-METH-HPLC-2024-08",
+                method_validation_date=today - datetime.timedelta(days=365),
+                effective_date=today - datetime.timedelta(days=90),
+                review_due_date=today + datetime.timedelta(days=275),
+                approved_by=admin_user,
+                notes="Validated isocratic reverse phase HPLC method on C18 column.",
+            )
+
+            spec2 = LabSpecification.objects.create(
+                tenant=tenant,
+                title="ApexVent V500 Critical Care Ventilator In-Process Pressure Transducer Linearity",
+                specification_type="in_process",
+                status="approved",
+                version="1.1",
+                product_code="CBK",
+                product_name="ApexVent V500 Pressure Flow Transducer",
+                analytical_method_number="AM-QC-512 / ISO 80601-2-12",
+                test_category="physical",
+                sop_document=sop_doc,
+                target_parameter_name="Differential Pressure Linearity",
+                parameter_unit="mbar",
+                lower_limit=Decimal("0.9500"),
+                upper_limit=Decimal("1.0500"),
+                target_value=Decimal("1.0000"),
+                text_acceptance_criteria="Linear sensor response across 0 to 100 mbar span. Correlation coefficient R^2 >= 0.9990.",
+                method_validation_reference="VAL-METH-SENS-2025-01",
+                method_validation_date=today - datetime.timedelta(days=200),
+                effective_date=today - datetime.timedelta(days=120),
+                review_due_date=today + datetime.timedelta(days=245),
+                approved_by=admin_user,
+                notes="Dual-channel pressure calibrator rig verification.",
+            )
+
+            spec3 = LabSpecification.objects.create(
+                tenant=tenant,
+                title="WFI Loop Point-of-Use Total Bacterial Endotoxin Bioburden Specification",
+                specification_type="environmental",
+                status="approved",
+                version="3.0",
+                product_code="WFI-LOOP-01",
+                product_name="Water for Injection Loop Sub-Loop A",
+                analytical_method_number="AM-MICRO-085 / USP <85>",
+                test_category="microbiological",
+                sop_document=sop_doc,
+                target_parameter_name="Bacterial Endotoxin",
+                parameter_unit="EU/mL",
+                lower_limit=None,
+                upper_limit=Decimal("0.2500"),
+                target_value=Decimal("0.0100"),
+                text_acceptance_criteria="Endotoxin content < 0.25 EU/mL. Total viable microbial aerobic count < 10 CFU/100 mL.",
+                method_validation_reference="VAL-WFI-MICRO-2023-11",
+                method_validation_date=today - datetime.timedelta(days=400),
+                effective_date=today - datetime.timedelta(days=180),
+                review_due_date=today + datetime.timedelta(days=185),
+                approved_by=admin_user,
+                notes="Kinetic turbidimetric LAL assay tested in 96-well microplate.",
+            )
+
+            spec4 = LabSpecification.objects.create(
+                tenant=tenant,
+                title="Finished Product Dissolution Rate - Tablet Core Batch Release",
+                specification_type="finished_product",
+                status="approved",
+                version="1.0",
+                product_code="FPR-TAB-50",
+                product_name="Hydrocortisone 50mg Extended Release Tablets",
+                analytical_method_number="AM-QC-112 / USP <711> Apparatus 2",
+                test_category="chemical",
+                sop_document=sop_doc,
+                target_parameter_name="Dissolution (Q at 45 min)",
+                parameter_unit="%",
+                lower_limit=Decimal("80.0000"),
+                upper_limit=None,
+                target_value=Decimal("95.0000"),
+                text_acceptance_criteria="Not less than 80% (Q) of labeled active drug dissolved in 45 minutes in 900 mL 0.1 N HCl.",
+                method_validation_reference="VAL-DISS-2024-03",
+                method_validation_date=today - datetime.timedelta(days=250),
+                effective_date=today - datetime.timedelta(days=60),
+                review_due_date=today + datetime.timedelta(days=300),
+                approved_by=admin_user,
+                notes="USP Apparatus 2 paddle method at 50 RPM, 37.0 +/- 0.5°C.",
+            )
+
+            # 2. Lab Samples
+            smp1 = LabSample.objects.create(
+                tenant=tenant,
+                sample_name="Raw Material Inbound Lot - API Hydrocortisone Sterility & Purity",
+                sample_type="raw_material",
+                status="in_testing",
+                matrix_description="Crystalline White Fine Powder",
+                source_batch_number="BATCH-2026-API-099",
+                item_code="API-001",
+                item_name="Sterile Hydrocortisone Sodium Succinate API",
+                sampling_point="Raw Material Quarantine Bay 3",
+                sampled_by=admin_user,
+                sampled_at=now - datetime.timedelta(days=3),
+                received_by=analyst_user,
+                received_at=now - datetime.timedelta(days=2),
+                current_custodian=analyst_user,
+                storage_location="Cold Room 02, Shelf 4B",
+                storage_condition="refrigerated_2_8c",
+                quantity_collected=Decimal("250.0000"),
+                unit_of_measure="g",
+                retest_date=today + datetime.timedelta(days=365),
+                expiry_date=today + datetime.timedelta(days=730),
+                barcode_identifier="BC-QSMP-2026-0001",
+                chain_of_custody_log=f"[{now.strftime('%Y-%m-%d %H:%M')}] Logged by {admin_user.username}; [{now.strftime('%Y-%m-%d %H:%M')}] Handed over to {analyst_user.username} in QC Lab.",
+                batch_record=batch_rec,
+                facility=org_unit,
+                notes="Primary sample pulled in sterile laminar flow isolation booth.",
+            )
+
+            smp2 = LabSample.objects.create(
+                tenant=tenant,
+                sample_name="In-Process Sensor Calibration Sub-Assembly Verification",
+                sample_type="in_process",
+                status="approved",
+                matrix_description="Solid State Electronic Transducer Module",
+                source_batch_number="BATCH-2026-V500-01",
+                item_code="CBK",
+                item_name="ApexVent V500 Pressure Flow Transducer",
+                sampling_point="Cleanroom Sub-Assembly Line 2 Station 4",
+                sampled_by=supervisor_user,
+                sampled_at=now - datetime.timedelta(days=10),
+                received_by=analyst_user,
+                received_at=now - datetime.timedelta(days=9),
+                current_custodian=admin_user,
+                storage_location="Quality Lab Desiccator Cabinet 1",
+                storage_condition="desiccated",
+                quantity_collected=Decimal("5.0000"),
+                unit_of_measure="ea",
+                retest_date=today + datetime.timedelta(days=180),
+                expiry_date=today + datetime.timedelta(days=700),
+                barcode_identifier="BC-QSMP-2026-0002",
+                chain_of_custody_log=f"[{now.strftime('%Y-%m-%d %H:%M')}] Transferred from cleanroom production to analytical physical test lab.",
+                batch_record=batch_rec,
+                facility=org_unit,
+                notes="Random pull from ventilator assembly batch for linearity verification.",
+            )
+
+            smp3 = LabSample.objects.create(
+                tenant=tenant,
+                sample_name="Environmental Monitoring Cleanroom Suite 1 Point-of-Use Surface Swab",
+                sample_type="environmental",
+                status="testing_completed",
+                matrix_description="Agar Contact Surface Plate Swab",
+                source_batch_number="ENV-2026-W42",
+                item_code="ENV-SWAB-01",
+                item_name="Surface Contact Plate Grade A Laminar Flow Hood",
+                sampling_point="Laminar Flow Hood LF-02 Work Surface",
+                sampled_by=admin_user,
+                sampled_at=now - datetime.timedelta(days=1),
+                received_by=analyst_user,
+                received_at=now - datetime.timedelta(days=1),
+                current_custodian=analyst_user,
+                storage_location="Microbiology Incubator 32.5C",
+                storage_condition="ambient",
+                quantity_collected=Decimal("1.0000"),
+                unit_of_measure="plate",
+                retest_date=None,
+                expiry_date=today + datetime.timedelta(days=7),
+                barcode_identifier="BC-QSMP-2026-0003",
+                chain_of_custody_log=f"[{now.strftime('%Y-%m-%d %H:%M')}] Sampled post-sanitization cycle and placed into micro incubator.",
+                batch_record=None,
+                facility=org_unit,
+                notes="Routine bi-weekly microbiological surface monitoring.",
+            )
+
+            smp4 = LabSample.objects.create(
+                tenant=tenant,
+                sample_name="Finished Product Release Assay Sample - Lot BATCH-2026-OOS-401",
+                sample_type="finished_product",
+                status="rejected",
+                matrix_description="White Round Biconvex Compressed Tablets",
+                source_batch_number="BATCH-2026-OOS-401",
+                item_code="FPR-TAB-50",
+                item_name="Hydrocortisone 50mg Extended Release Tablets",
+                sampling_point="Packaging Line Blister Sealer Station",
+                sampled_by=supervisor_user,
+                sampled_at=now - datetime.timedelta(days=15),
+                received_by=analyst_user,
+                received_at=now - datetime.timedelta(days=14),
+                current_custodian=admin_user,
+                storage_location="OOS Quarantine Cabinet B-04",
+                storage_condition="ambient",
+                quantity_collected=Decimal("60.0000"),
+                unit_of_measure="tab",
+                retest_date=today + datetime.timedelta(days=90),
+                expiry_date=today + datetime.timedelta(days=730),
+                barcode_identifier="BC-QSMP-2026-0004",
+                chain_of_custody_log=f"[{now.strftime('%Y-%m-%d %H:%M')}] Moved to OOS secure quarantine cabinet after confirmed dissolution failure.",
+                batch_record=batch_rec,
+                facility=org_unit,
+                notes="Commercial batch release testing samples.",
+            )
+
+            # 3. Test Worksheets
+            wks1 = LabTestWorksheet.objects.create(
+                tenant=tenant,
+                title="HPLC Assay Purity Test on Raw Material API Lot 099",
+                sample=smp1,
+                specification=spec1,
+                status="in_progress",
+                disposition="pending",
+                assigned_analyst=analyst_user,
+                reviewer=admin_user,
+                scheduled_date=today - datetime.timedelta(days=1),
+                execution_date=today,
+                instrument=gage_instrument,
+                instrument_name="Agilent 1260 Infinity II HPLC System",
+                reagent_lot_number="MEOH-HPLC-GRD-2026-04",
+                reagent_expiry_date=today + datetime.timedelta(days=180),
+                standards_lot_number="USP-RS-HYD-9988",
+                standards_expiry_date=today + datetime.timedelta(days=120),
+                raw_data_summary="Replicate 1: 99.82%, Replicate 2: 99.87%, Replicate 3: 99.85%",
+                numeric_result=Decimal("99.8500"),
+                qualitative_result="Conforming retention profile",
+                is_within_specification=True,
+                relative_standard_deviation=Decimal("0.25"),
+                notes="Column backpressure nominal at 145 bar. System suitability test passed.",
+            )
+
+            wks2 = LabTestWorksheet.objects.create(
+                tenant=tenant,
+                title="Transducer Pressure Calibration Conformance Verification",
+                sample=smp2,
+                specification=spec2,
+                status="approved",
+                disposition="conforms",
+                assigned_analyst=analyst_user,
+                reviewer=admin_user,
+                scheduled_date=today - datetime.timedelta(days=8),
+                execution_date=today - datetime.timedelta(days=7),
+                completion_timestamp=now - datetime.timedelta(days=7),
+                instrument=gage_instrument,
+                instrument_name="Druck DPI 611 Pressure Calibrator",
+                reagent_lot_number="N/A - Direct Electronic Probe",
+                reagent_expiry_date=today + datetime.timedelta(days=365),
+                standards_lot_number="NIST-TRACE-DP-01",
+                standards_expiry_date=today + datetime.timedelta(days=300),
+                raw_data_summary="Span challenged across 0 to 100 mbar: Linearity slope 1.0012, R^2 = 0.9999",
+                numeric_result=Decimal("1.0012"),
+                qualitative_result="Sensor response strictly linear",
+                is_within_specification=True,
+                relative_standard_deviation=Decimal("0.05"),
+                notes="Calibration passed all 5 pressure set points within 0.12% error band.",
+            )
+
+            wks3 = LabTestWorksheet.objects.create(
+                tenant=tenant,
+                title="Cleanroom Suite 1 Grade A Surface Bioburden Count",
+                sample=smp3,
+                specification=spec3,
+                status="review_pending",
+                disposition="conforms",
+                assigned_analyst=analyst_user,
+                reviewer=admin_user,
+                scheduled_date=today - datetime.timedelta(days=1),
+                execution_date=today,
+                completion_timestamp=now - datetime.timedelta(hours=2),
+                instrument=gage_instrument,
+                instrument_name="BioTek Synergy H1 Plate Reader",
+                reagent_lot_number="TSA-RODAC-LOT-8812",
+                reagent_expiry_date=today + datetime.timedelta(days=45),
+                standards_lot_number="ATCC-6538-REF",
+                standards_expiry_date=today + datetime.timedelta(days=60),
+                raw_data_summary="Incubation: 72h at 32.5C. 0 CFU recovered. Negative control valid.",
+                numeric_result=Decimal("0.0000"),
+                qualitative_result="Zero microbial colonies detected",
+                is_within_specification=True,
+                relative_standard_deviation=Decimal("0.00"),
+                notes="Ready for QA second-person review.",
+            )
+
+            wks4 = LabTestWorksheet.objects.create(
+                tenant=tenant,
+                title="Finished Product Tablet Dissolution Test - OOS Flagged",
+                sample=smp4,
+                specification=spec4,
+                status="rejected",
+                disposition="oos_flagged",
+                assigned_analyst=analyst_user,
+                reviewer=admin_user,
+                scheduled_date=today - datetime.timedelta(days=14),
+                execution_date=today - datetime.timedelta(days=13),
+                completion_timestamp=now - datetime.timedelta(days=13),
+                instrument=gage_instrument,
+                instrument_name="Distek 2500 Dissolution System",
+                reagent_lot_number="HCL-0.1N-LOT-5541",
+                reagent_expiry_date=today + datetime.timedelta(days=90),
+                standards_lot_number="USP-DISS-STD-441",
+                standards_expiry_date=today + datetime.timedelta(days=100),
+                raw_data_summary="Vessel 1: 72.1%, Vessel 2: 74.3%, Vessel 3: 71.8%, Vessel 4: 75.0%, Vessel 5: 73.2%, Vessel 6: 72.9%. Mean: 73.22% (Spec: Q >= 80.0%).",
+                numeric_result=Decimal("73.2200"),
+                qualitative_result="Out of specification - Low dissolution",
+                is_within_specification=False,
+                relative_standard_deviation=Decimal("1.65"),
+                notes="Result fails Q >= 80.0% acceptance criterion at 45 min. Triggered OOS investigation.",
+            )
+
+            # 4. OOS Investigations
+            oos1 = OosInvestigation.objects.create(
+                tenant=tenant,
+                title="OOS Investigation: Low Dissolution Rate on Hydrocortisone Tablet Batch BATCH-2026-OOS-401",
+                test_worksheet=wks4,
+                sample=smp4,
+                investigation_phase="phase_2_manufacturing",
+                status="retest_authorized",
+                severity="critical",
+                analyst_interview_completed=True,
+                calculation_verification_completed=True,
+                instrument_verification_completed=True,
+                reagent_verification_completed=True,
+                lab_error_identified=False,
+                lab_error_description="Phase I Lab investigation confirmed analyst followed SOP AM-QC-112 verbatim. Dissolution bath temperature, paddle RPM, and UV spectrophotometer verified in calibration. No lab error confirmed.",
+                manufacturing_investigation_required=True,
+                process_equipment_checked=True,
+                raw_material_lots_checked=True,
+                environmental_conditions_checked=True,
+                assignable_cause="Investigation identified lubrication blending step run for 18 minutes instead of standard 8 minutes on High Shear Mixer M-02, causing magnesium stearate over-lubrication of tablet granules reducing dissolution rate.",
+                hypothesis_testing_summary="Re-granulation trial confirmed over-lubrication hypothesis. Retest of retain samples under authorized protocol shows identical dissolution suppression.",
+                retest_plan_authorized=True,
+                retest_results_summary="Retest by independent secondary analyst confirmed dissolution mean of 73.4% matching original result.",
+                final_batch_disposition="quarantined",
+                investigation_lead=analyst_user,
+                qa_approver=admin_user,
+                target_completion_date=today + datetime.timedelta(days=5),
+                capa=capa_item,
+                non_conformance=ncr_item,
+                summary_and_conclusions="Assignable manufacturing cause identified. Initiated NCR and CAPA for blender timer interlock controls. Batch BATCH-2026-OOS-401 placed on quarantine hold pending final MRB disposition.",
+            )
+
+            oos2 = OosInvestigation.objects.create(
+                tenant=tenant,
+                title="Phase I Lab Investigation: Potential Chromatographic Integration Drift on Retention Standard",
+                test_worksheet=wks1,
+                sample=smp1,
+                investigation_phase="phase_1_lab",
+                status="open",
+                severity="major",
+                analyst_interview_completed=True,
+                calculation_verification_completed=True,
+                instrument_verification_completed=False,
+                reagent_verification_completed=False,
+                lab_error_identified=False,
+                lab_error_description="Preliminary peak integration review indicated baseline shoulder noise. Verifying column pressure and mobile phase degasser operation.",
+                manufacturing_investigation_required=False,
+                retest_plan_authorized=False,
+                final_batch_disposition="pending",
+                investigation_lead=analyst_user,
+                qa_approver=admin_user,
+                target_completion_date=today + datetime.timedelta(days=3),
+                summary_and_conclusions="Phase I lab error investigation underway. Checking autosampler needle rinse and mobile phase preparation records.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.19 Laboratory Information Management (LIMS) seeded successfully."))
 
 
 
