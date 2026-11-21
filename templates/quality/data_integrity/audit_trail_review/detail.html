@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}{{ review.number }} — Audit Trail Review — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:audit_trail_review_list' %}">Audit Trail Reviews</a>
+            <span class="sep">/</span>
+            <span>{{ review.number }}</span>
+        </div>
+        <h1 class="page-title">{{ review.number }} — {{ review.title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:audit_trail_review_edit' review.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Review
+        </a>
+        <form method="post" action="{% url 'quality:audit_trail_review_delete' review.pk %}" onsubmit="return confirm('Delete audit review {{ review.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Audit Review Scope & Source</h3>
+                {% if review.status == 'completed' %}
+                <span class="badge badge-green">Completed</span>
+                {% elif review.status == 'closed' %}
+                <span class="badge badge-muted">Closed</span>
+                {% elif review.status == 'in_progress' %}
+                <span class="badge badge-info">In Progress</span>
+                {% else %}
+                <span class="badge badge-slate">Scheduled</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Review Title</dt>
+                        <dd class="font-medium">{{ review.title }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Review Type</dt>
+                        <dd>
+                            <span class="badge badge-slate">{{ review.get_review_type_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Computerized System</dt>
+                        <dd>
+                            {% if review.system %}
+                            <span class="font-medium">{{ review.system.system_name }} ({{ review.system.number }})</span>
+                            {% else %}
+                            <span>Core Platform General</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Audit Source</dt>
+                        <dd>{{ review.get_audit_source_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Audit Period Start</dt>
+                        <dd>{{ review.period_start }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Audit Period End</dt>
+                        <dd>{{ review.period_end }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Review Execution Date</dt>
+                        <dd>{{ review.review_date|default:"In Progress" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Records Sampled / Examined</dt>
+                        <dd class="font-semibold">{{ review.records_sampled_count }} Records</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Anomalies & QA Disposition</h3>
+                {% if review.disposition == 'approved_clean' %}
+                <span class="badge badge-green">Approved Clean</span>
+                {% elif review.disposition == 'approved_remediated' %}
+                <span class="badge badge-amber">Approved Remediated</span>
+                {% elif review.disposition == 'rejected_escalated' %}
+                <span class="badge badge-red">Rejected — Escalated</span>
+                {% else %}
+                <span class="badge badge-slate">Under Examination</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Anomalies Detected</dt>
+                        <dd>
+                            {% if review.anomalies_detected_count > 0 %}
+                            <span class="text-red font-bold text-lg">{{ review.anomalies_detected_count }}</span>
+                            {% else %}
+                            <span class="text-green font-semibold">0 (Clean)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Anomaly Severity</dt>
+                        <dd>
+                            {% if review.anomaly_severity == 'critical' %}
+                            <span class="badge badge-red">Critical Severity</span>
+                            {% elif review.anomaly_severity == 'major' %}
+                            <span class="badge badge-amber">Major Severity</span>
+                            {% elif review.anomaly_severity == 'minor' %}
+                            <span class="badge badge-info">Minor Discrepancy</span>
+                            {% else %}
+                            <span class="badge badge-green">None (Clean)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Review Disposition</dt>
+                        <dd class="font-medium">{{ review.get_disposition_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Escalation Required</dt>
+                        <dd>
+                            {% if review.requires_escalation %}
+                            <span class="badge badge-red">Yes — Deviation / CAPA Mandatory</span>
+                            {% else %}
+                            <span class="text-muted">No</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        {% if review.findings_summary %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Audit Trail Findings & Log Observations</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-sm whitespace-pre-wrap">{{ review.findings_summary }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if review.qa_comments %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">QA Compliance Comments & Closeout Justification</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-sm whitespace-pre-wrap">{{ review.qa_comments }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Examiners & Signatures</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Conducted by Reviewer</dt>
+                        <dd class="font-medium text-sm">
+                            {% if review.reviewer %}
+                            {{ review.reviewer.get_full_name|default:review.reviewer.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">QA Approver</dt>
+                        <dd class="font-medium text-sm">
+                            {% if review.qa_approver %}
+                            {{ review.qa_approver.get_full_name|default:review.qa_approver.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Completed Timestamp</dt>
+                        <dd class="text-sm">{{ review.completed_at|date:"Y-m-d H:i"|default:"Not Completed" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Created</dt>
+                        <dd class="text-xs text-muted">{{ review.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Linked Quality Escalations</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <dt class="text-xs text-muted uppercase">Linked Non-Conformance (NCR)</dt>
+                    <dd class="text-sm mt-1">
+                        {% if review.linked_ncr %}
+                        <a href="{% url 'quality:ncr_detail' review.linked_ncr.pk %}" class="text-brand font-medium">
+                            {{ review.linked_ncr.number }} — {{ review.linked_ncr.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">None</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase">Linked CAPA Investigation</dt>
+                    <dd class="text-sm mt-1">
+                        {% if review.linked_capa %}
+                        <a href="{% url 'quality:capa_detail' review.linked_capa.pk %}" class="text-brand font-medium">
+                            {{ review.linked_capa.number }} — {{ review.linked_capa.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">None</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
