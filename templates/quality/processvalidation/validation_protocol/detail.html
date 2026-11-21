@@ -45,7 +45,7 @@
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon {% if validation_protocol.status == 'final_approved' %}green{% elif validation_protocol.status == 'deviation_hold' or validation_protocol.status == 'rejected' %}red{% elif validation_protocol.status == 'in_execution' %}orange{% else %}slate{% endif %}">
+        <div class="stat-icon {% if validation_protocol.status == 'final_approved' %}green{% elif validation_protocol.status == 'deviation_hold' or validation_protocol.status == 'rejected' %}orange{% elif validation_protocol.status == 'in_execution' %}orange{% else %}slate{% endif %}">
             <i data-lucide="check-circle-2"></i>
         </div>
         <div>
@@ -67,7 +67,7 @@
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon {% if validation_protocol.deviations_encountered > 0 %}red{% else %}green{% endif %}">
+        <div class="stat-icon {% if validation_protocol.deviations_encountered > 0 %}orange{% else %}green{% endif %}">
             <i data-lucide="alert-circle"></i>
         </div>
         <div>
