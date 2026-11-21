@@ -103,6 +103,18 @@ from apps.quality.models.ManagementReview.ManagementReviews import (
 from apps.quality.models.ManagementReview.QualityObjectives import (
     QualityObjective,
 )
+from apps.quality.models.ProcessValidation.ValidationProtocols import (
+    ValidationProtocol,
+)
+from apps.quality.models.ProcessValidation.ProcessCapabilityStudies import (
+    ProcessCapabilityStudy,
+)
+from apps.quality.models.ProcessValidation.ComputerSystemValidations import (
+    ComputerSystemValidation,
+)
+from apps.quality.models.ProcessValidation.CleaningValidations import (
+    CleaningValidation,
+)
 
 
 User = get_user_model()
@@ -121,6 +133,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            CleaningValidation.objects.all().delete()
+            ComputerSystemValidation.objects.all().delete()
+            ProcessCapabilityStudy.objects.all().delete()
+            ValidationProtocol.objects.all().delete()
             ManagementReviewAction.objects.all().delete()
             ManagementReviewInput.objects.all().delete()
             ManagementReview.objects.all().delete()
@@ -201,6 +217,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_12(tenant)
             self._seed_submodule_12_13(tenant)
             self._seed_submodule_12_14(tenant)
+            self._seed_submodule_12_15(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -4601,6 +4618,285 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.14 Management Review & Quality Planning seeded successfully."))
+
+    def _seed_submodule_12_15(self, tenant):
+        """Seed demo data for Sub-module 12.15: Process Validation & Verification."""
+        if ValidationProtocol.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.15 Process Validation data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.15 Process Validation & Verification...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+            or User.objects.filter(tenant=tenant).first()
+        )
+        quality_lead = (
+            User.objects.filter(tenant=tenant, username__icontains="quality").first()
+            or User.objects.filter(tenant=tenant, is_staff=True).first()
+            or admin_user
+        )
+        change_control = DocumentChangeOrder.objects.filter(tenant=tenant).first()
+
+        today = timezone.now().date()
+
+        with transaction.atomic():
+            # 1. Validation Protocols
+            proto1 = ValidationProtocol.objects.create(
+                tenant=tenant,
+                protocol_title="High-Speed Vial Filling & Stoppering Line 3 Qualification",
+                protocol_type="combined",
+                stage="stage_2_qualification",
+                status="completed",
+                risk_level="critical",
+                system_or_equipment_name="Bosch TLF 4020 Vial Filler",
+                equipment_id="EQ-FILL-03",
+                facility_location="Building 4, Cleanroom Suite A",
+                scope_and_objective="Comprehensive Installation, Operational, and Performance Qualification (IQ/OQ/PQ) of sterile filling line 3 per FDA Guidance for Industry (2011).",
+                acceptance_criteria_summary="100% compliance with critical utility specs, particulate counts <= ISO Class 5, filling speed 300 vials/min with fill volume accuracy within +/- 1.0%.",
+                author=quality_lead,
+                lead_validator=admin_user,
+                quality_approver=quality_lead,
+                planned_start_date=today - datetime.timedelta(days=90),
+                planned_completion_date=today - datetime.timedelta(days=30),
+                actual_execution_date=today - datetime.timedelta(days=28),
+                final_approval_date=today - datetime.timedelta(days=25),
+                next_revalidation_date=today + datetime.timedelta(days=340),
+                revalidation_frequency_months=12,
+                total_test_cases=48,
+                passed_test_cases=48,
+                failed_test_cases=0,
+                open_deviations_count=0,
+                execution_summary="All 48 IQ, OQ, and PQ acceptance tests successfully executed without critical deviations. Environmental monitoring and particulate counts satisfied ISO 14644-1 requirements.",
+                linked_change_control=change_control,
+            )
+
+            proto2 = ValidationProtocol.objects.create(
+                tenant=tenant,
+                protocol_title="Clean-In-Place (CIP) Skid 04 & Bioreactor 500L Cleaning Validation Protocol",
+                protocol_type="cleaning",
+                stage="stage_2_qualification",
+                status="in_execution",
+                risk_level="high",
+                system_or_equipment_name="Bio-CIP Skid 04 & 500L Bioreactor",
+                equipment_id="CIP-SKID-04",
+                facility_location="Building 2, Bioprocess Hall",
+                scope_and_objective="Establish scientific evidence that multi-product CIP wash sequence consistently removes biological and chemical residues below toxicological and 10 ppm limits.",
+                acceptance_criteria_summary="Three consecutive full-scale runs with swab TOC <= 1.23 ug/100cm2, rinse conductivity <= 1.3 uS/cm, bioburden < 10 CFU/100mL.",
+                author=quality_lead,
+                lead_validator=quality_lead,
+                quality_approver=admin_user,
+                planned_start_date=today - datetime.timedelta(days=20),
+                planned_completion_date=today + datetime.timedelta(days=20),
+                actual_execution_date=today - datetime.timedelta(days=5),
+                next_revalidation_date=today + datetime.timedelta(days=345),
+                revalidation_frequency_months=12,
+                total_test_cases=24,
+                passed_test_cases=16,
+                failed_test_cases=0,
+                open_deviations_count=1,
+                execution_summary="Runs 1 and 2 successfully passed all chemical and microbiological criteria. Minor non-critical flow rate sensor glitch logged as deviation DEV-01 and addressed.",
+            )
+
+            proto3 = ValidationProtocol.objects.create(
+                tenant=tenant,
+                protocol_title="Laboratory Information Management System (LIMS) GAMP 5 CSV Protocol",
+                protocol_type="csv",
+                stage="stage_2_qualification",
+                status="approved_for_exec",
+                risk_level="critical",
+                system_or_equipment_name="LabVantage LIMS Enterprise v8.8",
+                equipment_id="SW-LIMS-01",
+                facility_location="Central QC Analytical Laboratory",
+                scope_and_objective="Computer System Validation of GAMP 5 Category 4 configured software including 21 CFR Part 11 electronic records, audit trails, and data backup/recovery.",
+                acceptance_criteria_summary="All functional requirements tested with 100% pass rate. Unalterable timestamped audit trails and two-factor electronic signature enforcement verified.",
+                author=quality_lead,
+                lead_validator=admin_user,
+                quality_approver=quality_lead,
+                planned_start_date=today + datetime.timedelta(days=5),
+                planned_completion_date=today + datetime.timedelta(days=45),
+                revalidation_frequency_months=24,
+                next_revalidation_date=today + datetime.timedelta(days=730),
+                total_test_cases=55,
+                passed_test_cases=0,
+                failed_test_cases=0,
+                open_deviations_count=0,
+                execution_summary="Protocol approved by Quality Assurance and IT Steering Committee. Ready for dry-run execution in staging environment.",
+            )
+
+            # 2. Process Capability Studies
+            study1 = ProcessCapabilityStudy.objects.create(
+                tenant=tenant,
+                study_title="Sterile Vial Fill Volume 10.0 mL Operational Qualification SPC",
+                parameter_name="Filling Volume (mL)",
+                study_type="validation_pq",
+                status="capable",
+                lower_spec_limit=Decimal("9.8000"),
+                target_nominal=Decimal("10.0000"),
+                upper_spec_limit=Decimal("10.2000"),
+                measurement_unit="mL",
+                sample_size_n=150,
+                subgroup_size=5,
+                subgroups_count=30,
+                sample_mean=Decimal("10.0120"),
+                standard_deviation_within=Decimal("0.0380"),
+                standard_deviation_overall=Decimal("0.0410"),
+                cp=Decimal("1.7500"),
+                cpk=Decimal("1.6400"),
+                pp=Decimal("1.6300"),
+                ppk=Decimal("1.5300"),
+                estimated_ppm=Decimal("0.4500"),
+                normality_test_p_value=Decimal("0.4850"),
+                is_normal_distribution=True,
+                process_stable=True,
+                study_lead=admin_user,
+                reviewed_by=quality_lead,
+                start_date=today - datetime.timedelta(days=45),
+                completion_date=today - datetime.timedelta(days=28),
+                linked_validation_protocol=proto1,
+                notes_and_recommendations="Process is in statistical control and exhibits high capability (Cpk = 1.64 > 1.33 threshold). Recommend maintaining standard inline weight check frequency.",
+            )
+
+            study2 = ProcessCapabilityStudy.objects.create(
+                tenant=tenant,
+                study_title="Tyvek Pouch Packaging Heat Seal Strength Peel Force Study",
+                parameter_name="Seal Peel Strength (N/15mm)",
+                study_type="ongoing_spc",
+                status="capable",
+                lower_spec_limit=Decimal("3.5000"),
+                target_nominal=Decimal("5.0000"),
+                upper_spec_limit=Decimal("6.5000"),
+                measurement_unit="N/15mm",
+                sample_size_n=100,
+                subgroup_size=5,
+                subgroups_count=20,
+                sample_mean=Decimal("4.8500"),
+                standard_deviation_within=Decimal("0.2800"),
+                standard_deviation_overall=Decimal("0.3100"),
+                cp=Decimal("1.7900"),
+                cpk=Decimal("1.6100"),
+                pp=Decimal("1.6100"),
+                ppk=Decimal("1.4500"),
+                estimated_ppm=Decimal("0.8200"),
+                normality_test_p_value=Decimal("0.3200"),
+                is_normal_distribution=True,
+                process_stable=True,
+                study_lead=quality_lead,
+                reviewed_by=admin_user,
+                start_date=today - datetime.timedelta(days=20),
+                completion_date=today - datetime.timedelta(days=5),
+                notes_and_recommendations="Pouch seal peel force meets ISO 11607-1 integrity requirements. Cpk of 1.61 demonstrates excellent process capability.",
+            )
+
+            # 3. Computer System Validations
+            csv1 = ComputerSystemValidation.objects.create(
+                tenant=tenant,
+                system_name="LabVantage LIMS Enterprise",
+                software_version="v8.8.2",
+                vendor_name="LabVantage Solutions Inc.",
+                gamp_category="cat_4",
+                intended_use="Quality Control analytical data management, sample lifecycle tracking, automated certificate of analysis generation, and stability study scheduling.",
+                cfr_part_11_scope=True,
+                annex_11_scope=True,
+                status="pq_uat_execution",
+                system_owner=admin_user,
+                quality_lead=quality_lead,
+                electronic_signatures_enabled=True,
+                audit_trail_reviewed=True,
+                data_integrity_risk="high",
+                disaster_recovery_tested=True,
+                validation_plan_ref="SVP-LIMS-2026-001",
+                release_date=None,
+                next_periodic_review_date=today + datetime.timedelta(days=365),
+                validation_protocol=proto3,
+                regulatory_summary="Fully configured commercial off-the-shelf software subject to 21 CFR Part 11 and EU GMP Annex 11. Rigorous data integrity controls enforced.",
+            )
+
+            csv2 = ComputerSystemValidation.objects.create(
+                tenant=tenant,
+                system_name="Siemens Desigo CC Building & Environmental Monitoring System",
+                software_version="v5.1",
+                vendor_name="Siemens AG",
+                gamp_category="cat_4",
+                intended_use="Cleanroom differential pressure, HVAC temperature, and relative humidity continuous recording and deviation alerting.",
+                cfr_part_11_scope=True,
+                annex_11_scope=True,
+                status="released_for_use",
+                system_owner=admin_user,
+                quality_lead=quality_lead,
+                electronic_signatures_enabled=True,
+                audit_trail_reviewed=True,
+                data_integrity_risk="medium",
+                disaster_recovery_tested=True,
+                validation_plan_ref="SVP-EMS-2025-004",
+                release_date=today - datetime.timedelta(days=120),
+                next_periodic_review_date=today + datetime.timedelta(days=245),
+                validation_protocol=proto1,
+                regulatory_summary="Validated continuous environmental monitoring system operating in production mode. Annual audit trail periodic review scheduled.",
+            )
+
+            # 4. Cleaning Validations
+            clean1 = CleaningValidation.objects.create(
+                tenant=tenant,
+                cleaning_program_title="Bioreactor 500L & CIP Skid Multi-Product Cleaning Protocol",
+                equipment_identifier="CIP-SKID-04 / BIO-500L",
+                equipment_description="316L Stainless Steel Bioreactor 500L with automated clean-in-place spray ball distribution system.",
+                validation_type="matrix_bracket",
+                status="swab_rinse_testing",
+                previous_product_name="Monoclonal Antibody mAb-201",
+                next_product_name="Injectable Peptide Formulation B-105",
+                batch_size_next_product_kg=Decimal("250.00"),
+                minimum_therapeutic_dose_mg=Decimal("50.00"),
+                toxicological_pde_mg_day=Decimal("0.5000"),
+                shared_equipment_surface_area_cm2=Decimal("45000.00"),
+                calculated_maco_mg=Decimal("5.5556"),
+                maco_calculation_basis="pde",
+                swab_limit_microgram_per_surface=Decimal("1.2346"),
+                rinse_limit_ppm=Decimal("2.5000"),
+                analytical_method_ref="SOP-QC-MTH-405 (TOC & HPLC-UV)",
+                consecutive_successful_runs=2,
+                required_successful_runs=3,
+                validation_lead=quality_lead,
+                qa_reviewer=admin_user,
+                clean_hold_time_hours=48,
+                dirty_hold_time_hours=72,
+                validation_date=today - datetime.timedelta(days=5),
+                next_revalidation_date=today + datetime.timedelta(days=360),
+                linked_protocol=proto2,
+                analytical_results_summary="Runs 1 and 2 completed with swab TOC results at 0.42 ug/100cm2 and 0.38 ug/100cm2 against 1.23 limit. Run 3 scheduled for execution.",
+            )
+
+            clean2 = CleaningValidation.objects.create(
+                tenant=tenant,
+                cleaning_program_title="High-Shear Fluid Bed Granulator 250L Solvent Wash Protocol",
+                equipment_identifier="GRAN-250L",
+                equipment_description="Glatt High-Shear Granulator 250L chamber and product container.",
+                validation_type="worst_case_product",
+                status="validated",
+                previous_product_name="Active Compound X-99 (Insoluble)",
+                next_product_name="Placebo Excipient Blend",
+                batch_size_next_product_kg=Decimal("120.00"),
+                minimum_therapeutic_dose_mg=Decimal("10.00"),
+                toxicological_pde_mg_day=Decimal("0.1000"),
+                shared_equipment_surface_area_cm2=Decimal("32000.00"),
+                calculated_maco_mg=Decimal("1.2000"),
+                maco_calculation_basis="10ppm",
+                swab_limit_microgram_per_surface=Decimal("0.3750"),
+                rinse_limit_ppm=Decimal("1.0000"),
+                analytical_method_ref="SOP-QC-MTH-312 (LC-MS/MS)",
+                consecutive_successful_runs=3,
+                required_successful_runs=3,
+                validation_lead=quality_lead,
+                qa_reviewer=admin_user,
+                clean_hold_time_hours=72,
+                dirty_hold_time_hours=48,
+                validation_date=today - datetime.timedelta(days=60),
+                next_revalidation_date=today + datetime.timedelta(days=305),
+                linked_protocol=proto1,
+                analytical_results_summary="3 consecutive validation runs met all acceptance criteria with analytical non-detects across 12 critical sampling points.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.15 Process Validation & Verification seeded successfully."))
 
 
 
