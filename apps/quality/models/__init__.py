@@ -127,6 +127,18 @@ from apps.quality.models.ManagementReview.ManagementReviewInputs import (
 from apps.quality.models.ManagementReview.ManagementReviewActions import (
     ManagementReviewAction,
 )
+from apps.quality.models.ProcessValidation.ValidationProtocols import (
+    ValidationProtocol,
+)
+from apps.quality.models.ProcessValidation.ProcessCapabilityStudies import (
+    ProcessCapabilityStudy,
+)
+from apps.quality.models.ProcessValidation.ComputerSystemValidations import (
+    ComputerSystemValidation,
+)
+from apps.quality.models.ProcessValidation.CleaningValidations import (
+    CleaningValidation,
+)
 
 __all__ = [
     "TenantOwned",
@@ -187,5 +199,9 @@ __all__ = [
     "ManagementReview",
     "ManagementReviewInput",
     "ManagementReviewAction",
+    "ValidationProtocol",
+    "ProcessCapabilityStudy",
+    "ComputerSystemValidation",
+    "CleaningValidation",
 ]
 
