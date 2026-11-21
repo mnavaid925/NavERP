@@ -47,87 +47,108 @@
 ## Detailed Checkable Work Items
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze `.claude/tasks/contract-quality-12.17.md` with every field, choice, URL name, and view context key.
+- [x] Freeze `.claude/tasks/contract-quality-12.17.md` with every field, choice, URL name, and view context key.
 
 ### Phase 3.2: Entity by Entity Implementation
-- [ ] **Entity 1: RegulatorySubmission** (`QSUB-`)
-  - [ ] `apps/quality/models/RegulatorySubmissions/RegulatorySubmissions.py`
-  - [ ] `apps/quality/forms/RegulatorySubmissions/RegulatorySubmissions.py`
-  - [ ] `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py`
-  - [ ] `apps/quality/urls/RegulatorySubmissions/RegulatorySubmissions.py`
-  - [ ] `templates/quality/regulatory_submissions/regulatory_submission/list.html`
-  - [ ] `templates/quality/regulatory_submissions/regulatory_submission/detail.html`
-  - [ ] `templates/quality/regulatory_submissions/regulatory_submission/form.html`
-- [ ] **Entity 2: ProductRegistration** (`QREG-`)
-  - [ ] `apps/quality/models/RegulatorySubmissions/ProductRegistrations.py`
-  - [ ] `apps/quality/forms/RegulatorySubmissions/ProductRegistrations.py`
-  - [ ] `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py`
-  - [ ] `apps/quality/urls/RegulatorySubmissions/ProductRegistrations.py`
-  - [ ] `templates/quality/regulatory_submissions/product_registration/list.html`
-  - [ ] `templates/quality/regulatory_submissions/product_registration/detail.html`
-  - [ ] `templates/quality/regulatory_submissions/product_registration/form.html`
-- [ ] **Entity 3: RegulatoryCommitment** (`QCOM-`)
-  - [ ] `apps/quality/models/RegulatorySubmissions/RegulatoryCommitments.py`
-  - [ ] `apps/quality/forms/RegulatorySubmissions/RegulatoryCommitments.py`
-  - [ ] `apps/quality/views/RegulatorySubmissions/RegulatoryCommitments.py`
-  - [ ] `apps/quality/urls/RegulatorySubmissions/RegulatoryCommitments.py`
-  - [ ] `templates/quality/regulatory_submissions/regulatory_commitment/list.html`
-  - [ ] `templates/quality/regulatory_submissions/regulatory_commitment/detail.html`
-  - [ ] `templates/quality/regulatory_submissions/regulatory_commitment/form.html`
-- [ ] **Entity 4: PostMarketSurveillanceReport** (`QPMS-`)
-  - [ ] `apps/quality/models/RegulatorySubmissions/PostMarketSurveillanceReports.py`
-  - [ ] `apps/quality/forms/RegulatorySubmissions/PostMarketSurveillanceReports.py`
-  - [ ] `apps/quality/views/RegulatorySubmissions/PostMarketSurveillanceReports.py`
-  - [ ] `apps/quality/urls/RegulatorySubmissions/PostMarketSurveillanceReports.py`
-  - [ ] `templates/quality/regulatory_submissions/post_market_surveillance_report/list.html`
-  - [ ] `templates/quality/regulatory_submissions/post_market_surveillance_report/detail.html`
-  - [ ] `templates/quality/regulatory_submissions/post_market_surveillance_report/form.html`
-- [ ] **Dedicated Regulatory Dashboard**
-  - [ ] `apps/quality/views/RegulatorySubmissions/RegulatoryDashboard.py`
-  - [ ] `apps/quality/urls/RegulatorySubmissions/RegulatoryDashboard.py`
-  - [ ] `templates/quality/regulatory_submissions/regulatory_dashboard.html`
+- [x] **Entity 1: RegulatorySubmission** (`QSUB-`)
+  - [x] `apps/quality/models/RegulatorySubmissions/RegulatorySubmissions.py`
+  - [x] `apps/quality/forms/RegulatorySubmissions/RegulatorySubmissions.py`
+  - [x] `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py`
+  - [x] `apps/quality/urls/RegulatorySubmissions/RegulatorySubmissions.py`
+  - [x] `templates/quality/regulatory_submissions/regulatory_submission/list.html`
+  - [x] `templates/quality/regulatory_submissions/regulatory_submission/detail.html`
+  - [x] `templates/quality/regulatory_submissions/regulatory_submission/form.html`
+- [x] **Entity 2: ProductRegistration** (`QREG-`)
+  - [x] `apps/quality/models/RegulatorySubmissions/ProductRegistrations.py`
+  - [x] `apps/quality/forms/RegulatorySubmissions/ProductRegistrations.py`
+  - [x] `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py`
+  - [x] `apps/quality/urls/RegulatorySubmissions/ProductRegistrations.py`
+  - [x] `templates/quality/regulatory_submissions/product_registration/list.html`
+  - [x] `templates/quality/regulatory_submissions/product_registration/detail.html`
+  - [x] `templates/quality/regulatory_submissions/product_registration/form.html`
+- [x] **Entity 3: RegulatoryCommitment** (`QCOM-`)
+  - [x] `apps/quality/models/RegulatorySubmissions/RegulatoryCommitments.py`
+  - [x] `apps/quality/forms/RegulatorySubmissions/RegulatoryCommitments.py`
+  - [x] `apps/quality/views/RegulatorySubmissions/RegulatoryCommitments.py`
+  - [x] `apps/quality/urls/RegulatorySubmissions/RegulatoryCommitments.py`
+  - [x] `templates/quality/regulatory_submissions/regulatory_commitment/list.html`
+  - [x] `templates/quality/regulatory_submissions/regulatory_commitment/detail.html`
+  - [x] `templates/quality/regulatory_submissions/regulatory_commitment/form.html`
+- [x] **Entity 4: PostMarketSurveillanceReport** (`QPMS-`)
+  - [x] `apps/quality/models/RegulatorySubmissions/PostMarketSurveillanceReports.py`
+  - [x] `apps/quality/forms/RegulatorySubmissions/PostMarketSurveillanceReports.py`
+  - [x] `apps/quality/views/RegulatorySubmissions/PostMarketSurveillanceReports.py`
+  - [x] `apps/quality/urls/RegulatorySubmissions/PostMarketSurveillanceReports.py`
+  - [x] `templates/quality/regulatory_submissions/post_market_surveillance_report/list.html`
+  - [x] `templates/quality/regulatory_submissions/post_market_surveillance_report/detail.html`
+  - [x] `templates/quality/regulatory_submissions/post_market_surveillance_report/form.html`
+- [x] **Dedicated Regulatory Dashboard**
+  - [x] `apps/quality/views/RegulatorySubmissions/RegulatoryDashboard.py`
+  - [x] `apps/quality/urls/RegulatorySubmissions/RegulatoryDashboard.py`
+  - [x] `templates/quality/regulatory_submissions/regulatory_dashboard.html`
 
 ### Phase 3.3: Integration & Migration
-- [ ] Re-export all models in `apps/quality/models/__init__.py`
-- [ ] Re-export all forms in `apps/quality/forms/__init__.py`
-- [ ] Re-export all views in `apps/quality/views/__init__.py`
-- [ ] Wire URL routes in `apps/quality/urls/__init__.py`
-- [ ] Register all 4 models in `apps/quality/admin.py`
-- [ ] Extend `apps/quality/management/commands/seed_quality.py` with 12.17 seed data
-- [ ] Wire `LIVE_LINKS["12.17"]` in `apps/core/navigation.py`
-- [ ] Run `makemigrations quality`
-- [ ] Run `migrate`
-- [ ] Run `seed_quality` twice (idempotency check)
-- [ ] Run `manage.py check`
+- [x] Re-export all models in `apps/quality/models/__init__.py`
+- [x] Re-export all forms in `apps/quality/forms/__init__.py`
+- [x] Re-export all views in `apps/quality/views/__init__.py`
+- [x] Wire URL routes in `apps/quality/urls/__init__.py`
+- [x] Register all 4 models in `apps/quality/admin.py`
+- [x] Extend `apps/quality/management/commands/seed_quality.py` with 12.17 seed data
+- [x] Wire `LIVE_LINKS["12.17"]` in `apps/core/navigation.py`
+- [x] Run `makemigrations quality`
+- [x] Run `migrate`
+- [x] Run `seed_quality` twice (idempotency check)
+- [x] Run `manage.py check`
 
 ### Phase 3.4: Smoke Verification
-- [ ] Execute smoke test verifying all URLs return 200/302, content checks pass, and cross-tenant IDOR returns 404.
+- [x] Execute smoke test verifying all URLs return 200/302, content checks pass, and cross-tenant IDOR returns 404.
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] `code-reviewer` review
-- [ ] `explorer` review
-- [ ] `frontend-reviewer` review
-- [ ] `performance-reviewer` review
-- [ ] `qa-smoke-tester` review
-- [ ] `security-reviewer` review
-- [ ] Compile and deduplicate findings into `.claude/tasks/review-quality-12.17.md`
+- [x] `code-reviewer` review
+- [x] `explorer` review
+- [x] `frontend-reviewer` review
+- [x] `performance-reviewer` review
+- [x] `qa-smoke-tester` review
+- [x] `security-reviewer` review
+- [x] Compile and deduplicate findings into `.claude/tasks/review-quality-12.17.md`
 
 ### Phase 5: Code Fixer
-- [ ] Hand findings to code fixer, resolve Critical, Important, and Minor items one by one.
+- [x] Hand findings to code fixer, resolve Critical, Important, and Minor items one by one.
 
 ### Phase 6: Automated Test Suite
-- [ ] Update `tests/conftest.py` with 12.17 fixtures
-- [ ] `tests/test_regulatory_submissions_models.py`
-- [ ] `tests/test_regulatory_submissions_forms.py`
-- [ ] `tests/test_regulatory_submissions_views.py`
-- [ ] `tests/test_regulatory_submissions_security.py`
-- [ ] Run full pytest suite unfiltered.
+- [x] Update `tests/conftest.py` with 12.17 fixtures
+- [x] `tests/test_regulatorycompliance_models.py`
+- [x] `tests/test_regulatorycompliance_forms.py`
+- [x] `tests/test_regulatorycompliance_views.py`
+- [x] `tests/test_regulatorycompliance_security.py`
+- [x] Run full pytest suite unfiltered.
 
 ### Phase 7: Skill & Documentation Closeout
-- [ ] Update `.claude/skills/quality/SKILL.md` with 12.17 details
-- [ ] Update `README.md` marking 12.17 complete
-- [ ] Document gap register in `.agents/tasks/gaps-quality-12.17.md`
-- [ ] Complete close-out section in `.claude/tasks/todo.md`
+- [x] Update `.claude/skills/quality/SKILL.md` with 12.17 details
+- [x] Update `README.md` marking 12.17 complete
+- [x] Document gap register in `.agents/tasks/gaps-quality-12.17.md`
+- [x] Complete close-out section in `.claude/tasks/todo.md`
+
+---
+
+## Review notes — Sub-module 12.17 Close-out (2026-11-21)
+- **Delivery Unit**: Sub-module 12.17: Regulatory Compliance & Submissions in `apps/quality/` (Module 12: Quality Management System).
+- **Models**: 4 tenant-scoped models subclassing `TenantNumbered`:
+  - `RegulatorySubmission` [`QSUB-`] (510(k), PMA, CE-Mark, Technical Documentation, Health Canada MDL, PMDA, NMPA)
+  - `ProductRegistration` [`QREG-`] (Market clearances, establishment registrations, CE certificates, import/export permits, renewal countdowns)
+  - `RegulatoryCommitment` [`QCOM-`] (Post-approval clinical studies, deficiency responses, 483 commitments, annual reports)
+  - `PostMarketSurveillanceReport` [`QPMS-`] (Periodic Safety Update Reports [PSUR], Article 85 PMS reports, PMCF evaluations, benefit-risk conclusions)
+- **Forms**: 4 ModelForms under `apps/quality/forms/RegulatorySubmissions/` with tenant-scoped FK validation and integer/date bounds.
+- **Views & Routes**: 21 FBV endpoints across 4 entities + executive Command Center (`regulatory_dashboard`). Includes pagination, multi-param search/filters, streaming chunked CSV exports (`.iterator(chunk_size=1000)`), formula injection defense, and `@tenant_admin_required` gated deletions.
+- **Templates**: 13 responsive Tailwind templates under `templates/quality/regulatory_submissions/` (`list.html`, `detail.html`, `form.html` per entity + `regulatory_dashboard.html`).
+- **Wire-up**: `LIVE_LINKS["12.17"]` (all 5 menu links) in `apps/core/navigation.py`, admin registered in `apps/quality/admin.py`, package re-exports across `__init__.py`.
+- **Migrations**: `0034_regulatory_compliance_models.py`, `0037_productregistration_idx_qreg_ten_stat_exp_and_more.py`, `0038_regulatorycommitment_idx_qcom_ten_stat_due.py`.
+- **Seeder**: `manage.py seed_quality` creates realistic GxP demo records for Acme and Globex; verified 100% idempotent.
+- **Phase 4 Review**: 6 sequential reviewer passes completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`). Consolidated 25 findings (2 Critical, 9 Important, 14 Minor) in `.claude/tasks/review-quality-12.17.md`.
+- **Phase 5 Fixes**: `code-fixer` subagent burned down all 25 findings in ID order (C1–C2, I1–I9, M1–M14) across single-file commits; `manage.py check` verified 0 issues.
+- **Phase 6 Tests**: 4 test files (`test_regulatorycompliance_models.py` [10 tests], `test_regulatorycompliance_forms.py` [9 tests], `test_regulatorycompliance_views.py` [5 tests], `test_regulatorycompliance_security.py` [5 tests]) totaling **29 dedicated tests** (100% pass). Full unfiltered quality test suite passes with **2,405 green tests** (0 failures).
+- **Gaps Register**: `.agents/tasks/gaps-quality-12.17.md` committed. `**Gaps**: None` (zero open or deferred items for 12.17; upstream observation `GAP-quality-12.17-U01` logged for 12.4 CAPA).
+- **Documentation**: `.claude/skills/quality/SKILL.md` and `README.md` updated and committed.
 
 ---
 
