@@ -187,7 +187,7 @@ def product_registration_delete(request, pk):
 def product_registration_export(request):
     qs = (
         quality_scope(ProductRegistration.objects.all(), request)
-        .select_related("regulatory_authority", "authorized_representative", "regulatory_lead")
+        .select_related("regulatory_authority", "regulatory_lead")
         .defer("intended_purpose", "notes")
     )
 
