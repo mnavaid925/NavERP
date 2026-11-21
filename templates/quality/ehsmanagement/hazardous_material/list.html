@@ -26,8 +26,8 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <div class="form-group md:col-span-2">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div class="form-group md:col-span-2 lg:col-span-2">
                 <label class="form-label" for="q">Search</label>
                 <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Search by name, CAS, UN, number..." class="form-input">
             </div>
@@ -67,7 +67,16 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="md:col-span-6 flex justify-end gap-2">
+            <div class="form-group">
+                <label class="form-label" for="supplier">Supplier / Manufacturer</label>
+                <select name="supplier" id="supplier" class="form-select">
+                    <option value="">All Suppliers</option>
+                    {% for supp in suppliers %}
+                    <option value="{{ supp.pk }}" {% if request.GET.supplier == supp.pk|stringformat:"d" %}selected{% endif %}>{{ supp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-3 lg:col-span-6 flex justify-end gap-2">
                 <a href="{% url 'quality:hazardous_material_list' %}" class="btn btn-outline">Reset</a>
                 <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply Filters</button>
             </div>
