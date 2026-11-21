@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ validation_protocol.number }}{% else %}New Validation Protocol{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_validation_dashboard' %}">Process Validation</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:validation_protocol_list' %}">Protocols</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ validation_protocol.number }}{% else %}New Protocol{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Validation Protocol: {{ validation_protocol.number }}{% else %}Create Validation Protocol (IQ/OQ/PQ){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    1. Protocol Identification & Stage
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Protocol Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">Scope & Objectives</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.protocol_stage.id_for_label }}" class="form-label">Protocol Stage *</label>
+                        {{ form.protocol_stage }}
+                        {% if form.protocol_stage.errors %}<div class="form-error">{{ form.protocol_stage.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.target_type.id_for_label }}" class="form-label">Target System / Asset Type *</label>
+                        {{ form.target_type }}
+                        {% if form.target_type.errors %}<div class="form-error">{{ form.target_type.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Lifecycle Status *</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.revalidation_trigger.id_for_label }}" class="form-label">Validation / Revalidation Trigger *</label>
+                        {{ form.revalidation_trigger }}
+                        {% if form.revalidation_trigger.errors %}<div class="form-error">{{ form.revalidation_trigger.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    2. Physical System, Process & Location Context
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.equipment_tag.id_for_label }}" class="form-label">Equipment / Machine Tag</label>
+                        {{ form.equipment_tag }}
+                        {% if form.equipment_tag.errors %}<div class="form-error">{{ form.equipment_tag.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.process_name.id_for_label }}" class="form-label">Process / Assembly Operation</label>
+                        {{ form.process_name }}
+                        {% if form.process_name.errors %}<div class="form-error">{{ form.process_name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.facility_area.id_for_label }}" class="form-label">Facility Cleanroom / Area</label>
+                        {{ form.facility_area }}
+                        {% if form.facility_area.errors %}<div class="form-error">{{ form.facility_area.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.item_code.id_for_label }}" class="form-label">Associated Product / Item Code</label>
+                        {{ form.item_code }}
+                        {% if form.item_code.errors %}<div class="form-error">{{ form.item_code.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    3. Qualification Execution & Test Criteria
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.test_runs_planned.id_for_label }}" class="form-label">Planned Test Runs *</label>
+                        {{ form.test_runs_planned }}
+                        {% if form.test_runs_planned.errors %}<div class="form-error">{{ form.test_runs_planned.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.test_runs_completed.id_for_label }}" class="form-label">Completed Test Runs</label>
+                        {{ form.test_runs_completed }}
+                        {% if form.test_runs_completed.errors %}<div class="form-error">{{ form.test_runs_completed.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.deviations_encountered.id_for_label }}" class="form-label">Deviations Logged</label>
+                        {{ form.deviations_encountered }}
+                        {% if form.deviations_encountered.errors %}<div class="form-error">{{ form.deviations_encountered.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3 form-group">
+                        <label for="{{ form.acceptance_criteria.id_for_label }}" class="form-label">Pass/Fail Acceptance Criteria</label>
+                        {{ form.acceptance_criteria }}
+                        {% if form.acceptance_criteria.errors %}<div class="form-error">{{ form.acceptance_criteria.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3 form-group">
+                        <label for="{{ form.summary_conclusions.id_for_label }}" class="form-label">Summary Report Conclusions</label>
+                        {{ form.summary_conclusions }}
+                        {% if form.summary_conclusions.errors %}<div class="form-error">{{ form.summary_conclusions.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3 flex items-center gap-2">
+                        {{ form.critical_parameters_verified }}
+                        <label for="{{ form.critical_parameters_verified.id_for_label }}" class="text-sm text-slate-700 font-medium">
+                            All Critical Process Parameters (CPPs) verified and satisfied
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    4. Milestones, Governance & Team
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.target_completion_date.id_for_label }}" class="form-label">Target Completion Date</label>
+                        {{ form.target_completion_date }}
+                        {% if form.target_completion_date.errors %}<div class="form-error">{{ form.target_completion_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.actual_completion_date.id_for_label }}" class="form-label">Actual Completion Date</label>
+                        {{ form.actual_completion_date }}
+                        {% if form.actual_completion_date.errors %}<div class="form-error">{{ form.actual_completion_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.revalidation_due_date.id_for_label }}" class="form-label">Revalidation Due Date</label>
+                        {{ form.revalidation_due_date }}
+                        {% if form.revalidation_due_date.errors %}<div class="form-error">{{ form.revalidation_due_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.department.id_for_label }}" class="form-label">Department / Unit</label>
+                        {{ form.department }}
+                        {% if form.department.errors %}<div class="form-error">{{ form.department.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.lead_author.id_for_label }}" class="form-label">Lead Author *</label>
+                        {{ form.lead_author }}
+                        {% if form.lead_author.errors %}<div class="form-error">{{ form.lead_author.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.qa_reviewer.id_for_label }}" class="form-label">QA Reviewer *</label>
+                        {{ form.qa_reviewer }}
+                        {% if form.qa_reviewer.errors %}<div class="form-error">{{ form.qa_reviewer.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.final_approver.id_for_label }}" class="form-label">Final Approver</label>
+                        {{ form.final_approver }}
+                        {% if form.final_approver.errors %}<div class="form-error">{{ form.final_approver.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.governing_document.id_for_label }}" class="form-label">Governing VMP / SOP</label>
+                        {{ form.governing_document }}
+                        {% if form.governing_document.errors %}<div class="form-error">{{ form.governing_document.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.triggering_change.id_for_label }}" class="form-label">Triggering Change Order</label>
+                        {{ form.triggering_change }}
+                        {% if form.triggering_change.errors %}<div class="form-error">{{ form.triggering_change.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.calibration_gage.id_for_label }}" class="form-label">Calibrated Instrument / Gage</label>
+                        {{ form.calibration_gage }}
+                        {% if form.calibration_gage.errors %}<div class="form-error">{{ form.calibration_gage.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:validation_protocol_detail' validation_protocol.pk %}{% else %}{% url 'quality:validation_protocol_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Update Protocol{% else %}Create Protocol{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
