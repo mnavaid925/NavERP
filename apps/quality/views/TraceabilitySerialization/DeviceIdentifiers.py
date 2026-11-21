@@ -37,6 +37,10 @@ def device_identifier_list(request):
     if selected_gudid_status:
         qs = qs.filter(gudid_status=selected_gudid_status)
 
+    selected_eudamed_status = request.GET.get("eudamed_status", "").strip()
+    if selected_eudamed_status:
+        qs = qs.filter(eudamed_status=selected_eudamed_status)
+
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
@@ -50,6 +54,7 @@ def device_identifier_list(request):
         "eudamed_status_choices": DeviceIdentifier.REGULATORY_STATUS_CHOICES,
         "selected_device_class": selected_device_class,
         "selected_gudid_status": selected_gudid_status,
+        "selected_eudamed_status": selected_eudamed_status,
         "query": query,
     }
     return render(request, "quality/traceabilityserialization/device_identifier/list.html", context)
