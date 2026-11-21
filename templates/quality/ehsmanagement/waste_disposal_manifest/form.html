@@ -65,9 +65,14 @@
                 {% if form.manifest_type.errors %}<div class="form-error">{{ form.manifest_type.errors.0 }}</div>{% endif %}
             </div>
             <div class="form-group">
-                <label class="form-label" for="id_status">Status</label>
-                {{ form.status }}
-                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                <label class="form-label">Status</label>
+                <div class="pt-2">
+                    {% if waste_disposal_manifest %}
+                    <span class="badge {{ waste_disposal_manifest.status_badge_class }}">{{ waste_disposal_manifest.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge badge-slate">Draft</span>
+                    {% endif %}
+                </div>
             </div>
             <div class="form-group">
                 <label class="form-label" for="id_accumulation_start_date">Accumulation Start Date <span class="text-danger">*</span></label>
