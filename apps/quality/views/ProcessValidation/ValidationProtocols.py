@@ -21,7 +21,7 @@ PAGE_SIZE = 15
 @login_required
 def validation_protocol_list(request):
     qs = quality_scope(ValidationProtocol.objects.all(), request).select_related(
-        "lead_author", "qa_reviewer", "final_approver", "department"
+        "lead_author"
     )
 
     q = request.GET.get("q", "").strip()
@@ -171,7 +171,7 @@ def validation_protocol_delete(request, pk):
 @login_required
 def validation_protocol_export(request):
     qs = quality_scope(ValidationProtocol.objects.all(), request).select_related(
-        "lead_author", "qa_reviewer", "final_approver", "department"
+        "lead_author", "qa_reviewer"
     )
 
     q = request.GET.get("q", "").strip()
