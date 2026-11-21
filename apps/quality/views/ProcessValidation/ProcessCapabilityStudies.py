@@ -153,6 +153,29 @@ def process_capability_study_export(request):
         "investigator", "approved_by", "validation_protocol"
     )
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(title__icontains=q)
+            | Q(parameter_name__icontains=q)
+            | Q(process_name__icontains=q)
+            | Q(equipment_tag__icontains=q)
+            | Q(lot_number__icontains=q)
+        )
+
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    determination_filter = request.GET.get("determination", "").strip()
+    if determination_filter:
+        qs = qs.filter(capability_determination=determination_filter)
+
+    category_filter = request.GET.get("category", "").strip()
+    if category_filter:
+        qs = qs.filter(parameter_category=category_filter)
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="capability_studies.csv"'
     response["X-Content-Type-Options"] = "nosniff"
