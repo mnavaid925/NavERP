@@ -69,7 +69,7 @@ def regulatory_submission_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    target_authorities = Party.objects.filter(tenant=request.tenant).order_by("name")
+    target_authorities = Party.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
