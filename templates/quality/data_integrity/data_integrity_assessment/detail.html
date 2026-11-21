@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+
+{% block title %}{{ assessment.number }} — Data Integrity Assessment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_assessment_list' %}">ALCOA+ Assessments</a>
+            <span class="sep">/</span>
+            <span>{{ assessment.number }}</span>
+        </div>
+        <h1 class="page-title">{{ assessment.number }} — {{ assessment.title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:data_integrity_assessment_edit' assessment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Assessment
+        </a>
+        <form method="post" action="{% url 'quality:data_integrity_assessment_delete' assessment.pk %}" onsubmit="return confirm('Delete assessment {{ assessment.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Assessment Scope & Context</h3>
+                {% if assessment.status == 'approved' %}
+                <span class="badge badge-green">Approved</span>
+                {% elif assessment.status == 'remediation_pending' %}
+                <span class="badge badge-amber">Remediation Pending</span>
+                {% elif assessment.status == 'in_assessment' %}
+                <span class="badge badge-info">In Assessment</span>
+                {% elif assessment.status == 'superseded' %}
+                <span class="badge badge-muted">Superseded</span>
+                {% else %}
+                <span class="badge badge-slate">Draft</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Assessment Title</dt>
+                        <dd class="font-medium">{{ assessment.title }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Scope Evaluated</dt>
+                        <dd>{{ assessment.assessment_scope }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Computerized System</dt>
+                        <dd>
+                            {% if assessment.system %}
+                            <span class="font-medium">{{ assessment.system.system_name }} ({{ assessment.system.number }})</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Operational Unit</dt>
+                        <dd>
+                            {% if assessment.org_unit %}
+                            <span>{{ assessment.org_unit.name }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Assessment Date</dt>
+                        <dd>{{ assessment.assessment_date|default:"Pending" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Next Periodic Review</dt>
+                        <dd>
+                            {% if assessment.next_review_due %}
+                            <span>{{ assessment.next_review_due }}</span>
+                            {% if assessment.is_overdue %}
+                            <span class="badge badge-red ml-2">Overdue</span>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">ALCOA+ 9-Dimension Compliance Evaluation</h3>
+                {% if assessment.overall_risk_level == 'critical' %}
+                <span class="badge badge-red">Critical Risk</span>
+                {% elif assessment.overall_risk_level == 'high' %}
+                <span class="badge badge-amber">High Risk</span>
+                {% elif assessment.overall_risk_level == 'medium' %}
+                <span class="badge badge-info">Medium Risk</span>
+                {% else %}
+                <span class="badge badge-green">Low Risk</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Attributable (A)</div>
+                        <div class="text-sm font-medium mt-1">Traceable to Originator</div>
+                        <div class="mt-2">
+                            {% if assessment.attributable_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.attributable_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.attributable_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Legible (L)</div>
+                        <div class="text-sm font-medium mt-1">Readable & Permanent</div>
+                        <div class="mt-2">
+                            {% if assessment.legible_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.legible_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.legible_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Contemporaneous (C)</div>
+                        <div class="text-sm font-medium mt-1">Real-time Timestamp</div>
+                        <div class="mt-2">
+                            {% if assessment.contemporaneous_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.contemporaneous_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.contemporaneous_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Original (O)</div>
+                        <div class="text-sm font-medium mt-1">Primary Capture / True Copy</div>
+                        <div class="mt-2">
+                            {% if assessment.original_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.original_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.original_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Accurate (A)</div>
+                        <div class="text-sm font-medium mt-1">Error-free & Validated</div>
+                        <div class="mt-2">
+                            {% if assessment.accurate_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.accurate_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.accurate_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Complete (+)</div>
+                        <div class="text-sm font-medium mt-1">All Metadata & Retests</div>
+                        <div class="mt-2">
+                            {% if assessment.complete_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.complete_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.complete_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Consistent (+)</div>
+                        <div class="text-sm font-medium mt-1">Chronological Sequence</div>
+                        <div class="mt-2">
+                            {% if assessment.consistent_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.consistent_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.consistent_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Enduring (+)</div>
+                        <div class="text-sm font-medium mt-1">Durable & Tamper-evident</div>
+                        <div class="mt-2">
+                            {% if assessment.enduring_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.enduring_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.enduring_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="border rounded p-3 bg-slate-50">
+                        <div class="text-xs text-muted uppercase font-semibold">Available (+)</div>
+                        <div class="text-sm font-medium mt-1">Accessible for Audits</div>
+                        <div class="mt-2">
+                            {% if assessment.available_rating == 'fully_compliant' %}
+                            <span class="badge badge-green">Fully Compliant</span>
+                            {% elif assessment.available_rating == 'partially_compliant' %}
+                            <span class="badge badge-amber">Partially Compliant</span>
+                            {% elif assessment.available_rating == 'non_compliant' %}
+                            <span class="badge badge-red">Non-Compliant</span>
+                            {% else %}
+                            <span class="badge badge-slate">N/A</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if assessment.vulnerabilities_summary %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Identified Vulnerabilities & Data Gaps</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-sm whitespace-pre-wrap">{{ assessment.vulnerabilities_summary }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if assessment.remediation_plan %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Remediation Action Plan & Controls</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-sm whitespace-pre-wrap">{{ assessment.remediation_plan }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Assessors & Approvals</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Lead Assessor</dt>
+                        <dd class="font-medium text-sm">
+                            {% if assessment.lead_assessor %}
+                            {{ assessment.lead_assessor.get_full_name|default:assessment.lead_assessor.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">QA Reviewer</dt>
+                        <dd class="font-medium text-sm">
+                            {% if assessment.qa_reviewer %}
+                            {{ assessment.qa_reviewer.get_full_name|default:assessment.qa_reviewer.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">QA Approved At</dt>
+                        <dd class="text-sm">{{ assessment.qa_approved_at|date:"Y-m-d H:i"|default:"Pending QA Sign-off" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Created</dt>
+                        <dd class="text-xs text-muted">{{ assessment.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Linked Quality Escalations</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <dt class="text-xs text-muted uppercase">Linked CAPA Investigation</dt>
+                    <dd class="text-sm mt-1">
+                        {% if assessment.linked_capa %}
+                        <a href="{% url 'quality:capa_detail' assessment.linked_capa.pk %}" class="text-brand font-medium">
+                            {{ assessment.linked_capa.number }} — {{ assessment.linked_capa.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">None (No CAPA required)</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase">Linked Non-Conformance (NCR)</dt>
+                    <dd class="text-sm mt-1">
+                        {% if assessment.linked_ncr %}
+                        <a href="{% url 'quality:ncr_detail' assessment.linked_ncr.pk %}" class="text-brand font-medium">
+                            {{ assessment.linked_ncr.number }} — {{ assessment.linked_ncr.title }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">None</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
