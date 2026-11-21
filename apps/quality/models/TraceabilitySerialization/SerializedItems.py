@@ -35,7 +35,7 @@ class SerializedItem(TenantNumbered):
     COMMISSIONING_STATUS_CSS = {
         "allocated": "badge-slate",
         "commissioned": "badge-info",
-        "aggregated": "badge-purple",
+        "aggregated": "badge-slate",
         "shipped": "badge-green",
         "decommissioned": "badge-slate",
         "destroyed": "badge-muted",
