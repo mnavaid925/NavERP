@@ -46,7 +46,7 @@ class PostMarketSurveillanceReport(TenantNumbered):
 
     report_title = models.CharField(max_length=255)
     report_type = models.CharField(
-        max_length=30, choices=REPORT_TYPE_CHOICES, default="psur", db_index=True
+        max_length=30, choices=REPORT_TYPE_CHOICES, default="psur"
     )
     product_registration = models.ForeignKey(
         "quality.ProductRegistration",
@@ -59,7 +59,7 @@ class PostMarketSurveillanceReport(TenantNumbered):
         max_length=255, help_text="Product line, device model, or UDI family"
     )
     reporting_period_start = models.DateField()
-    reporting_period_end = models.DateField(db_index=True)
+    reporting_period_end = models.DateField()
     units_distributed = models.PositiveIntegerField(
         default=0, help_text="Total units shipped or deployed in period"
     )
@@ -69,13 +69,13 @@ class PostMarketSurveillanceReport(TenantNumbered):
         default=0, help_text="Number of recalls or FSCAs executed"
     )
     benefit_risk_conclusion = models.CharField(
-        max_length=30, choices=BENEFIT_RISK_CHOICES, default="favorable", db_index=True
+        max_length=30, choices=BENEFIT_RISK_CHOICES, default="favorable"
     )
     benefit_risk_rationale = models.TextField(blank=True)
     pmcf_action_required = models.BooleanField(default=False)
     pmcf_action_summary = models.TextField(blank=True)
     status = models.CharField(
-        max_length=25, choices=STATUS_CHOICES, default="draft", db_index=True
+        max_length=25, choices=STATUS_CHOICES, default="draft"
     )
     prepared_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -105,6 +105,7 @@ class PostMarketSurveillanceReport(TenantNumbered):
         indexes = [
             Index(fields=["tenant", "status"], name="idx_qpms_ten_status"),
             Index(fields=["tenant", "report_type"], name="idx_qpms_ten_type"),
+            Index(fields=["tenant", "benefit_risk_conclusion"], name="idx_qpms_ten_benrisk"),
             Index(fields=["tenant", "reporting_period_end"], name="idx_qpms_ten_period"),
         ]
 
