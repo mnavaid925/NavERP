@@ -115,6 +115,18 @@ from apps.quality.models.ProcessValidation.ComputerSystemValidations import (
 from apps.quality.models.ProcessValidation.CleaningValidations import (
     CleaningValidation,
 )
+from apps.quality.models.EhsManagement.HazardousMaterials import (
+    HazardousMaterial,
+)
+from apps.quality.models.EhsManagement.SafetyIncidents import (
+    SafetyIncident,
+)
+from apps.quality.models.EhsManagement.EnvironmentalMonitoringLogs import (
+    EnvironmentalMonitoringLog,
+)
+from apps.quality.models.EhsManagement.WasteDisposalManifests import (
+    WasteDisposalManifest,
+)
 
 
 User = get_user_model()
@@ -133,6 +145,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            WasteDisposalManifest.objects.all().delete()
+            EnvironmentalMonitoringLog.objects.all().delete()
+            SafetyIncident.objects.all().delete()
+            HazardousMaterial.objects.all().delete()
             CleaningValidation.objects.all().delete()
             ComputerSystemValidation.objects.all().delete()
             ProcessCapabilityStudy.objects.all().delete()
@@ -218,6 +234,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_13(tenant)
             self._seed_submodule_12_14(tenant)
             self._seed_submodule_12_15(tenant)
+            self._seed_submodule_12_16(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -4897,6 +4914,280 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.15 Process Validation & Verification seeded successfully."))
+
+    def _seed_submodule_12_16(self, tenant):
+        if HazardousMaterial.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.16 Environmental, Health & Safety (EHS) data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.16 Environmental, Health & Safety (EHS)...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not admin_user:
+            self.stdout.write(f"[{tenant.name}] Warning: No user found for tenant.")
+            return
+
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
+        ehs_officer = users[1] if len(users) > 1 else admin_user
+
+        qa_dept = OrgUnit.objects.filter(tenant=tenant, name__icontains="quality").order_by("pk").first()
+        if not qa_dept:
+            qa_dept = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
+
+        vendor = Party.objects.filter(tenant=tenant, is_vendor=True).order_by("pk").first()
+        if not vendor:
+            vendor = Party.objects.filter(tenant=tenant).order_by("pk").first()
+
+        today = timezone.now().date()
+        now = timezone.now()
+
+        with transaction.atomic():
+            # 1. Hazardous Materials
+            haz1 = HazardousMaterial.objects.create(
+                tenant=tenant,
+                material_name="Isopropyl Alcohol 99.8% (IPA USP Grade)",
+                trade_name="Propan-2-ol Electronic Cleaning Solvent",
+                cas_number="67-63-0",
+                un_na_number="UN1219",
+                ghs_hazard_class="flammable_liquid",
+                ghs_signal_word="danger",
+                ghs_pictograms="flame,exclamation",
+                physical_state="liquid",
+                storage_temperature_class="ambient",
+                storage_location="Flammables Storage Bunker B-101 / Flammable Safety Cabinet 3",
+                current_stock_quantity=Decimal("450.00"),
+                maximum_allowable_quantity=Decimal("1000.00"),
+                unit_of_measure="L",
+                nfpa_health=1,
+                nfpa_flammability=3,
+                nfpa_instability=0,
+                nfpa_special_notice="",
+                sds_revision_date=today - datetime.timedelta(days=180),
+                sds_document_url="https://sds.nav-erp.internal/ipa-99-usp.pdf",
+                status="approved",
+                org_unit=qa_dept,
+                supplier=vendor,
+                managed_by=ehs_officer,
+            )
+
+            haz2 = HazardousMaterial.objects.create(
+                tenant=tenant,
+                material_name="Sulfuric Acid 96% AR Grade",
+                trade_name="Hydrogen Sulfate Concentrated Acid",
+                cas_number="7664-93-9",
+                un_na_number="UN1830",
+                ghs_hazard_class="corrosive",
+                ghs_signal_word="danger",
+                ghs_pictograms="corrosion",
+                physical_state="liquid",
+                storage_temperature_class="controlled_room",
+                storage_location="Acid Corrosives Vault A-04 / Spill Containment Sump 2",
+                current_stock_quantity=Decimal("80.00"),
+                maximum_allowable_quantity=Decimal("200.00"),
+                unit_of_measure="L",
+                nfpa_health=3,
+                nfpa_flammability=0,
+                nfpa_instability=2,
+                nfpa_special_notice="W",
+                sds_revision_date=today - datetime.timedelta(days=90),
+                sds_document_url="https://sds.nav-erp.internal/sulfuric-acid-96.pdf",
+                status="approved",
+                org_unit=qa_dept,
+                supplier=vendor,
+                managed_by=ehs_officer,
+            )
+
+            haz3 = HazardousMaterial.objects.create(
+                tenant=tenant,
+                material_name="Formaldehyde 37% Solution (Formalin)",
+                trade_name="Methanal Preservative Solution",
+                cas_number="50-00-0",
+                un_na_number="UN2209",
+                ghs_hazard_class="toxic",
+                ghs_signal_word="danger",
+                ghs_pictograms="skull,health_hazard,corrosion",
+                physical_state="liquid",
+                storage_temperature_class="controlled_room",
+                storage_location="Toxic Chemicals Cabinet T-02",
+                current_stock_quantity=Decimal("25.00"),
+                maximum_allowable_quantity=Decimal("50.00"),
+                unit_of_measure="L",
+                nfpa_health=3,
+                nfpa_flammability=2,
+                nfpa_instability=0,
+                nfpa_special_notice="",
+                sds_revision_date=today - datetime.timedelta(days=45),
+                sds_document_url="https://sds.nav-erp.internal/formalin-37.pdf",
+                status="approved",
+                org_unit=qa_dept,
+                supplier=vendor,
+                managed_by=admin_user,
+            )
+
+            # 2. Safety Incidents
+            inc1 = SafetyIncident.objects.create(
+                tenant=tenant,
+                incident_title="Chemical Splash to Forearm During QC Acid Transfer",
+                incident_type="chemical_exposure",
+                severity_level="minor_first_aid",
+                incident_date=now - datetime.timedelta(days=14),
+                location_details="Quality Control Analytical Laboratory 2, Fume Hood 4",
+                description="Analyst sustained a minor skin exposure of dilute hydrochloric acid (0.1N) to the wrist area due to improper glove cuff overlap under lab coat.",
+                immediate_actions_taken="Emergency eyewash and safety shower station used immediately for 15 minutes continuous irrigation. First aid burn dressing applied by occupational health nurse.",
+                is_osha_recordable=False,
+                osha_case_number="",
+                lost_workdays=0,
+                restricted_workdays=0,
+                root_cause_summary="Personal Protective Equipment (PPE) gap: standard nitrile gloves did not provide extended forearm cuff protection when handling acid carboys.",
+                corrective_action_plan="Procure extended-cuff chemical resistant gloves; mandate sleeve aprons for all acid pouring operations.",
+                preventive_measures="Conducted refresher safety briefing on chemical transfer PPE for all QC laboratory personnel.",
+                status="closed",
+                org_unit=qa_dept,
+                reported_by=ehs_officer,
+                lead_investigator=admin_user,
+            )
+
+            inc2 = SafetyIncident.objects.create(
+                tenant=tenant,
+                incident_title="Forklift Near Miss in Raw Material Quarantine Aisle B",
+                incident_type="near_miss",
+                severity_level="near_miss",
+                incident_date=now - datetime.timedelta(days=5),
+                location_details="Warehouse Zone 1, Main Quarantine Aisle Intersection B-3",
+                description="Forklift operator turned blind corner without sounding horn while pallet truck was crossing aisle. No impact occurred; pedestrian stopped 2 feet clear.",
+                immediate_actions_taken="Both operators debriefed immediately by warehouse safety lead. Corner stop mirror adjusted.",
+                is_osha_recordable=False,
+                osha_case_number="",
+                lost_workdays=0,
+                restricted_workdays=0,
+                root_cause_summary="Blind aisle intersection lacked convex wide-angle safety dome mirror and floor stop line markings.",
+                corrective_action_plan="Install 360-degree overhead convex ceiling mirror and repaint yellow high-visibility pedestrian walkways.",
+                preventive_measures="Automated pedestrian proximity sensor beacon ordered for high-traffic aisle junctions.",
+                status="investigation",
+                org_unit=qa_dept,
+                reported_by=admin_user,
+                lead_investigator=ehs_officer,
+            )
+
+            # 3. Environmental Monitoring Logs
+            log1 = EnvironmentalMonitoringLog.objects.create(
+                tenant=tenant,
+                sampling_point_name="Cleanroom Suite 1 - Laminar Flow Filling Hood Air Viable",
+                sampling_point_code="CR1-LFH-01-AIR",
+                cleanroom_classification="iso_5",
+                monitoring_type="air_viable",
+                sample_timestamp=now - datetime.timedelta(days=1, hours=2),
+                measured_value=Decimal("0.00"),
+                unit_of_measure="CFU/m3",
+                alert_limit=Decimal("1.00"),
+                action_limit=Decimal("1.00"),
+                sampling_condition="in_operation",
+                compliance_status="pass",
+                root_cause_if_exceeded="",
+                corrective_action_reference="",
+                sampled_by=admin_user,
+                reviewed_by=ehs_officer,
+                org_unit=qa_dept,
+                equipment_tag="LAF-FILL-01",
+            )
+
+            log2 = EnvironmentalMonitoringLog.objects.create(
+                tenant=tenant,
+                sampling_point_name="Cleanroom Suite 1 - Gowning Airlock Surface Swab",
+                sampling_point_code="CR1-AL-03-SURF",
+                cleanroom_classification="iso_7",
+                monitoring_type="surface_swab",
+                sample_timestamp=now - datetime.timedelta(days=2, hours=4),
+                measured_value=Decimal("6.50"),
+                unit_of_measure="CFU/plate",
+                alert_limit=Decimal("5.00"),
+                action_limit=Decimal("10.00"),
+                sampling_condition="post_cleaning",
+                compliance_status="alert",
+                root_cause_if_exceeded="Slightly elevated contact plate count observed on gowning step-over bench following shift change.",
+                corrective_action_reference="CAPA-QC-2026-088",
+                sampled_by=ehs_officer,
+                reviewed_by=admin_user,
+                org_unit=qa_dept,
+                equipment_tag="AIRLOCK-STEP-01",
+            )
+
+            log3 = EnvironmentalMonitoringLog.objects.create(
+                tenant=tenant,
+                sampling_point_name="Packaging Area Differential Pressure Transmitter",
+                sampling_point_code="PKG-DP-02",
+                cleanroom_classification="iso_8",
+                monitoring_type="diff_pressure",
+                sample_timestamp=now - datetime.timedelta(hours=6),
+                measured_value=Decimal("18.40"),
+                unit_of_measure="Pa",
+                alert_limit=Decimal("12.00"),
+                action_limit=Decimal("10.00"),
+                sampling_condition="in_operation",
+                compliance_status="pass",
+                root_cause_if_exceeded="",
+                corrective_action_reference="",
+                sampled_by=admin_user,
+                reviewed_by=ehs_officer,
+                org_unit=qa_dept,
+                equipment_tag="DPT-PKG-02",
+            )
+
+            # 4. Waste Disposal Manifests
+            man1 = WasteDisposalManifest.objects.create(
+                tenant=tenant,
+                epa_manifest_tracking_number="018492043JJK",
+                waste_stream_name="Spent Organic Solvent Waste Blend (Acetone / Isopropanol / Methanol)",
+                dot_hazard_class="class_3",
+                epa_waste_codes="D001, F003, F005",
+                waste_quantity=Decimal("1850.00"),
+                unit_of_measure="kg",
+                container_count=10,
+                container_type="steel_drum",
+                physical_form="liquid",
+                management_method="fuel_blending",
+                shipment_date=today - datetime.timedelta(days=20),
+                tsdf_receipt_date=today - datetime.timedelta(days=17),
+                certificate_of_destruction_received=True,
+                status="certified_disposed",
+                hazardous_material=haz1,
+                transporter_epa_id="TXD980831201",
+                tsdf_epa_id="TXD000838896",
+                transporter=vendor,
+                tsdf_facility=vendor,
+                ehs_officer=ehs_officer,
+                org_unit=qa_dept,
+            )
+
+            man2 = WasteDisposalManifest.objects.create(
+                tenant=tenant,
+                epa_manifest_tracking_number="019284756XYZ",
+                waste_stream_name="Neutralized Corrosive Acid Solution Rinse Residues",
+                dot_hazard_class="class_8",
+                epa_waste_codes="D002",
+                waste_quantity=Decimal("750.00"),
+                unit_of_measure="kg",
+                container_count=4,
+                container_type="ibc_tote",
+                physical_form="liquid",
+                management_method="neutralization_treatment",
+                shipment_date=today - datetime.timedelta(days=3),
+                tsdf_receipt_date=None,
+                certificate_of_destruction_received=False,
+                status="shipped",
+                hazardous_material=haz2,
+                transporter_epa_id="TXD980831201",
+                tsdf_epa_id="TXD000838896",
+                transporter=vendor,
+                tsdf_facility=vendor,
+                ehs_officer=admin_user,
+                org_unit=qa_dept,
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.16 Environmental, Health & Safety (EHS) seeded successfully."))
 
 
 
