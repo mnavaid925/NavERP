@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 1 | 8 | 0 |
+| **Important** | 9 | 0 | 9 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 15 | 10 | 0 |
+| **Total** | 25 | 14 | 11 | 0 |
 
 ---
 
@@ -107,7 +107,7 @@
   - **Issue**: 2–3 separate `COUNT(*)` queries are executed per list view request.
   - **Fix**: Combine into a single `base_qs.aggregate(...)` with conditional `Count("id", filter=Q(...))`.
 
-- [ ] **I9: Non-Standard CSS Class `form-checkbox` on Boolean Input**
+- [x] **I9: Non-Standard CSS Class `form-checkbox` on Boolean Input**
   - **Files**:
     - `apps/quality/forms/RegulatorySubmissions/PostMarketSurveillanceReports.py:49`
     - `templates/quality/regulatory_submissions/post_market_surveillance_report/form.html:119`
