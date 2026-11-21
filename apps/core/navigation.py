@@ -3489,6 +3489,13 @@ LIVE_LINKS = {
         "Cleaning Validation": "quality:cleaning_validation_list",
         "Revalidation & Periodic Review": "quality:process_validation_dashboard",
     },
+    "12.16": {
+        "Hazardous Material Management": "quality:hazardous_material_list",
+        "Workplace Safety Inspections": "quality:safety_incident_list",
+        "Environmental Monitoring": "quality:environmental_monitoring_log_list",
+        "Waste Management & Disposal": "quality:waste_disposal_manifest_list",
+        "Occupational Health & Ergonomics": "quality:ehs_dashboard",
+    },
 
 
 
