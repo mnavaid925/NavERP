@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ regulatory_commitment.number }}{% else %}New Regulatory Commitment{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_dashboard' %}">Regulatory Compliance</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_commitment_list' %}">Commitments</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ regulatory_commitment.number }}{% else %}New Commitment{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Regulatory Commitment {{ regulatory_commitment.number }}{% else %}Log Health Authority Commitment & Deficiency{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:regulatory_commitment_detail' regulatory_commitment.pk %}{% else %}{% url 'quality:regulatory_commitment_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Commitment Core & Classification</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.title.id_for_label }}">Commitment Subject / Action Title *</label>
+                            {{ form.title }}
+                            {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.commitment_type.id_for_label }}">Commitment Type *</label>
+                            {{ form.commitment_type }}
+                            {% if form.commitment_type.errors %}<div class="form-error">{{ form.commitment_type.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.regulatory_agency.id_for_label }}">Regulatory Agency / Authority</label>
+                            {{ form.regulatory_agency }}
+                            {% if form.regulatory_agency.errors %}<div class="form-error">{{ form.regulatory_agency.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.agency_reference_number.id_for_label }}">Agency Reference / Deficiency Item #</label>
+                            {{ form.agency_reference_number }}
+                            {% if form.agency_reference_number.errors %}<div class="form-error">{{ form.agency_reference_number.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.correspondence_date.id_for_label }}">Agency Correspondence Date</label>
+                            {{ form.correspondence_date }}
+                            {% if form.correspondence_date.errors %}<div class="form-error">{{ form.correspondence_date.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Commitment Statement & Fulfillment Plan</h3>
+                    <div class="space-y-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.commitment_description.id_for_label }}">Commitment Description / Required Action *</label>
+                            {{ form.commitment_description }}
+                            {% if form.commitment_description.errors %}<div class="form-error">{{ form.commitment_description.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.verification_method.id_for_label }}">Verification Method & Deliverable Protocol</label>
+                            {{ form.verification_method }}
+                            {% if form.verification_method.errors %}<div class="form-error">{{ form.verification_method.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.agency_feedback.id_for_label }}">Agency Feedback & Formal Response Notes</label>
+                            {{ form.agency_feedback }}
+                            {% if form.agency_feedback.errors %}<div class="form-error">{{ form.agency_feedback.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Ownership, Deadlines & Lifecycle</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.responsible_owner.id_for_label }}">Responsible Owner</label>
+                            {{ form.responsible_owner }}
+                            {% if form.responsible_owner.errors %}<div class="form-error">{{ form.responsible_owner.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.due_date.id_for_label }}">Mandated Due Date *</label>
+                            {{ form.due_date }}
+                            {% if form.due_date.errors %}<div class="form-error">{{ form.due_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.completion_date.id_for_label }}">Actual Completion Date</label>
+                            {{ form.completion_date }}
+                            {% if form.completion_date.errors %}<div class="form-error">{{ form.completion_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Source Links & Traceability</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.linked_submission.id_for_label }}">Source Regulatory Submission</label>
+                            {{ form.linked_submission }}
+                            {% if form.linked_submission.errors %}<div class="form-error">{{ form.linked_submission.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.linked_registration.id_for_label }}">Linked Product Registration</label>
+                            {{ form.linked_registration }}
+                            {% if form.linked_registration.errors %}<div class="form-error">{{ form.linked_registration.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.linked_inspection.id_for_label }}">Linked Regulatory Inspection Host</label>
+                            {{ form.linked_inspection }}
+                            {% if form.linked_inspection.errors %}<div class="form-error">{{ form.linked_inspection.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group md:col-span-3">
+                            <label class="form-label" for="{{ form.notes.id_for_label }}">General Notes</label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3 border-t pt-4">
+                <a href="{% if is_edit %}{% url 'quality:regulatory_commitment_detail' regulatory_commitment.pk %}{% else %}{% url 'quality:regulatory_commitment_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Log Commitment{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
