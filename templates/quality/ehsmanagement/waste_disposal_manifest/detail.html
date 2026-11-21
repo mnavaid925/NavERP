@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}{{ waste_manifest.manifest_title }} ({{ waste_manifest.number }}) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:waste_disposal_manifest_list' %}">Waste Manifests</a>
+            <span class="sep">/</span>
+            <span>{{ waste_manifest.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ waste_manifest.manifest_title }}</h1>
+            <span class="badge {{ waste_manifest.status_css }}">{{ waste_manifest.get_status_display }}</span>
+            <span class="badge {{ waste_manifest.manifest_type_css }}">{{ waste_manifest.get_manifest_type_display }}</span>
+            {% if waste_manifest.is_accumulation_overdue %}
+            <span class="badge badge-red">Overdue Accumulation (&gt;90d)</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:waste_disposal_manifest_update' waste_manifest.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Manifest
+        </a>
+        <a href="{% url 'quality:waste_disposal_manifest_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Manifests
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Manifest Profile & Waste Chemistry -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-5 h-5 text-primary"></i> EPA Form 8700-22 Manifest Details
+                </h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Manifest Internal Number</dt>
+                        <dd class="font-mono font-medium">{{ waste_manifest.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>EPA Manifest Tracking ID</dt>
+                        <dd class="font-mono font-bold text-slate-900">{{ waste_manifest.regulatory_manifest_id }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Manifest Title</dt>
+                        <dd class="font-medium text-slate-900">{{ waste_manifest.manifest_title }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Waste Stream Category</dt>
+                        <dd>{{ waste_manifest.get_manifest_type_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Generator Facility / Org Unit</dt>
+                        <dd>
+                            {% if waste_manifest.generator_org_unit %}{{ waste_manifest.generator_org_unit.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Generator EPA ID</dt>
+                        <dd class="font-mono">{{ waste_manifest.generator_epa_id|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Accumulation Start Date</dt>
+                        <dd class="font-medium">{{ waste_manifest.accumulation_start_date|date:"Y-m-d" }} ({{ waste_manifest.accumulation_days }} days ago)</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Shipment / Dispatch Date</dt>
+                        <dd>{{ waste_manifest.shipment_date|date:"Y-m-d"|default:"Pending Dispatch" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>TSDF Receipt Date</dt>
+                        <dd>{{ waste_manifest.tsdf_receipt_date|date:"Y-m-d"|default:"Awaiting TSDF Receipt" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Certifying Officer</dt>
+                        <dd>
+                            {% if waste_manifest.certifying_officer %}
+                            {{ waste_manifest.certifying_officer.get_full_name|default:waste_manifest.certifying_officer.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Waste Profile, Quantity & RCRA Hazard Codes -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="package" class="w-5 h-5 text-amber-500"></i> Waste Stream Chemistry & Containers
+                </h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">DOT Proper Shipping Name & Description</div>
+                    <div class="text-sm font-medium text-slate-900 bg-slate-50 p-3 rounded border border-slate-200">
+                        {{ waste_manifest.waste_description }}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">EPA Waste Codes</div>
+                        <div class="font-mono text-sm bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
+                            {{ waste_manifest.epa_waste_codes|default:"None listed" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Originating Chemical Material</div>
+                        <div>
+                            {% if waste_manifest.associated_hazardous_material %}
+                            <a href="{% url 'quality:hazardous_material_detail' waste_manifest.associated_hazardous_material.pk %}" class="text-primary hover:underline font-medium text-sm flex items-center gap-1">
+                                <i data-lucide="flask-conical" class="w-4 h-4"></i>
+                                {{ waste_manifest.associated_hazardous_material.material_name }} ({{ waste_manifest.associated_hazardous_material.number }})
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400 text-sm">Not linked to specific inventory item</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">RCRA Hazardous Characteristics</div>
+                    <div class="flex flex-wrap gap-2">
+                        {% if waste_manifest.is_ignitable %}<span class="badge badge-red">D001 Ignitable</span>{% endif %}
+                        {% if waste_manifest.is_corrosive %}<span class="badge badge-red">D002 Corrosive</span>{% endif %}
+                        {% if waste_manifest.is_reactive %}<span class="badge badge-red">D003 Reactive</span>{% endif %}
+                        {% if waste_manifest.is_toxic %}<span class="badge badge-red">Toxicity Characteristic</span>{% endif %}
+                        {% if not waste_manifest.is_ignitable and not waste_manifest.is_corrosive and not waste_manifest.is_reactive and not waste_manifest.is_toxic %}
+                        <span class="badge badge-slate">Non-Characteristic / Listed Only</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2 border-t border-slate-200">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Net Quantity</div>
+                        <div class="text-xl font-bold font-mono text-slate-900">{{ waste_manifest.quantity_value }} {{ waste_manifest.get_quantity_uom_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Container Packaging</div>
+                        <div class="text-sm font-medium text-slate-800">{{ waste_manifest.container_count }} &times; {{ waste_manifest.get_container_type_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Physical Form</div>
+                        <div class="text-sm font-medium text-slate-800">{{ waste_manifest.get_physical_state_display }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Discrepancy & Notes -->
+        {% if waste_manifest.discrepancy_details or waste_manifest.notes %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-5 h-5 text-amber-500"></i> Discrepancies & Manifest Notes
+                </h3>
+            </div>
+            <div class="card-body space-y-3">
+                {% if waste_manifest.discrepancy_details %}
+                <div>
+                    <div class="text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">TSDF Receipt Discrepancy Flag</div>
+                    <div class="p-3 bg-red-50 text-red-900 rounded border border-red-200 text-sm whitespace-pre-line">{{ waste_manifest.discrepancy_details }}</div>
+                </div>
+                {% endif %}
+                {% if waste_manifest.notes %}
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">General Notes</div>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ waste_manifest.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar: Transporter, TSDF & Destruction Certification -->
+    <div class="space-y-6">
+        <!-- Certificate of Destruction Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="award" class="w-5 h-5 text-green-600"></i> TSDF Certificate of Destruction
+                </h3>
+            </div>
+            <div class="card-body space-y-3">
+                {% if waste_manifest.certificate_of_disposal_number %}
+                <div class="p-3 bg-green-50 rounded border border-green-200 space-y-2">
+                    <div class="text-xs font-semibold uppercase tracking-wider text-green-800">Final Destruction Confirmed</div>
+                    <div class="font-mono font-bold text-green-900 text-base">{{ waste_manifest.certificate_of_disposal_number }}</div>
+                    <div class="text-xs text-green-700">
+                        Received on {{ waste_manifest.certificate_received_date|date:"Y-m-d"|default:"Verified" }}
+                    </div>
+                    {% if waste_manifest.management_method_code %}
+                    <div class="text-xs text-green-800 pt-1 border-t border-green-200">
+                        Method: <strong>{{ waste_manifest.management_method_code }}</strong>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="p-3 bg-slate-50 rounded border border-slate-200 text-center text-xs text-slate-500">
+                    Awaiting final destruction certificate from designated TSDF facility.
+                </div>
+                {% endif %}
+
+                <!-- Quick TSDF Certification Form -->
+                {% if waste_manifest.status != 'certified_disposed' %}
+                <div class="pt-2 border-t border-slate-200">
+                    <h4 class="font-semibold text-slate-800 text-xs uppercase mb-2">Record TSDF Certification</h4>
+                    <form method="post" action="{% url 'quality:waste_disposal_manifest_certify' waste_manifest.pk %}" class="space-y-2">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label class="form-label text-xs" for="certificate_of_disposal_number">Certificate #</label>
+                            <input type="text" name="certificate_of_disposal_number" id="certificate_of_disposal_number" class="form-input text-sm" placeholder="e.g. COD-2026-9021" value="{{ waste_manifest.certificate_of_disposal_number }}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label text-xs" for="certificate_received_date">Date Received</label>
+                            <input type="date" name="certificate_received_date" id="certificate_received_date" class="form-input text-sm" value="{{ waste_manifest.certificate_received_date|date:'Y-m-d' }}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label text-xs" for="management_method_code">Disposal Method Code</label>
+                            <input type="text" name="management_method_code" id="management_method_code" class="form-input text-sm" placeholder="e.g. H040 Incineration" value="{{ waste_manifest.management_method_code }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-full">
+                            <i data-lucide="check"></i> Confirm Final Destruction
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Supply Chain Chain of Custody -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="truck" class="w-5 h-5 text-primary"></i> Cradle-to-Grave Custody
+                </h3>
+            </div>
+            <div class="card-body space-y-4 text-sm">
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Licensed Transporter</div>
+                    <div class="font-bold text-slate-900">{{ waste_manifest.transporter.name }}</div>
+                    <div class="font-mono text-xs text-slate-500">EPA ID: {{ waste_manifest.transporter_epa_id|default:"On File" }}</div>
+                </div>
+
+                <div class="border-t border-slate-200 pt-3">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Designated TSDF Facility</div>
+                    <div class="font-bold text-slate-900">{{ waste_manifest.tsdf_facility.name }}</div>
+                    <div class="font-mono text-xs text-slate-500">EPA ID: {{ waste_manifest.tsdf_epa_id|default:"On File" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
