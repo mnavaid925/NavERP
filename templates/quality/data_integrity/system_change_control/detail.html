@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}{{ change.number }} — System Change Control — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:system_change_control_list' %}">Change Controls</a>
+            <span class="sep">/</span>
+            <span>{{ change.number }}</span>
+        </div>
+        <h1 class="page-title">{{ change.number }} — {{ change.title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:system_change_control_edit' change.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Change
+        </a>
+        <form method="post" action="{% url 'quality:system_change_control_delete' change.pk %}" onsubmit="return confirm('Delete change control {{ change.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Change Overview & System Context</h3>
+                {% if change.status == 'implemented_closed' %}
+                <span class="badge badge-green">Closed</span>
+                {% elif change.status == 'approved_for_build' %}
+                <span class="badge badge-info">Approved Build</span>
+                {% elif change.status == 'testing_verification' %}
+                <span class="badge badge-amber">Testing Active</span>
+                {% elif change.status == 'ccb_review' %}
+                <span class="badge badge-amber">CCB Review</span>
+                {% elif change.status == 'rejected' %}
+                <span class="badge badge-red">Rejected</span>
+                {% elif change.status == 'cancelled' %}
+                <span class="badge badge-muted">Cancelled</span>
+                {% else %}
+                <span class="badge badge-slate">Draft</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Change Title</dt>
+                        <dd class="font-medium">{{ change.title }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Computerized System</dt>
+                        <dd>
+                            {% if change.system %}
+                            <span class="font-medium">{{ change.system.system_name }} ({{ change.system.number }})</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Change Type</dt>
+                        <dd>
+                            <span class="badge badge-slate">{{ change.get_change_type_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Change Priority</dt>
+                        <dd>
+                            {% if change.change_priority == 'emergency' %}
+                            <span class="badge badge-red">Emergency</span>
+                            {% elif change.change_priority == 'urgent' %}
+                            <span class="badge badge-amber">Urgent</span>
+                            {% else %}
+                            <span class="badge badge-slate">Routine</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>GxP Impact Rating</dt>
+                        <dd>
+                            {% if change.gxp_impact == 'direct_gxp' %}
+                            <span class="badge badge-red">Direct GxP Impact</span>
+                            {% elif change.gxp_impact == 'indirect_gxp' %}
+                            <span class="badge badge-amber">Indirect GxP</span>
+                            {% else %}
+                            <span class="badge badge-slate">Non-GxP</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Operational Unit</dt>
+                        <dd>{{ change.org_unit.name|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Implementation Date</dt>
+                        <dd>
+                            <span>{{ change.target_date|default:"TBD" }}</span>
+                            {% if change.is_overdue %}
+                            <span class="badge badge-red ml-2">Overdue</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Actual Implementation Date</dt>
+                        <dd>{{ change.actual_implementation_date|default:"Pending" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Technical Description & Business Justification</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h4 class="text-xs uppercase text-muted font-semibold">Change Description</h4>
+                    <p class="text-sm mt-1 whitespace-pre-wrap">{{ change.description }}</p>
+                </div>
+                {% if change.business_justification %}
+                <div class="pt-2 border-t">
+                    <h4 class="text-xs uppercase text-muted font-semibold">Business & Regulatory Justification</h4>
+                    <p class="text-sm mt-1 whitespace-pre-wrap">{{ change.business_justification }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Data Integrity Impact & Validation Requirements</h3>
+            </div>
+            <div class="card-body space-y-4">
+                {% if change.data_integrity_risk %}
+                <div>
+                    <h4 class="text-xs uppercase text-muted font-semibold">ALCOA+ Data Integrity Impact</h4>
+                    <p class="text-sm mt-1 whitespace-pre-wrap">{{ change.data_integrity_risk }}</p>
+                </div>
+                {% endif %}
+                {% if change.validation_deliverables %}
+                <div class="pt-2 border-t">
+                    <h4 class="text-xs uppercase text-muted font-semibold">Validation Deliverables & Testing Strategy</h4>
+                    <p class="text-sm mt-1 whitespace-pre-wrap">{{ change.validation_deliverables }}</p>
+                </div>
+                {% endif %}
+                {% if change.rollback_plan %}
+                <div class="pt-2 border-t">
+                    <h4 class="text-xs uppercase text-muted font-semibold">Rollback & Backout Contingency Plan</h4>
+                    <p class="text-sm mt-1 whitespace-pre-wrap">{{ change.rollback_plan }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if change.closure_summary %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Implementation Outcome & Closure Summary</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-sm whitespace-pre-wrap">{{ change.closure_summary }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Validation Gating Checklists</h3>
+            </div>
+            <div class="card-body">
+                <ul class="space-y-3">
+                    <li class="flex items-center justify-between text-sm">
+                        <span>CCB Multi-Signoff:</span>
+                        {% if change.ccb_approved %}
+                        <span class="badge badge-green">Approved</span>
+                        {% else %}
+                        <span class="badge badge-slate">Pending</span>
+                        {% endif %}
+                    </li>
+                    <li class="flex items-center justify-between text-sm">
+                        <span>Pre-deployment Backup Verified:</span>
+                        {% if change.data_backup_verified %}
+                        <span class="badge badge-green">Verified</span>
+                        {% else %}
+                        <span class="badge badge-slate">Pending</span>
+                        {% endif %}
+                    </li>
+                    <li class="flex items-center justify-between text-sm">
+                        <span>Qualification / Testing Success:</span>
+                        {% if change.testing_successful %}
+                        <span class="badge badge-green">Passed</span>
+                        {% else %}
+                        <span class="badge badge-slate">Pending</span>
+                        {% endif %}
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Stakeholders & Sign-offs</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Change Requestor</dt>
+                        <dd class="font-medium text-sm">
+                            {% if change.requestor %}
+                            {{ change.requestor.get_full_name|default:change.requestor.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">System Owner</dt>
+                        <dd class="font-medium text-sm">
+                            {% if change.system_owner %}
+                            {{ change.system_owner.get_full_name|default:change.system_owner.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">QA Lead</dt>
+                        <dd class="font-medium text-sm">
+                            {% if change.qa_lead %}
+                            {{ change.qa_lead.get_full_name|default:change.qa_lead.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Post-Implementation Review Due</dt>
+                        <dd class="text-sm">{{ change.post_review_due_date|default:"Not Scheduled" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase">Created</dt>
+                        <dd class="text-xs text-muted">{{ change.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
