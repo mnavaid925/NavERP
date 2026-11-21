@@ -39,7 +39,7 @@ def regulatory_dashboard(request):
         .select_related("regulatory_agency", "responsible_owner")
         .order_by("due_date")[:5]
     )
-    recent_pms_reports = pms_qs.select_related("product_registration").order_by("-reporting_period_end")[:5]
+    recent_pms_reports = pms_qs.order_by("-reporting_period_end")[:5]
 
     context = {
         "total_submissions": total_submissions,
