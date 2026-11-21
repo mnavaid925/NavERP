@@ -78,12 +78,12 @@
 {% if overdue_accumulation_count > 0 or expiring_sds_count > 0 %}
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
     {% if overdue_accumulation_count > 0 %}
-    <div class="p-4 bg-red-50 border border-red-300 rounded-lg flex items-center justify-between">
+    <div class="p-4 bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 rounded-lg flex items-center justify-between">
         <div class="flex items-center gap-3">
-            <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600"></i>
+            <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600 dark:text-red-400"></i>
             <div>
-                <div class="font-bold text-red-900 text-sm">RCRA Compliance Alert: Overdue Waste Accumulation</div>
-                <div class="text-xs text-red-700"><strong>{{ overdue_accumulation_count }}</strong> waste manifest(s) have exceeded the 90-day generator storage limit.</div>
+                <div class="font-bold text-red-900 dark:text-red-200 text-sm">RCRA Compliance Alert: Overdue Waste Accumulation</div>
+                <div class="text-xs text-red-700 dark:text-red-300"><strong>{{ overdue_accumulation_count }}</strong> waste manifest(s) have exceeded the 90-day generator storage limit.</div>
             </div>
         </div>
         <a href="{% url 'quality:waste_disposal_manifest_list' %}" class="btn btn-outline btn-sm">Review</a>
@@ -91,12 +91,12 @@
     {% endif %}
 
     {% if expiring_sds_count > 0 %}
-    <div class="p-4 bg-amber-50 border border-amber-300 rounded-lg flex items-center justify-between">
+    <div class="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-lg flex items-center justify-between">
         <div class="flex items-center gap-3">
-            <i data-lucide="clock" class="w-6 h-6 text-amber-600"></i>
+            <i data-lucide="clock" class="w-6 h-6 text-amber-600 dark:text-amber-400"></i>
             <div>
-                <div class="font-bold text-amber-900 text-sm">GHS HazCom Alert: Safety Data Sheets Expiring</div>
-                <div class="text-xs text-amber-700"><strong>{{ expiring_sds_count }}</strong> hazardous chemical SDS(s) require 3-year revision renewal.</div>
+                <div class="font-bold text-amber-900 dark:text-amber-200 text-sm">GHS HazCom Alert: Safety Data Sheets Expiring</div>
+                <div class="text-xs text-amber-700 dark:text-amber-300"><strong>{{ expiring_sds_count }}</strong> hazardous chemical SDS(s) require 3-year revision renewal.</div>
             </div>
         </div>
         <a href="{% url 'quality:hazardous_material_list' %}" class="btn btn-outline btn-sm">Review</a>
