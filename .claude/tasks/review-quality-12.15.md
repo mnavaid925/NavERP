@@ -150,7 +150,7 @@
   - **Location**: Table action columns in all 4 list templates
   - **Fix**: Add explicit `aria-label` to `.btn-icon` elements.
 
-- [ ] **[M8] Accessibility: Progress Bar Missing ARIA Attributes**
+- [x] **[M8] Accessibility: Progress Bar Missing ARIA Attributes** — fixed in d65f2800
   - **Location**: `templates/quality/processvalidation/validation_protocol/list.html:166-168`
   - **Fix**: Add `role="progressbar"` and ARIA value attributes.
 
