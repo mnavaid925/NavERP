@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ hazardous_material.material_name }}{% else %}Register Hazardous Material{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:hazardous_material_list' %}">Hazardous Materials</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ hazardous_material.number }}{% else %}Register New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Hazardous Material: {{ hazardous_material.material_name }}{% else %}Register Hazardous Material{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:hazardous_material_detail' hazardous_material.pk %}{% else %}{% url 'quality:hazardous_material_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="card p-4 bg-red-50 border-red-200">
+        <div class="flex items-center gap-2 text-red-700 font-semibold mb-2">
+            <i data-lucide="alert-octagon" class="w-5 h-5"></i> Please correct the errors below:
+        </div>
+        <ul class="list-disc list-inside text-sm text-red-600">
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- 1. Identification & Classification -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="flask-conical" class="w-5 h-5 text-primary"></i> Chemical Identification & Classification
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_material_name">Common / Chemical Name <span class="text-danger">*</span></label>
+                {{ form.material_name }}
+                {% if form.material_name.errors %}<div class="form-error">{{ form.material_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_trade_name">Trade / Brand Name</label>
+                {{ form.trade_name }}
+                {% if form.trade_name.errors %}<div class="form-error">{{ form.trade_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_cas_number">CAS Registry Number</label>
+                {{ form.cas_number }}
+                {% if form.cas_number.errors %}<div class="form-error">{{ form.cas_number.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_un_number">UN Transport Number</label>
+                {{ form.un_number }}
+                {% if form.un_number.errors %}<div class="form-error">{{ form.un_number.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_chemical_formula">Chemical Formula</label>
+                {{ form.chemical_formula }}
+                {% if form.chemical_formula.errors %}<div class="form-error">{{ form.chemical_formula.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_physical_state">Physical State</label>
+                {{ form.physical_state }}
+                {% if form.physical_state.errors %}<div class="form-error">{{ form.physical_state.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_status">Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_managed_by">Chemical Hygiene Officer <span class="text-danger">*</span></label>
+                {{ form.managed_by }}
+                {% if form.managed_by.errors %}<div class="form-error">{{ form.managed_by.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. GHS & NFPA Hazard Ratings -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="shield-alert" class="w-5 h-5 text-amber-500"></i> GHS & NFPA 704 Hazard Ratings
+            </h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_ghs_signal_word">GHS Signal Word</label>
+                    {{ form.ghs_signal_word }}
+                    {% if form.ghs_signal_word.errors %}<div class="form-error">{{ form.ghs_signal_word.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_ghs_pictograms">GHS Pictograms (comma-separated codes)</label>
+                    {{ form.ghs_pictograms }}
+                    <span class="text-xs text-slate-500">e.g. flame,corrosion,skull_crossbones,health_hazard,environment</span>
+                    {% if form.ghs_pictograms.errors %}<div class="form-error">{{ form.ghs_pictograms.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded border border-slate-200">
+                <div class="form-group">
+                    <label class="form-label text-blue-700 font-semibold" for="id_nfpa_health">NFPA Health (0-4)</label>
+                    {{ form.nfpa_health }}
+                    {% if form.nfpa_health.errors %}<div class="form-error">{{ form.nfpa_health.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label text-red-700 font-semibold" for="id_nfpa_flammability">NFPA Flammability (0-4)</label>
+                    {{ form.nfpa_flammability }}
+                    {% if form.nfpa_flammability.errors %}<div class="form-error">{{ form.nfpa_flammability.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label text-yellow-600 font-semibold" for="id_nfpa_instability">NFPA Instability (0-4)</label>
+                    {{ form.nfpa_instability }}
+                    {% if form.nfpa_instability.errors %}<div class="form-error">{{ form.nfpa_instability.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label text-slate-800 font-semibold" for="id_nfpa_special_hazard">Special Hazard</label>
+                    {{ form.nfpa_special_hazard }}
+                    {% if form.nfpa_special_hazard.errors %}<div class="form-error">{{ form.nfpa_special_hazard.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="id_hazard_statements">Hazard Statements (H-Codes)</label>
+                    {{ form.hazard_statements }}
+                    {% if form.hazard_statements.errors %}<div class="form-error">{{ form.hazard_statements.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_precautionary_statements">Precautionary Statements (P-Codes)</label>
+                    {{ form.precautionary_statements }}
+                    {% if form.precautionary_statements.errors %}<div class="form-error">{{ form.precautionary_statements.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. SDS Lifecycle & Exposure Limits -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="file-text" class="w-5 h-5 text-blue-500"></i> Safety Data Sheet (SDS) & Exposure Standards
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_sds_revision">SDS Revision</label>
+                {{ form.sds_revision }}
+                {% if form.sds_revision.errors %}<div class="form-error">{{ form.sds_revision.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_sds_issue_date">SDS Issue Date</label>
+                {{ form.sds_issue_date }}
+                {% if form.sds_issue_date.errors %}<div class="form-error">{{ form.sds_issue_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_sds_expiry_date">SDS Expiration Target (3-Yr)</label>
+                {{ form.sds_expiry_date }}
+                {% if form.sds_expiry_date.errors %}<div class="form-error">{{ form.sds_expiry_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_sds_document">Controlled Document</label>
+                {{ form.sds_document }}
+                {% if form.sds_document.errors %}<div class="form-error">{{ form.sds_document.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_osha_pel">OSHA PEL (Limit)</label>
+                {{ form.osha_pel }}
+                {% if form.osha_pel.errors %}<div class="form-error">{{ form.osha_pel.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_acgih_tlv">ACGIH TLV (Limit)</label>
+                {{ form.acgih_tlv }}
+                {% if form.acgih_tlv.errors %}<div class="form-error">{{ form.acgih_tlv.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_exposure_uom">Exposure Unit of Measure</label>
+                {{ form.exposure_uom }}
+                {% if form.exposure_uom.errors %}<div class="form-error">{{ form.exposure_uom.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Handling, PPE & Emergency Spill -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="life-buoy" class="w-5 h-5 text-green-500"></i> PPE & Spill Containment
+            </h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label" for="id_ppe_requirements">PPE Specifications</label>
+                {{ form.ppe_requirements }}
+                {% if form.ppe_requirements.errors %}<div class="form-error">{{ form.ppe_requirements.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_incompatible_materials">Incompatible Materials & Storage Segregation</label>
+                {{ form.incompatible_materials }}
+                {% if form.incompatible_materials.errors %}<div class="form-error">{{ form.incompatible_materials.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_spill_cleanup_procedure">Spill Cleanup & Neutralization Instructions</label>
+                {{ form.spill_cleanup_procedure }}
+                {% if form.spill_cleanup_procedure.errors %}<div class="form-error">{{ form.spill_cleanup_procedure.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Storage & Logistics -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="package" class="w-5 h-5 text-primary"></i> Facility Storage & Logistics
+            </h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_org_unit">Facility / Org Unit</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_storage_location_code">Storage Location Code</label>
+                {{ form.storage_location_code }}
+                {% if form.storage_location_code.errors %}<div class="form-error">{{ form.storage_location_code.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_maximum_storage_quantity">Max Storage Capacity</label>
+                {{ form.maximum_storage_quantity }}
+                {% if form.maximum_storage_quantity.errors %}<div class="form-error">{{ form.maximum_storage_quantity.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_quantity_uom">Quantity UOM</label>
+                {{ form.quantity_uom }}
+                {% if form.quantity_uom.errors %}<div class="form-error">{{ form.quantity_uom.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_supplier">Supplier / Manufacturer</label>
+                {{ form.supplier }}
+                {% if form.supplier.errors %}<div class="form-error">{{ form.supplier.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="id_notes">Additional Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'quality:hazardous_material_detail' hazardous_material.pk %}{% else %}{% url 'quality:hazardous_material_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Register Material{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
