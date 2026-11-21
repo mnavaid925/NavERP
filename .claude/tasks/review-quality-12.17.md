@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 3 | 6 | 0 |
+| **Important** | 9 | 2 | 7 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 17 | 8 | 0 |
+| **Total** | 25 | 16 | 9 | 0 |
 
 ---
 
@@ -92,7 +92,7 @@
   - **Issue**: `(tenant, -created_at)`, `(tenant, status, expiration_date)`, and `(tenant, status, due_date)` are frequently sorted/filtered together without composite index coverage.
   - **Fix**: Add composite indexes <= 30 chars: `idx_qsub_ten_created`, `idx_qreg_ten_stat_exp`, `idx_qcom_ten_stat_due`.
 
-- [ ] **I7: Redundant Duplicate SQL Roundtrips via `{{ queryset.count }}` in Detail Templates**
+- [x] **I7: Redundant Duplicate SQL Roundtrips via `{{ queryset.count }}` in Detail Templates**
   - **Files**:
     - `templates/quality/regulatory_submissions/regulatory_submission/detail.html:140, 183`
     - `templates/quality/regulatory_submissions/product_registration/detail.html:150, 193`
