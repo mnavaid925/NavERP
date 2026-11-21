@@ -37934,59 +37934,79 @@ apps/quality/
 
 ## Backend & Frontend Execution Plan
 
-- [ ] **Step 1: Contract Spec Freeze** -> `.claude/tasks/contract-quality-12.18.md`
-- [ ] **Step 2: Build Entity by Entity** (4 backend files + 3 templates per entity, strictly one by one):
-  - [ ] Entity 1: `BatchRecord`
-    - [ ] `apps/quality/models/TraceabilitySerialization/BatchRecords.py`
-    - [ ] `apps/quality/forms/TraceabilitySerialization/BatchRecords.py`
-    - [ ] `apps/quality/views/TraceabilitySerialization/BatchRecords.py`
-    - [ ] `apps/quality/urls/TraceabilitySerialization/BatchRecords.py`
-    - [ ] `templates/quality/traceabilityserialization/batch_record/list.html`
-    - [ ] `templates/quality/traceabilityserialization/batch_record/detail.html`
-    - [ ] `templates/quality/traceabilityserialization/batch_record/form.html`
-  - [ ] Entity 2: `DeviceIdentifier`
-    - [ ] `apps/quality/models/TraceabilitySerialization/DeviceIdentifiers.py`
-    - [ ] `apps/quality/forms/TraceabilitySerialization/DeviceIdentifiers.py`
-    - [ ] `apps/quality/views/TraceabilitySerialization/DeviceIdentifiers.py`
-    - [ ] `apps/quality/urls/TraceabilitySerialization/DeviceIdentifiers.py`
-    - [ ] `templates/quality/traceabilityserialization/device_identifier/list.html`
-    - [ ] `templates/quality/traceabilityserialization/device_identifier/detail.html`
-    - [ ] `templates/quality/traceabilityserialization/device_identifier/form.html`
-  - [ ] Entity 3: `SerializedItem`
-    - [ ] `apps/quality/models/TraceabilitySerialization/SerializedItems.py`
-    - [ ] `apps/quality/forms/TraceabilitySerialization/SerializedItems.py`
-    - [ ] `apps/quality/views/TraceabilitySerialization/SerializedItems.py`
-    - [ ] `apps/quality/urls/TraceabilitySerialization/SerializedItems.py`
-    - [ ] `templates/quality/traceabilityserialization/serialized_item/list.html`
-    - [ ] `templates/quality/traceabilityserialization/serialized_item/detail.html`
-    - [ ] `templates/quality/traceabilityserialization/serialized_item/form.html`
-  - [ ] Entity 4: `ProductRecall`
-    - [ ] `apps/quality/models/TraceabilitySerialization/ProductRecalls.py`
-    - [ ] `apps/quality/forms/TraceabilitySerialization/ProductRecalls.py`
-    - [ ] `apps/quality/views/TraceabilitySerialization/ProductRecalls.py`
-    - [ ] `apps/quality/urls/TraceabilitySerialization/ProductRecalls.py`
-    - [ ] `templates/quality/traceabilityserialization/product_recall/list.html`
-    - [ ] `templates/quality/traceabilityserialization/product_recall/detail.html`
-    - [ ] `templates/quality/traceabilityserialization/product_recall/form.html`
-  - [ ] Dedicated Dashboard: `TraceabilityDashboard`
-    - [ ] `apps/quality/views/TraceabilitySerialization/TraceabilityDashboard.py`
-    - [ ] `apps/quality/urls/TraceabilitySerialization/TraceabilityDashboard.py`
-    - [ ] `templates/quality/traceabilityserialization/traceability_dashboard.html`
-- [ ] **Step 3: Single-Writer Integrate & Migrations**
-  - [ ] Re-export models in `apps/quality/models/__init__.py`
-  - [ ] Re-export forms in `apps/quality/forms/__init__.py`
-  - [ ] Re-export views in `apps/quality/views/__init__.py`
-  - [ ] Re-export & include urls in `apps/quality/urls/__init__.py`
-  - [ ] Register 4 models in `apps/quality/admin.py`
-  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_18`)
-  - [ ] Wire `LIVE_LINKS["12.18"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration `0031_...`
-  - [ ] Run `migrate quality`
-  - [ ] Run `seed_quality` twice (verify idempotency)
-  - [ ] Run `manage.py check` (0 issues)
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.18.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
-- [ ] **Step 7: Automated Tests** -> `test_traceabilityserialization_models.py`, `test_traceabilityserialization_forms.py`, `test_traceabilityserialization_views.py`, `test_traceabilityserialization_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.18.md`
+- [x] **Step 1: Contract Spec Freeze** -> `.claude/tasks/contract-quality-12.18.md`
+- [x] **Step 2: Build Entity by Entity** (4 backend files + 3 templates per entity, strictly one by one):
+  - [x] Entity 1: `BatchRecord`
+    - [x] `apps/quality/models/TraceabilitySerialization/BatchRecords.py`
+    - [x] `apps/quality/forms/TraceabilitySerialization/BatchRecords.py`
+    - [x] `apps/quality/views/TraceabilitySerialization/BatchRecords.py`
+    - [x] `apps/quality/urls/TraceabilitySerialization/BatchRecords.py`
+    - [x] `templates/quality/traceabilityserialization/batch_record/list.html`
+    - [x] `templates/quality/traceabilityserialization/batch_record/detail.html`
+    - [x] `templates/quality/traceabilityserialization/batch_record/form.html`
+  - [x] Entity 2: `DeviceIdentifier`
+    - [x] `apps/quality/models/TraceabilitySerialization/DeviceIdentifiers.py`
+    - [x] `apps/quality/forms/TraceabilitySerialization/DeviceIdentifiers.py`
+    - [x] `apps/quality/views/TraceabilitySerialization/DeviceIdentifiers.py`
+    - [x] `apps/quality/urls/TraceabilitySerialization/DeviceIdentifiers.py`
+    - [x] `templates/quality/traceabilityserialization/device_identifier/list.html`
+    - [x] `templates/quality/traceabilityserialization/device_identifier/detail.html`
+    - [x] `templates/quality/traceabilityserialization/device_identifier/form.html`
+  - [x] Entity 3: `SerializedItem`
+    - [x] `apps/quality/models/TraceabilitySerialization/SerializedItems.py`
+    - [x] `apps/quality/forms/TraceabilitySerialization/SerializedItems.py`
+    - [x] `apps/quality/views/TraceabilitySerialization/SerializedItems.py`
+    - [x] `apps/quality/urls/TraceabilitySerialization/SerializedItems.py`
+    - [x] `templates/quality/traceabilityserialization/serialized_item/list.html`
+    - [x] `templates/quality/traceabilityserialization/serialized_item/detail.html`
+    - [x] `templates/quality/traceabilityserialization/serialized_item/form.html`
+  - [x] Entity 4: `ProductRecall`
+    - [x] `apps/quality/models/TraceabilitySerialization/ProductRecalls.py`
+    - [x] `apps/quality/forms/TraceabilitySerialization/ProductRecalls.py`
+    - [x] `apps/quality/views/TraceabilitySerialization/ProductRecalls.py`
+    - [x] `apps/quality/urls/TraceabilitySerialization/ProductRecalls.py`
+    - [x] `templates/quality/traceabilityserialization/product_recall/list.html`
+    - [x] `templates/quality/traceabilityserialization/product_recall/detail.html`
+    - [x] `templates/quality/traceabilityserialization/product_recall/form.html`
+  - [x] Dedicated Dashboard: `TraceabilityDashboard`
+    - [x] `apps/quality/views/TraceabilitySerialization/TraceabilityDashboard.py`
+    - [x] `apps/quality/urls/TraceabilitySerialization/TraceabilityDashboard.py`
+    - [x] `templates/quality/traceabilityserialization/traceability_dashboard.html`
+- [x] **Step 3: Single-Writer Integrate & Migrations**
+  - [x] Re-export models in `apps/quality/models/__init__.py`
+  - [x] Re-export forms in `apps/quality/forms/__init__.py`
+  - [x] Re-export views in `apps/quality/views/__init__.py`
+  - [x] Re-export & include urls in `apps/quality/urls/__init__.py`
+  - [x] Register 4 models in `apps/quality/admin.py`
+  - [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_18`)
+  - [x] Wire `LIVE_LINKS["12.18"]` in `apps/core/navigation.py`
+  - [x] Run `makemigrations quality` -> migrations `0034`, `0035`, `0036`
+  - [x] Run `migrate quality`
+  - [x] Run `seed_quality` twice (verify idempotency)
+  - [x] Run `manage.py check` (0 issues)
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.18.md`
+- [x] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
+- [x] **Step 7: Automated Tests** -> `test_traceabilityserialization_models.py`, `test_traceabilityserialization_forms.py`, `test_traceabilityserialization_views.py`, `test_traceabilityserialization_security.py` -> 100% green (24/24 passed)
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.18.md`
+
+---
+
+## Review notes — Sub-module 12.18 Close-out (2026-11-21)
+- **Delivery Unit**: Extension of `apps/quality/` (Module 12: Quality Management System) — Sub-module 12.18: Traceability & Serialization.
+- **Models**: 4 tenant-scoped models subclasses of `TenantNumbered`:
+  - `BatchRecord` [`QBMR-`]: Electronic Batch Production and Control Records complying with 21 CFR § 211.188 and § 820.184 (DHR). Tracks batch number, dates, yield %, critical parameters, line clearance, linked inspections (`InProcessInspection`), environmental logs (`EnvironmentalMonitoringLog`), deviations (`ProcessDeviation`), multi-gate release workflows, tenant-admin release gating with 21 CFR Part 11 e-signatures, and GMP preservation deletion locks.
+  - `DeviceIdentifier` [`QUDI-`]: Medical device identification compliant with FDA 21 CFR Part 830, EU MDR Article 27, and GUDID/EUDAMED standards with Device Identifiers (DI / GTIN-14), issuing agencies, device classifications, commercial distribution status, MRI safety, single-use flags, and GUDID sync timestamps.
+  - `SerializedItem` [`QSER-`]: Item-level serialization conforming to US DSCSA and EU FMD with serial numbers, GS1 Digital Link URIs, EPCIS states, packaging aggregation levels (`primary_each` -> `pallet_sscc`), parent container packaging hierarchies, and composite index `idx_qser_ten_epcis` on `(tenant, epcis_state)`.
+  - `ProductRecall` [`QRCL-`]: Market crisis correction and removal response complying with FDA 21 CFR Part 7, EU RAPEX, and ISO 13485:2016 §8.5.2 with Class I/II/III recall triage, root cause linkages to `CustomerComplaint`/`CapaInvestigation`/`NonConformanceReport`, affected lot/serial scopes, consignee notifications, customer response rate tracking, unit recovery reconciliation metrics, regulatory notification reference numbers, termination justification protocols, and tenant-admin gated deletion protections.
+- **Forms**: 5 ModelForms (`BatchRecordForm`, `BatchRecordReleaseForm`, `DeviceIdentifierForm`, `SerializedItemForm`, `ProductRecallForm`) with tenant-scoped FK filtering, cross-tenant foreign key rejection via `reject_foreign`, GMP release security, and business rule validations.
+- **Views & Routes**: 19 FBV views across 4 entities + Track & Trace Command Center (`traceability_dashboard`) and streaming EPCIS CSV export (`traceability_export_csv`) with chunked iterator processing and CSV injection defense.
+- **Templates**: 13 responsive Tailwind templates under `templates/quality/traceabilityserialization/` with color-named theme badges and CSRF-protected POST actions.
+- **Review Pass**: 6 sequential specialist reviews (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) yielded 16 findings (3 Critical, 7 Important, 6 Minor) consolidated in `.claude/tasks/review-quality-12.18.md`.
+- **Fix Pass**: `code-fixer` agent resolved all 16 findings in ID order across single-file commits with clean `manage.py check`.
+- **Tests**: 4 test files (`test_traceabilityserialization_models.py` [7 tests], `test_traceabilityserialization_forms.py` [6 tests], `test_traceabilityserialization_views.py` [6 tests], `test_traceabilityserialization_security.py` [5 tests]) totaling **24 dedicated tests**, all passing 100% green.
+- **Gaps Register**: Declared in `.agents/tasks/gaps-quality-12.18.md`:
+  - **Gaps**: None (100% of researched features, models, views, templates, navigation entries, migrations, and test coverage landed with 0 skipped or deferred items).
+- **Navigation Wiring**: `LIVE_LINKS["12.18"]` verified functional for all 5 feature bullets in `apps/core/navigation.py`.
+- **Git Commits**: All edits committed individually (one file per commit, PowerShell-safe). Nothing pushed.
