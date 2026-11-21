@@ -176,6 +176,18 @@ from apps.quality.models.TraceabilitySerialization.SerializedItems import (
 from apps.quality.models.TraceabilitySerialization.ProductRecalls import (
     ProductRecall,
 )
+from apps.quality.models.DataIntegrity.ElectronicRecordPolicies import (
+    ElectronicRecordPolicy,
+)
+from apps.quality.models.DataIntegrity.DataIntegrityAssessments import (
+    DataIntegrityAssessment,
+)
+from apps.quality.models.DataIntegrity.AuditTrailReviews import (
+    AuditTrailReview,
+)
+from apps.quality.models.DataIntegrity.SystemChangeControls import (
+    SystemChangeControl,
+)
 
 
 
@@ -1564,6 +1576,74 @@ class ProductRecallAdmin(admin.ModelAdmin):
     list_filter = ("recall_class", "status", "is_mock_recall", "tenant")
     search_fields = ("number", "title", "item_code", "item_name", "affected_lot_numbers")
     list_select_related = ("tenant", "coordinator", "closure_approved_by", "customer_complaint", "capa_investigation")
+
+
+@admin.register(ElectronicRecordPolicy)
+class ElectronicRecordPolicyAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "record_type_name",
+        "record_category",
+        "is_part_11_regulated",
+        "signature_requirement",
+        "retention_period_years",
+        "status",
+        "tenant",
+    )
+    list_filter = ("record_category", "is_part_11_regulated", "status", "tenant")
+    search_fields = ("number", "title", "record_type_name", "target_model_name")
+    list_select_related = ("tenant", "system", "governing_sop", "system_owner", "qa_approver")
+
+
+@admin.register(DataIntegrityAssessment)
+class DataIntegrityAssessmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "assessment_scope",
+        "overall_risk_level",
+        "status",
+        "next_review_due",
+        "tenant",
+    )
+    list_filter = ("overall_risk_level", "status", "tenant")
+    search_fields = ("number", "title", "assessment_scope", "vulnerabilities_summary")
+    list_select_related = ("tenant", "system", "org_unit", "lead_assessor", "qa_reviewer", "linked_capa", "linked_ncr")
+
+
+@admin.register(AuditTrailReview)
+class AuditTrailReviewAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "review_type",
+        "audit_source",
+        "anomaly_severity",
+        "disposition",
+        "status",
+        "tenant",
+    )
+    list_filter = ("review_type", "anomaly_severity", "disposition", "status", "tenant")
+    search_fields = ("number", "title", "findings_summary")
+    list_select_related = ("tenant", "system", "reviewer", "qa_approver", "linked_ncr", "linked_capa")
+
+
+@admin.register(SystemChangeControl)
+class SystemChangeControlAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "change_type",
+        "change_priority",
+        "gxp_impact",
+        "status",
+        "target_date",
+        "tenant",
+    )
+    list_filter = ("change_type", "change_priority", "gxp_impact", "status", "tenant")
+    search_fields = ("number", "title", "description")
+    list_select_related = ("tenant", "system", "requestor", "system_owner", "qa_lead", "org_unit")
+
 
 
 
