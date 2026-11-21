@@ -177,6 +177,18 @@ from apps.quality.forms.RegulatorySubmissions.RegulatoryCommitments import (
 from apps.quality.forms.RegulatorySubmissions.PostMarketSurveillanceReports import (
     PostMarketSurveillanceReportForm,
 )
+from apps.quality.forms.TraceabilitySerialization.BatchRecords import (
+    BatchRecordForm,
+)
+from apps.quality.forms.TraceabilitySerialization.DeviceIdentifiers import (
+    DeviceIdentifierForm,
+)
+from apps.quality.forms.TraceabilitySerialization.SerializedItems import (
+    SerializedItemForm,
+)
+from apps.quality.forms.TraceabilitySerialization.ProductRecalls import (
+    ProductRecallForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -260,5 +272,9 @@ __all__ = [
     "ProductRegistrationForm",
     "RegulatoryCommitmentForm",
     "PostMarketSurveillanceReportForm",
+    "BatchRecordForm",
+    "DeviceIdentifierForm",
+    "SerializedItemForm",
+    "ProductRecallForm",
 ]
 
