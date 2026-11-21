@@ -3380,12 +3380,12 @@ def regulatory_agency_party_a(db, tenant_a):
     party = Party.objects.create(
         tenant=tenant_a,
         name="FDA CDRH Regulatory Body",
-        party_type="organization",
+        kind="organization",
     )
     PartyRole.objects.create(
         tenant=tenant_a,
         party=party,
-        role_type="vendor",
+        role="vendor",
     )
     return party
 
@@ -3395,12 +3395,12 @@ def regulatory_agency_party_b(db, tenant_b):
     party = Party.objects.create(
         tenant=tenant_b,
         name="TUV SUD Notified Body Globex",
-        party_type="organization",
+        kind="organization",
     )
     PartyRole.objects.create(
         tenant=tenant_b,
         party=party,
-        role_type="vendor",
+        role="vendor",
     )
     return party
 
