@@ -189,6 +189,18 @@ from apps.quality.forms.TraceabilitySerialization.SerializedItems import (
 from apps.quality.forms.TraceabilitySerialization.ProductRecalls import (
     ProductRecallForm,
 )
+from apps.quality.forms.DataIntegrity.ElectronicRecordPolicies import (
+    ElectronicRecordPolicyForm,
+)
+from apps.quality.forms.DataIntegrity.DataIntegrityAssessments import (
+    DataIntegrityAssessmentForm,
+)
+from apps.quality.forms.DataIntegrity.AuditTrailReviews import (
+    AuditTrailReviewForm,
+)
+from apps.quality.forms.DataIntegrity.SystemChangeControls import (
+    SystemChangeControlForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -276,5 +288,9 @@ __all__ = [
     "DeviceIdentifierForm",
     "SerializedItemForm",
     "ProductRecallForm",
+    "ElectronicRecordPolicyForm",
+    "DataIntegrityAssessmentForm",
+    "AuditTrailReviewForm",
+    "SystemChangeControlForm",
 ]
 
