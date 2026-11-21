@@ -65,7 +65,7 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
             <div>
                 <label for="q" class="form-label text-xs">Search</label>
                 <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="System name, #, vendor..." class="form-input">
@@ -97,11 +97,20 @@
                     {% endfor %}
                 </select>
             </div>
+            <div>
+                <label for="approach" class="form-label text-xs">Validation Approach</label>
+                <select name="approach" id="approach" class="form-select">
+                    <option value="">All Approaches</option>
+                    {% for val, label in approach_choices %}
+                    <option value="{{ val }}" {% if request.GET.approach == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="flex items-end gap-2">
                 <button type="submit" class="btn btn-outline w-full">
                     <i data-lucide="filter"></i> Filter
                 </button>
-                {% if search_query or request.GET.gamp or request.GET.gxp or request.GET.status %}
+                {% if search_query or request.GET.gamp or request.GET.gxp or request.GET.status or request.GET.approach %}
                 <a href="{% url 'quality:computer_system_validation_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
