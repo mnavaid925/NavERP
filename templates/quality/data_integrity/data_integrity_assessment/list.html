@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Data Integrity Assessments (ALCOA+) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <span>ALCOA+ Assessments</span>
+        </div>
+        <h1 class="page-title">ALCOA+ Data Integrity Risk Assessments (DIRA)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:data_integrity_assessment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Assessment
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="clipboard-check"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Assessments</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-label">High / Critical Risk</div>
+            <div class="stat-value">{{ high_risk_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Remediation Pending</div>
+            <div class="stat-value">{{ pending_remediation_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">QA Approved & Closed</div>
+            <div class="stat-value">{{ approved_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" placeholder="Assessment title, scope, vulnerabilities..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="risk_level">Risk Level</label>
+                <select name="risk_level" id="risk_level" class="form-select">
+                    <option value="">All Risk Levels</option>
+                    {% for val, label in risk_choices %}
+                    <option value="{{ val }}" {% if risk_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:data_integrity_assessment_list' %}" class="btn btn-outline">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Assessment #</th>
+                        <th>Title & Scope</th>
+                        <th>Computerized System</th>
+                        <th>Lead Assessor</th>
+                        <th>Risk Level</th>
+                        <th>Gaps</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in assessments %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:data_integrity_assessment_detail' item.pk %}" class="font-medium text-brand">
+                                {{ item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium">{{ item.title }}</div>
+                            <div class="text-xs text-muted">{{ item.assessment_scope }}</div>
+                        </td>
+                        <td>
+                            {% if item.system %}
+                            <span class="text-sm font-medium">{{ item.system.system_name }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.lead_assessor %}
+                            <span class="text-sm">{{ item.lead_assessor.get_full_name|default:item.lead_assessor.username }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.overall_risk_level == 'critical' %}
+                            <span class="badge badge-red">Critical</span>
+                            {% elif item.overall_risk_level == 'high' %}
+                            <span class="badge badge-amber">High</span>
+                            {% elif item.overall_risk_level == 'medium' %}
+                            <span class="badge badge-info">Medium</span>
+                            {% else %}
+                            <span class="badge badge-green">Low</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.non_compliant_count > 0 %}
+                            <span class="badge badge-red">{{ item.non_compliant_count }} Gap{{ item.non_compliant_count|pluralize }}</span>
+                            {% else %}
+                            <span class="badge badge-green">0 Gaps</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.status == 'approved' %}
+                            <span class="badge badge-green">Approved</span>
+                            {% elif item.status == 'remediation_pending' %}
+                            <span class="badge badge-amber">Remediation Pending</span>
+                            {% elif item.status == 'in_assessment' %}
+                            <span class="badge badge-info">In Assessment</span>
+                            {% elif item.status == 'superseded' %}
+                            <span class="badge badge-muted">Superseded</span>
+                            {% else %}
+                            <span class="badge badge-slate">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions justify-end">
+                                <a href="{% url 'quality:data_integrity_assessment_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'quality:data_integrity_assessment_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'quality:data_integrity_assessment_delete' item.pk %}" onsubmit="return confirm('Delete assessment {{ item.number }}?');" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red" title="Delete">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <i data-lucide="clipboard-x" class="empty-state-icon"></i>
+                                <h3 class="empty-state-title">No Data Integrity Assessments Found</h3>
+                                <p class="empty-state-desc">Evaluate your workflows, computerized systems, and lab data against ALCOA+ standards.</p>
+                                <a href="{% url 'quality:data_integrity_assessment_create' %}" class="btn btn-primary mt-4">
+                                    <i data-lucide="plus"></i> New Assessment
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="pagination">
+            <span class="pagination-info">
+                Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ total_count }}
+            </span>
+            <div class="pagination-links">
+                {% if page_obj.has_previous %}
+                <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if q %}&q={{ q }}{% endif %}{% if risk_selected %}&risk_level={{ risk_selected }}{% endif %}{% if status_selected %}&status={{ status_selected }}{% endif %}" class="btn btn-outline btn-sm">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="btn btn-sm btn-disabled">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if risk_selected %}&risk_level={{ risk_selected }}{% endif %}{% if status_selected %}&status={{ status_selected }}{% endif %}" class="btn btn-outline btn-sm">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
