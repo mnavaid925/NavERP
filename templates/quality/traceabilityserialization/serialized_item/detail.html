@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Serialized Item {{ serialized_item.serial_number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Traceability & Serialization</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:serialized_item_list' %}" class="hover:underline">Serialized Items</a>
+        <span class="mx-1">/</span>
+        <span class="font-mono">{{ serialized_item.serial_number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900">
+          {{ serialized_item.serial_number }}
+        </h1>
+        <span class="badge badge-info">{{ serialized_item.get_packaging_level_display }}</span>
+
+        {% if serialized_item.commissioning_status == "commissioned" %}
+          <span class="badge badge-info">{{ serialized_item.get_commissioning_status_display }}</span>
+        {% elif serialized_item.commissioning_status == "aggregated" %}
+          <span class="badge badge-purple">{{ serialized_item.get_commissioning_status_display }}</span>
+        {% elif serialized_item.commissioning_status == "shipped" %}
+          <span class="badge badge-green">{{ serialized_item.get_commissioning_status_display }}</span>
+        {% elif serialized_item.commissioning_status == "recalled" %}
+          <span class="badge badge-red">{{ serialized_item.get_commissioning_status_display }}</span>
+        {% elif serialized_item.commissioning_status == "destroyed" %}
+          <span class="badge badge-muted">{{ serialized_item.get_commissioning_status_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ serialized_item.get_commissioning_status_display }}</span>
+        {% endif %}
+
+        {% if serialized_item.epcis_state == "active" %}
+          <span class="badge badge-green">{{ serialized_item.get_epcis_state_display }}</span>
+        {% elif serialized_item.epcis_state == "in_transit" %}
+          <span class="badge badge-info">{{ serialized_item.get_epcis_state_display }}</span>
+        {% elif serialized_item.epcis_state == "quarantined" %}
+          <span class="badge badge-amber">{{ serialized_item.get_epcis_state_display }}</span>
+        {% elif serialized_item.epcis_state == "suspect" %}
+          <span class="badge badge-red">{{ serialized_item.get_epcis_state_display }}</span>
+        {% else %}
+          <span class="badge badge-slate">{{ serialized_item.get_epcis_state_display }}</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        {{ serialized_item.item_name }} ({{ serialized_item.item_code }}) — Lot: {{ serialized_item.lot_number }}
+      </p>
+    </div>
+
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:serialized_item_edit' serialized_item.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+
+      <form method="post" action="{% url 'quality:serialized_item_delete' serialized_item.pk %}" class="inline" onsubmit="return confirm('Delete serialized item {{ serialized_item.serial_number }}?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Info Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Serialization & Aggregation -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Identification Card -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="barcode" class="w-4 h-4 text-blue-600"></i>
+          Serialization & Identification Data
+        </h2>
+        <dl class="detail-grid grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Serial Number (SN)</dt>
+            <dd class="text-sm font-mono font-bold text-slate-900 mt-0.5">{{ serialized_item.serial_number }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">GTIN / DI</dt>
+            <dd class="text-sm font-mono text-slate-900 mt-0.5">{{ serialized_item.gtin_or_di }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Packaging Level</dt>
+            <dd class="text-sm font-medium text-slate-900 mt-0.5">{{ serialized_item.get_packaging_level_display }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">SSCC Code (Pallet/Case)</dt>
+            <dd class="text-sm font-mono text-slate-900 mt-0.5">{{ serialized_item.sscc_code|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cryptographic Verification Hash</dt>
+            <dd class="text-xs font-mono text-slate-600 mt-0.5 break-all">{{ serialized_item.verification_code|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Commissioned Timestamp</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ serialized_item.commissioned_at|date:"Y-m-d H:i"|default:"—" }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Aggregation Hierarchy Card -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="boxes" class="w-4 h-4 text-blue-600"></i>
+          Packaging Aggregation Tree
+        </h2>
+        <div class="space-y-4">
+          <div class="p-3 bg-slate-50 rounded-lg flex items-center justify-between">
+            <div>
+              <span class="text-xs text-slate-500 uppercase font-semibold">Parent Container Pack:</span>
+              {% if serialized_item.parent_container %}
+                <a href="{% url 'quality:serialized_item_detail' serialized_item.parent_container.pk %}" class="ml-2 font-mono font-medium text-blue-600 hover:underline">
+                  {{ serialized_item.parent_container.serial_number }} ({{ serialized_item.parent_container.get_packaging_level_display }})
+                </a>
+              {% else %}
+                <span class="ml-2 text-sm text-slate-500">None (Top-Level Container or Unpacked Unit)</span>
+              {% endif %}
+            </div>
+            {% if serialized_item.parent_container %}
+              <span class="badge badge-purple">Aggregated</span>
+            {% endif %}
+          </div>
+
+          <!-- Child Units (if any) -->
+          {% if child_units %}
+            <div>
+              <h3 class="text-xs font-semibold text-slate-700 uppercase mb-2">Contained Child Units ({{ child_units.count }})</h3>
+              <div class="table-wrap border border-slate-200 rounded-lg">
+                <table class="table w-full text-left text-sm">
+                  <thead>
+                    <tr class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600 uppercase">
+                      <th class="py-2 px-3">Child Serial #</th>
+                      <th class="py-2 px-3">Level</th>
+                      <th class="py-2 px-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    {% for child in child_units %}
+                      <tr>
+                        <td class="py-2 px-3 font-mono font-medium text-blue-600">
+                          <a href="{% url 'quality:serialized_item_detail' child.pk %}" class="hover:underline">
+                            {{ child.serial_number }}
+                          </a>
+                        </td>
+                        <td class="py-2 px-3 text-xs">{{ child.get_packaging_level_display }}</td>
+                        <td class="py-2 px-3 text-xs">
+                          <span class="badge badge-info">{{ child.get_commissioning_status_display }}</span>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Batch & Manufacturing Linkage -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="git-branch" class="w-4 h-4 text-blue-600"></i>
+          Batch & Product Lineage
+        </h2>
+        <dl class="detail-grid grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Item Name / Code</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ serialized_item.item_name }} ({{ serialized_item.item_code }})</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Manufacturing Lot #</dt>
+            <dd class="text-sm font-mono font-medium text-slate-900 mt-0.5">{{ serialized_item.lot_number }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Linked Batch Record</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">
+              {% if serialized_item.batch_record %}
+                <a href="{% url 'quality:batch_record_detail' serialized_item.batch_record.pk %}" class="text-blue-600 hover:underline">
+                  {{ serialized_item.batch_record.number }} ({{ serialized_item.batch_record.batch_number }})
+                </a>
+              {% else %}
+                <span class="text-slate-400">—</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Device Identifier (UDI)</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">
+              {% if serialized_item.device_identifier %}
+                <a href="{% url 'quality:device_identifier_detail' serialized_item.device_identifier.pk %}" class="text-blue-600 hover:underline">
+                  {{ serialized_item.device_identifier.primary_di }}
+                </a>
+              {% else %}
+                <span class="text-slate-400">—</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Manufacturing Date</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ serialized_item.manufacturing_date|default:"—" }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Expiration Date</dt>
+            <dd class="text-sm text-slate-900 mt-0.5">{{ serialized_item.expiration_date|default:"—" }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+
+    <!-- Right Col: Custody & Cold Chain -->
+    <div class="space-y-6">
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="truck" class="w-4 h-4 text-blue-600"></i>
+          Chain of Custody & Logistics
+        </h2>
+        <div class="space-y-3">
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Current Custodian Party</div>
+            <div class="text-sm font-medium text-slate-900 mt-0.5">{{ serialized_item.custodian|default:"Internal Facility" }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Facility / Storage OrgUnit</div>
+            <div class="text-sm text-slate-900 mt-0.5">{{ serialized_item.location_unit|default:"—" }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 uppercase font-semibold">Outbound Shipment</div>
+            <div class="text-sm text-slate-900 mt-0.5">{{ serialized_item.shipment|default:"—" }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cold Chain Verification -->
+      <div class="card p-5">
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+          <i data-lucide="thermometer-snowflake" class="w-4 h-4 text-blue-600"></i>
+          Cold Chain Verification
+        </h2>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <span class="text-sm text-slate-700">Cold Chain Required</span>
+            {% if serialized_item.is_cold_chain %}
+              <span class="badge badge-info">Active</span>
+            {% else %}
+              <span class="badge badge-slate">Ambient</span>
+            {% endif %}
+          </div>
+          {% if serialized_item.is_cold_chain %}
+            <div class="grid grid-cols-2 gap-3 pt-2">
+              <div class="p-3 bg-slate-50 rounded-lg">
+                <div class="text-xs text-slate-500">Min Temp</div>
+                <div class="text-lg font-bold text-slate-900 mt-0.5">{{ serialized_item.temperature_limit_min|default:"—" }}°C</div>
+              </div>
+              <div class="p-3 bg-slate-50 rounded-lg">
+                <div class="text-xs text-slate-500">Max Temp</div>
+                <div class="text-lg font-bold text-slate-900 mt-0.5">{{ serialized_item.temperature_limit_max|default:"—" }}°C</div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Notes Card -->
+      {% if serialized_item.notes %}
+        <div class="card p-5">
+          <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 mb-3">Notes & Observations</h2>
+          <p class="text-sm text-slate-600 whitespace-pre-line">{{ serialized_item.notes }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
