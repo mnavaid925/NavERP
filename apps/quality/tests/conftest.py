@@ -67,6 +67,10 @@ from apps.quality.models import (
     SafetyIncident,
     EnvironmentalMonitoringLog,
     WasteDisposalManifest,
+    ValidationProtocol,
+    ProcessCapabilityStudy,
+    ComputerSystemValidation,
+    CleaningValidation,
 )
 
 
@@ -2938,4 +2942,249 @@ def waste_disposal_manifest_b(db, tenant_b, admin_b, hazardous_material_b, suppl
         tsdf_epa_id="TXD980879438",
         shipment_date=timezone.now().date() + timedelta(days=10),
         certifying_officer=admin_b,
+    )
+
+
+# ----------------------------------------------------------------------
+# Submodule 12.15: Process Validation & Verification Fixtures
+# ----------------------------------------------------------------------
+
+@pytest.fixture
+def validation_protocol_a(db, tenant_a, admin_user, quality_department, doc_a):
+    return ValidationProtocol.objects.create(
+        tenant=tenant_a,
+        title="Autoclave 01 IQ/OQ Qualification Protocol",
+        description="Installation and Operational qualification for steam sterilizer unit",
+        protocol_stage="iq",
+        target_type="equipment",
+        status="draft",
+        revalidation_trigger="initial",
+        equipment_tag="EQ-AC-01",
+        process_name="Terminal Sterilization",
+        facility_area="Cleanroom Suite 1",
+        target_completion_date=timezone.now().date() + timedelta(days=30),
+        test_runs_planned=3,
+        test_runs_completed=0,
+        acceptance_criteria="Hold temperature at 121.1 C (+/- 0.5 C) for >= 15.0 minutes.",
+        department=quality_department,
+        lead_author=admin_user,
+        qa_reviewer=admin_user,
+        governing_document=doc_a,
+    )
+
+
+@pytest.fixture
+def validation_protocol_b(db, tenant_b, admin_b, quality_department_b, doc_b):
+    return ValidationProtocol.objects.create(
+        tenant=tenant_b,
+        title="Globex Bioreactor OQ Protocol",
+        description="Operational qualification for 500L bioreactor vessel",
+        protocol_stage="oq",
+        target_type="equipment",
+        status="draft",
+        revalidation_trigger="initial",
+        equipment_tag="EQ-BIO-02",
+        process_name="Cell Fermentation",
+        facility_area="Upstream Suite Globex",
+        target_completion_date=timezone.now().date() + timedelta(days=45),
+        test_runs_planned=3,
+        test_runs_completed=0,
+        acceptance_criteria="Agitation speed control within +/- 2 RPM across 50-300 RPM range.",
+        department=quality_department_b,
+        lead_author=admin_b,
+        qa_reviewer=admin_b,
+        governing_document=doc_b,
+    )
+
+
+@pytest.fixture
+def process_capability_study_a(db, tenant_a, admin_user, validation_protocol_a):
+    return ProcessCapabilityStudy.objects.create(
+        tenant=tenant_a,
+        title="Tablet Compression Fill Weight Capability Study",
+        parameter_name="Tablet Gross Weight",
+        parameter_category="weight_mass",
+        unit_of_measure="mg",
+        upper_spec_limit=Decimal("525.0000"),
+        lower_spec_limit=Decimal("475.0000"),
+        target_nominal=Decimal("500.0000"),
+        subgroup_size=5,
+        number_of_subgroups=25,
+        total_samples=125,
+        mean_value=Decimal("500.2500"),
+        within_subgroup_stdev=Decimal("4.1500"),
+        overall_stdev=Decimal("4.3200"),
+        cp_index=Decimal("2.008"),
+        cpk_index=Decimal("1.988"),
+        pp_index=Decimal("1.929"),
+        ppk_index=Decimal("1.910"),
+        expected_ppm=Decimal("0.00"),
+        is_normally_distributed=True,
+        capability_determination="highly_capable",
+        status="draft",
+        process_name="Tablet Compression",
+        equipment_tag="EQ-TAB-01",
+        item_code="TAB-500MG",
+        lot_number="LOT-2026-001",
+        study_date=timezone.now().date(),
+        validation_protocol=validation_protocol_a,
+        investigator=admin_user,
+    )
+
+
+@pytest.fixture
+def process_capability_study_b(db, tenant_b, admin_b, validation_protocol_b):
+    return ProcessCapabilityStudy.objects.create(
+        tenant=tenant_b,
+        title="Globex Vial Fill Volume Study",
+        parameter_name="Fill Volume",
+        parameter_category="weight_mass",
+        unit_of_measure="mL",
+        upper_spec_limit=Decimal("10.5000"),
+        lower_spec_limit=Decimal("9.5000"),
+        target_nominal=Decimal("10.0000"),
+        subgroup_size=5,
+        number_of_subgroups=20,
+        total_samples=100,
+        mean_value=Decimal("10.0200"),
+        within_subgroup_stdev=Decimal("0.0900"),
+        overall_stdev=Decimal("0.0950"),
+        cp_index=Decimal("1.852"),
+        cpk_index=Decimal("1.778"),
+        pp_index=Decimal("1.754"),
+        ppk_index=Decimal("1.684"),
+        expected_ppm=Decimal("0.10"),
+        is_normally_distributed=True,
+        capability_determination="highly_capable",
+        status="draft",
+        process_name="Sterile Vial Fill",
+        equipment_tag="EQ-VIAL-02",
+        item_code="VIAL-10ML",
+        lot_number="GLB-2026-099",
+        study_date=timezone.now().date(),
+        validation_protocol=validation_protocol_b,
+        investigator=admin_b,
+    )
+
+
+@pytest.fixture
+def computer_system_validation_a(db, tenant_a, admin_user, validation_protocol_a, doc_a):
+    return ComputerSystemValidation.objects.create(
+        tenant=tenant_a,
+        system_name="MasterQMS Electronic Document Management",
+        version_release="v4.2.1",
+        vendor_name="Enterprise Systems Inc",
+        gamp_category="cat_4_configured",
+        gxp_impact="direct_gxp",
+        validation_approach="csa_risk_based",
+        hosting_model="cloud_saas",
+        is_part_11_compliant=True,
+        requires_audit_trail=True,
+        has_disaster_recovery_plan=True,
+        traceability_status="matrix_verified",
+        urs_requirements_count=45,
+        test_scripts_count=45,
+        deviations_found_count=0,
+        status="inventory_only",
+        periodic_review_frequency_months=24,
+        next_review_due=timezone.now().date() + timedelta(days=730),
+        description="Global electronic quality management system supporting SOP control",
+        system_owner=admin_user,
+        quality_lead=admin_user,
+        validation_protocol=validation_protocol_a,
+        urs_document=doc_a,
+    )
+
+
+@pytest.fixture
+def computer_system_validation_b(db, tenant_b, admin_b, validation_protocol_b, doc_b):
+    return ComputerSystemValidation.objects.create(
+        tenant=tenant_b,
+        system_name="Globex LIMS Sample Tracking",
+        version_release="v2.8.0",
+        vendor_name="LabSoft Solutions",
+        gamp_category="cat_4_configured",
+        gxp_impact="direct_gxp",
+        validation_approach="csa_risk_based",
+        hosting_model="on_premises",
+        is_part_11_compliant=True,
+        requires_audit_trail=True,
+        has_disaster_recovery_plan=True,
+        traceability_status="matrix_verified",
+        urs_requirements_count=30,
+        test_scripts_count=30,
+        deviations_found_count=0,
+        status="inventory_only",
+        periodic_review_frequency_months=24,
+        next_review_due=timezone.now().date() + timedelta(days=730),
+        description="Globex analytical lab information management system",
+        system_owner=admin_b,
+        quality_lead=admin_b,
+        validation_protocol=validation_protocol_b,
+        urs_document=doc_b,
+    )
+
+
+@pytest.fixture
+def cleaning_validation_a(db, tenant_a, admin_user, validation_protocol_a, doc_a):
+    return CleaningValidation.objects.create(
+        tenant=tenant_a,
+        title="High-Shear Granulator Gran-01 Cleaning Validation",
+        equipment_train_tag="GRAN-01 + DRY-01",
+        target_residue="Paracetamol API Active Marker",
+        cleaning_agent_used="0.1M Sodium Hydroxide + WFI Final Rinse",
+        worst_case_rationale="highest_potency",
+        calculation_basis="most_stringent",
+        min_daily_dose_active_mg=Decimal("500.0000"),
+        max_daily_dose_subsequent_mg=Decimal("20.0000"),
+        smallest_batch_size_kg=Decimal("150.000"),
+        safety_factor=Decimal("1000.0"),
+        toxicological_pde_mg_day=Decimal("10.0000"),
+        calculated_maco_mg=Decimal("3750.0000"),
+        total_surface_area_sqcm=Decimal("125000.00"),
+        swab_sampling_area_sqcm=Decimal("25.00"),
+        calculated_swab_limit_ug=Decimal("750.000"),
+        rinse_volume_liters=Decimal("200.00"),
+        calculated_rinse_limit_ppm=Decimal("18.750"),
+        analytical_method="hplc",
+        method_recovery_percentage=Decimal("88.50"),
+        dirty_hold_time_hours=Decimal("48.0"),
+        clean_hold_time_hours=Decimal("72.0"),
+        consecutive_successful_runs=3,
+        is_visually_clean=True,
+        cleaning_status="draft",
+        next_revalidation_date=timezone.now().date() + timedelta(days=365),
+        validation_protocol=validation_protocol_a,
+        cleaning_sop=doc_a,
+    )
+
+
+@pytest.fixture
+def cleaning_validation_b(db, tenant_b, admin_b, validation_protocol_b, doc_b):
+    return CleaningValidation.objects.create(
+        tenant=tenant_b,
+        title="Globex Ribbon Blender Cleaning Validation",
+        equipment_train_tag="BLEND-02 + HOP-02",
+        target_residue="Ibuprofen API",
+        cleaning_agent_used="CIP-100 Detergent 2% + WFI Rinse",
+        worst_case_rationale="lowest_solubility",
+        calculation_basis="ten_ppm_limit",
+        smallest_batch_size_kg=Decimal("200.000"),
+        safety_factor=Decimal("1000.0"),
+        calculated_maco_mg=Decimal("2000.0000"),
+        total_surface_area_sqcm=Decimal("95000.00"),
+        swab_sampling_area_sqcm=Decimal("25.00"),
+        calculated_swab_limit_ug=Decimal("526.316"),
+        rinse_volume_liters=Decimal("150.00"),
+        calculated_rinse_limit_ppm=Decimal("13.333"),
+        analytical_method="toc",
+        method_recovery_percentage=Decimal("85.00"),
+        dirty_hold_time_hours=Decimal("24.0"),
+        clean_hold_time_hours=Decimal("48.0"),
+        consecutive_successful_runs=2,
+        is_visually_clean=True,
+        cleaning_status="draft",
+        next_revalidation_date=timezone.now().date() + timedelta(days=365),
+        validation_protocol=validation_protocol_b,
+        cleaning_sop=doc_b,
     )
