@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product_registration.number }} — {{ product_registration.product_name }} ({{ product_registration.jurisdiction_country }}) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_dashboard' %}">Regulatory Compliance</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:product_registration_list' %}">Product Registrations</a>
+            <span class="sep">/</span>
+            <span>{{ product_registration.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ product_registration.number }}</h1>
+            <span class="badge {{ product_registration.status_css }}">
+                {{ product_registration.get_status_display }}
+            </span>
+            {% if product_registration.urgency_status == 'expired' %}
+            <span class="badge badge-red">License Expired</span>
+            {% elif product_registration.urgency_status == 'urgent' %}
+            <span class="badge badge-red">Expires in &le; 30 Days</span>
+            {% elif product_registration.urgency_status == 'warning' %}
+            <span class="badge badge-amber">Expires in &le; 90 Days</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:product_registration_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Registrations
+        </a>
+        <a href="{% url 'quality:product_registration_edit' product_registration.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Registration
+        </a>
+        <form method="post" action="{% url 'quality:product_registration_delete' product_registration.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this registration?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Registration & License Overview</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Registration Title</dt>
+                        <dd class="font-medium text-slate-900">{{ product_registration.registration_title }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Registration Type</dt>
+                        <dd>{{ product_registration.get_registration_type_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Jurisdiction / Country</dt>
+                        <dd class="font-medium text-slate-900">{{ product_registration.jurisdiction_country }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Regulatory Authority</dt>
+                        <dd>
+                            {% if product_registration.regulatory_authority %}
+                            {{ product_registration.regulatory_authority.name }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Authorized Representative / Sponsor</dt>
+                        <dd>
+                            {% if product_registration.authorized_representative %}
+                            {{ product_registration.authorized_representative.name }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Product Name</dt>
+                        <dd class="font-medium">{{ product_registration.product_name }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Product / Catalog Code</dt>
+                        <dd class="font-mono">
+                            {% if product_registration.product_code %}{{ product_registration.product_code }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>License / Certificate Number</dt>
+                        <dd class="font-mono font-medium text-slate-900">
+                            {% if product_registration.license_certificate_number %}{{ product_registration.license_certificate_number }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Establishment Registration (FEI/SRN)</dt>
+                        <dd class="font-mono">
+                            {% if product_registration.establishment_id %}{{ product_registration.establishment_id }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Source Submission Package</dt>
+                        <dd>
+                            {% if product_registration.linked_submission %}
+                            <a href="{% url 'quality:regulatory_submission_detail' product_registration.linked_submission.pk %}" class="text-primary hover:underline font-mono">
+                                {{ product_registration.linked_submission.number }} — {{ product_registration.linked_submission.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">Direct Entry / Legacy</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Intended Medical Purpose & Regulatory Scope</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Approved Intended Purpose</h3>
+                    {% if product_registration.intended_purpose %}
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-sm whitespace-pre-wrap text-slate-800">{{ product_registration.intended_purpose }}</div>
+                    {% else %}
+                    <p class="text-sm text-slate-400">No intended purpose specified.</p>
+                    {% endif %}
+                </div>
+
+                {% if product_registration.notes %}
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Registration Notes & Country Requirements</h3>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-sm whitespace-pre-wrap text-slate-800">{{ product_registration.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Post-Approval Regulatory Commitments ({{ linked_commitments.count }})</h2>
+                <a href="{% url 'quality:regulatory_commitment_create' %}?registration={{ product_registration.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i> Add Commitment
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in linked_commitments %}
+                        <tr>
+                            <td class="font-mono">
+                                <a href="{% url 'quality:regulatory_commitment_detail' c.pk %}" class="text-primary hover:underline">
+                                    {{ c.number }}
+                                </a>
+                            </td>
+                            <td>{{ c.title }}</td>
+                            <td>{{ c.get_commitment_type_display }}</td>
+                            <td>{{ c.due_date|date:"Y-m-d" }}</td>
+                            <td><span class="badge {{ c.status_css }}">{{ c.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-slate-400 text-sm">
+                                No active agency commitments logged against this registration.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Periodic Safety Update Reports & PMS ({{ linked_pms_reports.count }})</h2>
+                <a href="{% url 'quality:post_market_surveillance_report_create' %}?registration={{ product_registration.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i> Add PMS Report
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Report Title</th>
+                            <th>Type</th>
+                            <th>Period End</th>
+                            <th>Benefit-Risk</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in linked_pms_reports %}
+                        <tr>
+                            <td class="font-mono">
+                                <a href="{% url 'quality:post_market_surveillance_report_detail' p.pk %}" class="text-primary hover:underline">
+                                    {{ p.number }}
+                                </a>
+                            </td>
+                            <td>{{ p.report_title }}</td>
+                            <td>{{ p.get_report_type_display }}</td>
+                            <td>{{ p.reporting_period_end|date:"Y-m-d" }}</td>
+                            <td><span class="badge {{ p.benefit_risk_css }}">{{ p.get_benefit_risk_conclusion_display }}</span></td>
+                            <td><span class="badge {{ p.status_css }}">{{ p.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-slate-400 text-sm">
+                                No post-market surveillance reports or PSURs associated with this registration yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Validity & Renewal Lifecycle</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Initial Approval Date</dt>
+                        <dd>
+                            {% if product_registration.initial_approval_date %}
+                            {{ product_registration.initial_approval_date|date:"Y-m-d" }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Effective Authorization Date</dt>
+                        <dd>
+                            {% if product_registration.effective_date %}
+                            {{ product_registration.effective_date|date:"Y-m-d" }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Expiration Date</dt>
+                        <dd>
+                            {% if product_registration.expiration_date %}
+                            <span class="font-semibold {% if product_registration.urgency_status == 'expired' %}text-red-600{% elif product_registration.urgency_status == 'urgent' %}text-red-500{% elif product_registration.urgency_status == 'warning' %}text-amber-600{% else %}text-slate-900{% endif %}">
+                                {{ product_registration.expiration_date|date:"Y-m-d" }}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-500">Perpetual / No expiry</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Renewal Filing Date</dt>
+                        <dd>
+                            {% if product_registration.renewal_due_date %}
+                            <span class="{% if product_registration.is_overdue_renewal %}text-red-600 font-bold{% endif %}">
+                                {{ product_registration.renewal_due_date|date:"Y-m-d" }}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Renewal Lead Notice</dt>
+                        <dd>{{ product_registration.renewal_lead_days }} days ahead</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Days to Expiration</dt>
+                        <dd class="font-mono font-medium">
+                            {% if product_registration.days_to_expiration is not None %}
+                                {% if product_registration.days_to_expiration < 0 %}
+                                <span class="text-red-600 font-bold">Expired ({{ product_registration.days_to_expiration }}d)</span>
+                                {% else %}
+                                <span>{{ product_registration.days_to_expiration }} days</span>
+                                {% endif %}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Governance & Administration</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Regulatory Affairs Lead</dt>
+                        <dd>
+                            {% if product_registration.regulatory_lead %}
+                            {{ product_registration.regulatory_lead.get_full_name|default:product_registration.regulatory_lead.username }}
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created Timestamp</dt>
+                        <dd class="text-xs text-slate-500">{{ product_registration.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Updated</dt>
+                        <dd class="text-xs text-slate-500">{{ product_registration.updated_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
