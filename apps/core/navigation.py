@@ -3503,6 +3503,13 @@ LIVE_LINKS = {
         "Registration & Listing Management": "quality:product_registration_list",
         "Post-Market Surveillance (PMS)": "quality:post_market_surveillance_report_list",
     },
+    "12.18": {
+        "Batch & Lot Record Management": "quality:batch_record_list",
+        "Unique Device Identification (UDI)": "quality:device_identifier_list",
+        "Serialization & Aggregation": "quality:serialized_item_list",
+        "Track & Trace / Supply Chain Integrity": "quality:traceability_dashboard",
+        "Recall & Withdrawal Execution": "quality:product_recall_list",
+    },
 
 
 
