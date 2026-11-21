@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 3 | 11 | 0 |
-| **Total** | 25 | 3 | 22 | 0 |
+| **Minor** | 14 | 2 | 12 | 0 |
+| **Total** | 25 | 2 | 23 | 0 |
 
 ---
 
@@ -197,7 +197,7 @@
   - **Issue**: Reverse relation queries rely solely on relational integrity without `.filter(tenant=request.tenant)`.
   - **Fix**: Chain `.filter(tenant=request.tenant)` on reverse relation queries.
 
-- [ ] **M12: List View Filter Dropdown Querysets Fetch Full Model Instances**
+- [x] **M12: List View Filter Dropdown Querysets Fetch Full Model Instances**
   - **Files**:
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:64`
     - `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py:68`
