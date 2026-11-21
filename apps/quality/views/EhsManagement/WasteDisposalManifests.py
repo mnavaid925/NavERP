@@ -163,6 +163,14 @@ waste_disposal_manifest_edit = waste_disposal_manifest_update
 @require_POST
 def waste_disposal_manifest_delete(request, pk):
     obj = quality_object(request, WasteDisposalManifest, pk)
+    if not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)):
+        messages.error(request, "Only tenant administrators can delete waste disposal manifests.")
+        return redirect("quality:waste_disposal_manifest_detail", pk=obj.pk)
+
+    if obj.status in ("in_transit", "received_by_tsdf", "certified_disposed"):
+        messages.error(request, f"Active or certified waste disposal manifests cannot be deleted.")
+        return redirect("quality:waste_disposal_manifest_detail", pk=obj.pk)
+
     num = obj.number
     write_audit_log(request.user, obj, "delete", tenant=request.tenant)
     obj.delete()
