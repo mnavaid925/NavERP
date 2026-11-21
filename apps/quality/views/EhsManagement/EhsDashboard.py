@@ -22,27 +22,33 @@ def ehs_dashboard(request):
 
     # 1. Hazardous Materials Metrics
     materials_qs = quality_scope(HazardousMaterial.objects.all(), request)
-    active_materials_count = materials_qs.filter(status="active").count()
-    expiring_sds_qs = materials_qs.filter(
-        Q(sds_expiry_date__isnull=False) & Q(sds_expiry_date__lte=ninety_days_from_now)
-    ).order_by("sds_expiry_date")
-    expiring_sds_count = expiring_sds_qs.count()
-    expiring_sds_list = expiring_sds_qs[:5]
+    mat_agg = materials_qs.aggregate(
+        active_count=Count("id", filter=Q(status="active")),
+        expiring_sds_count=Count(
+            "id",
+            filter=Q(sds_expiry_date__isnull=False, sds_expiry_date__lte=ninety_days_from_now),
+        ),
+    )
+    active_materials_count = mat_agg["active_count"]
+    expiring_sds_count = mat_agg["expiring_sds_count"]
+    expiring_sds_list = materials_qs.filter(
+        sds_expiry_date__isnull=False, sds_expiry_date__lte=ninety_days_from_now
+    ).order_by("sds_expiry_date")[:5]
 
     # 2. Safety Incidents & OSHA 300 Metrics
     incidents_qs = quality_scope(SafetyIncident.objects.all(), request)
-    total_incidents_count = incidents_qs.count()
-    osha_recordable_count = incidents_qs.filter(is_osha_recordable=True).count()
-    dart_cases_count = incidents_qs.filter(
-        Q(lost_workdays_count__gt=0) | Q(restricted_workdays_count__gt=0)
-    ).count()
-
-    days_agg = incidents_qs.aggregate(
+    inc_agg = incidents_qs.aggregate(
+        total_count=Count("id"),
+        osha_count=Count("id", filter=Q(is_osha_recordable=True)),
+        dart_count=Count("id", filter=Q(lost_workdays_count__gt=0) | Q(restricted_workdays_count__gt=0)),
         total_lost=Sum("lost_workdays_count"),
         total_restricted=Sum("restricted_workdays_count"),
     )
-    total_lost_days = days_agg["total_lost"] or 0
-    total_restricted_days = days_agg["total_restricted"] or 0
+    total_incidents_count = inc_agg["total_count"]
+    osha_recordable_count = inc_agg["osha_count"]
+    dart_cases_count = inc_agg["dart_count"]
+    total_lost_days = inc_agg["total_lost"] or 0
+    total_restricted_days = inc_agg["total_restricted"] or 0
 
     recent_incidents = incidents_qs.select_related("org_unit", "reported_by").order_by("-incident_date")[:5]
 
@@ -59,16 +65,21 @@ def ehs_dashboard(request):
 
     # 4. Waste Disposal Manifests & 90-Day Accumulation
     manifests_qs = quality_scope(WasteDisposalManifest.objects.all(), request)
-    pending_manifests_qs = manifests_qs.filter(
+    man_agg = manifests_qs.aggregate(
+        pending_count=Count("id", filter=Q(status__in=["draft", "scheduled", "in_transit"])),
+        overdue_count=Count(
+            "id",
+            filter=Q(
+                status__in=["draft", "scheduled"],
+                accumulation_start_date__lt=ninety_days_ago,
+            ),
+        ),
+    )
+    pending_manifests_count = man_agg["pending_count"]
+    overdue_accumulation_count = man_agg["overdue_count"]
+    pending_manifests = manifests_qs.filter(
         status__in=["draft", "scheduled", "in_transit"]
-    ).order_by("accumulation_start_date")
-    pending_manifests_count = pending_manifests_qs.count()
-    pending_manifests = pending_manifests_qs.select_related("generator_org_unit", "transporter", "tsdf_facility")[:5]
-
-    overdue_accumulation_count = manifests_qs.filter(
-        status__in=["draft", "scheduled"],
-        accumulation_start_date__lt=ninety_days_ago,
-    ).count()
+    ).select_related("generator_org_unit", "transporter", "tsdf_facility").order_by("accumulation_start_date")[:5]
 
     type_counts = manifests_qs.values("manifest_type").annotate(count=Count("id"))
     manifests_by_type = {item["manifest_type"]: item["count"] for item in type_counts}
