@@ -155,7 +155,7 @@
                   </a>
                   {% if br.status != "released" %}
                     {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                    <form method="post" action="{% url 'quality:batch_record_delete' br.pk %}" class="inline" onsubmit="return confirm('Delete batch record {{ br.number }}?');">
+                    <form method="post" action="{% url 'quality:batch_record_delete' br.pk %}" class="inline" onsubmit="return confirm('Delete batch record {{ br.number|escapejs }}?');">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
