@@ -5224,9 +5224,9 @@ class Command(BaseCommand):
                 tsdf_epa_id="TXD000838896",
                 shipment_date=today - datetime.timedelta(days=20),
                 tsdf_receipt_date=today - datetime.timedelta(days=17),
-                destruction_certificate_date=today - datetime.timedelta(days=5),
+                certificate_received_date=today - datetime.timedelta(days=5),
                 discrepancy_details="",
-                prepared_by=ehs_officer,
+                certifying_officer=ehs_officer,
             )
 
             man2 = WasteDisposalManifest.objects.create(
@@ -5256,9 +5256,9 @@ class Command(BaseCommand):
                 tsdf_epa_id="TXD000838896",
                 shipment_date=today - datetime.timedelta(days=3),
                 tsdf_receipt_date=None,
-                destruction_certificate_date=None,
+                certificate_received_date=None,
                 discrepancy_details="",
-                prepared_by=admin_user,
+                certifying_officer=admin_user,
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.16 Environmental, Health & Safety (EHS) seeded successfully."))
