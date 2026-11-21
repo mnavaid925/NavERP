@@ -45,21 +45,13 @@ def process_validation_dashboard(request):
 
     total_overdue = (protocol_stats["reval_overdue"] or 0) + (csv_stats["review_due"] or 0) + (cleaning_stats["reval_due"] or 0)
 
-    recent_protocols = ValidationProtocol.objects.filter(tenant=tenant).select_related(
-        "lead_author", "department"
-    ).order_by("-created_at")[:5]
+    recent_protocols = ValidationProtocol.objects.filter(tenant=tenant).order_by("-created_at")[:5]
 
-    recent_studies = ProcessCapabilityStudy.objects.filter(tenant=tenant).select_related(
-        "investigator"
-    ).order_by("-created_at")[:5]
+    recent_studies = ProcessCapabilityStudy.objects.filter(tenant=tenant).order_by("-created_at")[:5]
 
-    recent_systems = ComputerSystemValidation.objects.filter(tenant=tenant).select_related(
-        "system_owner", "quality_lead"
-    ).order_by("-created_at")[:5]
+    recent_systems = ComputerSystemValidation.objects.filter(tenant=tenant).order_by("-created_at")[:5]
 
-    recent_cleaning = CleaningValidation.objects.filter(tenant=tenant).select_related(
-        "analytical_lead"
-    ).order_by("-created_at")[:5]
+    recent_cleaning = CleaningValidation.objects.filter(tenant=tenant).order_by("-created_at")[:5]
 
     context = {
         "total_protocols": protocol_stats["total"] or 0,
