@@ -98,7 +98,7 @@
                         <dd>
                             {% if hazardous_material.sds_document %}
                             <a href="{% url 'quality:controlled_document_detail' hazardous_material.sds_document.pk %}" class="text-primary hover:underline font-mono">
-                                {{ hazardous_material.sds_document.document_number }} — {{ hazardous_material.sds_document.title }}
+                                {{ hazardous_material.sds_document.number }} — {{ hazardous_material.sds_document.title }}
                             </a>
                             {% else %}
                             <span class="text-slate-400">None attached</span>
