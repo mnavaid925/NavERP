@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Worksheet {{ worksheet.number }}{% else %}New Test Worksheet{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lab_test_worksheet_list' %}" class="hover:underline">Test Worksheets</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ worksheet.number }}{% else %}New Worksheet{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="clipboard-list" class="w-6 h-6 text-blue-600"></i>
+        {% if is_edit %}Edit Worksheet: {{ worksheet.title }}{% else %}Assign Analytical Test Worksheet{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Execute analytical testing, record instrument and reagent lot details, and capture quantitative and qualitative measurements.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Assignment & Method Alignment -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          1. Worksheet Assignment & Sample/Specification Linkage
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Worksheet Title <span class="text-red-500">*</span></label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.sample.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Target Sample <span class="text-red-500">*</span></label>
+            {{ form.sample }}
+            {% if form.sample.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sample.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.specification.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Analytical Specification <span class="text-red-500">*</span></label>
+            {{ form.specification }}
+            {% if form.specification.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.specification.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Worksheet Status <span class="text-red-500">*</span></label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.disposition.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Disposition Result <span class="text-red-500">*</span></label>
+            {{ form.disposition }}
+            {% if form.disposition.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.disposition.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.assigned_analyst.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Assigned Analyst</label>
+            {{ form.assigned_analyst }}
+            {% if form.assigned_analyst.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.assigned_analyst.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.reviewer.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">QA / Lab Reviewer</label>
+            {{ form.reviewer }}
+            {% if form.reviewer.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.reviewer.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.scheduled_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Scheduled Date</label>
+            {{ form.scheduled_date }}
+            {% if form.scheduled_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.scheduled_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.execution_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Actual Execution Date</label>
+            {{ form.execution_date }}
+            {% if form.execution_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.execution_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Equipment & Reagents Traceability -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="microscope" class="w-4 h-4 text-blue-600"></i>
+          2. Analytical Equipment & Reagents Traceability
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.instrument.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Instrument / Gage (Calibrated)</label>
+            {{ form.instrument }}
+            {% if form.instrument.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.instrument.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.instrument_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Instrument Model / Name (Alternative)</label>
+            {{ form.instrument_name }}
+            <p class="text-xs text-slate-500 mt-0.5">e.g. Agilent 1260 HPLC System, Shimadzu UV-1800.</p>
+            {% if form.instrument_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.instrument_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.reagent_lot_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Reagent / Column Lot #</label>
+            {{ form.reagent_lot_number }}
+            {% if form.reagent_lot_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.reagent_lot_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.reagent_expiry_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Reagent Expiry Date</label>
+            {{ form.reagent_expiry_date }}
+            {% if form.reagent_expiry_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.reagent_expiry_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.standards_lot_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Reference Standard Lot #</label>
+            {{ form.standards_lot_number }}
+            {% if form.standards_lot_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.standards_lot_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.standards_expiry_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Standard Expiry Date</label>
+            {{ form.standards_expiry_date }}
+            {% if form.standards_expiry_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.standards_expiry_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Result Capture & Calculations -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="calculator" class="w-4 h-4 text-blue-600"></i>
+          3. Test Results & Replicate Capture
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.numeric_result.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Quantitative Result</label>
+            {{ form.numeric_result }}
+            {% if form.numeric_result.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.numeric_result.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.relative_standard_deviation.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Precision (% RSD)</label>
+            {{ form.relative_standard_deviation }}
+            {% if form.relative_standard_deviation.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.relative_standard_deviation.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.qualitative_result.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Qualitative Finding</label>
+            {{ form.qualitative_result }}
+            {% if form.qualitative_result.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.qualitative_result.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-3 flex items-center gap-2 pt-1">
+            {{ form.is_within_specification }}
+            <label for="{{ form.is_within_specification.id_for_label }}" class="form-label text-xs font-semibold text-slate-800 cursor-pointer">
+              Result confirms within specification limits (Uncheck if Out-of-Specification)
+            </label>
+            {% if form.is_within_specification.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.is_within_specification.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-3">
+            <label for="{{ form.raw_data_summary.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Raw Data / Replicate Summary</label>
+            {{ form.raw_data_summary }}
+            <p class="text-xs text-slate-500 mt-0.5">Capture individual replicate readings, absorbance values, retention times, or calculation formulas.</p>
+            {% if form.raw_data_summary.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.raw_data_summary.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-3">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Analyst Remarks</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'quality:lab_test_worksheet_detail' worksheet.pk %}{% else %}{% url 'quality:lab_test_worksheet_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>{% if is_edit %}Save Changes{% else %}Create Worksheet{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
