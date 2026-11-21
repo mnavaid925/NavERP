@@ -108,7 +108,7 @@
   - **Issue**: Missing composite index on `("tenant", "-created_at")`, causing database filesorts on all paginated views.
   - **Fix**: Add composite indexes with names `<= 30` characters (`idx_qval_ten_created`, `idx_qcpk_ten_created`, `idx_qcsv_ten_created`, `idx_qcln_ten_created`).
 
-- [ ] **[I8] Unbuffered Direct Queryset Iteration Without `.iterator(chunk_size=1000)` in CSV Exports**
+- [x] **[I8] Unbuffered Direct Queryset Iteration Without `.iterator(chunk_size=1000)` in CSV Exports** — fixed in 67bbac04, 0d0df7cb, 524476d1, 2a43cd64
   - **Location**: All 4 export views in `apps/quality/views/ProcessValidation/`
   - **Issue**: Direct queryset evaluation populates Django's internal cache with all rows in memory.
   - **Fix**: Iterate using `qs.iterator(chunk_size=1000)`.
