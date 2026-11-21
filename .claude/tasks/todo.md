@@ -47,7 +47,7 @@
 ## Detailed Checkable Work Items
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze `.claude/tasks/contract-quality-12.19.md` with every field, choice, URL name, and view context key.
+- [x] Freeze `.claude/tasks/contract-quality-12.19.md` with every field, choice, URL name, and view context key.
 
 ### Phase 3.2: Entity by Entity Implementation
 - [ ] **Entity 1: LabSample** (`QSMP-`)
