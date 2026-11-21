@@ -182,7 +182,7 @@ def cleaning_validation_export(request):
     if basis_filter:
         qs = qs.filter(calculation_basis=basis_filter)
 
-    response = HttpResponse(content_type="text/csv")
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="cleaning_validations.csv"'
     response["X-Content-Type-Options"] = "nosniff"
 
