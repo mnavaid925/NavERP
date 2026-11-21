@@ -52,6 +52,17 @@
   - Corroborates `M4` (hyperlinks to Computer System Validation and Controlled Document details).
   - `M7`: Redundant `has_previous` condition in `electronic_record_policy/list.html:201`.
 
+### Pass 4: `performance-reviewer`
+- **Critical**: None.
+- **Important**:
+  - `I9`: Missing `db_index=True` on `SystemChangeControl.change_type`.
+  - `I10`: Pagination page size alignment with 20 items/page standard across list views.
+- **Minor**:
+  - Corroborates `I1` / `M8`: `systems` query in assessment list unused until UI filter added.
+  - `M9`: Absence of composite ordering indexes on `(tenant, -created_at)` / `(tenant, -review_date)`.
+  - `M10`: Composite `["tenant", "status"]` index consideration for high-volume multi-tenant status filtering.
+
+
 
 
 
