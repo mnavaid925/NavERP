@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ regulatory_submission.number }}{% else %}New Regulatory Submission{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_dashboard' %}">Regulatory Compliance</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_submission_list' %}">Submissions</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ regulatory_submission.number }}{% else %}New Submission{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Regulatory Submission {{ regulatory_submission.number }}{% else %}Create Regulatory Submission Dossier{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:regulatory_submission_detail' regulatory_submission.pk %}{% else %}{% url 'quality:regulatory_submission_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Submission Identity & Classification</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.title.id_for_label }}">Submission Dossier Title *</label>
+                            {{ form.title }}
+                            {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.submission_type.id_for_label }}">Submission Type *</label>
+                            {{ form.submission_type }}
+                            {% if form.submission_type.errors %}<div class="form-error">{{ form.submission_type.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.device_class.id_for_label }}">Device Classification *</label>
+                            {{ form.device_class }}
+                            {% if form.device_class.errors %}<div class="form-error">{{ form.device_class.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_authority.id_for_label }}">Target Health Authority / Notified Body</label>
+                            {{ form.target_authority }}
+                            {% if form.target_authority.errors %}<div class="form-error">{{ form.target_authority.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.org_unit.id_for_label }}">Facility / Legal Manufacturer Org Unit</label>
+                            {{ form.org_unit }}
+                            {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Product Information & Application Numbers</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.product_name.id_for_label }}">Target Medical Device / Product Name *</label>
+                            {{ form.product_name }}
+                            {% if form.product_name.errors %}<div class="form-error">{{ form.product_name.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.product_code.id_for_label }}">Product / Catalog Code</label>
+                            {{ form.product_code }}
+                            {% if form.product_code.errors %}<div class="form-error">{{ form.product_code.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.application_number.id_for_label }}">Authority Application / 510(k) / File Number</label>
+                            {{ form.application_number }}
+                            {% if form.application_number.errors %}<div class="form-error">{{ form.application_number.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Dossier Status *</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Milestones & Governance</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.planned_submission_date.id_for_label }}">Planned Target Date</label>
+                            {{ form.planned_submission_date }}
+                            {% if form.planned_submission_date.errors %}<div class="form-error">{{ form.planned_submission_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.actual_submission_date.id_for_label }}">Actual Submission Date</label>
+                            {{ form.actual_submission_date }}
+                            {% if form.actual_submission_date.errors %}<div class="form-error">{{ form.actual_submission_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.decision_date.id_for_label }}">Authority Decision Date</label>
+                            {{ form.decision_date }}
+                            {% if form.decision_date.errors %}<div class="form-error">{{ form.decision_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.lead_author.id_for_label }}">Lead Regulatory Specialist</label>
+                            {{ form.lead_author }}
+                            {% if form.lead_author.errors %}<div class="form-error">{{ form.lead_author.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.qa_approver.id_for_label }}">QA / Regulatory Director Approver</label>
+                            {{ form.qa_approver }}
+                            {% if form.qa_approver.errors %}<div class="form-error">{{ form.qa_approver.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.technical_dossier.id_for_label }}">Master Controlled Document</label>
+                            {{ form.technical_dossier }}
+                            {% if form.technical_dossier.errors %}<div class="form-error">{{ form.technical_dossier.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Technical Dossier Summary & Strategy Notes</h3>
+                    <div class="space-y-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.technical_sections_summary.id_for_label }}">Technical Sections & Evidence Summary</label>
+                            {{ form.technical_sections_summary }}
+                            {% if form.technical_sections_summary.errors %}<div class="form-error">{{ form.technical_sections_summary.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.notes.id_for_label }}">Strategic Notes & Agency Interaction Comments</label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3 border-t pt-4">
+                <a href="{% if is_edit %}{% url 'quality:regulatory_submission_detail' regulatory_submission.pk %}{% else %}{% url 'quality:regulatory_submission_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Create Submission Dossier{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
