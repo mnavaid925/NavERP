@@ -322,7 +322,7 @@
                     <dt class="text-xs text-muted uppercase">Linked CAPA Investigation</dt>
                     <dd class="text-sm mt-1">
                         {% if assessment.linked_capa %}
-                        <a href="{% url 'quality:capa_detail' assessment.linked_capa.pk %}" class="text-brand font-medium">
+                        <a href="{% url 'quality:capa_investigation_detail' assessment.linked_capa.pk %}" class="text-brand font-medium">
                             {{ assessment.linked_capa.number }} — {{ assessment.linked_capa.title }}
                         </a>
                         {% else %}
@@ -334,7 +334,7 @@
                     <dt class="text-xs text-muted uppercase">Linked Non-Conformance (NCR)</dt>
                     <dd class="text-sm mt-1">
                         {% if assessment.linked_ncr %}
-                        <a href="{% url 'quality:ncr_detail' assessment.linked_ncr.pk %}" class="text-brand font-medium">
+                        <a href="{% url 'quality:non_conformance_report_detail' assessment.linked_ncr.pk %}" class="text-brand font-medium">
                             {{ assessment.linked_ncr.number }} — {{ assessment.linked_ncr.title }}
                         </a>
                         {% else %}
