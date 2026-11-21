@@ -3,7 +3,7 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -21,10 +21,24 @@ PAGE_SIZE = 15
 
 @login_required
 def regulatory_submission_list(request):
-    qs = quality_scope(
+    base_qs = quality_scope(
         RegulatorySubmission.objects.all(),
         request,
-    ).select_related("target_authority", "org_unit", "lead_author", "qa_approver")
+    )
+
+    stats = base_qs.aggregate(
+        total=Count("id"),
+        pending=Count(
+            "id",
+            filter=Q(status__in=["authoring", "internal_review", "under_review", "deficiency_response"]),
+        ),
+        approved=Count("id", filter=Q(status="approved_cleared")),
+    )
+    total_submissions = stats["total"]
+    pending_review_count = stats["pending"]
+    approved_count = stats["approved"]
+
+    qs = base_qs.select_related("target_authority", "org_unit", "lead_author", "qa_approver")
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -51,12 +65,6 @@ def regulatory_submission_list(request):
     target_authority_id = request.GET.get("target_authority", "").strip()
     if target_authority_id.isdigit():
         qs = qs.filter(target_authority_id=int(target_authority_id))
-
-    total_submissions = qs.count()
-    pending_review_count = qs.filter(
-        status__in=["authoring", "internal_review", "under_review", "deficiency_response"]
-    ).count()
-    approved_count = qs.filter(status="approved_cleared").count()
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page", 1)
