@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -23,10 +23,30 @@ PAGE_SIZE = 15
 
 @login_required
 def product_registration_list(request):
-    qs = quality_scope(
+    base_qs = quality_scope(
         ProductRegistration.objects.all(),
         request,
-    ).select_related("regulatory_authority", "authorized_representative", "regulatory_lead", "linked_submission")
+    )
+
+    today = timezone.now().date()
+    in_90_days = today + timedelta(days=90)
+    stats = base_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+        expiring=Count(
+            "id",
+            filter=Q(
+                status__in=["active", "pending_renewal"],
+                expiration_date__lte=in_90_days,
+                expiration_date__gte=today,
+            ),
+        ),
+    )
+    total_registrations = stats["total"]
+    active_count = stats["active"]
+    expiring_soon_count = stats["expiring"]
+
+    qs = base_qs.select_related("regulatory_authority", "authorized_representative", "regulatory_lead", "linked_submission")
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -51,16 +71,6 @@ def product_registration_list(request):
     regulatory_authority_id = request.GET.get("regulatory_authority", "").strip()
     if regulatory_authority_id.isdigit():
         qs = qs.filter(regulatory_authority_id=int(regulatory_authority_id))
-
-    total_registrations = qs.count()
-    active_count = qs.filter(status="active").count()
-    today = timezone.now().date()
-    in_90_days = today + timedelta(days=90)
-    expiring_soon_count = qs.filter(
-        status__in=["active", "pending_renewal"],
-        expiration_date__lte=in_90_days,
-        expiration_date__gte=today,
-    ).count()
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page", 1)
