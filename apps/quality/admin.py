@@ -1332,16 +1332,15 @@ class HazardousMaterialAdmin(admin.ModelAdmin):
         "material_name",
         "trade_name",
         "cas_number",
-        "ghs_hazard_class",
         "physical_state",
-        "storage_temperature_class",
-        "current_stock_quantity",
-        "unit_of_measure",
+        "storage_location_code",
+        "maximum_storage_quantity",
+        "quantity_uom",
         "status",
         "tenant",
     )
-    list_filter = ("ghs_hazard_class", "physical_state", "storage_temperature_class", "status", "tenant")
-    search_fields = ("number", "material_name", "trade_name", "cas_number", "storage_location")
+    list_filter = ("physical_state", "ghs_signal_word", "status", "tenant")
+    search_fields = ("number", "material_name", "trade_name", "cas_number", "storage_location_code")
     list_select_related = ("tenant", "org_unit", "supplier", "managed_by")
 
 
@@ -1349,54 +1348,55 @@ class HazardousMaterialAdmin(admin.ModelAdmin):
 class SafetyIncidentAdmin(admin.ModelAdmin):
     list_display = (
         "number",
-        "incident_title",
+        "title",
         "incident_type",
-        "severity_level",
+        "severity",
         "incident_date",
         "is_osha_recordable",
-        "lost_workdays",
+        "lost_workdays_count",
         "status",
         "tenant",
     )
-    list_filter = ("incident_type", "severity_level", "is_osha_recordable", "status", "tenant")
-    search_fields = ("number", "incident_title", "location_details", "osha_case_number")
-    list_select_related = ("tenant", "org_unit", "reported_by", "lead_investigator")
+    list_filter = ("incident_type", "severity", "is_osha_recordable", "status", "tenant")
+    search_fields = ("number", "title", "location_details")
+    list_select_related = ("tenant", "org_unit", "reported_by", "affected_person", "lead_investigator")
 
 
 @admin.register(EnvironmentalMonitoringLog)
 class EnvironmentalMonitoringLogAdmin(admin.ModelAdmin):
     list_display = (
         "number",
-        "sampling_point_name",
-        "cleanroom_classification",
-        "monitoring_type",
-        "sample_timestamp",
+        "sampling_point_id",
+        "cleanroom_class",
+        "monitoring_category",
+        "sampling_timestamp",
         "measured_value",
-        "action_limit",
-        "compliance_status",
+        "unit_of_measure",
+        "upper_action_limit",
+        "evaluation_status",
         "tenant",
     )
-    list_filter = ("cleanroom_classification", "monitoring_type", "compliance_status", "tenant")
-    search_fields = ("number", "sampling_point_name", "sampling_point_code", "equipment_tag")
-    list_select_related = ("tenant", "org_unit", "sampled_by", "reviewed_by")
+    list_filter = ("cleanroom_class", "monitoring_category", "evaluation_status", "operational_state", "tenant")
+    search_fields = ("number", "sampling_point_id", "parameter_name")
+    list_select_related = ("tenant", "org_unit", "sampled_by", "verified_by")
 
 
 @admin.register(WasteDisposalManifest)
 class WasteDisposalManifestAdmin(admin.ModelAdmin):
     list_display = (
         "number",
-        "epa_manifest_tracking_number",
-        "waste_stream_name",
-        "dot_hazard_class",
-        "waste_quantity",
-        "unit_of_measure",
+        "manifest_type",
+        "physical_state",
+        "quantity_value",
+        "quantity_uom",
+        "accumulation_start_date",
         "shipment_date",
         "status",
         "tenant",
     )
-    list_filter = ("dot_hazard_class", "physical_form", "management_method", "status", "tenant")
-    search_fields = ("number", "epa_manifest_tracking_number", "waste_stream_name", "transporter_epa_id", "tsdf_epa_id")
-    list_select_related = ("tenant", "hazardous_material", "org_unit", "transporter", "tsdf_facility", "ehs_officer")
+    list_filter = ("manifest_type", "physical_state", "status", "tenant")
+    search_fields = ("number", "generator_epa_id", "transporter_epa_id", "tsdf_epa_id", "epa_waste_codes")
+    list_select_related = ("tenant", "associated_hazardous_material", "generator_org_unit", "transporter", "tsdf_facility")
 
 
 
