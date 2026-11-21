@@ -79,7 +79,7 @@ class ComputerSystemValidationForm(TenantModelForm):
             self.fields["validation_protocol"].queryset = ValidationProtocol.objects.filter(tenant=self.tenant).order_by("title")
             self.fields["urs_document"].queryset = ControlledDocument.objects.filter(tenant=self.tenant).order_by("title")
             self.fields["vsr_document"].queryset = ControlledDocument.objects.filter(tenant=self.tenant).order_by("title")
-            self.fields["risk_assessment"].queryset = RiskAssessment.objects.filter(tenant=self.tenant).order_by("title")
+            self.fields["risk_assessment"].queryset = RiskAssessment.objects.filter(tenant=self.tenant).order_by("number")
 
     def clean(self):
         cleaned = super().clean()
