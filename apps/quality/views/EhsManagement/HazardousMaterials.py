@@ -90,7 +90,7 @@ def hazardous_material_create(request):
             messages.success(request, f"Hazardous material {obj.number} created successfully.")
             return redirect("quality:hazardous_material_detail", pk=obj.pk)
     else:
-        form = HazardousMaterialForm(tenant=request.tenant)
+        form = HazardousMaterialForm(tenant=request.tenant, initial={"managed_by": request.user})
 
     context = {
         "form": form,
