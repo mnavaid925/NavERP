@@ -243,6 +243,12 @@ def safety_incident_investigate(request, pk):
         obj.status = "under_review"
 
     obj.save(update_fields=["investigation_findings", "root_cause_category", "status", "updated_at"])
-    write_audit_log(request.user, obj, "investigate", tenant=request.tenant)
+    write_audit_log(
+        request.user,
+        obj,
+        "update",
+        changes={"action": "investigate", "status": obj.status},
+        tenant=request.tenant,
+    )
     messages.success(request, f"Investigation findings logged for {obj.number}. Status updated to {obj.get_status_display()}.")
     return redirect("quality:safety_incident_detail", pk=obj.pk)
