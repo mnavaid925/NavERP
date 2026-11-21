@@ -236,10 +236,14 @@ def waste_disposal_manifest_export(request):
 @require_POST
 def waste_disposal_manifest_certify(request, pk):
     obj = quality_object(request, WasteDisposalManifest, pk)
-    cert_num = request.POST.get("certificate_of_disposal_number", "").strip()
+    cert_num = request.POST.get("certificate_of_disposal_number", "").strip()[:100]
     cert_date_str = request.POST.get("certificate_received_date", "").strip()
-    method_code = request.POST.get("management_method_code", "").strip()
+    method_code = request.POST.get("management_method_code", "").strip()[:50]
     discrepancy = request.POST.get("discrepancy_details", "").strip()
+
+    if not cert_num and not discrepancy:
+        messages.error(request, "A Certificate of Disposal number or discrepancy explanation is required.")
+        return redirect("quality:waste_disposal_manifest_detail", pk=obj.pk)
 
     if cert_num:
         obj.certificate_of_disposal_number = cert_num
