@@ -197,7 +197,7 @@
                         <dt>Time Remaining</dt>
                         <dd class="font-mono font-medium">
                             {% if regulatory_commitment.is_overdue %}
-                            <span class="text-red-600 font-bold">Overdue by {{ regulatory_commitment.days_remaining|stringformat:"d"|slice:"1:" }} days</span>
+                            <span class="text-red-600 font-bold">Overdue by {% if regulatory_commitment.days_remaining < 0 %}{{ regulatory_commitment.days_remaining|stringformat:"d"|slice:"1:" }}{% else %}{{ regulatory_commitment.days_remaining }}{% endif %} days</span>
                             {% elif regulatory_commitment.status == "agency_accepted" %}
                             <span class="text-green-600">Accepted & Closed</span>
                             {% elif regulatory_commitment.status == "waived" %}
