@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}OOS Investigation {{ investigation.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:oos_investigation_list' %}" class="hover:underline">OOS Investigations</a>
+        <span class="mx-1">/</span>
+        <span>{{ investigation.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+          {{ investigation.title }}
+        </h1>
+        <span class="badge {{ investigation.get_phase_badge }}">{{ investigation.get_investigation_phase_display }}</span>
+        <span class="badge {{ investigation.get_severity_badge }}">{{ investigation.get_severity_display }}</span>
+        <span class="badge {{ investigation.get_status_badge }}">{{ investigation.get_status_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 font-mono mt-1">OOS ID: {{ investigation.number }} | Triggered from Worksheet: {{ investigation.test_worksheet.number }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      {% if investigation.status != "closed" %}
+        <form method="post" action="{% url 'quality:oos_investigation_close' investigation.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary flex items-center gap-1.5 text-sm">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            <span>Close & Approve OOS</span>
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'quality:oos_investigation_edit' investigation.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      {% if investigation.status != "closed" %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'quality:oos_investigation_delete' investigation.pk %}" class="inline" onsubmit="return confirm('Delete OOS investigation {{ investigation.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+              <span>Delete</span>
+            </button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Primary Metadata Grid -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+      Event Metadata & Specimen Linkage
+    </h2>
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">OOS Event Title</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">{{ investigation.title }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Triggering Worksheet</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          <a href="{% url 'quality:lab_test_worksheet_detail' investigation.test_worksheet.pk %}" class="text-blue-600 hover:underline">
+            {{ investigation.test_worksheet.number }} — {{ investigation.test_worksheet.title }}
+          </a>
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sample Evaluated</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          <a href="{% url 'quality:lab_sample_detail' investigation.sample.pk %}" class="text-blue-600 hover:underline">
+            {{ investigation.sample.number }} — {{ investigation.sample.sample_name }}
+          </a>
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product / Item Code</dt>
+        <dd class="text-sm font-mono text-slate-800 mt-1">{{ investigation.sample.item_code|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Source Batch / Lot #</dt>
+        <dd class="text-sm font-mono font-medium text-slate-900 mt-1">{{ investigation.sample.source_batch_number|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Target Parameter & Out-of-Spec Value</dt>
+        <dd class="text-sm font-bold text-red-600 mt-1">
+          {{ investigation.test_worksheet.specification.target_parameter_name }}: 
+          {% if investigation.test_worksheet.numeric_result is not None %}
+            {{ investigation.test_worksheet.numeric_result }} {{ investigation.test_worksheet.specification.parameter_unit }}
+          {% else %}
+            {{ investigation.test_worksheet.qualitative_result }}
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Investigation Lead</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          {{ investigation.investigation_lead.get_full_name|default:investigation.investigation_lead.username|default:"Unassigned" }}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">QA Approver</dt>
+        <dd class="text-sm text-slate-700 mt-1">
+          {{ investigation.qa_approver.get_full_name|default:investigation.qa_approver.username|default:"Pending QA Closure" }}
+        </dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Phase I: Laboratory Investigation Card -->
+  <div class="card p-6 border-l-4 {% if investigation.lab_error_identified %}border-amber-500{% elif investigation.phase_1_completed %}border-green-500{% else %}border-slate-300{% endif %}">
+    <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
+      <span class="flex items-center gap-2">
+        <i data-lucide="microscope" class="w-4 h-4 text-blue-600"></i>
+        Phase I: Laboratory Error Assessment
+      </span>
+      {% if investigation.phase_1_completed %}
+        <span class="badge badge-green text-xs">Phase I Verification Completed</span>
+      {% else %}
+        <span class="badge badge-amber text-xs">Phase I In Progress</span>
+      {% endif %}
+    </h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div class="p-3 rounded-lg border {% if investigation.analyst_interview_completed %}bg-green-50/50 border-green-200 text-green-900{% else %}bg-slate-50 border-slate-200 text-slate-600{% endif %} flex items-center gap-2">
+        <i data-lucide="{% if investigation.analyst_interview_completed %}check-circle{% else %}circle{% endif %}" class="w-4 h-4 {% if investigation.analyst_interview_completed %}text-green-600{% else %}text-slate-400{% endif %}"></i>
+        <span class="text-xs font-semibold">Analyst Interviewed</span>
+      </div>
+
+      <div class="p-3 rounded-lg border {% if investigation.calculation_verification_completed %}bg-green-50/50 border-green-200 text-green-900{% else %}bg-slate-50 border-slate-200 text-slate-600{% endif %} flex items-center gap-2">
+        <i data-lucide="{% if investigation.calculation_verification_completed %}check-circle{% else %}circle{% endif %}" class="w-4 h-4 {% if investigation.calculation_verification_completed %}text-green-600{% else %}text-slate-400{% endif %}"></i>
+        <span class="text-xs font-semibold">Calculations Verified</span>
+      </div>
+
+      <div class="p-3 rounded-lg border {% if investigation.instrument_verification_completed %}bg-green-50/50 border-green-200 text-green-900{% else %}bg-slate-50 border-slate-200 text-slate-600{% endif %} flex items-center gap-2">
+        <i data-lucide="{% if investigation.instrument_verification_completed %}check-circle{% else %}circle{% endif %}" class="w-4 h-4 {% if investigation.instrument_verification_completed %}text-green-600{% else %}text-slate-400{% endif %}"></i>
+        <span class="text-xs font-semibold">Instrument Qualified</span>
+      </div>
+
+      <div class="p-3 rounded-lg border {% if investigation.reagent_verification_completed %}bg-green-50/50 border-green-200 text-green-900{% else %}bg-slate-50 border-slate-200 text-slate-600{% endif %} flex items-center gap-2">
+        <i data-lucide="{% if investigation.reagent_verification_completed %}check-circle{% else %}circle{% endif %}" class="w-4 h-4 {% if investigation.reagent_verification_completed %}text-green-600{% else %}text-slate-400{% endif %}"></i>
+        <span class="text-xs font-semibold">Reagents / Standards Valid</span>
+      </div>
+    </div>
+
+    <div class="mt-4 pt-3 border-t border-slate-100">
+      <div class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Laboratory Error Finding</div>
+      {% if investigation.lab_error_identified %}
+        <div class="p-3 rounded bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+          <strong>Confirmed Lab Error:</strong> {{ investigation.lab_error_description }}
+        </div>
+      {% else %}
+        <p class="text-sm text-slate-600">No laboratory analytical error identified. Proceeding with Phase II manufacturing evaluation.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Phase II: Manufacturing Investigation Card -->
+  <div class="card p-6 border-l-4 {% if investigation.investigation_phase == 'phase_2_manufacturing' or investigation.assignable_cause %}border-red-500{% else %}border-slate-300{% endif %}">
+    <h2 class="text-base font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
+      <span class="flex items-center gap-2">
+        <i data-lucide="factory" class="w-4 h-4 text-blue-600"></i>
+        Phase II: Manufacturing Root Cause Investigation
+      </span>
+      {% if investigation.manufacturing_investigation_required %}
+        <span class="badge badge-red text-xs">Phase II Required</span>
+      {% else %}
+        <span class="badge badge-slate text-xs">Phase II Not Required</span>
+      {% endif %}
+    </h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      <div class="p-3 rounded-lg border {% if investigation.process_equipment_checked %}bg-green-50/50 border-green-200 text-green-900{% else %}bg-slate-50 border-slate-200 text-slate-600{% endif %} flex items-center gap-2">
+        <i data-lucide="{% if investigation.process_equipment_checked %}check-circle{% else %}circle{% endif %}" class="w-4 h-4 {% if investigation.process_equipment_checked %}text-green-600{% else %}text-slate-400{% endif %}"></i>
+        <span class="text-xs font-semibold">Equipment Parameters Checked</span>
+      </div>
+
+      <div class="p-3 rounded-lg border {% if investigation.raw_material_lots_checked %}bg-green-50/50 border-green-200 text-green-900{% else %}bg-slate-50 border-slate-200 text-slate-600{% endif %} flex items-center gap-2">
+        <i data-lucide="{% if investigation.raw_material_lots_checked %}check-circle{% else %}circle{% endif %}" class="w-4 h-4 {% if investigation.raw_material_lots_checked %}text-green-600{% else %}text-slate-400{% endif %}"></i>
+        <span class="text-xs font-semibold">Raw Material Lots Evaluated</span>
+      </div>
+
+      <div class="p-3 rounded-lg border {% if investigation.environmental_conditions_checked %}bg-green-50/50 border-green-200 text-green-900{% else %}bg-slate-50 border-slate-200 text-slate-600{% endif %} flex items-center gap-2">
+        <i data-lucide="{% if investigation.environmental_conditions_checked %}check-circle{% else %}circle{% endif %}" class="w-4 h-4 {% if investigation.environmental_conditions_checked %}text-green-600{% else %}text-slate-400{% endif %}"></i>
+        <span class="text-xs font-semibold">Cleanroom HVAC / Environment Verified</span>
+      </div>
+    </div>
+
+    {% if investigation.assignable_cause %}
+      <div class="mt-4 pt-3 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Identified Root Cause / Assignable Cause</h3>
+        <p class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200">{{ investigation.assignable_cause }}</p>
+      </div>
+    {% endif %}
+
+    {% if investigation.hypothesis_testing_summary %}
+      <div class="mt-4 pt-3 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Hypothesis Testing Protocol & Outcome</h3>
+        <p class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200">{{ investigation.hypothesis_testing_summary }}</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Retesting & Batch Disposition Card -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="check-square" class="w-4 h-4 text-blue-600"></i>
+      Retest Authorization & Final Batch Disposition
+    </h2>
+    <dl class="detail-grid mb-6">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Retest Plan Authorized</dt>
+        <dd class="text-sm font-semibold mt-1">
+          {% if investigation.retest_plan_authorized %}
+            <span class="badge badge-green">Authorized by QA</span>
+          {% else %}
+            <span class="badge badge-slate">Not Authorized</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Final Batch Disposition</dt>
+        <dd class="text-sm font-bold mt-1">
+          <span class="badge {% if investigation.final_batch_disposition == 'batch_released' %}badge-green{% elif investigation.final_batch_disposition == 'batch_rejected' or investigation.final_batch_disposition == 'quarantined' %}badge-red{% else %}badge-slate{% endif %}">
+            {{ investigation.get_final_batch_disposition_display }}
+          </span>
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Target Completion Date</dt>
+        <dd class="text-sm text-slate-700 mt-1">
+          {{ investigation.target_completion_date|default:"—" }}
+          {% if investigation.is_overdue %}
+            <span class="badge badge-red ml-1">Overdue</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Closed At Timestamp</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ investigation.closed_at|default:"Open Investigation" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escalated CAPA</dt>
+        <dd class="text-sm font-medium mt-1">
+          {% if investigation.capa %}
+            <a href="{% url 'quality:capa_detail' investigation.capa.pk %}" class="text-blue-600 hover:underline">
+              {{ investigation.capa.number }} — {{ investigation.capa.title }}
+            </a>
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escalated NCR</dt>
+        <dd class="text-sm font-medium mt-1">
+          {% if investigation.non_conformance %}
+            <a href="{% url 'quality:ncr_detail' investigation.non_conformance.pk %}" class="text-blue-600 hover:underline">
+              {{ investigation.non_conformance.number }} — {{ investigation.non_conformance.title }}
+            </a>
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+
+    {% if investigation.retest_results_summary %}
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Retest Protocol & Re-analysis Results</h3>
+        <p class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200">{{ investigation.retest_results_summary }}</p>
+      </div>
+    {% endif %}
+
+    {% if investigation.summary_and_conclusions %}
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Investigation Summary & QA Conclusions</h3>
+        <p class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200">{{ investigation.summary_and_conclusions }}</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
