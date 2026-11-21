@@ -36782,7 +36782,7 @@ apps/quality/
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 (Document Control), 12.2 (Design Controls), 12.3 (Risk Management), 12.4 (CAPA), 12.5 (Non-Conformance), 12.6 (Supplier Quality), 12.7 (Incoming Quality), 12.8 (In-Process Quality), 12.9 (Final Quality & Release), 12.10 (Calibration & MSA), 12.11 (Audit Management), 12.12 (Training & Competency), 12.13 (Customer Complaints), and 12.14 (Management Review).
 > **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
-> Migration is **incremental**: previous committed leaf is `0026_alter_qualityobjective_rag_status_and_more.py` (claims next incremental migration `0027_...`) (L43).
+> Migration is **incremental**: previous committed leaf is `0026_alter_qualityobjective_rag_status_and_more.py` (claims incremental migration `0027_...` or `0028_...` if 12.15 migrates first) (L43).
 > Free prefixes verified (0 collisions repo-wide): **`QVAL`** (`ValidationProtocol`), **`QCPK`** (`ProcessCapabilityStudy`), **`QCSV`** (`ComputerSystemValidation`), **`QCLN`** (`CleaningValidation`).
 > Plan written from `.claude/tasks/research-quality-12.15.md` (Phase 1) and `NavERP.md` (`### 12.15 Process Validation & Verification`).
 > Package folder name: `apps/quality/{models,forms,views,urls}/ProcessValidation/<Entity>.py` (`ValidationProtocols.py`, `ProcessCapabilityStudies.py`, `ComputerSystemValidations.py`, `CleaningValidations.py`, plus dedicated `ProcessValidationDashboard.py` in `views/` & `urls/`)
@@ -37151,7 +37151,7 @@ apps/quality/
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 through 12.14.
 > **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
-> Migration is **incremental**: previous committed leaf is `0026_alter_qualityobjective_rag_status_and_more.py` (claims next incremental migration `0027_...`) (L43).
+> Migration is **incremental**: previous committed leaf is `0026_alter_qualityobjective_rag_status_and_more.py` (claims incremental migration `0027_...` or `0028_...` if 12.15 migrates first) (L43).
 > Free prefixes verified (0 collisions repo-wide): **`QHAZ`** (`HazardousMaterial`), **`QSIR`** (`SafetyIncident`), **`QENV`** (`EnvironmentalMonitoringLog`), **`QWST`** (`WasteDisposalManifest`).
 > Plan written from `.claude/tasks/research-quality-12.16.md` (Phase 1) and `NavERP.md` (`### 12.16 Environmental, Health & Safety (EHS)`).
 > Package folder name: `apps/quality/{models,forms,views,urls}/EhsManagement/<Entity>.py` (`HazardousMaterials.py`, `SafetyIncidents.py`, `EnvironmentalMonitoringLogs.py`, `WasteDisposalManifests.py`, plus dedicated command center `EhsDashboard.py` in `views/` & `urls/`)
@@ -37563,7 +37563,7 @@ apps/quality/
   - [ ] Register 4 models in `apps/quality/admin.py`
   - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_16`)
   - [ ] Wire `LIVE_LINKS["12.16"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration `0027_...`
+  - [ ] Run `makemigrations quality` -> incremental migration `0027_...` (or `0028_...` if 12.15 migrates first)
   - [ ] Run `migrate quality`
   - [ ] Run `seed_quality` twice (verify idempotency)
   - [ ] Run `manage.py check` (0 issues)
