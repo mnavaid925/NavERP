@@ -45,7 +45,7 @@ class SafetyIncidentForm(TenantModelForm):
         ]
         widgets = {
             "title": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Eyewash splash incident during solvent bath transfer"}),
-            "incident_date": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
+            "incident_date": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
             "report_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "incident_type": forms.Select(attrs={"class": "form-select"}),
             "severity": forms.Select(attrs={"class": "form-select"}),
