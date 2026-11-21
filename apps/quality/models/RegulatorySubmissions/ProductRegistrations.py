@@ -99,6 +99,7 @@ class ProductRegistration(TenantNumbered):
         ]
         indexes = [
             Index(fields=["tenant", "status"], name="idx_qreg_ten_status"),
+            Index(fields=["tenant", "status", "expiration_date"], name="idx_qreg_ten_stat_exp"),
             Index(fields=["tenant", "registration_type"], name="idx_qreg_ten_type"),
             Index(fields=["tenant", "jurisdiction_country"], name="idx_qreg_ten_juris"),
             Index(fields=["tenant", "expiration_date"], name="idx_qreg_ten_exp"),
