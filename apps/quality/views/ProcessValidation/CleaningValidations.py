@@ -19,9 +19,7 @@ PAGE_SIZE = 15
 
 @login_required
 def cleaning_validation_list(request):
-    qs = quality_scope(CleaningValidation.objects.all(), request).select_related(
-        "analytical_lead", "qa_approver", "validation_protocol", "cleaning_sop"
-    )
+    qs = quality_scope(CleaningValidation.objects.all(), request)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -159,7 +157,7 @@ def cleaning_validation_delete(request, pk):
 @login_required
 def cleaning_validation_export(request):
     qs = quality_scope(CleaningValidation.objects.all(), request).select_related(
-        "analytical_lead", "qa_approver", "validation_protocol", "cleaning_sop"
+        "analytical_lead"
     )
 
     q = request.GET.get("q", "").strip()
