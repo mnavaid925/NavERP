@@ -29,7 +29,11 @@ def regulatory_dashboard(request):
 
     recent_submissions = submissions_qs.select_related("target_authority").order_by("-created_at")[:5]
     expiring_registrations = (
-        registrations_qs.filter(status__in=["active", "pending_renewal"], expiration_date__isnull=False)
+        registrations_qs.filter(
+            status__in=["active", "pending_renewal"],
+            expiration_date__isnull=False,
+            expiration_date__gte=today,
+        )
         .order_by("expiration_date")[:5]
     )
     pending_commitments = (
