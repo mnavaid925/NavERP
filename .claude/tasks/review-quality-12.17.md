@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 9 | 5 | 0 |
-| **Total** | 25 | 9 | 16 | 0 |
+| **Minor** | 14 | 8 | 6 | 0 |
+| **Total** | 25 | 8 | 17 | 0 |
 
 ---
 
@@ -157,7 +157,7 @@
   - **Issue**: Does not handle `?inspection=` GET parameter to pre-populate `linked_inspection`.
   - **Fix**: Inspect `request.GET.get("inspection")` and pre-populate `linked_inspection` and `regulatory_agency`.
 
-- [ ] **M6: Visual Negative Sign Discrepancy on Expiration Days in Detail View**
+- [x] **M6: Visual Negative Sign Discrepancy on Expiration Days in Detail View**
   - **File**: `templates/quality/regulatory_submissions/product_registration/detail.html:297`
   - **Issue**: Renders `Expired (-5d)` instead of `Expired 5d ago`.
   - **Fix**: Strip negative sign using `|stringformat:"d"|slice:"1:"`.
