@@ -53,3 +53,18 @@
 
 ### Minor
 - **[FR-M1]** `batch_record/list.html:150-161`, `device_identifier/list.html:161-172`, `serialized_item/list.html:176-187`, `product_recall/list.html:160-171`: Icon-only action links/buttons missing explicit `aria-label` attributes.
+
+---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Critical
+- **[PR-C1]** `apps/quality/views/TraceabilitySerialization/TraceabilityDashboard.py:92`: Unbounded memory bloat in Serialized Item CSV export (`for item in serialized_qs:`). Must use `.iterator(chunk_size=1000)` to avoid caching high-volume serialization datasets in memory.
+
+### Important
+- **[PR-I1]** `apps/quality/views/TraceabilitySerialization/BatchRecords.py:61-71` & `batch_record/detail.html:105`: Chained secondary FK query on Batch Record detail via `work_order__item` (Lesson L18) when printing `{{ batch_record.work_order }}` whose `__str__` accesses `self.item`. Add `"work_order__item"` to `select_related`.
+- **[PR-I2]** `apps/quality/models/TraceabilitySerialization/SerializedItems.py:125-129` & `apps/quality/views/TraceabilitySerialization/SerializedItems.py:40-42`: Missing composite index on hot tenant filter field `(tenant, epcis_state)` on `SerializedItem`. Add `idx_qser_ten_epcis` index.
+
+### Minor
+- **[PR-M1]** `apps/quality/views/TraceabilitySerialization/TraceabilityDashboard.py:24-30`: Unconsolidated separate count queries in Dashboard KPIs. Consolidate into `.aggregate(Count(..., filter=...))`.
+- **[PR-M2]** `traceability_dashboard.html:123` & `serialized_item/detail.html:138`: Redundant extra count queries on querysets iterated immediately after (`.count` -> `|length`).
