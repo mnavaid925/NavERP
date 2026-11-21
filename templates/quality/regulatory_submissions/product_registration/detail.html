@@ -147,7 +147,7 @@
 
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h2 class="card-title">Post-Approval Regulatory Commitments ({{ linked_commitments.count }})</h2>
+                <h2 class="card-title">Post-Approval Regulatory Commitments ({{ linked_commitments|length }})</h2>
                 <a href="{% url 'quality:regulatory_commitment_create' %}?registration={{ product_registration.pk }}" class="btn btn-outline btn-sm">
                     <i data-lucide="plus"></i> Add Commitment
                 </a>
@@ -190,7 +190,7 @@
 
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h2 class="card-title">Periodic Safety Update Reports & PMS ({{ linked_pms_reports.count }})</h2>
+                <h2 class="card-title">Periodic Safety Update Reports & PMS ({{ linked_pms_reports|length }})</h2>
                 <a href="{% url 'quality:post_market_surveillance_report_create' %}?registration={{ product_registration.pk }}" class="btn btn-outline btn-sm">
                     <i data-lucide="plus"></i> Add PMS Report
                 </a>
