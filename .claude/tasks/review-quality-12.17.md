@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 13 | 1 | 0 |
-| **Total** | 25 | 13 | 12 | 0 |
+| **Minor** | 14 | 12 | 2 | 0 |
+| **Total** | 25 | 12 | 13 | 0 |
 
 ---
 
@@ -125,7 +125,7 @@
   - **Issue**: If commitment is `waived`, displays countdown `in X days` instead of "Waived".
   - **Fix**: Add explicit `{% elif item.status == "waived" %}` branch.
 
-- [ ] **M2: Missing Cross-Module Hyperlink to Core Spine Entities in Detail Views**
+- [x] **M2: Missing Cross-Module Hyperlink to Core Spine Entities in Detail Views**
   - **Files**:
     - `templates/quality/regulatory_submissions/regulatory_submission/detail.html:108-115` (`technical_dossier`)
     - `templates/quality/regulatory_submissions/regulatory_commitment/detail.html:167-171` (`linked_inspection`)
