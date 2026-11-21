@@ -604,6 +604,7 @@ from apps.quality.views.EhsManagement.HazardousMaterials import (
     hazardous_material_export,
     hazardous_material_label,
     hazardous_material_list,
+    hazardous_material_update,
 )
 from apps.quality.views.EhsManagement.SafetyIncidents import (
     safety_incident_create,
@@ -611,26 +612,33 @@ from apps.quality.views.EhsManagement.SafetyIncidents import (
     safety_incident_detail,
     safety_incident_edit,
     safety_incident_export,
+    safety_incident_investigate,
     safety_incident_list,
+    safety_incident_update,
 )
 from apps.quality.views.EhsManagement.EnvironmentalMonitoringLogs import (
     environmental_monitoring_log_create,
     environmental_monitoring_log_delete,
     environmental_monitoring_log_detail,
     environmental_monitoring_log_edit,
+    environmental_monitoring_log_evaluate,
     environmental_monitoring_log_export,
     environmental_monitoring_log_list,
+    environmental_monitoring_log_update,
 )
 from apps.quality.views.EhsManagement.WasteDisposalManifests import (
+    waste_disposal_manifest_certify,
     waste_disposal_manifest_create,
     waste_disposal_manifest_delete,
     waste_disposal_manifest_detail,
     waste_disposal_manifest_edit,
     waste_disposal_manifest_export,
     waste_disposal_manifest_list,
+    waste_disposal_manifest_update,
 )
 from apps.quality.views.EhsManagement.EhsDashboard import (
     ehs_dashboard,
+    ehs_dashboard_export,
 )
 
 __all__ = [
@@ -1089,6 +1097,7 @@ __all__ = [
     "hazardous_material_export",
     "hazardous_material_detail",
     "hazardous_material_edit",
+    "hazardous_material_update",
     "hazardous_material_delete",
     "hazardous_material_label",
     "safety_incident_list",
@@ -1096,19 +1105,26 @@ __all__ = [
     "safety_incident_export",
     "safety_incident_detail",
     "safety_incident_edit",
+    "safety_incident_update",
     "safety_incident_delete",
+    "safety_incident_investigate",
     "environmental_monitoring_log_list",
     "environmental_monitoring_log_create",
     "environmental_monitoring_log_export",
     "environmental_monitoring_log_detail",
     "environmental_monitoring_log_edit",
+    "environmental_monitoring_log_update",
     "environmental_monitoring_log_delete",
+    "environmental_monitoring_log_evaluate",
     "waste_disposal_manifest_list",
     "waste_disposal_manifest_create",
     "waste_disposal_manifest_export",
     "waste_disposal_manifest_detail",
     "waste_disposal_manifest_edit",
+    "waste_disposal_manifest_update",
     "waste_disposal_manifest_delete",
+    "waste_disposal_manifest_certify",
     "ehs_dashboard",
+    "ehs_dashboard_export",
 ]
 
