@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 4 | 10 | 0 |
-| **Total** | 25 | 4 | 21 | 0 |
+| **Minor** | 14 | 3 | 11 | 0 |
+| **Total** | 25 | 3 | 22 | 0 |
 
 ---
 
@@ -190,7 +190,7 @@
   - **Issue**: Icon action buttons only supply generic titles without record identifiers for screen readers.
   - **Fix**: Add `aria-label="View {{ item.number }}"`, `aria-label="Edit {{ item.number }}"`, `aria-label="Delete {{ item.number }}"`.
 
-- [ ] **M11: Defense-in-Depth Tenant Scoping on Reverse Relations in Detail Views**
+- [x] **M11: Defense-in-Depth Tenant Scoping on Reverse Relations in Detail Views**
   - **Files**:
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:93-94`
     - `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py:96-97`
