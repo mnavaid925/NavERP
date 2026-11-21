@@ -142,16 +142,10 @@
           3. Status, QA Review & Exception Checklist
         </h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div class="form-group">
+          <div class="form-group sm:col-span-2">
             <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lifecycle Status</label>
             {{ form.status }}
             {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
-          </div>
-
-          <div class="form-group">
-            <label for="{{ form.release_status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Release Disposition</label>
-            {{ form.release_status }}
-            {% if form.release_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.release_status.errors }}</div>{% endif %}
           </div>
 
           <div class="form-group">
