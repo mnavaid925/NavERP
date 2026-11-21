@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 7 | 7 | 0 |
-| **Total** | 25 | 7 | 18 | 0 |
+| **Minor** | 14 | 6 | 8 | 0 |
+| **Total** | 25 | 6 | 19 | 0 |
 
 ---
 
@@ -167,7 +167,7 @@
   - **Issue**: Orders by `expiration_date` ascending without filtering `expiration_date__gte=today`, crowding out upcoming renewals if historic expired records exist.
   - **Fix**: Filter `expiration_date__gte=today` (or include active/pending renewal status).
 
-- [ ] **M8: Plain Text Asterisks Instead of Design System `<span class="req">*</span>`**
+- [x] **M8: Plain Text Asterisks Instead of Design System `<span class="req">*</span>`**
   - **Files**:
     - `templates/quality/regulatory_submissions/regulatory_submission/form.html`
     - `templates/quality/regulatory_submissions/product_registration/form.html`
