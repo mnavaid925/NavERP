@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Traceability & Serialization Command Center — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Traceability & Serialization</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="network" class="w-6 h-6 text-blue-600"></i>
+        Traceability & Serialization Command Center
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        End-to-end supply chain genealogy, DSCSA / UDI compliance monitoring, aggregation parent-child trees, and rapid recall orchestration.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:traceability_export_csv' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export Serialization CSV</span>
+      </a>
+      <a href="{% url 'quality:batch_record_create' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+        <span>New Batch Record</span>
+      </a>
+      <a href="{% url 'quality:serialized_item_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Allocate Serial Unit</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="file-spreadsheet" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ total_batches }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total Batch Records</div>
+        <div class="text-xs text-green-600 mt-0.5">{{ released_batches }} QA Released</div>
+      </div>
+    </div>
+
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="barcode" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ total_serialized }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Serialized Units</div>
+        <div class="text-xs text-blue-600 mt-0.5">{{ commissioned_units }} Commissioned</div>
+      </div>
+    </div>
+
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="shield-alert" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ quarantined_batches }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Quarantine Holds</div>
+        <div class="text-xs text-slate-500 mt-0.5">Active containment</div>
+      </div>
+    </div>
+
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon {% if active_recalls > 0 %}red{% else %}slate{% endif %} p-3 rounded-lg {% if active_recalls > 0 %}bg-red-50 text-red-600{% else %}bg-slate-50 text-slate-600{% endif %}">
+        <i data-lucide="alert-octagon" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold {% if active_recalls > 0 %}text-red-600{% else %}text-slate-900{% endif %}">
+          {{ active_recalls }}
+        </div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Active Recalls</div>
+        <div class="text-xs text-slate-500 mt-0.5">In recovery / containment</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Genealogy & Track-and-Trace Explorer -->
+  <div class="card p-5 bg-gradient-to-r from-blue-50/40 via-white to-slate-50/40 border-blue-100">
+    <div class="max-w-2xl">
+      <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="scan" class="w-5 h-5 text-blue-600"></i>
+        Instant Serial & Lot Genealogy Trace
+      </h2>
+      <p class="text-xs text-slate-600 mt-1">
+        Enter a unit serial number, pallet SSCC, or manufacturing lot number to immediately inspect its custody chain, parent packaging container, and batch genealogy.
+      </p>
+      <form method="get" class="mt-3 flex gap-2">
+        <div class="relative flex-1">
+          <input
+            type="text"
+            name="trace"
+            value="{{ trace_query }}"
+            placeholder="Scan or enter SN-..., SSCC-..., or LOT-..."
+            class="form-input w-full pl-9"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        </div>
+        <button type="submit" class="btn btn-primary text-sm px-4">Execute Trace</button>
+        {% if trace_query %}
+          <a href="{% url 'quality:traceability_dashboard' %}" class="btn btn-outline text-sm" title="Clear Trace">
+            Clear
+          </a>
+        {% endif %}
+      </form>
+    </div>
+
+    <!-- Trace Results Table -->
+    {% if trace_results is not None %}
+      <div class="mt-4 pt-4 border-t border-slate-200">
+        <h3 class="text-xs font-semibold text-slate-700 uppercase mb-2">Trace Results for "{{ trace_query }}" ({{ trace_results.count }})</h3>
+        {% if trace_results %}
+          <div class="table-wrap border border-slate-200 rounded-lg bg-white">
+            <table class="table w-full text-left text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600 uppercase">
+                  <th class="py-2 px-3">Serial #</th>
+                  <th class="py-2 px-3">Product Name</th>
+                  <th class="py-2 px-3">Lot #</th>
+                  <th class="py-2 px-3">Level</th>
+                  <th class="py-2 px-3">Parent Pack</th>
+                  <th class="py-2 px-3">Custodian</th>
+                  <th class="py-2 px-3">Status</th>
+                  <th class="py-2 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                {% for r in trace_results %}
+                  <tr>
+                    <td class="py-2 px-3 font-mono font-medium text-blue-600">
+                      <a href="{% url 'quality:serialized_item_detail' r.pk %}" class="hover:underline">
+                        {{ r.serial_number }}
+                      </a>
+                    </td>
+                    <td class="py-2 px-3 font-medium text-slate-900">{{ r.item_name }}</td>
+                    <td class="py-2 px-3 font-mono text-xs text-slate-600">{{ r.lot_number }}</td>
+                    <td class="py-2 px-3 text-xs">{{ r.get_packaging_level_display }}</td>
+                    <td class="py-2 px-3 text-xs font-mono text-slate-600">
+                      {% if r.parent_container %}
+                        <a href="{% url 'quality:serialized_item_detail' r.parent_container.pk %}" class="text-blue-600 hover:underline">
+                          {{ r.parent_container.serial_number }}
+                        </a>
+                      {% elif r.sscc_code %}
+                        <span>SSCC: {{ r.sscc_code }}</span>
+                      {% else %}
+                        <span class="text-slate-400">—</span>
+                      {% endif %}
+                    </td>
+                    <td class="py-2 px-3 text-xs text-slate-700">{{ r.custodian|default:"Facility" }}</td>
+                    <td class="py-2 px-3 text-xs">
+                      <span class="badge badge-info">{{ r.get_commissioning_status_display }}</span>
+                    </td>
+                    <td class="py-2 px-3 text-right">
+                      <a href="{% url 'quality:serialized_item_detail' r.pk %}" class="btn btn-outline text-xs px-2 py-0.5">
+                        Inspect
+                      </a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="p-4 bg-slate-50 rounded-lg text-center text-xs text-slate-500">
+            No serialized item or lot matched "{{ trace_query }}".
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Operational Pipelines Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Recent Electronic Batch Records -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="file-spreadsheet" class="w-4 h-4 text-blue-600"></i>
+          Recent Batch Manufacturing Records
+        </h2>
+        <a href="{% url 'quality:batch_record_list' %}" class="text-xs text-blue-600 hover:underline font-medium">
+          View All
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for br in recent_batch_records %}
+          <div class="py-2.5 flex items-center justify-between">
+            <div>
+              <a href="{% url 'quality:batch_record_detail' br.pk %}" class="text-sm font-medium text-slate-900 hover:text-blue-600">
+                {{ br.batch_number }}
+              </a>
+              <div class="text-xs text-slate-500">{{ br.product_name }} · Yield: {{ br.yield_percentage }}%</div>
+            </div>
+            <div class="flex items-center gap-2">
+              {% if br.status == "released" %}
+                <span class="badge badge-green text-xs">{{ br.get_status_display }}</span>
+              {% elif br.status == "rejected" %}
+                <span class="badge badge-red text-xs">{{ br.get_status_display }}</span>
+              {% else %}
+                <span class="badge badge-amber text-xs">{{ br.get_status_display }}</span>
+              {% endif %}
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-xs text-slate-400 py-4 text-center">No batch records created yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Active Product Recalls & Drills -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i>
+          Product Recalls & Simulated Drills
+        </h2>
+        <a href="{% url 'quality:product_recall_list' %}" class="text-xs text-blue-600 hover:underline font-medium">
+          View All
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for rc in recent_recalls %}
+          <div class="py-2.5 flex items-center justify-between">
+            <div>
+              <a href="{% url 'quality:product_recall_detail' rc.pk %}" class="text-sm font-medium text-slate-900 hover:text-blue-600">
+                {{ rc.title }}
+              </a>
+              <div class="text-xs text-slate-500">Recovery: {{ rc.recovery_rate_pct }}% · {{ rc.get_recall_class_display }}</div>
+            </div>
+            <div>
+              {% if rc.status == "completed" %}
+                <span class="badge badge-green text-xs">Completed</span>
+              {% elif rc.status == "containment_hold" %}
+                <span class="badge badge-red text-xs">Hold Active</span>
+              {% else %}
+                <span class="badge badge-amber text-xs">{{ rc.get_status_display }}</span>
+              {% endif %}
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-xs text-slate-400 py-4 text-center">No active recalls or drills recorded.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- UDI & Serialized Inventory Matrix -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- UDI Master Directory -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="qr-code" class="w-4 h-4 text-blue-600"></i>
+          UDI Master Directory
+        </h2>
+        <a href="{% url 'quality:device_identifier_list' %}" class="text-xs text-blue-600 hover:underline font-medium">
+          View All
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for udi in udi_devices %}
+          <div class="py-2.5 flex items-center justify-between">
+            <div>
+              <a href="{% url 'quality:device_identifier_detail' udi.pk %}" class="text-sm font-mono font-medium text-blue-600 hover:underline">
+                {{ udi.primary_di }}
+              </a>
+              <div class="text-xs text-slate-500">{{ udi.device_name }} ({{ udi.get_device_class_display }})</div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="badge badge-info text-xs">GUDID: {{ udi.get_gudid_status_display }}</span>
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-xs text-slate-400 py-4 text-center">No UDI device master records created.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Recent Serial Allocations -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i>
+          Recent Serial Allocations
+        </h2>
+        <a href="{% url 'quality:serialized_item_list' %}" class="text-xs text-blue-600 hover:underline font-medium">
+          View All
+        </a>
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for si in recent_serialized_items %}
+          <div class="py-2.5 flex items-center justify-between">
+            <div>
+              <a href="{% url 'quality:serialized_item_detail' si.pk %}" class="text-sm font-mono font-medium text-blue-600 hover:underline">
+                {{ si.serial_number }}
+              </a>
+              <div class="text-xs text-slate-500">{{ si.item_name }} · {{ si.get_packaging_level_display }}</div>
+            </div>
+            <div>
+              <span class="badge badge-info text-xs">{{ si.get_commissioning_status_display }}</span>
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-xs text-slate-400 py-4 text-center">No serialized items allocated yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
