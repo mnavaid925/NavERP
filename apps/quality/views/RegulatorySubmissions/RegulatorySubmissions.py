@@ -98,8 +98,8 @@ def regulatory_submission_detail(request, pk):
         pk,
         select_related=("target_authority", "org_unit", "lead_author", "qa_approver", "technical_dossier"),
     )
-    linked_commitments = submission.regulatory_commitments.all().order_by("due_date")
-    linked_registrations = submission.product_registrations.all().order_by("product_name")
+    linked_commitments = submission.regulatory_commitments.filter(tenant=request.tenant).order_by("due_date")
+    linked_registrations = submission.product_registrations.filter(tenant=request.tenant).order_by("product_name")
 
     context = {
         "regulatory_submission": submission,
