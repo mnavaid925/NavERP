@@ -38155,3 +38155,122 @@ apps/quality/
   - **Gaps**: None (100% of researched features, models, views, templates, navigation entries, migrations, and test coverage landed with 0 skipped or deferred items).
 - **Navigation Wiring**: `LIVE_LINKS["12.18"]` verified functional for all 5 feature bullets in `apps/core/navigation.py`.
 - **Git Commits**: All edits committed individually (one file per commit, PowerShell-safe). Nothing pushed.
+
+# Sub-module 12.20: Data Integrity & Electronic Records (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.20.md` (2026-11-21)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 through 12.18.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0038_productregistration_idx_qreg_ten_stat_exp_and_more.py` (claims next available incremental migration `0039_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QREC`** (`ElectronicRecordPolicy`), **`QDIR`** (`DataIntegrityAssessment`), **`QATR`** (`AuditTrailReview`), **`QCCR`** (`SystemChangeControl`).
+> Plan written from `.claude/tasks/research-quality-12.20.md` (Phase 1) and `NavERP.md` (`### 12.20 Data Integrity & Electronic Records`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/DataIntegrity/<Entity>.py` (`ElectronicRecordPolicies.py`, `DataIntegrityAssessments.py`, `AuditTrailReviews.py`, `SystemChangeControls.py`, plus dedicated `DataIntegrityDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/data_integrity/{electronic_record_policy,data_integrity_assessment,audit_trail_review,system_change_control}/{list,detail,form}.html` + `templates/quality/data_integrity/data_integrity_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QREC`** (`ElectronicRecordPolicy`), **`QDIR`** (`DataIntegrityAssessment`), **`QATR`** (`AuditTrailReview`), **`QCCR`** (`SystemChangeControl`), all 4 model classes, and all URL stems (`electronic_record_policy_*`, `data_integrity_assessment_*`, `audit_trail_review_*`, `system_change_control_*`, `data_integrity_dashboard`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.AuditLog` (`apps/core/models/AuditLog.py`).
+  - Module 12 siblings (12.1, 12.4, 12.5, 12.15): `quality.ComputerSystemValidation` (`apps/quality/models/ProcessValidation/ComputerSystemValidations.py`), `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.NonConformanceReport` (`apps/quality/models/NonConformance/NonConformanceReports.py`), `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`).
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `quality.ComputerSystemValidation`, `quality.ControlledDocument`, `quality.NonConformanceReport`, `quality.CapaInvestigation`, `core.OrgUnit`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Regulatory Alignment (21 CFR Part 11, EU Annex 11, ALCOA+, ISPE GAMP 5, PIC/S PI 041-1)**:
+  - 21 CFR Part 11 and EU Annex 11 electronic record governance, signature requirements, re-authentication, dual-signature enforcement, and archival policies.
+  - Comprehensive ALCOA+ Data Integrity Risk Assessments (DIRA) across 9 dimensions with automated DI-RPN scoring and vulnerability mitigation tracking.
+  - Periodic and event-driven GxP Audit Trail Reviews (ATR), anomaly logging, and QA disposition sign-offs.
+  - Formal Computer System Change Control (CCR) with GxP impact assessment, GAMP categorization, CCB review, testing verification, and rollback plans.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `review_date`, `assessment_date`, `actual_implementation_date`, `qa_approval_date`), auto-numbers (`number`), MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_overdue`, `di_risk_score`, `is_compliant`, `days_open`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-quality-12.20.md` with every field, choice, URL name, and view context key.
+
+### Phase 3.2: Entity by Entity Implementation
+- [ ] **Entity 1: ElectronicRecordPolicy** (`QREC-`)
+  - [ ] `apps/quality/models/DataIntegrity/ElectronicRecordPolicies.py`
+  - [ ] `apps/quality/forms/DataIntegrity/ElectronicRecordPolicies.py`
+  - [ ] `apps/quality/views/DataIntegrity/ElectronicRecordPolicies.py`
+  - [ ] `apps/quality/urls/DataIntegrity/ElectronicRecordPolicies.py`
+  - [ ] `templates/quality/data_integrity/electronic_record_policy/list.html`
+  - [ ] `templates/quality/data_integrity/electronic_record_policy/detail.html`
+  - [ ] `templates/quality/data_integrity/electronic_record_policy/form.html`
+- [ ] **Entity 2: DataIntegrityAssessment** (`QDIR-`)
+  - [ ] `apps/quality/models/DataIntegrity/DataIntegrityAssessments.py`
+  - [ ] `apps/quality/forms/DataIntegrity/DataIntegrityAssessments.py`
+  - [ ] `apps/quality/views/DataIntegrity/DataIntegrityAssessments.py`
+  - [ ] `apps/quality/urls/DataIntegrity/DataIntegrityAssessments.py`
+  - [ ] `templates/quality/data_integrity/data_integrity_assessment/list.html`
+  - [ ] `templates/quality/data_integrity/data_integrity_assessment/detail.html`
+  - [ ] `templates/quality/data_integrity/data_integrity_assessment/form.html`
+- [ ] **Entity 3: AuditTrailReview** (`QATR-`)
+  - [ ] `apps/quality/models/DataIntegrity/AuditTrailReviews.py`
+  - [ ] `apps/quality/forms/DataIntegrity/AuditTrailReviews.py`
+  - [ ] `apps/quality/views/DataIntegrity/AuditTrailReviews.py`
+  - [ ] `apps/quality/urls/DataIntegrity/AuditTrailReviews.py`
+  - [ ] `templates/quality/data_integrity/audit_trail_review/list.html`
+  - [ ] `templates/quality/data_integrity/audit_trail_review/detail.html`
+  - [ ] `templates/quality/data_integrity/audit_trail_review/form.html`
+- [ ] **Entity 4: SystemChangeControl** (`QCCR-`)
+  - [ ] `apps/quality/models/DataIntegrity/SystemChangeControls.py`
+  - [ ] `apps/quality/forms/DataIntegrity/SystemChangeControls.py`
+  - [ ] `apps/quality/views/DataIntegrity/SystemChangeControls.py`
+  - [ ] `apps/quality/urls/DataIntegrity/SystemChangeControls.py`
+  - [ ] `templates/quality/data_integrity/system_change_control/list.html`
+  - [ ] `templates/quality/data_integrity/system_change_control/detail.html`
+  - [ ] `templates/quality/data_integrity/system_change_control/form.html`
+- [ ] **Dedicated Data Integrity Dashboard**
+  - [ ] `apps/quality/views/DataIntegrity/DataIntegrityDashboard.py`
+  - [ ] `apps/quality/urls/DataIntegrity/DataIntegrityDashboard.py`
+  - [ ] `templates/quality/data_integrity/data_integrity_dashboard.html`
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all models in `apps/quality/models/__init__.py`
+- [ ] Re-export all forms in `apps/quality/forms/__init__.py`
+- [ ] Re-export all views in `apps/quality/views/__init__.py`
+- [ ] Wire URL routes in `apps/quality/urls/__init__.py`
+- [ ] Register all 4 models in `apps/quality/admin.py`
+- [ ] Extend `apps/quality/management/commands/seed_quality.py` with 12.20 seed data
+- [ ] Wire `LIVE_LINKS["12.20"]` in `apps/core/navigation.py`
+- [ ] Run `makemigrations quality`
+- [ ] Run `migrate`
+- [ ] Run `seed_quality` twice (idempotency check)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] Run comprehensive smoke verification via `qa-smoke-tester` agent (assert 200/302, content rendering, search/filters, IDOR isolation -> 404)
+
+### Phase 4: Specialist Multi-Agent Review
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-quality-12.20.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-quality-12.20.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-quality-12.20.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-quality-12.20.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-quality-12.20.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-quality-12.20.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-quality-12.20.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite
+- [ ] Pin test fixtures in `apps/quality/tests/conftest.py`
+- [ ] Implement `apps/quality/tests/test_dataintegrity_models.py`
+- [ ] Implement `apps/quality/tests/test_dataintegrity_forms.py`
+- [ ] Implement `apps/quality/tests/test_dataintegrity_views.py`
+- [ ] Implement `apps/quality/tests/test_dataintegrity_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/quality/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Update `.claude/skills/quality/SKILL.md` with 12.20 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 12.20 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-quality-12.20.md` (or declare None)
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
