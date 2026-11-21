@@ -183,6 +183,36 @@ def waste_disposal_manifest_export(request):
     qs = quality_scope(WasteDisposalManifest.objects.all(), request).select_related(
         "generator_org_unit", "transporter", "tsdf_facility"
     )
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(manifest_title__icontains=q)
+            | Q(regulatory_manifest_id__icontains=q)
+            | Q(waste_description__icontains=q)
+            | Q(epa_waste_codes__icontains=q)
+        )
+
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    type_filter = request.GET.get("manifest_type", "").strip()
+    if type_filter:
+        qs = qs.filter(manifest_type=type_filter)
+
+    transporter_filter = request.GET.get("transporter", "").strip()
+    if transporter_filter and transporter_filter.isdigit():
+        qs = qs.filter(transporter_id=int(transporter_filter))
+
+    tsdf_filter = (request.GET.get("tsdf_facility") or request.GET.get("tsdf", "")).strip()
+    if tsdf_filter and tsdf_filter.isdigit():
+        qs = qs.filter(tsdf_facility_id=int(tsdf_filter))
+
+    org_unit_filter = request.GET.get("org_unit", "").strip()
+    if org_unit_filter and org_unit_filter.isdigit():
+        qs = qs.filter(generator_org_unit_id=int(org_unit_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="waste_manifests_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
     response["X-Content-Type-Options"] = "nosniff"
