@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
@@ -91,7 +92,10 @@ def serialized_item_create(request):
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
+            if obj.commissioning_status == "commissioned" and not obj.commissioned_at:
+                obj.commissioned_at = timezone.now()
             obj.save()
+            form.save_m2m()
             write_audit_log(request.user, obj, "create", tenant=request.tenant)
             messages.success(request, f"Serialized Item {obj.serial_number} created successfully.")
             return redirect("quality:serialized_item_detail", pk=obj.pk)
@@ -112,7 +116,11 @@ def serialized_item_edit(request, pk):
     if request.method == "POST":
         form = SerializedItemForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save()
+            obj = form.save(commit=False)
+            if obj.commissioning_status == "commissioned" and not obj.commissioned_at:
+                obj.commissioned_at = timezone.now()
+            obj.save()
+            form.save_m2m()
             write_audit_log(request.user, obj, "update", tenant=request.tenant)
             messages.success(request, f"Serialized Item {obj.serial_number} updated successfully.")
             return redirect("quality:serialized_item_detail", pk=obj.pk)
