@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ capability_study.number }}{% else %}New Process Capability Study{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_validation_dashboard' %}">Process Validation</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_capability_study_list' %}">Capability Studies</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ capability_study.number }}{% else %}New Study{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Process Capability Study: {{ capability_study.number }}{% else %}New Process Capability Study (Cp/Cpk){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    1. Study Identification & Parameter
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Study Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.parameter_name.id_for_label }}" class="form-label">Parameter / CQA Name *</label>
+                        {{ form.parameter_name }}
+                        {% if form.parameter_name.errors %}<div class="form-error">{{ form.parameter_name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.parameter_category.id_for_label }}" class="form-label">Parameter Category *</label>
+                        {{ form.parameter_category }}
+                        {% if form.parameter_category.errors %}<div class="form-error">{{ form.parameter_category.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.unit_of_measure.id_for_label }}" class="form-label">Unit of Measure (UOM) *</label>
+                        {{ form.unit_of_measure }}
+                        {% if form.unit_of_measure.errors %}<div class="form-error">{{ form.unit_of_measure.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Study Status *</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    2. Specification Limits & Statistical Sampling
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.lower_spec_limit.id_for_label }}" class="form-label">Lower Spec Limit (LSL) *</label>
+                        {{ form.lower_spec_limit }}
+                        {% if form.lower_spec_limit.errors %}<div class="form-error">{{ form.lower_spec_limit.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.target_nominal.id_for_label }}" class="form-label">Target / Nominal Value</label>
+                        {{ form.target_nominal }}
+                        {% if form.target_nominal.errors %}<div class="form-error">{{ form.target_nominal.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.upper_spec_limit.id_for_label }}" class="form-label">Upper Spec Limit (USL) *</label>
+                        {{ form.upper_spec_limit }}
+                        {% if form.upper_spec_limit.errors %}<div class="form-error">{{ form.upper_spec_limit.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.subgroup_size.id_for_label }}" class="form-label">Subgroup Size (n) *</label>
+                        {{ form.subgroup_size }}
+                        {% if form.subgroup_size.errors %}<div class="form-error">{{ form.subgroup_size.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.number_of_subgroups.id_for_label }}" class="form-label">Number of Subgroups (k) *</label>
+                        {{ form.number_of_subgroups }}
+                        {% if form.number_of_subgroups.errors %}<div class="form-error">{{ form.number_of_subgroups.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.total_samples.id_for_label }}" class="form-label">Total Sample Size (N) *</label>
+                        {{ form.total_samples }}
+                        {% if form.total_samples.errors %}<div class="form-error">{{ form.total_samples.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.mean_value.id_for_label }}" class="form-label">Process Mean (X-bar) *</label>
+                        {{ form.mean_value }}
+                        {% if form.mean_value.errors %}<div class="form-error">{{ form.mean_value.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.within_subgroup_stdev.id_for_label }}" class="form-label">Within-Subgroup StDev (&sigma;w)</label>
+                        {{ form.within_subgroup_stdev }}
+                        {% if form.within_subgroup_stdev.errors %}<div class="form-error">{{ form.within_subgroup_stdev.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.overall_stdev.id_for_label }}" class="form-label">Overall StDev (s) *</label>
+                        {{ form.overall_stdev }}
+                        {% if form.overall_stdev.errors %}<div class="form-error">{{ form.overall_stdev.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3 flex items-center gap-2">
+                        {{ form.is_normally_distributed }}
+                        <label for="{{ form.is_normally_distributed.id_for_label }}" class="text-sm text-slate-700 font-medium">
+                            Normal distribution verified (goodness of fit / probability plot)
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    3. Manufacturing Asset & Operation Context
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.equipment_tag.id_for_label }}" class="form-label">Machine / Tool Tag</label>
+                        {{ form.equipment_tag }}
+                        {% if form.equipment_tag.errors %}<div class="form-error">{{ form.equipment_tag.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.process_name.id_for_label }}" class="form-label">Manufacturing Process</label>
+                        {{ form.process_name }}
+                        {% if form.process_name.errors %}<div class="form-error">{{ form.process_name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.item_code.id_for_label }}" class="form-label">Product / Item Code</label>
+                        {{ form.item_code }}
+                        {% if form.item_code.errors %}<div class="form-error">{{ form.item_code.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.lot_number.id_for_label }}" class="form-label">Production Lot Number</label>
+                        {{ form.lot_number }}
+                        {% if form.lot_number.errors %}<div class="form-error">{{ form.lot_number.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.study_date.id_for_label }}" class="form-label">Study Date</label>
+                        {{ form.study_date }}
+                        {% if form.study_date.errors %}<div class="form-error">{{ form.study_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.analysis_summary.id_for_label }}" class="form-label">Analysis Summary & Assignable Causes</label>
+                        {{ form.analysis_summary }}
+                        {% if form.analysis_summary.errors %}<div class="form-error">{{ form.analysis_summary.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    4. Protocol Traceability & Ownership
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.validation_protocol.id_for_label }}" class="form-label">Validation Protocol</label>
+                        {{ form.validation_protocol }}
+                        {% if form.validation_protocol.errors %}<div class="form-error">{{ form.validation_protocol.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.linked_parameter_log.id_for_label }}" class="form-label">Linked Parameter Log</label>
+                        {{ form.linked_parameter_log }}
+                        {% if form.linked_parameter_log.errors %}<div class="form-error">{{ form.linked_parameter_log.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.investigator.id_for_label }}" class="form-label">Investigator / Analyst *</label>
+                        {{ form.investigator }}
+                        {% if form.investigator.errors %}<div class="form-error">{{ form.investigator.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.approved_by.id_for_label }}" class="form-label">Quality Approver</label>
+                        {{ form.approved_by }}
+                        {% if form.approved_by.errors %}<div class="form-error">{{ form.approved_by.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:process_capability_study_detail' capability_study.pk %}{% else %}{% url 'quality:process_capability_study_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Update Study{% else %}Calculate & Save Study{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
