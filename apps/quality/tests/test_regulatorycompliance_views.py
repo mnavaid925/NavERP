@@ -16,9 +16,9 @@ def test_regulatorycompliance_dashboard_view(client, admin_user, regulatory_subm
     client.force_login(admin_user)
     res = client.get(reverse("quality:regulatory_dashboard"))
     assert res.status_code == 200
-    assert "metrics" in res.context
-    assert res.context["metrics"]["active_registrations"] >= 1
-    assert res.context["metrics"]["open_commitments"] >= 1
+    assert "active_registrations" in res.context
+    assert res.context["active_registrations"] >= 1
+    assert res.context["open_commitments"] >= 1
 
 
 @pytest.mark.django_db
