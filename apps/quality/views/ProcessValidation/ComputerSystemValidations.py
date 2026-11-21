@@ -190,7 +190,7 @@ def computer_system_validation_export(request):
     if approach_filter:
         qs = qs.filter(validation_approach=approach_filter)
 
-    response = HttpResponse(content_type="text/csv")
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="computer_systems.csv"'
     response["X-Content-Type-Options"] = "nosniff"
 
