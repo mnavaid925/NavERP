@@ -163,6 +163,18 @@ from apps.quality.models.RegulatorySubmissions.RegulatoryCommitments import (
 from apps.quality.models.RegulatorySubmissions.PostMarketSurveillanceReports import (
     PostMarketSurveillanceReport,
 )
+from apps.quality.models.TraceabilitySerialization.BatchRecords import (
+    BatchRecord,
+)
+from apps.quality.models.TraceabilitySerialization.DeviceIdentifiers import (
+    DeviceIdentifier,
+)
+from apps.quality.models.TraceabilitySerialization.SerializedItems import (
+    SerializedItem,
+)
+from apps.quality.models.TraceabilitySerialization.ProductRecalls import (
+    ProductRecall,
+)
 
 __all__ = [
     "TenantOwned",
@@ -235,5 +247,9 @@ __all__ = [
     "ProductRegistration",
     "RegulatoryCommitment",
     "PostMarketSurveillanceReport",
+    "BatchRecord",
+    "DeviceIdentifier",
+    "SerializedItem",
+    "ProductRecall",
 ]
 
