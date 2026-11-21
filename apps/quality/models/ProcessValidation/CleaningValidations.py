@@ -168,6 +168,7 @@ class CleaningValidation(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "-created_at"], name="idx_qcln_ten_created"),
             models.Index(fields=["tenant", "cleaning_status"], name="idx_qcln_ten_status"),
+            models.Index(fields=["tenant", "analytical_method"], name="idx_qcln_ten_method"),
             models.Index(fields=["tenant", "next_revalidation_date"], name="idx_qcln_ten_reval_due"),
         ]
         constraints = [
