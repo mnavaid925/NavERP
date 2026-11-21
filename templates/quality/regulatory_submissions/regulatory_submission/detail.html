@@ -108,7 +108,11 @@
                     <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
                         <i data-lucide="file-check" class="text-primary w-5 h-5"></i>
                         <div>
-                            <div class="font-mono text-sm font-medium">{{ regulatory_submission.technical_dossier.number }}</div>
+                            <div class="font-mono text-sm font-medium">
+                                <a href="{% url 'quality:controlled_document_detail' regulatory_submission.technical_dossier.pk %}" class="text-primary hover:underline">
+                                    {{ regulatory_submission.technical_dossier.number }}
+                                </a>
+                            </div>
                             <div class="text-xs text-slate-600">{{ regulatory_submission.technical_dossier.title }} (Rev {{ regulatory_submission.technical_dossier.revision }})</div>
                         </div>
                     </div>
