@@ -4655,6 +4655,7 @@ class Command(BaseCommand):
         )
         change_control = DocumentChangeOrder.objects.filter(tenant=tenant).first()
         org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        cleaning_sop = ControlledDocument.objects.filter(tenant=tenant).first()
 
         today = timezone.now().date()
 
@@ -4890,6 +4891,7 @@ class Command(BaseCommand):
                 next_revalidation_date=today + datetime.timedelta(days=360),
                 notes="Runs 1 and 2 completed with swab TOC results at 0.42 ug/100cm2 and 0.38 ug/100cm2 against 1.23 limit. Run 3 scheduled for execution.",
                 validation_protocol=proto2,
+                cleaning_sop=cleaning_sop,
                 analytical_lead=quality_lead,
                 qa_approver=admin_user,
             )
@@ -4925,11 +4927,10 @@ class Command(BaseCommand):
                 next_revalidation_date=today + datetime.timedelta(days=305),
                 notes="3 consecutive validation runs met all acceptance criteria with analytical non-detects across 12 critical sampling points.",
                 validation_protocol=proto1,
+                cleaning_sop=cleaning_sop,
                 analytical_lead=quality_lead,
                 qa_approver=admin_user,
             )
-
-        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.15 Process Validation & Verification seeded successfully."))
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.15 Process Validation & Verification seeded successfully."))
 
