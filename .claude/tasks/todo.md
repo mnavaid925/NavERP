@@ -37517,62 +37517,62 @@ apps/quality/
 
 ## Execution Checklist (Steps 1 through 9)
 
-- [ ] **Step 1: Pre-build Contract** -> Freeze `.claude/tasks/contract-quality-12.16.md` (all model fields, choices, form fields, view context vars, and URL patterns pinned).
-- [ ] **Step 2: Build Entity by Entity** (4 backend files + 3 templates per entity, strictly one by one):
-  - [ ] Entity 1: `HazardousMaterial`
-    - [ ] `apps/quality/models/EhsManagement/HazardousMaterials.py`
-    - [ ] `apps/quality/forms/EhsManagement/HazardousMaterials.py`
-    - [ ] `apps/quality/views/EhsManagement/HazardousMaterials.py`
-    - [ ] `apps/quality/urls/EhsManagement/HazardousMaterials.py`
-    - [ ] `templates/quality/ehsmanagement/hazardous_material/list.html`
-    - [ ] `templates/quality/ehsmanagement/hazardous_material/detail.html`
-    - [ ] `templates/quality/ehsmanagement/hazardous_material/form.html`
-  - [ ] Entity 2: `SafetyIncident`
-    - [ ] `apps/quality/models/EhsManagement/SafetyIncidents.py`
-    - [ ] `apps/quality/forms/EhsManagement/SafetyIncidents.py`
-    - [ ] `apps/quality/views/EhsManagement/SafetyIncidents.py`
-    - [ ] `apps/quality/urls/EhsManagement/SafetyIncidents.py`
-    - [ ] `templates/quality/ehsmanagement/safety_incident/list.html`
-    - [ ] `templates/quality/ehsmanagement/safety_incident/detail.html`
-    - [ ] `templates/quality/ehsmanagement/safety_incident/form.html`
-  - [ ] Entity 3: `EnvironmentalMonitoringLog`
-    - [ ] `apps/quality/models/EhsManagement/EnvironmentalMonitoringLogs.py`
-    - [ ] `apps/quality/forms/EhsManagement/EnvironmentalMonitoringLogs.py`
-    - [ ] `apps/quality/views/EhsManagement/EnvironmentalMonitoringLogs.py`
-    - [ ] `apps/quality/urls/EhsManagement/EnvironmentalMonitoringLogs.py`
-    - [ ] `templates/quality/ehsmanagement/environmental_monitoring_log/list.html`
-    - [ ] `templates/quality/ehsmanagement/environmental_monitoring_log/detail.html`
-    - [ ] `templates/quality/ehsmanagement/environmental_monitoring_log/form.html`
-  - [ ] Entity 4: `WasteDisposalManifest`
-    - [ ] `apps/quality/models/EhsManagement/WasteDisposalManifests.py`
-    - [ ] `apps/quality/forms/EhsManagement/WasteDisposalManifests.py`
-    - [ ] `apps/quality/views/EhsManagement/WasteDisposalManifests.py`
-    - [ ] `apps/quality/urls/EhsManagement/WasteDisposalManifests.py`
-    - [ ] `templates/quality/ehsmanagement/waste_disposal_manifest/list.html`
-    - [ ] `templates/quality/ehsmanagement/waste_disposal_manifest/detail.html`
-    - [ ] `templates/quality/ehsmanagement/waste_disposal_manifest/form.html`
-  - [ ] Dedicated Dashboard: `EhsDashboard`
-    - [ ] `apps/quality/views/EhsManagement/EhsDashboard.py`
-    - [ ] `apps/quality/urls/EhsManagement/EhsDashboard.py`
-    - [ ] `templates/quality/ehsmanagement/ehs_dashboard.html`
-- [ ] **Step 3: Single-Writer Integrate & Migrations**
-  - [ ] Re-export models in `apps/quality/models/__init__.py`
-  - [ ] Re-export forms in `apps/quality/forms/__init__.py`
-  - [ ] Re-export views in `apps/quality/views/__init__.py`
-  - [ ] Re-export & include urls in `apps/quality/urls/__init__.py`
-  - [ ] Register 4 models in `apps/quality/admin.py`
-  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_16`)
-  - [ ] Wire `LIVE_LINKS["12.16"]` in `apps/core/navigation.py`
-  - [ ] Run `makemigrations quality` -> incremental migration `0027_...` (or `0028_...` if 12.15 migrates first)
-  - [ ] Run `migrate quality`
-  - [ ] Run `seed_quality` twice (verify idempotency)
-  - [ ] Run `manage.py check` (0 issues)
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.16.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
-- [ ] **Step 7: Automated Tests** -> `test_ehsmanagement_models.py`, `test_ehsmanagement_forms.py`, `test_ehsmanagement_views.py`, `test_ehsmanagement_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.16.md`
+- [x] **Step 1: Pre-build Contract** -> Freeze `.claude/tasks/contract-quality-12.16.md` (all model fields, choices, form fields, view context vars, and URL patterns pinned).
+- [x] **Step 2: Build Entity by Entity** (4 backend files + 3 templates per entity, strictly one by one):
+  - [x] Entity 1: `HazardousMaterial`
+    - [x] `apps/quality/models/EhsManagement/HazardousMaterials.py`
+    - [x] `apps/quality/forms/EhsManagement/HazardousMaterials.py`
+    - [x] `apps/quality/views/EhsManagement/HazardousMaterials.py`
+    - [x] `apps/quality/urls/EhsManagement/HazardousMaterials.py`
+    - [x] `templates/quality/ehsmanagement/hazardous_material/list.html`
+    - [x] `templates/quality/ehsmanagement/hazardous_material/detail.html`
+    - [x] `templates/quality/ehsmanagement/hazardous_material/form.html`
+  - [x] Entity 2: `SafetyIncident`
+    - [x] `apps/quality/models/EhsManagement/SafetyIncidents.py`
+    - [x] `apps/quality/forms/EhsManagement/SafetyIncidents.py`
+    - [x] `apps/quality/views/EhsManagement/SafetyIncidents.py`
+    - [x] `apps/quality/urls/EhsManagement/SafetyIncidents.py`
+    - [x] `templates/quality/ehsmanagement/safety_incident/list.html`
+    - [x] `templates/quality/ehsmanagement/safety_incident/detail.html`
+    - [x] `templates/quality/ehsmanagement/safety_incident/form.html`
+  - [x] Entity 3: `EnvironmentalMonitoringLog`
+    - [x] `apps/quality/models/EhsManagement/EnvironmentalMonitoringLogs.py`
+    - [x] `apps/quality/forms/EhsManagement/EnvironmentalMonitoringLogs.py`
+    - [x] `apps/quality/views/EhsManagement/EnvironmentalMonitoringLogs.py`
+    - [x] `apps/quality/urls/EhsManagement/EnvironmentalMonitoringLogs.py`
+    - [x] `templates/quality/ehsmanagement/environmental_monitoring_log/list.html`
+    - [x] `templates/quality/ehsmanagement/environmental_monitoring_log/detail.html`
+    - [x] `templates/quality/ehsmanagement/environmental_monitoring_log/form.html`
+  - [x] Entity 4: `WasteDisposalManifest`
+    - [x] `apps/quality/models/EhsManagement/WasteDisposalManifests.py`
+    - [x] `apps/quality/forms/EhsManagement/WasteDisposalManifests.py`
+    - [x] `apps/quality/views/EhsManagement/WasteDisposalManifests.py`
+    - [x] `apps/quality/urls/EhsManagement/WasteDisposalManifests.py`
+    - [x] `templates/quality/ehsmanagement/waste_disposal_manifest/list.html`
+    - [x] `templates/quality/ehsmanagement/waste_disposal_manifest/detail.html`
+    - [x] `templates/quality/ehsmanagement/waste_disposal_manifest/form.html`
+  - [x] Dedicated Dashboard: `EhsDashboard`
+    - [x] `apps/quality/views/EhsManagement/EhsDashboard.py`
+    - [x] `apps/quality/urls/EhsManagement/EhsDashboard.py`
+    - [x] `templates/quality/ehsmanagement/ehs_dashboard.html`
+- [x] **Step 3: Single-Writer Integrate & Migrations**
+  - [x] Re-export models in `apps/quality/models/__init__.py`
+  - [x] Re-export forms in `apps/quality/forms/__init__.py`
+  - [x] Re-export views in `apps/quality/views/__init__.py`
+  - [x] Re-export & include urls in `apps/quality/urls/__init__.py`
+  - [x] Register 4 models in `apps/quality/admin.py`
+  - [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_16`)
+  - [x] Wire `LIVE_LINKS["12.16"]` in `apps/core/navigation.py`
+  - [x] Run `makemigrations quality` -> incremental migration `0027_...` (or `0028_...` if 12.15 migrates first)
+  - [x] Run `migrate quality`
+  - [x] Run `seed_quality` twice (verify idempotency)
+  - [x] Run `manage.py check` (0 issues)
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.16.md`
+- [x] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
+- [x] **Step 7: Automated Tests** -> `test_ehsmanagement_models.py`, `test_ehsmanagement_forms.py`, `test_ehsmanagement_views.py`, `test_ehsmanagement_security.py` -> 100% green
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.16.md`
 
 ---
 
@@ -37585,5 +37585,16 @@ apps/quality/
 
 ---
 
-## Review notes — Sub-module 12.16 Close-out (YYYY-MM-DD)
-(filled in at the end)
+## Review notes — Sub-module 12.16 Close-out (2026-11-21)
+
+- **Research Artifact**: `.claude/tasks/research-quality-12.16.md` (committed: `7e415c0d`)
+- **Pre-build Contract**: `.claude/tasks/contract-quality-12.16.md` (committed: `c8fb98c3`)
+- **Review Findings**: `.claude/tasks/review-quality-12.16.md` (committed: `8788e4e2`)
+- **Gap Register**: `.agents/tasks/gaps-quality-12.16.md` (committed: `1c138647`)
+- **Gaps**: None. All 23 review findings (2 Critical, 7 Important, 14 Minor) fixed and verified with 0 open items.
+- **Models Landed (4)**: `HazardousMaterial` [QHAZ-], `SafetyIncident` [QSIR-], `EnvironmentalMonitoringLog` [QENV-], `WasteDisposalManifest` [QWST-].
+- **Command Center Landed**: `ehs_dashboard` with OSHA 300 / DART telemetry, cleanroom excursion tracking, RCRA 90-day accumulation alerts, and CSV export.
+- **Migrations**: `0027_hazardousmaterial_safetyincident_environmentalmonitoringlog_wastedisposalmanifest.py`, `0028_environmentalmonitoringlog_idx_qenv_ten_stat_time_and_more.py`, `0029_hazardousmaterial_idx_qhaz_ten_name.py`, `0030_alter_hazardousmaterial_nfpa_flammability_and_more.py`.
+- **Navigation**: `LIVE_LINKS["12.16"]` active in `apps/core/navigation.py`.
+- **Seeder**: Idempotent demo data in `apps/quality/management/commands/seed_quality.py` (`_seed_submodule_12_16`).
+- **Test Suite**: 4 dedicated test files (`test_ehsmanagement_models.py`, `test_ehsmanagement_forms.py`, `test_ehsmanagement_views.py`, `test_ehsmanagement_security.py`) landing 49 passing tests. Full unfiltered quality test suite passing: 2,308 passed, 0 failures.
