@@ -64,6 +64,8 @@ def traceability_dashboard(request):
 
 @login_required
 def traceability_export_csv(request):
+    write_audit_log(request.user, SerializedItem(), "export", tenant=request.tenant)
+
     serialized_qs = quality_scope(SerializedItem.objects.all(), request).select_related(
         "batch_record", "parent_container"
     )
