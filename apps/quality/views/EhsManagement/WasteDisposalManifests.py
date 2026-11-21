@@ -47,7 +47,7 @@ def waste_disposal_manifest_list(request):
     if transporter_filter and transporter_filter.isdigit():
         qs = qs.filter(transporter_id=int(transporter_filter))
 
-    tsdf_filter = request.GET.get("tsdf_facility", "").strip()
+    tsdf_filter = (request.GET.get("tsdf_facility") or request.GET.get("tsdf", "")).strip()
     if tsdf_filter and tsdf_filter.isdigit():
         qs = qs.filter(tsdf_facility_id=int(tsdf_filter))
 
