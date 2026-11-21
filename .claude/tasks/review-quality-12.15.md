@@ -134,7 +134,7 @@
   - **Location**: `templates/quality/processvalidation/validation_protocol/list.html:68-120`
   - **Fix**: Add `revalidation_trigger` dropdown to filter grid and clear-filter condition.
 
-- [ ] **[M4] Missing `validation_approach` Dropdown in `computer_system_validation/list.html` Filter Bar**
+- [x] **[M4] Missing `validation_approach` Dropdown in `computer_system_validation/list.html` Filter Bar** — fixed in 6afa4719
   - **Location**: `templates/quality/processvalidation/computer_system_validation/list.html:68-110`
   - **Fix**: Add `approach` select element to filter grid and clear-filter condition.
 
