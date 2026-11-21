@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}LIMS Command Center — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>LIMS</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="flask-conical" class="w-6 h-6 text-blue-600"></i>
+        Laboratory Information Management (LIMS)
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Analytical sample pipeline, testing worksheets, OOS investigations, and instrument/reagent traceability under GLP/ISO 17025 compliance.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:lims_export_csv' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export LIMS CSV</span>
+      </a>
+      <a href="{% url 'quality:lab_test_worksheet_create' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+        <span>New Worksheet</span>
+      </a>
+      <a href="{% url 'quality:lab_sample_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Register Sample</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon blue p-3 rounded-lg bg-blue-50 text-blue-600">
+        <i data-lucide="test-tube" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ total_samples }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total Samples</div>
+        <div class="text-xs text-blue-600 mt-0.5">{{ samples_in_testing }} in Testing</div>
+      </div>
+    </div>
+
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon purple p-3 rounded-lg bg-purple-50 text-purple-600">
+        <i data-lucide="clipboard-list" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ pending_worksheets }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Active Worksheets</div>
+        <div class="text-xs text-purple-600 mt-0.5">Assigned / In Progress</div>
+      </div>
+    </div>
+
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon red p-3 rounded-lg bg-red-50 text-red-600">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ open_oos_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Open OOS Events</div>
+        <div class="text-xs text-red-600 mt-0.5">Under Investigation</div>
+      </div>
+    </div>
+
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon orange p-3 rounded-lg bg-amber-50 text-amber-600">
+        <i data-lucide="clock" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">{{ expiring_reagents_count }}</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Reagents &lt;30d</div>
+        <div class="text-xs text-amber-600 mt-0.5">Expiring Soon</div>
+      </div>
+    </div>
+
+    <div class="stat-card card p-4 flex items-center gap-4">
+      <div class="stat-icon green p-3 rounded-lg bg-green-50 text-green-600">
+        <i data-lucide="book-open-check" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900">GLP / 17025</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Compliance Mode</div>
+        <div class="text-xs text-green-600 mt-0.5">ALCOA+ Audit Trail</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operational Workflows Quick Links -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <a href="{% url 'quality:lab_sample_list' %}" class="card p-4 hover:shadow-md transition-shadow flex items-center justify-between border-l-4 border-blue-500">
+      <div>
+        <div class="text-sm font-semibold text-slate-900">Sample Management</div>
+        <div class="text-xs text-slate-500 mt-0.5">Accessioning & chain of custody</div>
+      </div>
+      <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400"></i>
+    </a>
+
+    <a href="{% url 'quality:lab_specification_list' %}" class="card p-4 hover:shadow-md transition-shadow flex items-center justify-between border-l-4 border-indigo-500">
+      <div>
+        <div class="text-sm font-semibold text-slate-900">Method Specifications</div>
+        <div class="text-xs text-slate-500 mt-0.5">Analytical limits & validations</div>
+      </div>
+      <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400"></i>
+    </a>
+
+    <a href="{% url 'quality:lab_test_worksheet_list' %}" class="card p-4 hover:shadow-md transition-shadow flex items-center justify-between border-l-4 border-purple-500">
+      <div>
+        <div class="text-sm font-semibold text-slate-900">Test Execution Worksheets</div>
+        <div class="text-xs text-slate-500 mt-0.5">Raw data & replicate calculations</div>
+      </div>
+      <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400"></i>
+    </a>
+
+    <a href="{% url 'quality:oos_investigation_list' %}" class="card p-4 hover:shadow-md transition-shadow flex items-center justify-between border-l-4 border-red-500">
+      <div>
+        <div class="text-sm font-semibold text-slate-900">OOS Investigations</div>
+        <div class="text-xs text-slate-500 mt-0.5">Phase I/II root cause analysis</div>
+      </div>
+      <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400"></i>
+    </a>
+  </div>
+
+  <!-- Recent Pipeline Activity Grids -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Recent Samples -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+        <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="test-tube" class="w-4 h-4 text-blue-600"></i>
+          Recent Lab Samples
+        </h2>
+        <a href="{% url 'quality:lab_sample_list' %}" class="text-xs text-blue-600 hover:underline">View All</a>
+      </div>
+      <div class="divide-y divide-slate-100 text-sm">
+        {% for s in recent_samples %}
+          <div class="py-2.5 flex items-center justify-between">
+            <div>
+              <a href="{% url 'quality:lab_sample_detail' s.pk %}" class="font-mono font-medium text-blue-600 hover:underline">
+                {{ s.number }}
+              </a>
+              <span class="text-slate-800 ml-1 font-medium">{{ s.sample_name }}</span>
+              <div class="text-xs text-slate-400 mt-0.5">Type: {{ s.get_sample_type_display }} | Lot: {{ s.source_batch_number|default:"—" }}</div>
+            </div>
+            <span class="badge {{ s.get_status_badge }}">{{ s.get_status_display }}</span>
+          </div>
+        {% empty %}
+          <p class="text-xs text-slate-400 py-3 text-center">No samples registered yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Recent Test Worksheets -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+        <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+          <i data-lucide="clipboard-list" class="w-4 h-4 text-purple-600"></i>
+          Recent Analytical Worksheets
+        </h2>
+        <a href="{% url 'quality:lab_test_worksheet_list' %}" class="text-xs text-blue-600 hover:underline">View All</a>
+      </div>
+      <div class="divide-y divide-slate-100 text-sm">
+        {% for w in recent_worksheets %}
+          <div class="py-2.5 flex items-center justify-between">
+            <div>
+              <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="font-mono font-medium text-purple-600 hover:underline">
+                {{ w.number }}
+              </a>
+              <span class="text-slate-800 ml-1 font-medium">{{ w.title }}</span>
+              <div class="text-xs text-slate-400 mt-0.5">Analyst: {{ w.assigned_analyst.username|default:"Unassigned" }} | Sched: {{ w.scheduled_date|default:"—" }}</div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="badge {{ w.get_status_badge }}">{{ w.get_status_display }}</span>
+              <span class="badge {{ w.get_disposition_badge }}">{{ w.get_disposition_display }}</span>
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-xs text-slate-400 py-3 text-center">No test worksheets logged yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent OOS Events -->
+  {% if recent_oos %}
+    <div class="card p-5 border-l-4 border-red-500">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-red-100">
+        <h2 class="text-sm font-semibold text-red-900 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i>
+          Out-of-Specification Investigations
+        </h2>
+        <a href="{% url 'quality:oos_investigation_list' %}" class="text-xs text-red-600 hover:underline">View All</a>
+      </div>
+      <div class="divide-y divide-slate-100 text-sm">
+        {% for oos in recent_oos %}
+          <div class="py-2.5 flex items-center justify-between">
+            <div>
+              <a href="{% url 'quality:oos_investigation_detail' oos.pk %}" class="font-mono font-medium text-red-600 hover:underline">
+                {{ oos.number }}
+              </a>
+              <span class="text-slate-800 ml-1 font-medium">{{ oos.title }}</span>
+              <div class="text-xs text-slate-400 mt-0.5">Sample: {{ oos.sample.number }} | Phase: {{ oos.get_investigation_phase_display }}</div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="badge {{ oos.get_severity_badge }}">{{ oos.get_severity_display }}</span>
+              <span class="badge {{ oos.get_status_badge }}">{{ oos.get_status_display }}</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
