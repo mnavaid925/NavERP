@@ -24,7 +24,7 @@
 
 ## Critical Findings
 
-- [ ] **[C1] Multiple Invalid Choice Literals in `seed_quality.py` (`_seed_submodule_12_15`)**
+- [x] **[C1] Multiple Invalid Choice Literals in `seed_quality.py` (`_seed_submodule_12_15`)** — fixed in 74d455d1
   - **Location**: `apps/quality/management/commands/seed_quality.py:4745-4890`
   - **Issue**: The demo data seeder `_seed_submodule_12_15` passes choice strings that do not exist on the models' `CHOICES` tuples (`weight_mass` vs `fill_volume_weight`, `highly_capable` vs `capable_excellent`, `approved` vs `completed`, `matrix_verified` vs `verified_100_percent`, `traditional_csv` vs `traditional_v_model`, `on_premises` vs `on_premise`, `sampling_in_progress` vs `in_cleaning_runs`). Causes badge lookup failures and breaks dashboard KPI filtering.
   - **Fix**: Update `_seed_submodule_12_15` in `apps/quality/management/commands/seed_quality.py` to use canonical choice keys.
