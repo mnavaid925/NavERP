@@ -36,3 +36,16 @@
 - `apps/quality/views/LimsManagement/LabSamples.py:143` — `lab_sample_delete` only guards against status `approved`, `in_testing`, `testing_completed`, but does not guard against deleting a registered/received sample that has attached `test_worksheets` or `oos_investigations`, which cascade-deletes testing history under `on_delete=CASCADE`. Fix: check `if obj.test_worksheets.exists() or obj.oos_investigations.exists(): messages.error(...)`.
 - `templates/quality/lims_management/lab_sample/detail.html:69` — `sample.work_order` is fetched in `select_related` by `lab_sample_detail` view and present in `LabSampleForm`, but omitted from the metadata display grid `<dl class="detail-grid">`. Fix: add a `detail-item` displaying `sample.work_order`.
 - `apps/quality/forms/LimsManagement/LabSamples.py:51` — `"sampled_at": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"})` lacks `format="%Y-%m-%dT%H:%M"`, causing HTML5 `datetime-local` inputs to render empty when editing an existing sample. Fix: add `format="%Y-%m-%dT%H:%M"`.
+
+---
+
+### Pass 2: `explorer` Findings
+
+#### Important
+- `apps/quality/forms/LimsManagement/OosInvestigations.py:93-105` — In `OosInvestigationForm.clean()`, tenant FK validation is enforced with `reject_foreign`, but there is no consistency check asserting that `sample == test_worksheet.sample`. A user could manually submit a worksheet belonging to Sample A while selecting Sample B in the sample dropdown, leading to cross-sample data inconsistency. Fix: enforce `if ws and smp and ws.sample_id != smp.id: self.add_error("sample", "Selected sample must match the sample linked to the test worksheet.")`.
+- `apps/quality/views/LimsManagement/LabSamples.py:143` — Missing cascade deletion guard in `lab_sample_delete`. If a sample is in `registered` or `received` status and already has associated `LabTestWorksheet` or `OosInvestigation` records, deleting the sample will cascade-delete those analytical records. Fix: check `if obj.test_worksheets.exists() or obj.oos_investigations.exists(): ...` and prevent deletion.
+
+#### Minor
+- `templates/quality/lims_management/lab_sample/detail.html:165` — `sample.work_order` is fetched in `select_related` by `lab_sample_detail` view and present in `LabSampleForm`, but omitted from the metadata display grid `<dl class="detail-grid">`. Fix: add a `detail-item` displaying `sample.work_order`.
+- `apps/quality/views/LimsManagement/LabTestWorksheets.py:162` — Missing state transition guard in `lab_test_worksheet_complete`. If called via direct POST on an already approved, rejected, or cancelled worksheet, it resets status back to `review_pending`. Fix: guard with `if obj.status not in ["assigned", "in_progress"]: ...`.
+- `apps/quality/views/LimsManagement/OosInvestigations.py:170` — Authorization check on `oos_investigation_close`: verify if `request.user` has appropriate permission or is staff/tenant admin before closing GxP investigation.
