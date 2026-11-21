@@ -180,6 +180,31 @@ def environmental_monitoring_log_export(request):
     qs = quality_scope(EnvironmentalMonitoringLog.objects.all(), request).select_related(
         "org_unit", "sampled_by", "verified_by", "measurement_instrument"
     )
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(sampling_point_id__icontains=q)
+            | Q(parameter_name__icontains=q)
+            | Q(excursion_details__icontains=q)
+        )
+
+    eval_filter = request.GET.get("evaluation_status", "").strip()
+    if eval_filter:
+        qs = qs.filter(evaluation_status=eval_filter)
+
+    class_filter = request.GET.get("cleanroom_class", "").strip()
+    if class_filter:
+        qs = qs.filter(cleanroom_class=class_filter)
+
+    cat_filter = request.GET.get("monitoring_category", "").strip()
+    if cat_filter:
+        qs = qs.filter(monitoring_category=cat_filter)
+
+    org_unit_filter = request.GET.get("org_unit", "").strip()
+    if org_unit_filter and org_unit_filter.isdigit():
+        qs = qs.filter(org_unit_id=int(org_unit_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="environmental_logs_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
     response["X-Content-Type-Options"] = "nosniff"
