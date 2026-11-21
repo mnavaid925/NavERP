@@ -27,7 +27,7 @@
         {% if serialized_item.commissioning_status == "commissioned" %}
           <span class="badge badge-info">{{ serialized_item.get_commissioning_status_display }}</span>
         {% elif serialized_item.commissioning_status == "aggregated" %}
-          <span class="badge badge-purple">{{ serialized_item.get_commissioning_status_display }}</span>
+          <span class="badge badge-slate">{{ serialized_item.get_commissioning_status_display }}</span>
         {% elif serialized_item.commissioning_status == "shipped" %}
           <span class="badge badge-green">{{ serialized_item.get_commissioning_status_display }}</span>
         {% elif serialized_item.commissioning_status == "recalled" %}
@@ -130,7 +130,7 @@
               {% endif %}
             </div>
             {% if serialized_item.parent_container %}
-              <span class="badge badge-purple">Aggregated</span>
+              <span class="badge badge-slate">Aggregated</span>
             {% endif %}
           </div>
 
