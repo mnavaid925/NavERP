@@ -77,7 +77,6 @@ class RegulatorySubmissionForm(TenantModelForm):
             cleaned_data,
             ["target_authority", "org_unit", "lead_author", "qa_approver", "technical_dossier"],
         )
-        planned = cleaned_data.get("planned_submission_date")
         actual = cleaned_data.get("actual_submission_date")
         decision = cleaned_data.get("decision_date")
         if actual and decision and decision < actual:
