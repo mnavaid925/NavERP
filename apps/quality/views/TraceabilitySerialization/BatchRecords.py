@@ -6,6 +6,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.quality.forms.TraceabilitySerialization.BatchRecords import BatchRecordForm
 from apps.quality.models.TraceabilitySerialization.BatchRecords import BatchRecord
@@ -124,6 +125,7 @@ def batch_record_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def batch_record_delete(request, pk):
     obj = quality_object(request, BatchRecord, pk)
     if obj.status == "released":
@@ -138,6 +140,7 @@ def batch_record_delete(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def batch_record_release(request, pk):
     obj = quality_object(request, BatchRecord, pk)
     if obj.can_release:
