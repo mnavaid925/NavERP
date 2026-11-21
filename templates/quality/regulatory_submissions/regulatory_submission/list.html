@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Regulatory Submissions — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_dashboard' %}">Regulatory Compliance</a>
+            <span class="sep">/</span>
+            <span>Submissions</span>
+        </div>
+        <h1 class="page-title">Regulatory Submissions & Dossiers</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:regulatory_submission_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:regulatory_submission_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Submission
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="folder-git-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Submissions</div>
+            <div class="stat-value">{{ total_submissions }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">In Review / Deficiency</div>
+            <div class="stat-value">{{ pending_review_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Approved / Cleared</div>
+            <div class="stat-value">{{ approved_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Search by number, title, product, application #..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="submission_type">Type</label>
+                <select name="submission_type" id="submission_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in submission_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.submission_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="device_class">Device Class</label>
+                <select name="device_class" id="device_class" class="form-select">
+                    <option value="">All Classes</option>
+                    {% for val, label in device_class_choices %}
+                    <option value="{{ val }}" {% if request.GET.device_class == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group lg:col-span-3">
+                <label class="form-label" for="target_authority">Target Health Authority</label>
+                <select name="target_authority" id="target_authority" class="form-select">
+                    <option value="">All Authorities</option>
+                    {% for auth in target_authorities %}
+                    <option value="{{ auth.pk }}" {% if request.GET.target_authority == auth.pk|stringformat:"d" %}selected{% endif %}>{{ auth.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-2 flex items-end justify-end gap-2">
+                <a href="{% url 'quality:regulatory_submission_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Title & Product</th>
+                    <th>Type</th>
+                    <th>Target Authority</th>
+                    <th>Class</th>
+                    <th>App / Tracking #</th>
+                    <th>Status</th>
+                    <th>Submitted / Decision</th>
+                    <th class="table-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in regulatory_submissions %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'quality:regulatory_submission_detail' item.pk %}" class="text-primary hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ item.title }}</div>
+                        <div class="text-xs text-slate-500">{{ item.product_name }}{% if item.product_code %} ({{ item.product_code }}){% endif %}</div>
+                    </td>
+                    <td>
+                        <span class="text-sm font-medium">{{ item.get_submission_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if item.target_authority %}
+                        <span class="text-sm">{{ item.target_authority.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs font-mono">{{ item.get_device_class_display }}</span>
+                    </td>
+                    <td>
+                        {% if item.application_number %}
+                        <span class="font-mono text-xs">{{ item.application_number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_css }}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {% if item.actual_submission_date %}
+                        <div>Sub: {{ item.actual_submission_date|date:"Y-m-d" }}</div>
+                        {% endif %}
+                        {% if item.decision_date %}
+                        <div class="text-slate-900 font-medium">Dec: {{ item.decision_date|date:"Y-m-d" }}</div>
+                        {% elif item.planned_submission_date %}
+                        <div class="text-slate-400">Plan: {{ item.planned_submission_date|date:"Y-m-d" }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions">
+                        <a href="{% url 'quality:regulatory_submission_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:regulatory_submission_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:regulatory_submission_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this submission?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="file-text" class="empty-icon"></i>
+                            <h3>No regulatory submissions recorded</h3>
+                            <p class="text-slate-500">Track 510(k), PMA, CE technical files, and health authority dossier clearance.</p>
+                            <a href="{% url 'quality:regulatory_submission_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> Create First Submission
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} records
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.submission_type %}&submission_type={{ request.GET.submission_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Previous</span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.submission_type %}&submission_type={{ request.GET.submission_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
