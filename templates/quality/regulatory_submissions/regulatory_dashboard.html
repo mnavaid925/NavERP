@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Regulatory Compliance & Submissions Command Center — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <span>Regulatory Compliance Command Center</span>
+        </div>
+        <h1 class="page-title">Regulatory Affairs & Global Submissions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:regulatory_submission_create' %}" class="btn btn-outline">
+            <i data-lucide="folder-plus"></i> New Submission
+        </a>
+        <a href="{% url 'quality:product_registration_create' %}" class="btn btn-outline">
+            <i data-lucide="globe"></i> Register License
+        </a>
+        <a href="{% url 'quality:regulatory_commitment_create' %}" class="btn btn-outline">
+            <i data-lucide="file-signature"></i> Log Commitment
+        </a>
+        <a href="{% url 'quality:post_market_surveillance_report_create' %}" class="btn btn-primary">
+            <i data-lucide="activity"></i> Compile PMS Report
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="folder-git-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Submissions</div>
+            <div class="stat-value">{{ total_submissions }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Licenses</div>
+            <div class="stat-value">{{ active_registrations }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="hourglass"></i>
+        </div>
+        <div>
+            <div class="stat-label">Open Commitments</div>
+            <div class="stat-value">{{ open_commitments }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-label">Overdue Commitments</div>
+            <div class="stat-value">{{ overdue_commitments }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-label">PMS / PSUR Reports</div>
+            <div class="stat-value">{{ pms_reports_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title">Recent Regulatory Submissions</h2>
+            <a href="{% url 'quality:regulatory_submission_list' %}" class="btn btn-outline btn-sm">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Title & Product</th>
+                        <th>Authority</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in recent_submissions %}
+                    <tr>
+                        <td class="font-mono font-medium">
+                            <a href="{% url 'quality:regulatory_submission_detail' item.pk %}" class="text-primary hover:underline">
+                                {{ item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ item.title }}</div>
+                            <div class="text-xs text-slate-500">{{ item.product_name }}</div>
+                        </td>
+                        <td>
+                            {% if item.target_authority %}
+                            <span class="text-xs">{{ item.target_authority.name }}</span>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ item.status_css }}">
+                                {{ item.get_status_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-slate-400 text-sm">No submissions recorded yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title">Expiring Global Licenses & Renewals</h2>
+            <a href="{% url 'quality:product_registration_list' %}" class="btn btn-outline btn-sm">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Product & Jurisdiction</th>
+                        <th>Expiration Date</th>
+                        <th>Urgency</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in expiring_registrations %}
+                    <tr>
+                        <td class="font-mono font-medium">
+                            <a href="{% url 'quality:product_registration_detail' item.pk %}" class="text-primary hover:underline">
+                                {{ item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ item.product_name }}</div>
+                            <div class="text-xs text-slate-500">{{ item.jurisdiction_country }}</div>
+                        </td>
+                        <td class="text-xs font-mono">
+                            {{ item.expiration_date|date:"Y-m-d" }}
+                        </td>
+                        <td>
+                            {% if item.urgency_status == 'expired' %}
+                            <span class="badge badge-red">Expired</span>
+                            {% elif item.urgency_status == 'urgent' %}
+                            <span class="badge badge-red">&le; 30d</span>
+                            {% elif item.urgency_status == 'warning' %}
+                            <span class="badge badge-amber">&le; 90d</span>
+                            {% else %}
+                            <span class="badge badge-green">Normal</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-slate-400 text-sm">No active licenses with expiration tracking.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title">Pending Health Authority Commitments</h2>
+            <a href="{% url 'quality:regulatory_commitment_list' %}" class="btn btn-outline btn-sm">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Commitment Title</th>
+                        <th>Agency</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in pending_commitments %}
+                    <tr>
+                        <td class="font-mono font-medium">
+                            <a href="{% url 'quality:regulatory_commitment_detail' item.pk %}" class="text-primary hover:underline">
+                                {{ item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ item.title }}</div>
+                        </td>
+                        <td>
+                            {% if item.regulatory_agency %}
+                            <span class="text-xs">{{ item.regulatory_agency.name }}</span>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-xs font-mono {% if item.is_overdue %}text-red-600 font-bold{% endif %}">
+                            {{ item.due_date|date:"Y-m-d" }}
+                        </td>
+                        <td>
+                            <span class="badge {{ item.status_css }}">
+                                {{ item.get_status_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-slate-400 text-sm">No pending regulatory commitments.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title">Recent Post-Market Surveillance (PMS / PSUR)</h2>
+            <a href="{% url 'quality:post_market_surveillance_report_list' %}" class="btn btn-outline btn-sm">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Report Title</th>
+                        <th>Period End</th>
+                        <th>Benefit-Risk</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in recent_pms_reports %}
+                    <tr>
+                        <td class="font-mono font-medium">
+                            <a href="{% url 'quality:post_market_surveillance_report_detail' item.pk %}" class="text-primary hover:underline">
+                                {{ item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ item.report_title }}</div>
+                            <div class="text-xs text-slate-500">{{ item.device_model_family }}</div>
+                        </td>
+                        <td class="text-xs font-mono">
+                            {{ item.reporting_period_end|date:"Y-m-d" }}
+                        </td>
+                        <td>
+                            <span class="badge {{ item.benefit_risk_css }}">
+                                {{ item.get_benefit_risk_conclusion_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {{ item.status_css }}">
+                                {{ item.get_status_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-slate-400 text-sm">No post-market surveillance reports recorded yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
