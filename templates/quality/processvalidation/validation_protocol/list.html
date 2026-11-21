@@ -192,15 +192,15 @@
                         <span class="text-xs text-slate-700">{{ p.lead_author.get_full_name|default:p.lead_author.username }}</span>
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'quality:validation_protocol_detail' p.pk %}" class="btn-icon" title="View Protocol">
+                        <a href="{% url 'quality:validation_protocol_detail' p.pk %}" class="btn-icon" title="View Protocol" aria-label="View Protocol {{ p.number }}">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'quality:validation_protocol_edit' p.pk %}" class="btn-icon" title="Edit Protocol">
+                        <a href="{% url 'quality:validation_protocol_edit' p.pk %}" class="btn-icon" title="Edit Protocol" aria-label="Edit Protocol {{ p.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'quality:validation_protocol_delete' p.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete protocol {{ p.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete Protocol">
+                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete Protocol" aria-label="Delete Protocol {{ p.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
