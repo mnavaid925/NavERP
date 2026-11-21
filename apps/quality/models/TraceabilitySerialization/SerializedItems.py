@@ -126,6 +126,7 @@ class SerializedItem(TenantNumbered):
             models.Index(fields=["tenant", "serial_number"], name="idx_qser_ten_serial"),
             models.Index(fields=["tenant", "commissioning_status"], name="idx_qser_ten_comm"),
             models.Index(fields=["tenant", "packaging_level"], name="idx_qser_ten_pkg"),
+            models.Index(fields=["tenant", "epcis_state"], name="idx_qser_ten_epcis"),
         ]
 
     def __str__(self):
