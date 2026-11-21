@@ -34,7 +34,7 @@
 
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
-        <div class="stat-icon {% if capability_study.capability_determination == 'highly_capable' or capability_study.capability_determination == 'capable' %}green{% elif capability_study.capability_determination == 'marginally_capable' %}orange{% elif capability_study.capability_determination == 'incapable' %}red{% else %}slate{% endif %}">
+        <div class="stat-icon {% if capability_study.capability_determination == 'highly_capable' or capability_study.capability_determination == 'capable' %}green{% elif capability_study.capability_determination == 'marginally_capable' %}orange{% elif capability_study.capability_determination == 'incapable' %}orange{% else %}slate{% endif %}">
             <i data-lucide="award"></i>
         </div>
         <div>
@@ -72,7 +72,7 @@
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon {% if capability_study.expected_ppm and capability_study.expected_ppm > 66 %}red{% else %}green{% endif %}">
+        <div class="stat-icon {% if capability_study.expected_ppm and capability_study.expected_ppm > 66 %}orange{% else %}green{% endif %}">
             <i data-lucide="alert-circle"></i>
         </div>
         <div>
