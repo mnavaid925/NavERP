@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 14 | 11 | 0 |
+| **Minor** | 14 | 13 | 1 | 0 |
+| **Total** | 25 | 13 | 12 | 0 |
 
 ---
 
@@ -118,7 +118,7 @@
 
 ## Minor Findings
 
-- [ ] **M1: Ambiguous Countdown / Overdue Display for Waived Commitments**
+- [x] **M1: Ambiguous Countdown / Overdue Display for Waived Commitments**
   - **Files**:
     - `templates/quality/regulatory_submissions/regulatory_commitment/list.html:148-154`
     - `templates/quality/regulatory_submissions/regulatory_commitment/detail.html:197-203`
