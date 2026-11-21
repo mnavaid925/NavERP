@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 11 | 3 | 0 |
-| **Total** | 25 | 11 | 14 | 0 |
+| **Minor** | 14 | 10 | 4 | 0 |
+| **Total** | 25 | 10 | 15 | 0 |
 
 ---
 
@@ -143,7 +143,7 @@
   - **Issue**: Unused imports (`get_object_or_404`, `timedelta`, `timezone`, `RegulatoryInspectionHost`).
   - **Fix**: Remove unused imports.
 
-- [ ] **M4: Missing Audit Logging on Bulk CSV Data Export**
+- [x] **M4: Missing Audit Logging on Bulk CSV Data Export**
   - **Files**:
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:171`
     - `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py:187`
