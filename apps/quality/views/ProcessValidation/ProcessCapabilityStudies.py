@@ -18,9 +18,7 @@ PAGE_SIZE = 15
 
 @login_required
 def process_capability_study_list(request):
-    qs = quality_scope(ProcessCapabilityStudy.objects.all(), request).select_related(
-        "investigator", "approved_by", "validation_protocol"
-    )
+    qs = quality_scope(ProcessCapabilityStudy.objects.all(), request)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -150,7 +148,7 @@ def process_capability_study_delete(request, pk):
 @login_required
 def process_capability_study_export(request):
     qs = quality_scope(ProcessCapabilityStudy.objects.all(), request).select_related(
-        "investigator", "approved_by", "validation_protocol"
+        "investigator"
     )
 
     q = request.GET.get("q", "").strip()
