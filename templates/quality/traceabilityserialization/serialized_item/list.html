@@ -137,7 +137,7 @@
                 {% if item.commissioning_status == "commissioned" %}
                   <span class="badge badge-info">{{ item.get_commissioning_status_display }}</span>
                 {% elif item.commissioning_status == "aggregated" %}
-                  <span class="badge badge-purple">{{ item.get_commissioning_status_display }}</span>
+                  <span class="badge badge-slate">{{ item.get_commissioning_status_display }}</span>
                 {% elif item.commissioning_status == "shipped" %}
                   <span class="badge badge-green">{{ item.get_commissioning_status_display }}</span>
                 {% elif item.commissioning_status == "recalled" %}
