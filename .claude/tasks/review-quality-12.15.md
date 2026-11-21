@@ -99,7 +99,7 @@
   - **Issue**: `last_review_date` is defined in `ComputerSystemValidationForm.Meta.fields` but omitted from the template.
   - **Fix**: Add the `last_review_date` form-group block in Section 3 of `form.html`.
 
-- [ ] **[I7] Missing Composite Indexes on `(tenant, -created_at)` Across All 4 Models**
+- [x] **[I7] Missing Composite Indexes on `(tenant, -created_at)` Across All 4 Models** — fixed in 70657376, 01c8ba45, 817a2627, 5b957d39, 33c4cae1
   - **Location**:
     - `apps/quality/models/ProcessValidation/ValidationProtocols.py:154-159`
     - `apps/quality/models/ProcessValidation/ProcessCapabilityStudies.py:130-134`
