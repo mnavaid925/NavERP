@@ -80,7 +80,7 @@
   - **Issue**: Metric fields with defaults in models are required in ModelForms because they lack `blank=True`, causing form validation errors when omitted on creation.
   - **Fix**: In form `__init__`, set `required = False` on these defaulted fields.
 
-- [ ] **[I5] Unauthorized Stat Icon Modifier Variant `stat-icon red` Used in Stat Cards**
+- [x] **[I5] Unauthorized Stat Icon Modifier Variant `stat-icon red` Used in Stat Cards** — fixed in fef70700, 430ed079, 1685591a, cb4db992, c0b0ce8b, 34db7ece, 65f5b616, 930a0ab6, 3f2158d8
   - **Location**:
     - `templates/quality/processvalidation/validation_protocol/list.html:56`
     - `templates/quality/processvalidation/validation_protocol/detail.html:48, 70`
