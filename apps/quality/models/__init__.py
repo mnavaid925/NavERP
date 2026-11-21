@@ -139,6 +139,18 @@ from apps.quality.models.ProcessValidation.ComputerSystemValidations import (
 from apps.quality.models.ProcessValidation.CleaningValidations import (
     CleaningValidation,
 )
+from apps.quality.models.EhsManagement.HazardousMaterials import (
+    HazardousMaterial,
+)
+from apps.quality.models.EhsManagement.SafetyIncidents import (
+    SafetyIncident,
+)
+from apps.quality.models.EhsManagement.EnvironmentalMonitoringLogs import (
+    EnvironmentalMonitoringLog,
+)
+from apps.quality.models.EhsManagement.WasteDisposalManifests import (
+    WasteDisposalManifest,
+)
 
 __all__ = [
     "TenantOwned",
@@ -203,5 +215,9 @@ __all__ = [
     "ProcessCapabilityStudy",
     "ComputerSystemValidation",
     "CleaningValidation",
+    "HazardousMaterial",
+    "SafetyIncident",
+    "EnvironmentalMonitoringLog",
+    "WasteDisposalManifest",
 ]
 
