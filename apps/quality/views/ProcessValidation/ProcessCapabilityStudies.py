@@ -174,7 +174,7 @@ def process_capability_study_export(request):
     if category_filter:
         qs = qs.filter(parameter_category=category_filter)
 
-    response = HttpResponse(content_type="text/csv")
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="capability_studies.csv"'
     response["X-Content-Type-Options"] = "nosniff"
 
