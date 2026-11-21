@@ -32,4 +32,16 @@
   - `M2`: Lack of server-side minimum validation for `retention_period_years >= 1`
   - `M3`: Validation consistency between `anomalies_detected_count > 0` and `disposition="approved_clean"`
 
+### Pass 2: `explorer`
+- **Critical**: None.
+- **Important**:
+  - Corroborates `I1`, `I2`, `I3`, `I4`, `I5`, `I6`.
+  - `I7`: `SystemChangeControlForm` allows closing without requiring `closure_summary`.
+  - `I8`: `DataIntegrityAssessmentForm` allows approval when ALCOA+ ratings are `non_compliant` without requiring `remediation_plan` or `linked_capa`.
+- **Minor**:
+  - Corroborates `M1`, `M2`, `M3`.
+  - `M4`: Detail templates render `system` and `governing_sop` as plain text instead of clickable links to `quality:computer_system_validation_detail` and `quality:controlled_document_detail`.
+  - `M5`: Add index on `SystemChangeControl.target_date` for overdue/deadline queries.
+
+
 
