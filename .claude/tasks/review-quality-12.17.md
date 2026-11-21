@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 5 | 9 | 0 |
-| **Total** | 25 | 5 | 20 | 0 |
+| **Minor** | 14 | 4 | 10 | 0 |
+| **Total** | 25 | 4 | 21 | 0 |
 
 ---
 
@@ -181,7 +181,7 @@
   - **Issue**: Parent breadcrumb reads `Registrations` instead of `Product Registrations`.
   - **Fix**: Update breadcrumb text to `Product Registrations`.
 
-- [ ] **M10: Action Icon Buttons Lack Row-Specific `aria-label` Context**
+- [x] **M10: Action Icon Buttons Lack Row-Specific `aria-label` Context**
   - **Files**:
     - `templates/quality/regulatory_submissions/regulatory_submission/list.html`
     - `templates/quality/regulatory_submissions/product_registration/list.html`
