@@ -254,7 +254,7 @@
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escalated CAPA</dt>
         <dd class="text-sm font-medium mt-1">
           {% if investigation.capa %}
-            <a href="{% url 'quality:capa_detail' investigation.capa.pk %}" class="text-blue-600 hover:underline">
+            <a href="{% url 'quality:capa_investigation_detail' investigation.capa.pk %}" class="text-blue-600 hover:underline">
               {{ investigation.capa.number }} — {{ investigation.capa.title }}
             </a>
           {% else %}
@@ -266,7 +266,7 @@
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escalated NCR</dt>
         <dd class="text-sm font-medium mt-1">
           {% if investigation.non_conformance %}
-            <a href="{% url 'quality:ncr_detail' investigation.non_conformance.pk %}" class="text-blue-600 hover:underline">
+            <a href="{% url 'quality:non_conformance_report_detail' investigation.non_conformance.pk %}" class="text-blue-600 hover:underline">
               {{ investigation.non_conformance.number }} — {{ investigation.non_conformance.title }}
             </a>
           {% else %}
