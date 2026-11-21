@@ -153,6 +153,8 @@ class WasteDisposalManifest(TenantNumbered):
             models.Index(fields=["tenant", "transporter"], name="idx_qwst_ten_transp"),
             models.Index(fields=["tenant", "tsdf_facility"], name="idx_qwst_ten_tsdf"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qwst_ten_created"),
+            models.Index(fields=["tenant", "associated_hazardous_material", "-shipment_date"], name="idx_qwst_ten_mat_ship"),
+            models.Index(fields=["tenant", "status", "accumulation_start_date"], name="idx_qwst_ten_stat_acc"),
         ]
 
     def __str__(self):
