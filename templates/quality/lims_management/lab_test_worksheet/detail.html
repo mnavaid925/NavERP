@@ -127,7 +127,7 @@
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Analytical Instrument</dt>
         <dd class="text-sm font-medium text-slate-900 mt-1">
           {% if worksheet.instrument %}
-            <a href="{% url 'quality:gage_detail' worksheet.instrument.pk %}" class="text-blue-600 hover:underline">
+            <a href="{% url 'quality:calibration_gage_detail' worksheet.instrument.pk %}" class="text-blue-600 hover:underline">
               {{ worksheet.instrument.gage_id }} - {{ worksheet.instrument.name }}
             </a>
           {% elif worksheet.instrument_name %}
