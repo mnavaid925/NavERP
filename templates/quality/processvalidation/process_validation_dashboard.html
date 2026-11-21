@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Process Validation & Verification Dashboard — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <span>Process Validation</span>
+        </div>
+        <h1 class="page-title">Process Validation & Verification Command Center</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:validation_protocol_create' %}" class="btn btn-outline">
+            <i data-lucide="plus"></i> New Protocol
+        </a>
+        <a href="{% url 'quality:process_capability_study_create' %}" class="btn btn-outline">
+            <i data-lucide="bar-chart-2"></i> New Cp/Cpk Study
+        </a>
+        <a href="{% url 'quality:computer_system_validation_create' %}" class="btn btn-outline">
+            <i data-lucide="monitor"></i> Register System
+        </a>
+        <a href="{% url 'quality:cleaning_validation_create' %}" class="btn btn-primary">
+            <i data-lucide="sparkles"></i> New Cleaning Study
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-check"></i>
+        </div>
+        <div>
+            <div class="stat-label">Validation Protocols</div>
+            <div class="stat-value">{{ total_protocols }}</div>
+            <div class="text-xs text-slate-500 mt-1">{{ active_protocols }} in active execution</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="stat-label">Process Capability</div>
+            <div class="stat-value">{{ capable_studies }} / {{ total_studies }}</div>
+            <div class="text-xs text-slate-500 mt-1">Capable (Cpk &ge; 1.33)</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="monitor"></i>
+        </div>
+        <div>
+            <div class="stat-label">GAMP 5 Systems</div>
+            <div class="stat-value">{{ validated_systems }} / {{ total_systems }}</div>
+            <div class="text-xs text-slate-500 mt-1">Validated for live GxP</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if overdue_revalidations > 0 %}red{% else %}green{% endif %}">
+            <i data-lucide="calendar-clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Periodic Revalidations</div>
+            <div class="stat-value">{{ overdue_revalidations }} Overdue</div>
+            <div class="text-xs text-slate-500 mt-1">{{ validated_cleaning }} Cleaning Trains Validated</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="card-title">Recent Validation Protocols (IQ/OQ/PQ)</h2>
+            <a href="{% url 'quality:validation_protocol_list' %}" class="text-xs font-semibold text-blue-600 hover:underline">
+                View All &rarr;
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Protocol</th>
+                        <th>Stage</th>
+                        <th>Runs</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in recent_protocols %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:validation_protocol_detail' p.pk %}" class="font-medium text-blue-600 hover:underline">
+                                {{ p.number }}
+                            </a>
+                            <div class="text-xs text-slate-500 truncate max-w-xs">{{ p.title }}</div>
+                        </td>
+                        <td><span class="badge {{ p.stage_css }}">{{ p.get_protocol_stage_display }}</span></td>
+                        <td class="text-xs font-mono">{{ p.test_runs_completed }}/{{ p.test_runs_planned }}</td>
+                        <td><span class="badge {{ p.status_css }}">{{ p.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-xs text-slate-400">No protocols logged yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="card-title">Recent Capability Studies (Cp/Cpk)</h2>
+            <a href="{% url 'quality:process_capability_study_list' %}" class="text-xs font-semibold text-blue-600 hover:underline">
+                View All &rarr;
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Cpk</th>
+                        <th>Ppk</th>
+                        <th>Determination</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in recent_studies %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:process_capability_study_detail' s.pk %}" class="font-medium text-blue-600 hover:underline">
+                                {{ s.number }}
+                            </a>
+                            <div class="text-xs text-slate-500 truncate max-w-xs">{{ s.parameter_name }}</div>
+                        </td>
+                        <td class="font-bold text-slate-900">{{ s.cpk_index|default:"—" }}</td>
+                        <td class="font-mono text-slate-700">{{ s.ppk_index|default:"—" }}</td>
+                        <td><span class="badge {{ s.determination_css }}">{{ s.get_capability_determination_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-xs text-slate-400">No capability studies logged yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="card-title">Computer Systems Inventory (CSV / GAMP 5)</h2>
+            <a href="{% url 'quality:computer_system_validation_list' %}" class="text-xs font-semibold text-blue-600 hover:underline">
+                View All &rarr;
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>System</th>
+                        <th>GAMP Category</th>
+                        <th>Status</th>
+                        <th>Next Review</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in recent_systems %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:computer_system_validation_detail' c.pk %}" class="font-medium text-blue-600 hover:underline">
+                                {{ c.number }}
+                            </a>
+                            <div class="text-xs text-slate-500 truncate max-w-xs">{{ c.system_name }} ({{ c.version_release }})</div>
+                        </td>
+                        <td><span class="badge {{ c.gamp_css }}">{{ c.get_gamp_category_display }}</span></td>
+                        <td><span class="badge {{ c.status_css }}">{{ c.get_status_display }}</span></td>
+                        <td class="text-xs text-slate-700">{{ c.next_review_due|date:"Y-m-d"|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-xs text-slate-400">No computer systems registered yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="card-title">Cleaning Validation & Residue Limits (MACO)</h2>
+            <a href="{% url 'quality:cleaning_validation_list' %}" class="text-xs font-semibold text-blue-600 hover:underline">
+                View All &rarr;
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Equipment Train</th>
+                        <th>MACO</th>
+                        <th>Swab Limit</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cl in recent_cleaning %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:cleaning_validation_detail' cl.pk %}" class="font-medium text-blue-600 hover:underline">
+                                {{ cl.number }}
+                            </a>
+                            <div class="text-xs text-slate-500 truncate max-w-xs">{{ cl.equipment_train_tag }} ({{ cl.target_residue }})</div>
+                        </td>
+                        <td class="font-mono text-xs font-bold">{{ cl.calculated_maco_mg|default:"—" }} mg</td>
+                        <td class="font-mono text-xs text-slate-700">{{ cl.calculated_swab_limit_ug|default:"—" }} &micro;g</td>
+                        <td><span class="badge {{ cl.status_css }}">{{ cl.get_cleaning_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-xs text-slate-400">No cleaning studies logged yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
