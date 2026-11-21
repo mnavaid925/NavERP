@@ -188,7 +188,7 @@
                     </div>
                     <div class="detail-item">
                         <dt>Final Approver</dt>
-                        <dd>{{ validation_protocol.final_approver.get_full_name|default:validation_protocol.final_approver.username|default:"Pending" }}</dd>
+                        <dd>{% if validation_protocol.final_approver %}{{ validation_protocol.final_approver.get_full_name|default:validation_protocol.final_approver.username }}{% else %}Pending{% endif %}</dd>
                     </div>
                 </dl>
             </div>
