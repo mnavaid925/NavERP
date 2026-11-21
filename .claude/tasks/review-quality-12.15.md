@@ -158,7 +158,7 @@
   - **Location**: `apps/quality/models/ProcessValidation/CleaningValidations.py:61, 109, 168-171`
   - **Fix**: Add composite index `idx_qcln_ten_method` on `("tenant", "analytical_method")`.
 
-- [ ] **[M10] Redundant `select_related` Table Joins in CSV Exports, Dashboard Recent Queries, and List Views**
+- [x] **[M10] Redundant `select_related` Table Joins in CSV Exports, Dashboard Recent Queries, and List Views** — fixed in 6f135852, 00d315c5, 1c4b60c5, c3d8642e, 3f27d48c
   - **Location**: Export, dashboard, and list views in `apps/quality/views/ProcessValidation/`
   - **Fix**: Prune foreign keys not referenced in outputs or templates.
 
