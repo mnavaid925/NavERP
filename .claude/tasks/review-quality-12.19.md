@@ -49,3 +49,17 @@
 - `templates/quality/lims_management/lab_sample/detail.html:165` — `sample.work_order` is fetched in `select_related` by `lab_sample_detail` view and present in `LabSampleForm`, but omitted from the metadata display grid `<dl class="detail-grid">`. Fix: add a `detail-item` displaying `sample.work_order`.
 - `apps/quality/views/LimsManagement/LabTestWorksheets.py:162` — Missing state transition guard in `lab_test_worksheet_complete`. If called via direct POST on an already approved, rejected, or cancelled worksheet, it resets status back to `review_pending`. Fix: guard with `if obj.status not in ["assigned", "in_progress"]: ...`.
 - `apps/quality/views/LimsManagement/OosInvestigations.py:170` — Authorization check on `oos_investigation_close`: verify if `request.user` has appropriate permission or is staff/tenant admin before closing GxP investigation.
+
+---
+
+### Pass 3: `frontend-reviewer` Findings
+
+#### Critical
+- `templates/quality/lims_management/lab_sample/detail.html:133,143,153,233`, `templates/quality/lims_management/lab_specification/detail.html:213`, `templates/quality/lims_management/lab_test_worksheet/list.html:123`, `templates/quality/lims_management/lab_test_worksheet/detail.html:95,101`, `templates/quality/lims_management/oos_investigation/detail.html:109,115` — Unsafe dotted lookup in filter argument on nullable User FKs (`{{ obj.fk.get_full_name|default:obj.fk.username }}`) raises `VariableDoesNotExist` and 500s when FK is None (Lesson L10). Fix: wrap each in explicit `{% if fk %}{{ fk.get_full_name|default:fk.username }}{% else %}...{% endif %}`.
+
+#### Important
+- `templates/quality/lims_management/lims_dashboard.html:66` — Disallowed `stat-icon red` class used on line 66. `stat-icon` only accepts `blue/green/orange/purple/slate` per `theme.css` and L33. Fix: change to `stat-icon orange` (or `stat-icon purple`).
+- `apps/quality/models/LimsManagement/LabSpecifications.py:51` & `apps/quality/models/LimsManagement/OosInvestigations.py:49` — Non-existent `badge-purple` emitted by model helpers (`"chromatographic"` and `"root_cause_found"`). `theme.css` only defines green, red, amber, info, muted, slate. Fix: change to `badge-info`.
+
+#### Minor
+- `templates/quality/lims_management/lab_sample/detail.html:252,298`, `templates/quality/lims_management/lab_specification/detail.html:228`, `templates/quality/lims_management/lab_test_worksheet/detail.html:286` — Related table eye action links lack `title` and `aria-label` attributes. Fix: add `title="View Detail" aria-label="View Detail"`.
