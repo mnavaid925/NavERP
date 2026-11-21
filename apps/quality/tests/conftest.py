@@ -3156,6 +3156,7 @@ def cleaning_validation_a(db, tenant_a, admin_user, validation_protocol_a, doc_a
         next_revalidation_date=timezone.now().date() + timedelta(days=365),
         validation_protocol=validation_protocol_a,
         cleaning_sop=doc_a,
+        analytical_lead=admin_user,
     )
 
 
@@ -3187,4 +3188,5 @@ def cleaning_validation_b(db, tenant_b, admin_b, validation_protocol_b, doc_b):
         next_revalidation_date=timezone.now().date() + timedelta(days=365),
         validation_protocol=validation_protocol_b,
         cleaning_sop=doc_b,
+        analytical_lead=admin_b,
     )
