@@ -122,7 +122,7 @@
 
 ## Minor Findings
 
-- [ ] **[M1] `is_revalidation_overdue` and Dashboard Overdue Filter Over-reporting for Rejected/Superseded Protocols**
+- [x] **[M1] `is_revalidation_overdue` and Dashboard Overdue Filter Over-reporting for Rejected/Superseded Protocols** — fixed in 88df7430, 800cffc1
   - **Location**: `apps/quality/models/ProcessValidation/ValidationProtocols.py:174-177`, `apps/quality/views/ProcessValidation/ProcessValidationDashboard.py:23`
   - **Fix**: Exclude `"rejected"` and `"superseded"` protocols.
 
