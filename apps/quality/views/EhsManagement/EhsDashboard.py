@@ -120,21 +120,41 @@ def ehs_dashboard_export(request):
     env_qs = quality_scope(EnvironmentalMonitoringLog.objects.all(), request)
     manifests_qs = quality_scope(WasteDisposalManifest.objects.all(), request)
 
-    days_agg = incidents_qs.aggregate(
+    mat_agg = materials_qs.aggregate(
+        active_count=Count("id", filter=Q(status="active")),
+        expiring_count=Count("id", filter=Q(sds_expiry_date__lte=ninety_days_from_now)),
+    )
+    inc_agg = incidents_qs.aggregate(
+        total_count=Count("id"),
+        osha_count=Count("id", filter=Q(is_osha_recordable=True)),
+        dart_count=Count("id", filter=Q(lost_workdays_count__gt=0) | Q(restricted_workdays_count__gt=0)),
         total_lost=Sum("lost_workdays_count"),
         total_restricted=Sum("restricted_workdays_count"),
+    )
+    env_agg = env_qs.aggregate(
+        excursion_count=Count("id", filter=Q(evaluation_status__in=["alert_exceeded", "action_exceeded"])),
+    )
+    man_agg = manifests_qs.aggregate(
+        pending_count=Count("id", filter=Q(status__in=["draft", "scheduled", "in_transit"])),
+        overdue_count=Count(
+            "id",
+            filter=Q(
+                status__in=["draft", "scheduled"],
+                accumulation_start_date__lt=ninety_days_ago,
+            ),
+        ),
     )
 
     writer = csv.writer(response)
     writer.writerow(["EHS Metric KPI", "Value"])
-    writer.writerow(["Active Hazardous Chemicals", _csv_safe(materials_qs.filter(status="active").count())])
-    writer.writerow(["Expiring / Overdue SDSs (90d)", _csv_safe(materials_qs.filter(sds_expiry_date__lte=ninety_days_from_now).count())])
-    writer.writerow(["Total Workplace Incidents Logged", _csv_safe(incidents_qs.count())])
-    writer.writerow(["OSHA 300 Recordable Incidents", _csv_safe(incidents_qs.filter(is_osha_recordable=True).count())])
-    writer.writerow(["DART Incidents (Lost/Restricted Time)", _csv_safe(incidents_qs.filter(Q(lost_workdays_count__gt=0) | Q(restricted_workdays_count__gt=0)).count())])
-    writer.writerow(["Total Days Away From Work", _csv_safe(days_agg["total_lost"] or 0)])
-    writer.writerow(["Total Restricted / Transfer Days", _csv_safe(days_agg["total_restricted"] or 0)])
-    writer.writerow(["Cleanroom Environmental Excursions", _csv_safe(env_qs.filter(evaluation_status__in=["alert_exceeded", "action_exceeded"]).count())])
-    writer.writerow(["Pending Waste Manifests In Transit / TSDF", _csv_safe(manifests_qs.filter(status__in=["draft", "scheduled", "in_transit"]).count())])
-    writer.writerow(["Overdue Waste Accumulations (>90d)", _csv_safe(manifests_qs.filter(status__in=["draft", "scheduled"], accumulation_start_date__lt=ninety_days_ago).count())])
+    writer.writerow(["Active Hazardous Chemicals", _csv_safe(mat_agg["active_count"])])
+    writer.writerow(["Expiring / Overdue SDSs (90d)", _csv_safe(mat_agg["expiring_count"])])
+    writer.writerow(["Total Workplace Incidents Logged", _csv_safe(inc_agg["total_count"])])
+    writer.writerow(["OSHA 300 Recordable Incidents", _csv_safe(inc_agg["osha_count"])])
+    writer.writerow(["DART Incidents (Lost/Restricted Time)", _csv_safe(inc_agg["dart_count"])])
+    writer.writerow(["Total Days Away From Work", _csv_safe(inc_agg["total_lost"] or 0)])
+    writer.writerow(["Total Restricted / Transfer Days", _csv_safe(inc_agg["total_restricted"] or 0)])
+    writer.writerow(["Cleanroom Environmental Excursions", _csv_safe(env_agg["excursion_count"])])
+    writer.writerow(["Pending Waste Manifests In Transit / TSDF", _csv_safe(man_agg["pending_count"])])
+    writer.writerow(["Overdue Waste Accumulations (>90d)", _csv_safe(man_agg["overdue_count"])])
     return response
