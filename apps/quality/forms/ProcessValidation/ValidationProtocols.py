@@ -73,6 +73,10 @@ class ValidationProtocolForm(TenantModelForm):
 
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
+        if "deviations_encountered" in self.fields:
+            self.fields["deviations_encountered"].required = False
+        if "test_runs_completed" in self.fields:
+            self.fields["test_runs_completed"].required = False
         if self.tenant:
             user_qs = User.objects.filter(tenant=self.tenant, is_active=True).order_by("first_name", "last_name", "username")
             self.fields["lead_author"].queryset = user_qs
