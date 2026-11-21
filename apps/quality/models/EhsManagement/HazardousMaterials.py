@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -64,9 +65,21 @@ class HazardousMaterial(TenantNumbered):
     hazard_statements = models.TextField(blank=True, help_text="GHS Hazard statements (H-codes and descriptions)")
     precautionary_statements = models.TextField(blank=True, help_text="GHS Precautionary statements (P-codes and instructions)")
 
-    nfpa_health = models.PositiveSmallIntegerField(default=0, help_text="NFPA 704 Health rating 0-4")
-    nfpa_flammability = models.PositiveSmallIntegerField(default=0, help_text="NFPA 704 Flammability rating 0-4")
-    nfpa_instability = models.PositiveSmallIntegerField(default=0, help_text="NFPA 704 Instability/Reactivity rating 0-4")
+    nfpa_health = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(4)],
+        help_text="NFPA 704 Health rating 0-4",
+    )
+    nfpa_flammability = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(4)],
+        help_text="NFPA 704 Flammability rating 0-4",
+    )
+    nfpa_instability = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(4)],
+        help_text="NFPA 704 Instability/Reactivity rating 0-4",
+    )
     nfpa_special_hazard = models.CharField(max_length=20, choices=NFPA_SPECIAL_HAZARD_CHOICES, default="none")
 
     sds_revision = models.CharField(max_length=50, blank=True, default="Rev 1.0", help_text="SDS document revision identifier")
