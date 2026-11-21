@@ -640,6 +640,41 @@ from apps.quality.views.EhsManagement.EhsDashboard import (
     ehs_dashboard,
     ehs_dashboard_export,
 )
+from apps.quality.views.RegulatorySubmissions.RegulatorySubmissions import (
+    regulatory_submission_create,
+    regulatory_submission_delete,
+    regulatory_submission_detail,
+    regulatory_submission_edit,
+    regulatory_submission_export,
+    regulatory_submission_list,
+)
+from apps.quality.views.RegulatorySubmissions.ProductRegistrations import (
+    product_registration_create,
+    product_registration_delete,
+    product_registration_detail,
+    product_registration_edit,
+    product_registration_export,
+    product_registration_list,
+)
+from apps.quality.views.RegulatorySubmissions.RegulatoryCommitments import (
+    regulatory_commitment_create,
+    regulatory_commitment_delete,
+    regulatory_commitment_detail,
+    regulatory_commitment_edit,
+    regulatory_commitment_export,
+    regulatory_commitment_list,
+)
+from apps.quality.views.RegulatorySubmissions.PostMarketSurveillanceReports import (
+    post_market_surveillance_report_create,
+    post_market_surveillance_report_delete,
+    post_market_surveillance_report_detail,
+    post_market_surveillance_report_edit,
+    post_market_surveillance_report_export,
+    post_market_surveillance_report_list,
+)
+from apps.quality.views.RegulatorySubmissions.RegulatoryDashboard import (
+    regulatory_dashboard,
+)
 
 __all__ = [
     "controlled_document_list",
@@ -1126,5 +1161,30 @@ __all__ = [
     "waste_disposal_manifest_certify",
     "ehs_dashboard",
     "ehs_dashboard_export",
+    "regulatory_submission_list",
+    "regulatory_submission_create",
+    "regulatory_submission_export",
+    "regulatory_submission_detail",
+    "regulatory_submission_edit",
+    "regulatory_submission_delete",
+    "product_registration_list",
+    "product_registration_create",
+    "product_registration_export",
+    "product_registration_detail",
+    "product_registration_edit",
+    "product_registration_delete",
+    "regulatory_commitment_list",
+    "regulatory_commitment_create",
+    "regulatory_commitment_export",
+    "regulatory_commitment_detail",
+    "regulatory_commitment_edit",
+    "regulatory_commitment_delete",
+    "post_market_surveillance_report_list",
+    "post_market_surveillance_report_create",
+    "post_market_surveillance_report_export",
+    "post_market_surveillance_report_detail",
+    "post_market_surveillance_report_edit",
+    "post_market_surveillance_report_delete",
+    "regulatory_dashboard",
 ]
 
