@@ -42,7 +42,7 @@ class EnvironmentalMonitoringLogForm(TenantModelForm):
         ]
         widgets = {
             "sampling_point_id": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. CR-ISO7-AIRLOCK-01"}),
-            "sampling_timestamp": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
+            "sampling_timestamp": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
             "org_unit": forms.Select(attrs={"class": "form-select"}),
             "cleanroom_class": forms.Select(attrs={"class": "form-select"}),
             "operational_state": forms.Select(attrs={"class": "form-select"}),
