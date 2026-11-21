@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Product Recall {{ product_recall.number }}{% else %}Initiate Product Recall{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Traceability & Serialization</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:product_recall_list' %}" class="hover:underline">Product Recalls</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ product_recall.number }}{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600"></i>
+        {% if is_edit %}Edit Recall Case: {{ product_recall.number }}{% else %}Initiate Product Recall / Mock Drill{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Document market recall events, assign severity classifications, identify affected lot ranges, and track containment.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Classification & Core Case Info -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i>
+          1. Recall Classification & Case Identification
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Recall Title / Description <span class="text-red-500">*</span></label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.recall_class.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Severity Classification <span class="text-red-500">*</span></label>
+            {{ form.recall_class }}
+            {% if form.recall_class.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.recall_class.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lifecycle Status</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2 flex items-center gap-6 pt-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.is_mock_recall }}
+              <span class="text-sm font-medium text-slate-800">Simulated Mock Recall Drill (Audit Readiness)</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.mock_drill_hours.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Drill Elapsed Time (Hours)</label>
+            {{ form.mock_drill_hours }}
+            {% if form.mock_drill_hours.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.mock_drill_hours.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.coordinator.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Recall Coordinator</label>
+            {{ form.coordinator }}
+            {% if form.coordinator.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.coordinator.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Product & Lot Scope -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i>
+          2. Product & Lot Scope Identification
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.item_code.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Item Code / Part # <span class="text-red-500">*</span></label>
+            {{ form.item_code }}
+            {% if form.item_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_code.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.item_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Item Name <span class="text-red-500">*</span></label>
+            {{ form.item_name }}
+            {% if form.item_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.item_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.affected_lot_numbers.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Affected Batch / Lot Numbers <span class="text-red-500">*</span></label>
+            {{ form.affected_lot_numbers }}
+            {% if form.affected_lot_numbers.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.affected_lot_numbers.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.affected_serial_range.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Affected Serial Number Range</label>
+            {{ form.affected_serial_range }}
+            {% if form.affected_serial_range.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.affected_serial_range.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Quantities & Recovery Reconciliation -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="pie-chart" class="w-4 h-4 text-blue-600"></i>
+          3. Quantities & Product Recovery
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div class="form-group">
+            <label for="{{ form.total_distributed_qty.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Total Distributed Qty</label>
+            {{ form.total_distributed_qty }}
+            {% if form.total_distributed_qty.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_distributed_qty.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.total_quarantined_qty.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Total Quarantined Qty</label>
+            {{ form.total_quarantined_qty }}
+            {% if form.total_quarantined_qty.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_quarantined_qty.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.total_recovered_qty.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Total Recovered Qty</label>
+            {{ form.total_recovered_qty }}
+            {% if form.total_recovered_qty.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_recovered_qty.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.total_destroyed_qty.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Total Destroyed Qty</label>
+            {{ form.total_destroyed_qty }}
+            {% if form.total_destroyed_qty.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.total_destroyed_qty.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Hazard & Health Evaluation -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+          4. Hazard Evaluation & Root Cause
+        </h2>
+        <div class="space-y-4">
+          <div class="form-group">
+            <label for="{{ form.hazard_summary.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Health Hazard Summary / Reason for Recall <span class="text-red-500">*</span></label>
+            {{ form.hazard_summary }}
+            {% if form.hazard_summary.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.hazard_summary.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.root_cause.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Investigated Root Cause</label>
+            {{ form.root_cause }}
+            {% if form.root_cause.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.root_cause.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Regulatory & Oversight -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="landmark" class="w-4 h-4 text-blue-600"></i>
+          5. Regulatory Notifications & Quality Governance
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.regulatory_agency_notified.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Regulatory Agency Notified</label>
+            {{ form.regulatory_agency_notified }}
+            {% if form.regulatory_agency_notified.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.regulatory_agency_notified.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.regulatory_notification_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Notification Date</label>
+            {{ form.regulatory_notification_date }}
+            {% if form.regulatory_notification_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.regulatory_notification_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.customer_complaint.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Triggering Customer Complaint</label>
+            {{ form.customer_complaint }}
+            {% if form.customer_complaint.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.customer_complaint.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.capa_investigation.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Associated CAPA Investigation</label>
+            {{ form.capa_investigation }}
+            {% if form.capa_investigation.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.capa_investigation.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.closure_approved_by.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Closure Approved By</label>
+            {{ form.closure_approved_by }}
+            {% if form.closure_approved_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.closure_approved_by.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Recall Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <a href="{% if is_edit %}{% url 'quality:product_recall_detail' product_recall.pk %}{% else %}{% url 'quality:product_recall_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm">
+          {% if is_edit %}Save Changes{% else %}Initiate Recall Case{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
