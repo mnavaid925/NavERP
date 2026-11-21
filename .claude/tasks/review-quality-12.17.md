@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 2 | 12 | 0 |
-| **Total** | 25 | 2 | 23 | 0 |
+| **Minor** | 14 | 1 | 13 | 0 |
+| **Total** | 25 | 1 | 24 | 0 |
 
 ---
 
@@ -206,7 +206,7 @@
   - **Issue**: Filter options load all fields instead of `.only("id", "name")`.
   - **Fix**: Add `.only("id", "name")` to filter dropdown querysets.
 
-- [ ] **M13: Commitment Detail Overdue Days Display on Status Override**
+- [x] **M13: Commitment Detail Overdue Days Display on Status Override**
   - **File**: `templates/quality/regulatory_submissions/regulatory_commitment/detail.html:198`
   - **Issue**: When `status == "overdue"` but `due_date >= today`, `slice:"1:"` strips the first digit of a positive number.
   - **Fix**: Only apply slice if `days_remaining < 0`.
