@@ -76,3 +76,12 @@
 - `apps/quality/views/LimsManagement/OosInvestigations.py:97-99` — In `oos_investigation_create`, accessing `ws.sample.number` triggers secondary database query because `ws` was fetched without `select_related("sample")`. Fix: add `.select_related("sample")`.
 - `apps/quality/views/LimsManagement/LimsDashboard.py:28-29` — Dual `count()` roundtrips on `LabSample`. Fix: combine `total_samples` and `samples_in_testing` into single `aggregate(total=Count("id"), in_testing=Count("id", filter=Q(status="in_testing")))`.
 - `apps/quality/models/LimsManagement/LabSamples.py:159-165` — `storage_condition` filter in `lab_sample_list` lacks composite index `(tenant, storage_condition)`. Fix: add `models.Index(fields=["tenant", "storage_condition"], name="idx_qsmp_ten_storage")`.
+
+---
+
+### Pass 5: `qa-smoke-tester` Findings
+
+- 62 runtime URL checks, filtered lists, junk parameter inputs, and page 2 pagination checks executed against live seeded data: 100% PASS.
+- Zero comment leaks (`{#` or `{% comment`) detected.
+- 15/15 Cross-tenant IDOR access attempts strictly blocked with HTTP 404.
+- Zero Critical, Important, or Minor runtime failures observed on seeded data.
