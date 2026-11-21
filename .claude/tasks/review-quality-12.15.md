@@ -130,7 +130,7 @@
   - **Location**: `templates/quality/processvalidation/process_capability_study/list.html:43`, `templates/quality/processvalidation/process_validation_dashboard.html:49`
   - **Fix**: Replace `&ge;` with `>=`.
 
-- [ ] **[M3] Missing `revalidation_trigger` Dropdown in `validation_protocol/list.html` Filter Bar**
+- [x] **[M3] Missing `revalidation_trigger` Dropdown in `validation_protocol/list.html` Filter Bar** — fixed in cdd8e4d5
   - **Location**: `templates/quality/processvalidation/validation_protocol/list.html:68-120`
   - **Fix**: Add `revalidation_trigger` dropdown to filter grid and clear-filter condition.
 
