@@ -302,6 +302,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_17(tenant)
             self._seed_submodule_12_18(tenant)
             self._seed_submodule_12_19(tenant)
+            self._seed_submodule_12_20(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -5937,347 +5938,6 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.18 Traceability & Serialization seeded successfully."))
 
-        # =========================================================================
-        # 12.20 Data Integrity & Electronic Records (Idempotent seed data)
-        # =========================================================================
-        if not ElectronicRecordPolicy.objects.filter(tenant=tenant).exists():
-            csv_system = ComputerSystemValidation.objects.filter(tenant=tenant).first()
-            org_unit = OrgUnit.objects.filter(tenant=tenant).first()
-            sop_doc = ControlledDocument.objects.filter(tenant=tenant).first()
-            ncr_item = NonConformanceReport.objects.filter(tenant=tenant).first()
-            capa_item = CapaInvestigation.objects.filter(tenant=tenant).first()
-
-            # 1. Electronic Record Policies
-            pol1 = ElectronicRecordPolicy.objects.create(
-                tenant=tenant,
-                title="Electronic Batch Production & Control Record 21 CFR Part 11 Governance Policy",
-                record_type_name="Electronic Batch Record (eBR)",
-                record_category="production_batch",
-                target_model_name="BatchRecord",
-                system=csv_system,
-                governing_sop=sop_doc,
-                is_part_11_regulated=True,
-                is_annex_11_regulated=True,
-                signature_requirement="dual_peer_review",
-                reauthentication_required=True,
-                dual_signature_required=True,
-                audit_trail_mandatory=True,
-                retention_period_years=10,
-                storage_format="database_relational",
-                backup_frequency="daily_snapshot",
-                legal_hold=False,
-                status="active",
-                system_owner=admin_user,
-                qa_approver=admin_user,
-                approval_date=today - datetime.timedelta(days=180),
-                description="Governs closed-system electronic batch production records, mandatory dual-signoff gates, password re-entry, and immutable audit logging.",
-            )
-
-            pol2 = ElectronicRecordPolicy.objects.create(
-                tenant=tenant,
-                title="Analytical Chromatography Test Data & LIMS Results Data Integrity Protocol",
-                record_type_name="Analytical Testing Data Stream",
-                record_category="lab_analytical",
-                target_model_name="CertificateOfAnalysis",
-                system=csv_system,
-                governing_sop=sop_doc,
-                is_part_11_regulated=True,
-                is_annex_11_regulated=True,
-                signature_requirement="triple_qa_approval",
-                reauthentication_required=True,
-                dual_signature_required=True,
-                audit_trail_mandatory=True,
-                retention_period_years=15,
-                storage_format="hybrid_blob",
-                backup_frequency="continuous_wal",
-                legal_hold=False,
-                status="active",
-                system_owner=supervisor_user,
-                qa_approver=admin_user,
-                approval_date=today - datetime.timedelta(days=120),
-                description="Raw chromatographic integration data, audit trails, and multi-tier QA sign-offs stored with SHA-256 digital seals.",
-            )
-
-            pol3 = ElectronicRecordPolicy.objects.create(
-                tenant=tenant,
-                title="Quality Non-Conformance & Deviation Electronic Records Policy",
-                record_type_name="NCR & Process Deviation Dossier",
-                record_category="deviation_ncr",
-                target_model_name="NonConformanceReport",
-                system=csv_system,
-                governing_sop=sop_doc,
-                is_part_11_regulated=True,
-                is_annex_11_regulated=True,
-                signature_requirement="dual_peer_review",
-                reauthentication_required=True,
-                dual_signature_required=False,
-                audit_trail_mandatory=True,
-                retention_period_years=10,
-                storage_format="database_relational",
-                backup_frequency="daily_snapshot",
-                legal_hold=False,
-                status="active",
-                system_owner=admin_user,
-                qa_approver=admin_user,
-                approval_date=today - datetime.timedelta(days=90),
-                description="Establishes electronic signature manifestations, audit trails, and investigation approvals for deviations and containment holds.",
-            )
-
-            pol4 = ElectronicRecordPolicy.objects.create(
-                tenant=tenant,
-                title="Laboratory Metrology & Equipment Calibration Electronic Logs",
-                record_type_name="Calibration & Maintenance Manifest",
-                record_category="equipment_calibration",
-                target_model_name="CalibrationRecord",
-                system=csv_system,
-                governing_sop=sop_doc,
-                is_part_11_regulated=False,
-                is_annex_11_regulated=True,
-                signature_requirement="single_author",
-                reauthentication_required=False,
-                dual_signature_required=False,
-                audit_trail_mandatory=True,
-                retention_period_years=7,
-                storage_format="database_relational",
-                backup_frequency="weekly_full",
-                legal_hold=False,
-                status="under_revision",
-                system_owner=supervisor_user,
-                qa_approver=admin_user,
-                approval_date=None,
-                description="Periodic revision adapting calibration metrology equipment to automated Bluetooth digital gage data capture.",
-            )
-
-            # 2. Data Integrity Assessments (ALCOA+)
-            dia1 = DataIntegrityAssessment.objects.create(
-                tenant=tenant,
-                title="LIMS & Chromatography Data System (CDS) Raw Data ALCOA+ Audit",
-                assessment_scope="QC Analytical Laboratories & LIMS Ingestion Pipeline",
-                system=csv_system,
-                org_unit=org_unit,
-                lead_assessor=admin_user,
-                qa_reviewer=supervisor_user,
-                assessment_date=today - datetime.timedelta(days=60),
-                next_review_due=today + datetime.timedelta(days=305),
-                attributable_rating="fully_compliant",
-                legible_rating="fully_compliant",
-                contemporaneous_rating="fully_compliant",
-                original_rating="fully_compliant",
-                accurate_rating="fully_compliant",
-                complete_rating="fully_compliant",
-                consistent_rating="fully_compliant",
-                enduring_rating="fully_compliant",
-                available_rating="fully_compliant",
-                overall_risk_level="low",
-                vulnerabilities_summary="Zero critical data vulnerabilities identified. Time synchronization verified via NTP stratum-1 clock servers.",
-                remediation_plan="Maintain annual audit trail verification schedule and automated daily backup integrity checks.",
-                status="approved",
-                qa_approved_at=timezone.now() - datetime.timedelta(days=58),
-                comments="Baseline ALCOA+ risk score: Low. System demonstrated robust 21 CFR Part 11 closed-system access controls.",
-            )
-
-            dia2 = DataIntegrityAssessment.objects.create(
-                tenant=tenant,
-                title="Packaging Line Automated Serialization Sensor Stream ALCOA+ Review",
-                assessment_scope="Shop Floor High-Speed Packaging & 2D Barcode Vision Inspection",
-                system=csv_system,
-                org_unit=org_unit,
-                lead_assessor=supervisor_user,
-                qa_reviewer=admin_user,
-                assessment_date=today - datetime.timedelta(days=20),
-                next_review_due=today + datetime.timedelta(days=160),
-                attributable_rating="fully_compliant",
-                legible_rating="fully_compliant",
-                contemporaneous_rating="partially_compliant",
-                original_rating="fully_compliant",
-                accurate_rating="fully_compliant",
-                complete_rating="partially_compliant",
-                consistent_rating="fully_compliant",
-                enduring_rating="fully_compliant",
-                available_rating="fully_compliant",
-                overall_risk_level="medium",
-                vulnerabilities_summary="Intermittent 200ms network latency buffering barcode scan logs during packaging line peak throughput (350 packs/min).",
-                remediation_plan="Implement edge buffer gateway to guarantee 100% contemporaneous event time stamps before cloud sync.",
-                linked_ncr=ncr_item,
-                status="remediation_pending",
-                comments="Medium risk identified. Procedural line clearance verified zero duplicate serials commissioned.",
-            )
-
-            dia3 = DataIntegrityAssessment.objects.create(
-                tenant=tenant,
-                title="QC Microbiology Colony Counter Image Storage & Audit Trail Evaluation",
-                assessment_scope="Microbiology Bioburden Testing Station",
-                system=csv_system,
-                org_unit=org_unit,
-                lead_assessor=admin_user,
-                qa_reviewer=admin_user,
-                assessment_date=today - datetime.timedelta(days=10),
-                next_review_due=today + datetime.timedelta(days=20),
-                attributable_rating="non_compliant",
-                legible_rating="fully_compliant",
-                contemporaneous_rating="partially_compliant",
-                original_rating="fully_compliant",
-                accurate_rating="partially_compliant",
-                complete_rating="fully_compliant",
-                consistent_rating="fully_compliant",
-                enduring_rating="fully_compliant",
-                available_rating="fully_compliant",
-                overall_risk_level="high",
-                vulnerabilities_summary="Legacy standalone workstation utilizing shared operator Windows account. Audit trail cannot distinguish between individual microbiologists.",
-                remediation_plan="Migrate colony counter workstation to Active Directory / LDAP single sign-on with individual credentials and 2FA.",
-                linked_capa=capa_item,
-                status="remediation_pending",
-                comments="High risk flagged during internal pre-audit sweep. CAPA initiated for enterprise identity integration.",
-            )
-
-            # 3. Audit Trail Reviews
-            atr1 = AuditTrailReview.objects.create(
-                tenant=tenant,
-                title="Q3 2026 Monthly Core Quality Database Audit Trail Verification",
-                system=csv_system,
-                review_type="periodic_system",
-                audit_source="database_audit_log",
-                period_start=today - datetime.timedelta(days=90),
-                period_end=today,
-                reviewer=admin_user,
-                qa_approver=admin_user,
-                review_date=today - datetime.timedelta(days=2),
-                records_sampled_count=1450,
-                anomalies_detected_count=0,
-                anomaly_severity="none",
-                findings_summary="1,450 mutation transactions sampled across ControlledDocument, NonConformanceReport, and CapaInvestigation. Zero deleted logs, zero timestamp gaps, 100% attributable to authorized user accounts.",
-                disposition="approved_clean",
-                status="completed",
-                qa_comments="Audit trail review clean. Full compliance with 21 CFR § 11.10(e) confirmed.",
-                completed_at=timezone.now() - datetime.timedelta(days=2),
-            )
-
-            atr2 = AuditTrailReview.objects.create(
-                tenant=tenant,
-                title="HPLC Chromatography Integration Reprocessing Event Investigation",
-                system=csv_system,
-                review_type="event_investigation",
-                audit_source="instrument_raw_log",
-                period_start=today - datetime.timedelta(days=30),
-                period_end=today - datetime.timedelta(days=15),
-                reviewer=supervisor_user,
-                qa_approver=admin_user,
-                review_date=today - datetime.timedelta(days=12),
-                records_sampled_count=320,
-                anomalies_detected_count=2,
-                anomaly_severity="minor",
-                findings_summary="Two manual chromatogram peak integration reprocessing events detected on Lot BMR-2026-08 without supervisor prior notation.",
-                disposition="approved_remediated",
-                status="completed",
-                linked_ncr=ncr_item,
-                qa_comments="Analyst provided technical justification for split peak baseline drift; SOP updated to require pre-reprocessing supervisor sign-off.",
-                completed_at=timezone.now() - datetime.timedelta(days=10),
-            )
-
-            atr3 = AuditTrailReview.objects.create(
-                tenant=tenant,
-                title="MES Operator User Access & Security Privilege Drift Review",
-                system=csv_system,
-                review_type="user_access_drift",
-                audit_source="application_event_log",
-                period_start=today - datetime.timedelta(days=180),
-                period_end=today,
-                reviewer=admin_user,
-                qa_approver=admin_user,
-                review_date=today - datetime.timedelta(days=5),
-                records_sampled_count=85,
-                anomalies_detected_count=1,
-                anomaly_severity="major",
-                findings_summary="One junior maintenance technician retained system administrator privileges after conclusion of factory acceptance testing (FAT).",
-                disposition="rejected_escalated",
-                status="completed",
-                linked_ncr=ncr_item,
-                linked_capa=capa_item,
-                qa_comments="Administrative privilege immediately revoked. Security audit trail examined; zero unauthorized parameter edits detected.",
-                completed_at=timezone.now() - datetime.timedelta(days=4),
-            )
-
-            # 4. System Change Controls
-            scc1 = SystemChangeControl.objects.create(
-                tenant=tenant,
-                title="LIMS Enterprise v8.8 Security Vulnerability Patch & TLS 1.3 Upgrade",
-                system=csv_system,
-                change_type="software_patch",
-                change_priority="urgent",
-                gxp_impact="direct_gxp",
-                requestor=admin_user,
-                system_owner=admin_user,
-                qa_lead=supervisor_user,
-                org_unit=org_unit,
-                description="Apply vendor security roll-up patch resolving OpenSSL CVE-2026-1184 and enforce mandatory TLS 1.3 ciphers for client workstations.",
-                business_justification="Mitigate critical cyber-security vulnerability and ensure encrypted transit of GxP analytical testing records.",
-                data_integrity_risk="Low risk. Zero database schema modifications; encrypted transport strengthens ALCOA+ Enduring and Available dimensions.",
-                validation_deliverables="Installation Qualification (IQ) execution, regression test suite (15 automated scripts), UAT sign-off.",
-                rollback_plan="Restore pre-patch VM snapshot and reload validated v8.8.1 application binary within 45 minutes.",
-                target_date=today - datetime.timedelta(days=30),
-                actual_implementation_date=today - datetime.timedelta(days=28),
-                post_review_due_date=today + datetime.timedelta(days=60),
-                status="implemented_closed",
-                testing_successful=True,
-                data_backup_verified=True,
-                ccb_approved=True,
-                closure_summary="Deployment executed with zero downtime. All 15 regression scripts passed 100%. Released for live GxP use.",
-            )
-
-            scc2 = SystemChangeControl.objects.create(
-                tenant=tenant,
-                title="Cloud Data Lake Schema Expansion for Real-Time GxP Audit Log Streaming",
-                system=csv_system,
-                change_type="database_schema",
-                change_priority="routine",
-                gxp_impact="direct_gxp",
-                requestor=supervisor_user,
-                system_owner=admin_user,
-                qa_lead=admin_user,
-                org_unit=org_unit,
-                description="Add partition columns and index hardening on database audit log tables to support automated sub-second ALCOA+ query performance.",
-                business_justification="Enhance query speed during health authority inspections and support continuous automated anomaly detection.",
-                data_integrity_risk="Database migration carries risk of table lock. Migration scripts tested in staging clone with zero data loss.",
-                validation_deliverables="Data migration verification script, performance benchmark report, CCB sign-off.",
-                rollback_plan="Revert migration with zero-downtime backward compatible table view aliasing.",
-                target_date=today + datetime.timedelta(days=15),
-                actual_implementation_date=None,
-                post_review_due_date=today + datetime.timedelta(days=105),
-                status="testing_verification",
-                testing_successful=False,
-                data_backup_verified=True,
-                ccb_approved=True,
-                closure_summary="",
-            )
-
-            scc3 = SystemChangeControl.objects.create(
-                tenant=tenant,
-                title="Shop Floor Cleanroom Environmental HMI Display Firmware Update",
-                system=csv_system,
-                change_type="infrastructure_network",
-                change_priority="emergency",
-                gxp_impact="direct_gxp",
-                requestor=supervisor_user,
-                system_owner=supervisor_user,
-                qa_lead=admin_user,
-                org_unit=org_unit,
-                description="Emergency firmware patch addressing touchscreen freeze on Cleanroom Suite #2 environmental monitor display.",
-                business_justification="Ensure continuous visual alarm annunciation for differential pressure and particulate count thresholds.",
-                data_integrity_risk="Sensor data logging continues uninterrupted in PLC background; only operator display panel firmware affected.",
-                validation_deliverables="Post-installation alarm verification test protocol and differential pressure challenge test.",
-                rollback_plan="Swap in pre-configured spare HMI panel held in critical spare parts inventory.",
-                target_date=today + datetime.timedelta(days=2),
-                actual_implementation_date=None,
-                post_review_due_date=today + datetime.timedelta(days=30),
-                status="draft",
-                testing_successful=False,
-                data_backup_verified=False,
-                ccb_approved=False,
-                closure_summary="",
-            )
-
-        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.20 Data Integrity & Electronic Records seeded successfully."))
-
     def _seed_submodule_12_19(self, tenant):
         if LabSample.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"[{tenant.name}] 12.19 LIMS data already seeded, skipping.")
@@ -6682,6 +6342,363 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.19 Laboratory Information Management (LIMS) seeded successfully."))
+
+    def _seed_submodule_12_20(self, tenant):
+        if ElectronicRecordPolicy.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.20 Data Integrity & Electronic Records data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.20 Data Integrity & Electronic Records...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not admin_user:
+            self.stdout.write(f"[{tenant.name}] Warning: No user found for tenant.")
+            return
+
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
+        supervisor_user = users[1] if len(users) > 1 else admin_user
+
+        today = timezone.now().date()
+        csv_system = ComputerSystemValidation.objects.filter(tenant=tenant).first()
+        org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        sop_doc = ControlledDocument.objects.filter(tenant=tenant).first()
+        ncr_item = NonConformanceReport.objects.filter(tenant=tenant).first()
+        capa_item = CapaInvestigation.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
+            # 1. Electronic Record Policies
+            pol1 = ElectronicRecordPolicy.objects.create(
+                tenant=tenant,
+                title="Electronic Batch Production & Control Record 21 CFR Part 11 Governance Policy",
+                record_type_name="Electronic Batch Record (eBR)",
+                record_category="production_batch",
+                target_model_name="BatchRecord",
+                system=csv_system,
+                governing_sop=sop_doc,
+                is_part_11_regulated=True,
+                is_annex_11_regulated=True,
+                signature_requirement="dual_peer_review",
+                reauthentication_required=True,
+                dual_signature_required=True,
+                audit_trail_mandatory=True,
+                retention_period_years=10,
+                storage_format="database_relational",
+                backup_frequency="daily_snapshot",
+                legal_hold=False,
+                status="active",
+                system_owner=admin_user,
+                qa_approver=admin_user,
+                approval_date=today - datetime.timedelta(days=180),
+                description="Governs closed-system electronic batch production records, mandatory dual-signoff gates, password re-entry, and immutable audit logging.",
+            )
+
+            pol2 = ElectronicRecordPolicy.objects.create(
+                tenant=tenant,
+                title="Analytical Chromatography Test Data & LIMS Results Data Integrity Protocol",
+                record_type_name="Analytical Testing Data Stream",
+                record_category="lab_analytical",
+                target_model_name="CertificateOfAnalysis",
+                system=csv_system,
+                governing_sop=sop_doc,
+                is_part_11_regulated=True,
+                is_annex_11_regulated=True,
+                signature_requirement="triple_qa_approval",
+                reauthentication_required=True,
+                dual_signature_required=True,
+                audit_trail_mandatory=True,
+                retention_period_years=15,
+                storage_format="hybrid_blob",
+                backup_frequency="continuous_wal",
+                legal_hold=False,
+                status="active",
+                system_owner=supervisor_user,
+                qa_approver=admin_user,
+                approval_date=today - datetime.timedelta(days=120),
+                description="Raw chromatographic integration data, audit trails, and multi-tier QA sign-offs stored with SHA-256 digital seals.",
+            )
+
+            pol3 = ElectronicRecordPolicy.objects.create(
+                tenant=tenant,
+                title="Quality Non-Conformance & Deviation Electronic Records Policy",
+                record_type_name="NCR & Process Deviation Dossier",
+                record_category="deviation_ncr",
+                target_model_name="NonConformanceReport",
+                system=csv_system,
+                governing_sop=sop_doc,
+                is_part_11_regulated=True,
+                is_annex_11_regulated=True,
+                signature_requirement="dual_peer_review",
+                reauthentication_required=True,
+                dual_signature_required=False,
+                audit_trail_mandatory=True,
+                retention_period_years=10,
+                storage_format="database_relational",
+                backup_frequency="daily_snapshot",
+                legal_hold=False,
+                status="active",
+                system_owner=admin_user,
+                qa_approver=admin_user,
+                approval_date=today - datetime.timedelta(days=90),
+                description="Establishes electronic signature manifestations, audit trails, and investigation approvals for deviations and containment holds.",
+            )
+
+            pol4 = ElectronicRecordPolicy.objects.create(
+                tenant=tenant,
+                title="Laboratory Metrology & Equipment Calibration Electronic Logs",
+                record_type_name="Calibration & Maintenance Manifest",
+                record_category="equipment_calibration",
+                target_model_name="CalibrationRecord",
+                system=csv_system,
+                governing_sop=sop_doc,
+                is_part_11_regulated=False,
+                is_annex_11_regulated=True,
+                signature_requirement="single_author",
+                reauthentication_required=False,
+                dual_signature_required=False,
+                audit_trail_mandatory=True,
+                retention_period_years=7,
+                storage_format="database_relational",
+                backup_frequency="weekly_full",
+                legal_hold=False,
+                status="under_revision",
+                system_owner=supervisor_user,
+                qa_approver=admin_user,
+                approval_date=None,
+                description="Periodic revision adapting calibration metrology equipment to automated Bluetooth digital gage data capture.",
+            )
+
+            # 2. Data Integrity Assessments (ALCOA+)
+            dia1 = DataIntegrityAssessment.objects.create(
+                tenant=tenant,
+                title="LIMS & Chromatography Data System (CDS) Raw Data ALCOA+ Audit",
+                assessment_scope="QC Analytical Laboratories & LIMS Ingestion Pipeline",
+                system=csv_system,
+                org_unit=org_unit,
+                lead_assessor=admin_user,
+                qa_reviewer=supervisor_user,
+                assessment_date=today - datetime.timedelta(days=60),
+                next_review_due=today + datetime.timedelta(days=305),
+                attributable_rating="fully_compliant",
+                legible_rating="fully_compliant",
+                contemporaneous_rating="fully_compliant",
+                original_rating="fully_compliant",
+                accurate_rating="fully_compliant",
+                complete_rating="fully_compliant",
+                consistent_rating="fully_compliant",
+                enduring_rating="fully_compliant",
+                available_rating="fully_compliant",
+                overall_risk_level="low",
+                vulnerabilities_summary="Zero critical data vulnerabilities identified. Time synchronization verified via NTP stratum-1 clock servers.",
+                remediation_plan="Maintain annual audit trail verification schedule and automated daily backup integrity checks.",
+                status="approved",
+                qa_approved_at=timezone.now() - datetime.timedelta(days=58),
+                comments="Baseline ALCOA+ risk score: Low. System demonstrated robust 21 CFR Part 11 closed-system access controls.",
+            )
+
+            dia2 = DataIntegrityAssessment.objects.create(
+                tenant=tenant,
+                title="Packaging Line Automated Serialization Sensor Stream ALCOA+ Review",
+                assessment_scope="Shop Floor High-Speed Packaging & 2D Barcode Vision Inspection",
+                system=csv_system,
+                org_unit=org_unit,
+                lead_assessor=supervisor_user,
+                qa_reviewer=admin_user,
+                assessment_date=today - datetime.timedelta(days=20),
+                next_review_due=today + datetime.timedelta(days=160),
+                attributable_rating="fully_compliant",
+                legible_rating="fully_compliant",
+                contemporaneous_rating="partially_compliant",
+                original_rating="fully_compliant",
+                accurate_rating="fully_compliant",
+                complete_rating="partially_compliant",
+                consistent_rating="fully_compliant",
+                enduring_rating="fully_compliant",
+                available_rating="fully_compliant",
+                overall_risk_level="medium",
+                vulnerabilities_summary="Intermittent 200ms network latency buffering barcode scan logs during packaging line peak throughput (350 packs/min).",
+                remediation_plan="Implement edge buffer gateway to guarantee 100% contemporaneous event time stamps before cloud sync.",
+                linked_ncr=ncr_item,
+                status="remediation_pending",
+                comments="Medium risk identified. Procedural line clearance verified zero duplicate serials commissioned.",
+            )
+
+            dia3 = DataIntegrityAssessment.objects.create(
+                tenant=tenant,
+                title="QC Microbiology Colony Counter Image Storage & Audit Trail Evaluation",
+                assessment_scope="Microbiology Bioburden Testing Station",
+                system=csv_system,
+                org_unit=org_unit,
+                lead_assessor=admin_user,
+                qa_reviewer=admin_user,
+                assessment_date=today - datetime.timedelta(days=10),
+                next_review_due=today + datetime.timedelta(days=20),
+                attributable_rating="non_compliant",
+                legible_rating="fully_compliant",
+                contemporaneous_rating="partially_compliant",
+                original_rating="fully_compliant",
+                accurate_rating="partially_compliant",
+                complete_rating="fully_compliant",
+                consistent_rating="fully_compliant",
+                enduring_rating="fully_compliant",
+                available_rating="fully_compliant",
+                overall_risk_level="high",
+                vulnerabilities_summary="Legacy standalone workstation utilizing shared operator Windows account. Audit trail cannot distinguish between individual microbiologists.",
+                remediation_plan="Migrate colony counter workstation to Active Directory / LDAP single sign-on with individual credentials and 2FA.",
+                linked_capa=capa_item,
+                status="remediation_pending",
+                comments="High risk flagged during internal pre-audit sweep. CAPA initiated for enterprise identity integration.",
+            )
+
+            # 3. Audit Trail Reviews
+            atr1 = AuditTrailReview.objects.create(
+                tenant=tenant,
+                title="Q3 2026 Monthly Core Quality Database Audit Trail Verification",
+                system=csv_system,
+                review_type="periodic_system",
+                audit_source="database_audit_log",
+                period_start=today - datetime.timedelta(days=90),
+                period_end=today,
+                reviewer=admin_user,
+                qa_approver=admin_user,
+                review_date=today - datetime.timedelta(days=2),
+                records_sampled_count=1450,
+                anomalies_detected_count=0,
+                anomaly_severity="none",
+                findings_summary="1,450 mutation transactions sampled across ControlledDocument, NonConformanceReport, and CapaInvestigation. Zero deleted logs, zero timestamp gaps, 100% attributable to authorized user accounts.",
+                disposition="approved_clean",
+                status="completed",
+                qa_comments="Audit trail review clean. Full compliance with 21 CFR § 11.10(e) confirmed.",
+                completed_at=timezone.now() - datetime.timedelta(days=2),
+            )
+
+            atr2 = AuditTrailReview.objects.create(
+                tenant=tenant,
+                title="HPLC Chromatography Integration Reprocessing Event Investigation",
+                system=csv_system,
+                review_type="event_investigation",
+                audit_source="instrument_raw_log",
+                period_start=today - datetime.timedelta(days=30),
+                period_end=today - datetime.timedelta(days=15),
+                reviewer=supervisor_user,
+                qa_approver=admin_user,
+                review_date=today - datetime.timedelta(days=12),
+                records_sampled_count=320,
+                anomalies_detected_count=2,
+                anomaly_severity="minor",
+                findings_summary="Two manual chromatogram peak integration reprocessing events detected on Lot BMR-2026-08 without supervisor prior notation.",
+                disposition="approved_remediated",
+                status="completed",
+                linked_ncr=ncr_item,
+                qa_comments="Analyst provided technical justification for split peak baseline drift; SOP updated to require pre-reprocessing supervisor sign-off.",
+                completed_at=timezone.now() - datetime.timedelta(days=10),
+            )
+
+            atr3 = AuditTrailReview.objects.create(
+                tenant=tenant,
+                title="MES Operator User Access & Security Privilege Drift Review",
+                system=csv_system,
+                review_type="user_access_drift",
+                audit_source="application_event_log",
+                period_start=today - datetime.timedelta(days=180),
+                period_end=today,
+                reviewer=admin_user,
+                qa_approver=admin_user,
+                review_date=today - datetime.timedelta(days=5),
+                records_sampled_count=85,
+                anomalies_detected_count=1,
+                anomaly_severity="major",
+                findings_summary="One junior maintenance technician retained system administrator privileges after conclusion of factory acceptance testing (FAT).",
+                disposition="rejected_escalated",
+                status="completed",
+                linked_ncr=ncr_item,
+                linked_capa=capa_item,
+                qa_comments="Administrative privilege immediately revoked. Security audit trail examined; zero unauthorized parameter edits detected.",
+                completed_at=timezone.now() - datetime.timedelta(days=4),
+            )
+
+            # 4. System Change Controls
+            scc1 = SystemChangeControl.objects.create(
+                tenant=tenant,
+                title="LIMS Enterprise v8.8 Security Vulnerability Patch & TLS 1.3 Upgrade",
+                system=csv_system,
+                change_type="software_patch",
+                change_priority="urgent",
+                gxp_impact="direct_gxp",
+                requestor=admin_user,
+                system_owner=admin_user,
+                qa_lead=supervisor_user,
+                org_unit=org_unit,
+                description="Apply vendor security roll-up patch resolving OpenSSL CVE-2026-1184 and enforce mandatory TLS 1.3 ciphers for client workstations.",
+                business_justification="Mitigate critical cyber-security vulnerability and ensure encrypted transit of GxP analytical testing records.",
+                data_integrity_risk="Low risk. Zero database schema modifications; encrypted transport strengthens ALCOA+ Enduring and Available dimensions.",
+                validation_deliverables="Installation Qualification (IQ) execution, regression test suite (15 automated scripts), UAT sign-off.",
+                rollback_plan="Restore pre-patch VM snapshot and reload validated v8.8.1 application binary within 45 minutes.",
+                target_date=today - datetime.timedelta(days=30),
+                actual_implementation_date=today - datetime.timedelta(days=28),
+                post_review_due_date=today + datetime.timedelta(days=60),
+                status="implemented_closed",
+                testing_successful=True,
+                data_backup_verified=True,
+                ccb_approved=True,
+                closure_summary="Deployment executed with zero downtime. All 15 regression scripts passed 100%. Released for live GxP use.",
+            )
+
+            scc2 = SystemChangeControl.objects.create(
+                tenant=tenant,
+                title="Cloud Data Lake Schema Expansion for Real-Time GxP Audit Log Streaming",
+                system=csv_system,
+                change_type="database_schema",
+                change_priority="routine",
+                gxp_impact="direct_gxp",
+                requestor=supervisor_user,
+                system_owner=admin_user,
+                qa_lead=admin_user,
+                org_unit=org_unit,
+                description="Add partition columns and index hardening on database audit log tables to support automated sub-second ALCOA+ query performance.",
+                business_justification="Enhance query speed during health authority inspections and support continuous automated anomaly detection.",
+                data_integrity_risk="Database migration carries risk of table lock. Migration scripts tested in staging clone with zero data loss.",
+                validation_deliverables="Data migration verification script, performance benchmark report, CCB sign-off.",
+                rollback_plan="Revert migration with zero-downtime backward compatible table view aliasing.",
+                target_date=today + datetime.timedelta(days=15),
+                actual_implementation_date=None,
+                post_review_due_date=today + datetime.timedelta(days=105),
+                status="testing_verification",
+                testing_successful=False,
+                data_backup_verified=True,
+                ccb_approved=True,
+                closure_summary="",
+            )
+
+            scc3 = SystemChangeControl.objects.create(
+                tenant=tenant,
+                title="Shop Floor Cleanroom Environmental HMI Display Firmware Update",
+                system=csv_system,
+                change_type="infrastructure_network",
+                change_priority="emergency",
+                gxp_impact="direct_gxp",
+                requestor=supervisor_user,
+                system_owner=supervisor_user,
+                qa_lead=admin_user,
+                org_unit=org_unit,
+                description="Emergency firmware patch addressing touchscreen freeze on Cleanroom Suite #2 environmental monitor display.",
+                business_justification="Ensure continuous visual alarm annunciation for differential pressure and particulate count thresholds.",
+                data_integrity_risk="Sensor data logging continues uninterrupted in PLC background; only operator display panel firmware affected.",
+                validation_deliverables="Post-installation alarm verification test protocol and differential pressure challenge test.",
+                rollback_plan="Swap in pre-configured spare HMI panel held in critical spare parts inventory.",
+                target_date=today + datetime.timedelta(days=2),
+                actual_implementation_date=None,
+                post_review_due_date=today + datetime.timedelta(days=30),
+                status="draft",
+                testing_successful=False,
+                data_backup_verified=False,
+                ccb_approved=False,
+                closure_summary="",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.20 Data Integrity & Electronic Records seeded successfully."))
 
 
 
