@@ -94,7 +94,7 @@
   - **Issue**: Design system only allows `stat-icon blue/green/orange/purple/slate`. `red` is unauthorized.
   - **Fix**: Replace `stat-icon red` with `stat-icon orange` across all 11 locations.
 
-- [ ] **[I6] Form Field Omission in `computer_system_validation/form.html`**
+- [x] **[I6] Form Field Omission in `computer_system_validation/form.html`** — fixed in 91ff8e15
   - **Location**: `templates/quality/processvalidation/computer_system_validation/form.html:133-154`
   - **Issue**: `last_review_date` is defined in `ComputerSystemValidationForm.Meta.fields` but omitted from the template.
   - **Fix**: Add the `last_review_date` form-group block in Section 3 of `form.html`.
