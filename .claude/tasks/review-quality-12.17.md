@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 4 | 5 | 0 |
+| **Important** | 9 | 3 | 6 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 18 | 7 | 0 |
+| **Total** | 25 | 17 | 8 | 0 |
 
 ---
 
@@ -84,7 +84,7 @@
   - **Issue**: Fields have `db_index=True` despite already being covered as the secondary column in `Meta.indexes` composite indexes.
   - **Fix**: Remove redundant `db_index=True` where composite indexes provide coverage.
 
-- [ ] **I6: Missing High-Value Composite Indexes for Default Ordering and Filter Patterns**
+- [x] **I6: Missing High-Value Composite Indexes for Default Ordering and Filter Patterns**
   - **Files**:
     - `apps/quality/models/RegulatorySubmissions/RegulatorySubmissions.py:120`
     - `apps/quality/models/RegulatorySubmissions/ProductRegistrations.py:100`
