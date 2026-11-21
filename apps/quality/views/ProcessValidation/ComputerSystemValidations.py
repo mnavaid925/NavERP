@@ -166,6 +166,32 @@ def computer_system_validation_export(request):
         "system_owner", "quality_lead", "validation_protocol"
     )
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(system_name__icontains=q)
+            | Q(version_release__icontains=q)
+            | Q(vendor_name__icontains=q)
+            | Q(description__icontains=q)
+        )
+
+    gamp_filter = request.GET.get("gamp", "").strip()
+    if gamp_filter:
+        qs = qs.filter(gamp_category=gamp_filter)
+
+    gxp_filter = request.GET.get("gxp", "").strip()
+    if gxp_filter:
+        qs = qs.filter(gxp_impact=gxp_filter)
+
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    approach_filter = request.GET.get("approach", "").strip()
+    if approach_filter:
+        qs = qs.filter(validation_approach=approach_filter)
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="computer_systems.csv"'
     response["X-Content-Type-Options"] = "nosniff"
