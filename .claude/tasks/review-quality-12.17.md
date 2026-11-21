@@ -12,10 +12,10 @@
 
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
-| **Critical** | 2 | 1 | 1 | 0 |
+| **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 9 | 0 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 24 | 1 | 0 |
+| **Total** | 25 | 23 | 2 | 0 |
 
 ---
 
@@ -30,7 +30,7 @@
   - **Issue**: CSV export loops iterate over unchunked querysets (`for item in qs:`) which caches all objects in memory at once. Furthermore, massive `TextField` columns (`technical_sections_summary`, `notes`, `intended_purpose`, `commitment_description`, etc.) are queried across the wire but never written to the CSV.
   - **Fix**: Stream via `.iterator(chunk_size=1000)` and use `.defer(...)` or `.only(...)` to exclude large unused text fields.
 
-- [ ] **C2: Redundant Unused Table JOINs in CSV Exports and Dashboard**
+- [x] **C2: Redundant Unused Table JOINs in CSV Exports and Dashboard**
   - **Files**:
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:172` (`org_unit`)
     - `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py:188` (`authorized_representative`)
