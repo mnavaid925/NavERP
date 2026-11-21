@@ -197,6 +197,7 @@ def product_registration_delete(request, pk):
 
 @login_required
 def product_registration_export(request):
+    write_audit_log(request.user, ProductRegistration(), "export", tenant=request.tenant)
     qs = (
         quality_scope(ProductRegistration.objects.all(), request)
         .select_related("regulatory_authority", "regulatory_lead")
