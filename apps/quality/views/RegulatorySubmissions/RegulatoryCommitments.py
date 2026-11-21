@@ -71,7 +71,7 @@ def regulatory_commitment_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    agencies = Party.objects.filter(tenant=request.tenant).order_by("name")
+    agencies = Party.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
