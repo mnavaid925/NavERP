@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}{{ computer_system.number }} — Computer System Validation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_validation_dashboard' %}">Process Validation</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:computer_system_validation_list' %}">Computer Systems</a>
+            <span class="sep">/</span>
+            <span>{{ computer_system.number }}</span>
+        </div>
+        <h1 class="page-title">{{ computer_system.system_name }} ({{ computer_system.version_release }})</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:computer_system_validation_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Systems
+        </a>
+        <a href="{% url 'quality:computer_system_validation_edit' computer_system.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit System
+        </a>
+        <form method="post" action="{% url 'quality:computer_system_validation_delete' computer_system.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete computer system {{ computer_system.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="cpu"></i>
+        </div>
+        <div>
+            <div class="stat-label">GAMP 5 Category</div>
+            <div class="stat-value text-base mt-1">
+                <span class="badge {{ computer_system.gamp_css }}">{{ computer_system.get_gamp_category_display }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if computer_system.status == 'validated_live' %}green{% elif computer_system.status == 'periodic_review_due' %}red{% elif computer_system.status == 'in_qualification' %}orange{% else %}slate{% endif %}">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Validation Status</div>
+            <div class="stat-value text-base mt-1">
+                <span class="badge {{ computer_system.status_css }}">{{ computer_system.get_status_display }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="git-merge"></i>
+        </div>
+        <div>
+            <div class="stat-label">Traceability Matrix</div>
+            <div class="stat-value text-lg font-bold text-slate-800">
+                {{ computer_system.urs_requirements_count }} URS &times; {{ computer_system.test_scripts_count }} Tests
+            </div>
+            <div class="text-xs text-slate-500 mt-1">{{ computer_system.get_traceability_status_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="lock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Electronic Records</div>
+            <div class="stat-value text-base mt-1">
+                {% if computer_system.is_part_11_compliant %}
+                <span class="badge badge-green">21 CFR Part 11 Compliant</span>
+                {% else %}
+                <span class="badge badge-slate">Non-Part 11 System</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">System Architecture & GAMP Scope</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>System Inventory Number</dt>
+                        <dd class="font-mono font-medium">{{ computer_system.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Application / Software Name</dt>
+                        <dd class="font-bold text-slate-900">{{ computer_system.system_name }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Version / Build Release</dt>
+                        <dd class="font-mono text-slate-800">{{ computer_system.version_release }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Commercial Vendor / Supplier</dt>
+                        <dd>{{ computer_system.vendor_name }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Deployment & Hosting Model</dt>
+                        <dd>{{ computer_system.get_hosting_model_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>GxP Impact Classification</dt>
+                        <dd class="font-semibold text-slate-900">{{ computer_system.get_gxp_impact_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Validation Approach</dt>
+                        <dd>{{ computer_system.get_validation_approach_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Traceability Status</dt>
+                        <dd>{{ computer_system.get_traceability_status_display }}</dd>
+                    </div>
+                </dl>
+
+                {% if computer_system.description %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">System Description & Functional Scope</h3>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ computer_system.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Data Integrity & Electronic Records Controls</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-4 rounded-lg border {% if computer_system.is_part_11_compliant %}bg-green-50 border-green-200 text-green-900{% else %}bg-slate-50 border-slate-200 text-slate-700{% endif %}">
+                        <div class="flex items-center gap-2 font-semibold text-sm mb-1">
+                            <i data-lucide="file-text"></i> 21 CFR Part 11 / Annex 11
+                        </div>
+                        <div class="text-xs">
+                            {% if computer_system.is_part_11_compliant %}
+                            Electronic signatures and electronic records controls implemented.
+                            {% else %}
+                            System not designated for regulatory electronic records.
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="p-4 rounded-lg border {% if computer_system.requires_audit_trail %}bg-blue-50 border-blue-200 text-blue-900{% else %}bg-slate-50 border-slate-200 text-slate-700{% endif %}">
+                        <div class="flex items-center gap-2 font-semibold text-sm mb-1">
+                            <i data-lucide="history"></i> GxP Audit Trail
+                        </div>
+                        <div class="text-xs">
+                            {% if computer_system.requires_audit_trail %}
+                            Tamper-evident, time-stamped system audit trail required and verified.
+                            {% else %}
+                            Standard system logs sufficient.
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="p-4 rounded-lg border {% if computer_system.has_disaster_recovery_plan %}bg-purple-50 border-purple-200 text-purple-900{% else %}bg-slate-50 border-slate-200 text-slate-700{% endif %}">
+                        <div class="flex items-center gap-2 font-semibold text-sm mb-1">
+                            <i data-lucide="database"></i> Disaster Recovery (DR)
+                        </div>
+                        <div class="text-xs">
+                            {% if computer_system.has_disaster_recovery_plan %}
+                            Automated backups and business continuity plan verified.
+                            {% else %}
+                            DR plan pending documentation.
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-4 border-t border-slate-100">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase">Verified URS Requirements</div>
+                        <div class="text-xl font-bold text-slate-800">{{ computer_system.urs_requirements_count }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase">Executed Test Scripts</div>
+                        <div class="text-xl font-bold text-slate-800">{{ computer_system.test_scripts_count }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase">Software Deviations Found</div>
+                        <div class="text-xl font-bold {% if computer_system.deviations_found_count > 0 %}text-red-600{% else %}text-green-600{% endif %}">
+                            {{ computer_system.deviations_found_count }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Periodic Review & Cadence</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Live Validation Date</dt>
+                        <dd>{{ computer_system.validated_date|date:"Y-m-d"|default:"Pending release" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Review Frequency</dt>
+                        <dd>Every {{ computer_system.periodic_review_frequency_months }} Months</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Review Date</dt>
+                        <dd>{{ computer_system.last_review_date|date:"Y-m-d"|default:"None conducted" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Next Review Due Date</dt>
+                        <dd class="{% if computer_system.is_review_overdue %}text-red-600 font-bold{% endif %}">
+                            {{ computer_system.next_review_due|date:"Y-m-d"|default:"Not scheduled" }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>System Business Owner</dt>
+                        <dd>{{ computer_system.system_owner.get_full_name|default:computer_system.system_owner.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>QA Validation Lead</dt>
+                        <dd>{{ computer_system.quality_lead.get_full_name|default:computer_system.quality_lead.username }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Traceability & Document Dossier</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Qualification Protocol</dt>
+                        <dd>
+                            {% if computer_system.validation_protocol %}
+                            <a href="{% url 'quality:validation_protocol_detail' computer_system.validation_protocol.pk %}" class="text-blue-600 hover:underline">
+                                {{ computer_system.validation_protocol.number }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>URS Document</dt>
+                        <dd>
+                            {% if computer_system.urs_document %}
+                            <a href="{% url 'quality:controlled_document_detail' computer_system.urs_document.pk %}" class="text-blue-600 hover:underline">
+                                {{ computer_system.urs_document.number }} — {{ computer_system.urs_document.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Validation Summary Report (VSR)</dt>
+                        <dd>
+                            {% if computer_system.vsr_document %}
+                            <a href="{% url 'quality:controlled_document_detail' computer_system.vsr_document.pk %}" class="text-blue-600 hover:underline">
+                                {{ computer_system.vsr_document.number }} — {{ computer_system.vsr_document.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Software Risk Assessment</dt>
+                        <dd>
+                            {% if computer_system.risk_assessment %}
+                            <a href="{% url 'quality:risk_assessment_detail' computer_system.risk_assessment.pk %}" class="text-blue-600 hover:underline">
+                                {{ computer_system.risk_assessment.number }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
