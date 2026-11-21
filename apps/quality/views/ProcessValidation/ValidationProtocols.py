@@ -229,7 +229,7 @@ def validation_protocol_export(request):
         "QA Reviewer",
     ])
 
-    for p in qs:
+    for p in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(p.number),
             _csv_safe(p.title),
