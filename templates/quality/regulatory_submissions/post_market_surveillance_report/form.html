@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ post_market_surveillance_report.number }}{% else %}New Post-Market Surveillance Report{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:regulatory_dashboard' %}">Regulatory Compliance</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:post_market_surveillance_report_list' %}">PMS Reports</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ post_market_surveillance_report.number }}{% else %}New PMS Report{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Surveillance Report {{ post_market_surveillance_report.number }}{% else %}Compile Post-Market Surveillance & PSUR Report{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'quality:post_market_surveillance_report_detail' post_market_surveillance_report.pk %}{% else %}{% url 'quality:post_market_surveillance_report_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Report Identity & Scope</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.report_title.id_for_label }}">Surveillance Report Title *</label>
+                            {{ form.report_title }}
+                            {% if form.report_title.errors %}<div class="form-error">{{ form.report_title.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.report_type.id_for_label }}">Report Type *</label>
+                            {{ form.report_type }}
+                            {% if form.report_type.errors %}<div class="form-error">{{ form.report_type.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.product_registration.id_for_label }}">Target Product Registration / License</label>
+                            {{ form.product_registration }}
+                            {% if form.product_registration.errors %}<div class="form-error">{{ form.product_registration.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.device_model_family.id_for_label }}">Device Model / UDI Family Line *</label>
+                            {{ form.device_model_family }}
+                            {% if form.device_model_family.errors %}<div class="form-error">{{ form.device_model_family.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Surveillance Timeframe & Field Volumes</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.reporting_period_start.id_for_label }}">Period Start Date *</label>
+                            {{ form.reporting_period_start }}
+                            {% if form.reporting_period_start.errors %}<div class="form-error">{{ form.reporting_period_start.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.reporting_period_end.id_for_label }}">Period End Date *</label>
+                            {{ form.reporting_period_end }}
+                            {% if form.reporting_period_end.errors %}<div class="form-error">{{ form.reporting_period_end.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.units_distributed.id_for_label }}">Units Sold / Distributed</label>
+                            {{ form.units_distributed }}
+                            {% if form.units_distributed.errors %}<div class="form-error">{{ form.units_distributed.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.total_complaints_count.id_for_label }}">Total Complaints Received</label>
+                            {{ form.total_complaints_count }}
+                            {% if form.total_complaints_count.errors %}<div class="form-error">{{ form.total_complaints_count.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.serious_incidents_count.id_for_label }}">Serious Vigilance Incidents</label>
+                            {{ form.serious_incidents_count }}
+                            {% if form.serious_incidents_count.errors %}<div class="form-error">{{ form.serious_incidents_count.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.field_actions_count.id_for_label }}">Recalls / FSCAs Executed</label>
+                            {{ form.field_actions_count }}
+                            {% if form.field_actions_count.errors %}<div class="form-error">{{ form.field_actions_count.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Benefit-Risk Profile & Clinical Evaluation</h3>
+                    <div class="space-y-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.benefit_risk_conclusion.id_for_label }}">Benefit-Risk Determination *</label>
+                            {{ form.benefit_risk_conclusion }}
+                            {% if form.benefit_risk_conclusion.errors %}<div class="form-error">{{ form.benefit_risk_conclusion.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.benefit_risk_rationale.id_for_label }}">Clinical & Statistical Rationale</label>
+                            {{ form.benefit_risk_rationale }}
+                            {% if form.benefit_risk_rationale.errors %}<div class="form-error">{{ form.benefit_risk_rationale.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <div class="flex items-center gap-2">
+                                {{ form.pmcf_action_required }}
+                                <label class="form-label mb-0" for="{{ form.pmcf_action_required.id_for_label }}">
+                                    Heightened Post-Market Clinical Follow-up (PMCF) Required
+                                </label>
+                            </div>
+                            {% if form.pmcf_action_required.errors %}<div class="form-error">{{ form.pmcf_action_required.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.pmcf_action_summary.id_for_label }}">PMCF Actions Plan / Summary</label>
+                            {{ form.pmcf_action_summary }}
+                            {% if form.pmcf_action_summary.errors %}<div class="form-error">{{ form.pmcf_action_summary.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Governance, Approval & Next Review</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Report Status *</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.prepared_by.id_for_label }}">Prepared By (RA / Safety)</label>
+                            {{ form.prepared_by }}
+                            {% if form.prepared_by.errors %}<div class="form-error">{{ form.prepared_by.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.approved_by.id_for_label }}">Medical / QA Sign-off</label>
+                            {{ form.approved_by }}
+                            {% if form.approved_by.errors %}<div class="form-error">{{ form.approved_by.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.approval_date.id_for_label }}">Approval Date</label>
+                            {{ form.approval_date }}
+                            {% if form.approval_date.errors %}<div class="form-error">{{ form.approval_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="{{ form.next_report_due_date.id_for_label }}">Next Periodic Report Filing Deadline</label>
+                            {{ form.next_report_due_date }}
+                            {% if form.next_report_due_date.errors %}<div class="form-error">{{ form.next_report_due_date.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="form-group md:col-span-3">
+                            <label class="form-label" for="{{ form.notes.id_for_label }}">Internal Notes</label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3 border-t pt-4">
+                <a href="{% if is_edit %}{% url 'quality:post_market_surveillance_report_detail' post_market_surveillance_report.pk %}{% else %}{% url 'quality:post_market_surveillance_report_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> {% if is_edit %}Save Changes{% else %}Compile Report{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
