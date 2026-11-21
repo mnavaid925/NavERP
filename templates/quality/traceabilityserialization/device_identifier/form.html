@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Device Identifier {{ device_identifier.primary_di }}{% else %}New Device Identifier (UDI){% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Traceability & Serialization</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:device_identifier_list' %}" class="hover:underline">Device Identifiers</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ device_identifier.primary_di }}{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="qr-code" class="w-6 h-6 text-blue-600"></i>
+        {% if is_edit %}Edit Device Identifier: {{ device_identifier.primary_di }}{% else %}New Unique Device Identifier (UDI){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Configure Primary Device Identifiers (UDI-DI), Basic UDI-DI, agency mappings, and clinical safety attributes.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: UDI Identification -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="qr-code" class="w-4 h-4 text-blue-600"></i>
+          1. UDI Identifier & Regulatory Codes
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.device_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Device Description / Model Name <span class="text-red-500">*</span></label>
+            {{ form.device_name }}
+            {% if form.device_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.device_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.primary_di.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Primary Device Identifier (DI / GTIN) <span class="text-red-500">*</span></label>
+            {{ form.primary_di }}
+            {% if form.primary_di.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.primary_di.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.issuing_agency.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Issuing Agency</label>
+            {{ form.issuing_agency }}
+            {% if form.issuing_agency.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.issuing_agency.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.basic_udi_di.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Basic UDI-DI (EUDAMED)</label>
+            {{ form.basic_udi_di }}
+            {% if form.basic_udi_di.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.basic_udi_di.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.barcode_format.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Label Barcode Format</label>
+            {{ form.barcode_format }}
+            {% if form.barcode_format.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.barcode_format.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.fda_listing_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">FDA Listing Number</label>
+            {{ form.fda_listing_number }}
+            {% if form.fda_listing_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.fda_listing_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.submission_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Submission Date</label>
+            {{ form.submission_date }}
+            {% if form.submission_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.submission_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Product & Commercial Data -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          2. Commercial Classification & Catalog
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.device_class.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Device Risk Class</label>
+            {{ form.device_class }}
+            {% if form.device_class.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.device_class.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.brand_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Brand / Commercial Name</label>
+            {{ form.brand_name }}
+            {% if form.brand_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.brand_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.model_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Model Number</label>
+            {{ form.model_number }}
+            {% if form.model_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.model_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.catalog_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Catalog Number</label>
+            {{ form.catalog_number }}
+            {% if form.catalog_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.catalog_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.commercial_distribution_status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Distribution Lifecycle Status</label>
+            {{ form.commercial_distribution_status }}
+            {% if form.commercial_distribution_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.commercial_distribution_status.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Regulatory Repositories & Safety -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="shield" class="w-4 h-4 text-blue-600"></i>
+          3. Repository Status & Clinical Safety Attributes
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.gudid_status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">FDA GUDID Status</label>
+            {{ form.gudid_status }}
+            {% if form.gudid_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.gudid_status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.eudamed_status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">EU EUDAMED Status</label>
+            {{ form.eudamed_status }}
+            {% if form.eudamed_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.eudamed_status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.mri_safety_status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">MRI Safety Status</label>
+            {{ form.mri_safety_status }}
+            {% if form.mri_safety_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.mri_safety_status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.regulatory_contact.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Regulatory Affairs Contact</label>
+            {{ form.regulatory_contact }}
+            {% if form.regulatory_contact.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.regulatory_contact.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.approval_document.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Controlled Specification Document</label>
+            {{ form.approval_document }}
+            {% if form.approval_document.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.approval_document.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2 flex items-center gap-6 pt-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.is_sterile }}
+              <span class="text-sm font-medium text-slate-800">Sterile Packaging</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.contains_latex }}
+              <span class="text-sm font-medium text-slate-800">Contains Latex</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.is_single_use }}
+              <span class="text-sm font-medium text-slate-800">Single-Use Device</span>
+            </label>
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.storage_handling_instructions.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Storage & Handling Instructions</label>
+            {{ form.storage_handling_instructions }}
+            {% if form.storage_handling_instructions.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.storage_handling_instructions.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Regulatory Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <a href="{% if is_edit %}{% url 'quality:device_identifier_detail' device_identifier.pk %}{% else %}{% url 'quality:device_identifier_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm">
+          {% if is_edit %}Save Changes{% else %}Create Device Identifier{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
