@@ -1339,7 +1339,7 @@ class HazardousMaterialAdmin(admin.ModelAdmin):
         "status",
         "tenant",
     )
-    list_filter = ("physical_state", "status", "is_flammable", "is_corrosive", "is_toxic", "tenant")
+    list_filter = ("physical_state", "ghs_signal_word", "status", "tenant")
     search_fields = ("number", "material_name", "trade_name", "cas_number", "storage_location_code")
     list_select_related = ("tenant", "org_unit", "supplier", "managed_by")
 
