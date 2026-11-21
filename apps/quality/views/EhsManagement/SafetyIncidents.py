@@ -156,6 +156,9 @@ def safety_incident_update(request, pk):
     return render(request, "quality/ehsmanagement/safety_incident/form.html", context)
 
 
+safety_incident_edit = safety_incident_update
+
+
 @login_required
 @require_POST
 def safety_incident_delete(request, pk):
