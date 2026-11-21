@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Batch Record {{ batch_record.number }}{% else %}New Batch Manufacturing Record{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Traceability & Serialization</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:batch_record_list' %}" class="hover:underline">Batch Records</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ batch_record.number }}{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="file-spreadsheet" class="w-6 h-6 text-blue-600"></i>
+        {% if is_edit %}Edit Batch Record: {{ batch_record.batch_number }}{% else %}New Electronic Batch Record (eBR){% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Capture production run parameters, target quantities, review-by-exception checklist status, and quality oversight.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Identification & Product -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          1. Batch & Product Specification
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Batch Title / Purpose <span class="text-red-500">*</span></label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.batch_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Batch Number <span class="text-red-500">*</span></label>
+            {{ form.batch_number }}
+            {% if form.batch_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.batch_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.product_code.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Product Code / SKU <span class="text-red-500">*</span></label>
+            {{ form.product_code }}
+            {% if form.product_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.product_code.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.product_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Product Name <span class="text-red-500">*</span></label>
+            {{ form.product_name }}
+            {% if form.product_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.product_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.production_order_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Production Order #</label>
+            {{ form.production_order_number }}
+            {% if form.production_order_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.production_order_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.work_order.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">SCM Work Order</label>
+            {{ form.work_order }}
+            {% if form.work_order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.work_order.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.master_document.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Master Document / Recipe</label>
+            {{ form.master_document }}
+            {% if form.master_document.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.master_document.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Quantities & Timeline -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="calendar" class="w-4 h-4 text-blue-600"></i>
+          2. Quantities & Lifecycle Dates
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label for="{{ form.planned_quantity.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Planned Quantity</label>
+            {{ form.planned_quantity }}
+            {% if form.planned_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.planned_quantity.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.actual_quantity.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Actual Quantity</label>
+            {{ form.actual_quantity }}
+            {% if form.actual_quantity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.actual_quantity.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.unit_of_measure.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Unit of Measure</label>
+            {{ form.unit_of_measure }}
+            {% if form.unit_of_measure.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.unit_of_measure.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.manufacturing_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Manufacturing Date</label>
+            {{ form.manufacturing_date }}
+            {% if form.manufacturing_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.manufacturing_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.expiration_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Expiration Date</label>
+            {{ form.expiration_date }}
+            {% if form.expiration_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.expiration_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.retest_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Retest Date</label>
+            {{ form.retest_date }}
+            {% if form.retest_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.retest_date.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Review-by-Exception & Disposition -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="check-circle" class="w-4 h-4 text-blue-600"></i>
+          3. Status, QA Review & Exception Checklist
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lifecycle Status</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.release_status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Release Disposition</label>
+            {{ form.release_status }}
+            {% if form.release_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.release_status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.supervisor.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Production Supervisor</label>
+            {{ form.supervisor }}
+            {% if form.supervisor.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supervisor.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.qa_reviewer.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">QA Reviewer</label>
+            {{ form.qa_reviewer }}
+            {% if form.qa_reviewer.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.qa_reviewer.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.linked_ncr.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Non-Conformance Report</label>
+            {{ form.linked_ncr }}
+            {% if form.linked_ncr.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_ncr.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.linked_deviation.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Process Deviation</label>
+            {{ form.linked_deviation }}
+            {% if form.linked_deviation.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_deviation.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.linked_fqc.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Linked Final Inspection Lot (FQC)</label>
+            {{ form.linked_fqc }}
+            {% if form.linked_fqc.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.linked_fqc.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.electronic_signature.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Electronic Signature Record</label>
+            {{ form.electronic_signature }}
+            {% if form.electronic_signature.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.electronic_signature.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2 flex items-center gap-6 pt-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.checklist_passed }}
+              <span class="text-sm font-medium text-slate-800">All Master Recipe Checklists & In-Process Tests Passed</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.is_quarantined }}
+              <span class="text-sm font-medium text-red-700">Quarantine Hold Active</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Notes -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+          4. Operational Notes
+        </h2>
+        <div class="form-group">
+          {{ form.notes }}
+          {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <a href="{% if is_edit %}{% url 'quality:batch_record_detail' batch_record.pk %}{% else %}{% url 'quality:batch_record_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm">
+          {% if is_edit %}Save Changes{% else %}Create Batch Record{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
