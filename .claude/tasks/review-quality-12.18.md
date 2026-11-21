@@ -38,3 +38,18 @@
 ### Minor
 - **[EX-M1]** Duplicate of CR-M1. Unused import `write_audit_log` in `TraceabilityDashboard.py:9`.
 - **[EX-M2]** Duplicate of CR-M2. Unused import `Count` in `TraceabilityDashboard.py:4`.
+
+---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Critical
+- **[FR-C1]** Duplicate of CR-C1. `templates/quality/traceabilityserialization/product_recall/detail.html:211`: `NoReverseMatch` crash on `{% url 'quality:complaint_detail' ... %}` -> update to `'quality:customer_complaint_detail'`.
+- **[FR-C2]** Duplicate of CR-C2. `templates/quality/traceabilityserialization/product_recall/detail.html:223`: `NoReverseMatch` crash on `{% url 'quality:capa_detail' ... %}` -> update to `'quality:capa_investigation_detail'`.
+
+### Important
+- **[FR-I1]** Duplicate of CR-I4. `badge-purple` used across 5 template locations (`serialized_item/list.html:140`, `serialized_item/detail.html:30, 131`, `product_recall/list.html:124`, `product_recall/detail.html:32`). Replace with `badge-info`/`badge-slate`/`badge-amber`.
+- **[FR-I2]** `templates/quality/traceabilityserialization/traceability_dashboard.html:77`: `stat-icon red` used instead of canonical L33 palette (`blue`, `green`, `orange`, `purple`, `slate`). Change to `orange`.
+
+### Minor
+- **[FR-M1]** `batch_record/list.html:150-161`, `device_identifier/list.html:161-172`, `serialized_item/list.html:176-187`, `product_recall/list.html:160-171`: Icon-only action links/buttons missing explicit `aria-label` attributes.
