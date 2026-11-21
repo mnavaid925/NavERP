@@ -165,6 +165,18 @@ from apps.quality.forms.EhsManagement.EnvironmentalMonitoringLogs import (
 from apps.quality.forms.EhsManagement.WasteDisposalManifests import (
     WasteDisposalManifestForm,
 )
+from apps.quality.forms.RegulatorySubmissions.RegulatorySubmissions import (
+    RegulatorySubmissionForm,
+)
+from apps.quality.forms.RegulatorySubmissions.ProductRegistrations import (
+    ProductRegistrationForm,
+)
+from apps.quality.forms.RegulatorySubmissions.RegulatoryCommitments import (
+    RegulatoryCommitmentForm,
+)
+from apps.quality.forms.RegulatorySubmissions.PostMarketSurveillanceReports import (
+    PostMarketSurveillanceReportForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -244,5 +256,9 @@ __all__ = [
     "SafetyIncidentForm",
     "EnvironmentalMonitoringLogForm",
     "WasteDisposalManifestForm",
+    "RegulatorySubmissionForm",
+    "ProductRegistrationForm",
+    "RegulatoryCommitmentForm",
+    "PostMarketSurveillanceReportForm",
 ]
 
