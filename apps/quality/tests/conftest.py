@@ -2728,7 +2728,7 @@ def management_review_action_b(db, tenant_b, management_review_b, admin_b):
 
 
 @pytest.fixture
-def hazardous_material_a(db, tenant_a, admin_user, controlled_document_a, supplier_party_a, quality_department):
+def hazardous_material_a(db, tenant_a, admin_user, doc_a, supplier_party_a, quality_department):
     return HazardousMaterial.objects.create(
         tenant=tenant_a,
         material_name="Isopropyl Alcohol 99% USP",
@@ -2747,7 +2747,7 @@ def hazardous_material_a(db, tenant_a, admin_user, controlled_document_a, suppli
         sds_revision="Rev 3.0",
         sds_issue_date=timezone.now().date() - timedelta(days=180),
         sds_expiry_date=timezone.now().date() + timedelta(days=730),
-        sds_document=controlled_document_a,
+        sds_document=doc_a,
         org_unit=quality_department,
         storage_location_code="FLAM-CAB-01",
         maximum_storage_quantity=Decimal("500.00"),
