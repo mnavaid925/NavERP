@@ -62,7 +62,7 @@ def batch_record_detail(request, pk):
         select_related=[
             "supervisor",
             "qa_reviewer",
-            "work_order",
+            "work_order__item",
             "master_document",
             "electronic_signature",
             "linked_ncr",
