@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Computer System Validation (CSV/CSA) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_validation_dashboard' %}">Process Validation</a>
+            <span class="sep">/</span>
+            <span>Computer Systems (CSV)</span>
+        </div>
+        <h1 class="page-title">Computer System Validation (CSV / CSA)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:computer_system_validation_export' %}?{{ query_string }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:computer_system_validation_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New System
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="monitor"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Computer Systems</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="stat-label">Validated for Live GxP</div>
+            <div class="stat-value">{{ validated_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">In Qualification</div>
+            <div class="stat-value">{{ in_qual_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="calendar-x"></i>
+        </div>
+        <div>
+            <div class="stat-label">Periodic Review Due</div>
+            <div class="stat-value">{{ review_due_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="System name, #, vendor..." class="form-input">
+            </div>
+            <div>
+                <label for="gamp" class="form-label text-xs">GAMP 5 Category</label>
+                <select name="gamp" id="gamp" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in gamp_choices %}
+                    <option value="{{ val }}" {% if request.GET.gamp == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="gxp" class="form-label text-xs">GxP Impact</label>
+                <select name="gxp" id="gxp" class="form-select">
+                    <option value="">All GxP Impacts</option>
+                    {% for val, label in gxp_choices %}
+                    <option value="{{ val }}" {% if request.GET.gxp == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Validation Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if search_query or request.GET.gamp or request.GET.gxp or request.GET.status %}
+                <a href="{% url 'quality:computer_system_validation_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters" aria-label="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>System Name & Build</th>
+                    <th>Vendor</th>
+                    <th>GAMP Category</th>
+                    <th>GxP / Approach</th>
+                    <th>21 CFR Part 11</th>
+                    <th>Status</th>
+                    <th>Next Review</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in page_obj %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'quality:computer_system_validation_detail' s.pk %}" class="text-blue-600 hover:underline">
+                            {{ s.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ s.system_name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">Build: {{ s.version_release }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-800">{{ s.vendor_name }}</div>
+                        <div class="text-xs text-slate-500">{{ s.get_hosting_model_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ s.gamp_css }}">{{ s.get_gamp_category_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-xs font-semibold text-slate-800">{{ s.get_gxp_impact_display }}</div>
+                        <div class="text-xs text-slate-500">{{ s.get_validation_approach_display }}</div>
+                    </td>
+                    <td>
+                        {% if s.is_part_11_compliant %}
+                        <span class="badge badge-green">Part 11 Compliant</span>
+                        {% else %}
+                        <span class="badge badge-slate">N/A — Non-Electronic</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ s.status_css }}">{{ s.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {% if s.next_review_due %}
+                        <span class="{% if s.is_review_overdue %}text-red-600 font-bold{% else %}text-slate-700{% endif %}">
+                            {{ s.next_review_due|date:"Y-m-d" }}
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'quality:computer_system_validation_detail' s.pk %}" class="btn-icon" title="View System">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:computer_system_validation_edit' s.pk %}" class="btn-icon" title="Edit System">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:computer_system_validation_delete' s.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete computer system {{ s.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete System">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="monitor" class="empty-icon"></i>
+                            <div class="empty-title">No Computer Systems Registered</div>
+                            <div class="empty-desc">Register your software, ERP, LIMS, or computerized lab systems for GAMP 5 validation and 21 CFR Part 11 compliance.</div>
+                            <a href="{% url 'quality:computer_system_validation_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> New System
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} systems
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page=1{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">First</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Last</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
