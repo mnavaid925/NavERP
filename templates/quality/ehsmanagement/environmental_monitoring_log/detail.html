@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}{{ environmental_log.sampling_point_id }} ({{ environmental_log.number }}) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:environmental_monitoring_log_list' %}">Environmental Logs</a>
+            <span class="sep">/</span>
+            <span>{{ environmental_log.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ environmental_log.sampling_point_id }} — {{ environmental_log.parameter_name }}</h1>
+            <span class="badge {{ environmental_log.evaluation_status_css }}">{{ environmental_log.get_evaluation_status_display }}</span>
+            <span class="badge badge-info">{{ environmental_log.cleanroom_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:environmental_monitoring_log_update' environmental_log.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Log
+        </a>
+        <a href="{% url 'quality:environmental_monitoring_log_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Logs
+        </a>
+    </div>
+</div>
+
+<!-- Excursion Alert Banner if Limit Breached -->
+{% if environmental_log.is_excursion %}
+<div class="card mb-6 p-4 bg-red-50 border-red-300">
+    <div class="flex items-start gap-3">
+        <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5"></i>
+        <div class="space-y-1">
+            <h3 class="font-bold text-red-900 text-base">Cleanroom Excursion Detected: {{ environmental_log.get_evaluation_status_display }}</h3>
+            <p class="text-sm text-red-700">
+                Measured value of <strong>{{ environmental_log.measured_value }} {{ environmental_log.get_unit_of_measure_display }}</strong> breaches defined cleanroom limits.
+                {% if environmental_log.upper_action_limit %}Action limit threshold is &le; {{ environmental_log.upper_action_limit }}.{% endif %}
+            </p>
+            {% if environmental_log.immediate_containment_action %}
+            <div class="text-xs text-red-800 bg-red-100 p-2 rounded mt-2 border border-red-200">
+                <strong>Immediate Containment:</strong> {{ environmental_log.immediate_containment_action }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Log Overview & Limits -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="gauge" class="w-5 h-5 text-primary"></i> Sample Reading & Cleanroom Environment
+                </h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Log Record Number</dt>
+                        <dd class="font-mono font-medium">{{ environmental_log.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Sampling Point ID</dt>
+                        <dd class="font-mono font-medium text-slate-900">{{ environmental_log.sampling_point_id }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Sampling Timestamp</dt>
+                        <dd class="font-medium">{{ environmental_log.sampling_timestamp|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Cleanroom Classification</dt>
+                        <dd>{{ environmental_log.get_cleanroom_class_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Operational State</dt>
+                        <dd>{{ environmental_log.get_operational_state_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Monitoring Category</dt>
+                        <dd>{{ environmental_log.get_monitoring_category_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Facility / Org Unit</dt>
+                        <dd>
+                            {% if environmental_log.org_unit %}{{ environmental_log.org_unit.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>QC Sampling Technician</dt>
+                        <dd>
+                            {% if environmental_log.sampled_by %}
+                            {{ environmental_log.sampled_by.get_full_name|default:environmental_log.sampled_by.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Quality Reviewer / Verifier</dt>
+                        <dd>
+                            {% if environmental_log.verified_by %}
+                            <span class="text-green-700 font-medium">Verified by {{ environmental_log.verified_by.get_full_name|default:environmental_log.verified_by.username }}</span>
+                            {% else %}
+                            <span class="text-amber-600">Pending Review</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Limit Standards & Quantitative Comparison -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="sliders" class="w-5 h-5 text-blue-500"></i> Quantitative Parameter & Limit Thresholds
+                </h3>
+            </div>
+            <div class="card-body space-y-6">
+                <!-- Highlighted Measured Value Box -->
+                <div class="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Parameter Monitored</div>
+                        <div class="text-lg font-bold text-slate-900">{{ environmental_log.parameter_name }}</div>
+                    </div>
+                    <div class="text-right mt-2 sm:mt-0">
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Measured Value</div>
+                        <div class="text-3xl font-black font-mono {% if environmental_log.is_excursion %}text-red-600{% else %}text-green-600{% endif %}">
+                            {{ environmental_log.measured_value }} <span class="text-sm font-normal text-slate-600">{{ environmental_log.get_unit_of_measure_display }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 font-medium">Nominal Target</div>
+                        <div class="text-base font-bold text-slate-800 font-mono">
+                            {% if environmental_log.target_nominal_value %}{{ environmental_log.target_nominal_value }}{% else %}—{% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 bg-amber-50 rounded border border-amber-200">
+                        <div class="text-xs text-amber-800 font-medium">Lower Alert Limit</div>
+                        <div class="text-base font-bold text-amber-900 font-mono">
+                            {% if environmental_log.lower_alert_limit %}{{ environmental_log.lower_alert_limit }}{% else %}None{% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 bg-amber-50 rounded border border-amber-200">
+                        <div class="text-xs text-amber-800 font-medium">Upper Alert Limit</div>
+                        <div class="text-base font-bold text-amber-900 font-mono">
+                            {% if environmental_log.upper_alert_limit %}{{ environmental_log.upper_alert_limit }}{% else %}None{% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 bg-red-50 rounded border border-red-200">
+                        <div class="text-xs text-red-800 font-medium">Upper Action Limit</div>
+                        <div class="text-base font-bold text-red-900 font-mono">
+                            {% if environmental_log.upper_action_limit %}{{ environmental_log.upper_action_limit }}{% else %}None{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if environmental_log.excursion_details %}
+                <div class="pt-2 border-t border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Excursion & Impact Description</div>
+                    <div class="p-3 bg-slate-50 text-slate-800 rounded border border-slate-200 text-sm whitespace-pre-line">
+                        {{ environmental_log.excursion_details }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: Calibrated Gage & QMS Escalation -->
+    <div class="space-y-6">
+        <!-- Measuring Instrument Traceability -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="wrench" class="w-5 h-5 text-primary"></i> Calibrated Gage Traceability
+                </h3>
+            </div>
+            <div class="card-body">
+                {% if environmental_log.measurement_instrument %}
+                <dl class="space-y-2 text-sm">
+                    <div>
+                        <dt class="text-xs text-slate-500 font-medium">Gage Identifier</dt>
+                        <dd class="font-mono font-bold text-primary">{{ environmental_log.measurement_instrument.gage_id }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 font-medium">Instrument Name</dt>
+                        <dd class="text-slate-800">{{ environmental_log.measurement_instrument.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 font-medium">Gage Status</dt>
+                        <dd><span class="badge {{ environmental_log.measurement_instrument.status_css }}">{{ environmental_log.measurement_instrument.get_status_display }}</span></dd>
+                    </div>
+                </dl>
+                {% else %}
+                <div class="text-xs text-slate-400">No calibrated gage linked directly to this reading.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Verification & Quality Re-check -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i> Quality Reviewer Verification
+                </h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div class="text-xs text-slate-600">
+                    Trigger automated limit evaluation check and stamp your user verification to this environmental record.
+                </div>
+                <form method="post" action="{% url 'quality:environmental_monitoring_log_evaluate' environmental_log.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline btn-sm w-full">
+                        <i data-lucide="shield-check"></i> Verify & Re-evaluate Limits
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- QMS Cross-Links -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="link" class="w-5 h-5 text-primary"></i> Linked QMS Records
+                </h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 mb-1">Process Deviation (QDEV)</div>
+                    {% if environmental_log.process_deviation %}
+                    <a href="{% url 'quality:process_deviation_detail' environmental_log.process_deviation.pk %}" class="flex items-center gap-2 text-primary hover:underline font-mono">
+                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                        {{ environmental_log.process_deviation.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-xs text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div class="border-t border-slate-200 pt-2">
+                    <div class="text-xs font-medium text-slate-500 mb-1">Non-Conformance Report (QNCR)</div>
+                    {% if environmental_log.non_conformance_report %}
+                    <a href="{% url 'quality:non_conformance_report_detail' environmental_log.non_conformance_report.pk %}" class="flex items-center gap-2 text-primary hover:underline font-mono">
+                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                        {{ environmental_log.non_conformance_report.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-xs text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div class="border-t border-slate-200 pt-2">
+                    <div class="text-xs font-medium text-slate-500 mb-1">CAPA Investigation (QCAP)</div>
+                    {% if environmental_log.capa_investigation %}
+                    <a href="{% url 'quality:capa_investigation_detail' environmental_log.capa_investigation.pk %}" class="flex items-center gap-2 text-primary hover:underline font-mono">
+                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                        {{ environmental_log.capa_investigation.number }}
+                    </a>
+                    {% else %}
+                    <span class="text-xs text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
