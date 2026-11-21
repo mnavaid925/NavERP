@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Test Worksheets — Laboratory Information Management (LIMS) — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <span>Test Worksheets</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="clipboard-list" class="w-6 h-6 text-blue-600"></i>
+        Test Execution & Result Capture
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Electronic analytical worksheets, raw data capture, instrument interfacing, reagent lot traceability, and automated specification comparisons.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:lims_dashboard' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>LIMS Command Center</span>
+      </a>
+      <a href="{% url 'quality:lab_test_worksheet_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Test Worksheet</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Card -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      <div class="form-group md:col-span-2">
+        <label for="q" class="form-label text-xs font-semibold text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            name="q"
+            id="q"
+            value="{{ query }}"
+            placeholder="Search by worksheet #, title, sample #, spec title, instrument, reagent lot..."
+            class="form-input w-full pl-9"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="status" class="form-label text-xs font-semibold text-slate-600 mb-1">Status</label>
+        <select name="status" id="status" class="form-select w-full">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group flex gap-2">
+        <div class="flex-1">
+          <label for="disposition" class="form-label text-xs font-semibold text-slate-600 mb-1">Disposition</label>
+          <select name="disposition" id="disposition" class="form-select w-full">
+            <option value="">All Dispositions</option>
+            {% for val, label in disposition_choices %}
+              <option value="{{ val }}" {% if selected_disposition == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary self-end">Filter</button>
+        {% if query or selected_status or selected_disposition %}
+          <a href="{% url 'quality:lab_test_worksheet_list' %}" class="btn btn-outline self-end" title="Clear Filters">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Worksheets Table -->
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table w-full text-left text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+            <th class="py-3 px-4">Worksheet #</th>
+            <th class="py-3 px-4">Title / Specification</th>
+            <th class="py-3 px-4">Sample</th>
+            <th class="py-3 px-4">Analyst / Scheduled</th>
+            <th class="py-3 px-4">Instrument / Reagent</th>
+            <th class="py-3 px-4">Measured Result</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4">Disposition</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for w in worksheets %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-slate-900">
+                <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="text-blue-600 hover:underline">
+                  {{ w.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ w.title }}</div>
+                <div class="text-xs text-slate-500">{{ w.specification.title }}</div>
+              </td>
+              <td class="py-3 px-4 text-xs font-mono">
+                <a href="{% url 'quality:lab_sample_detail' w.sample.pk %}" class="text-blue-600 hover:underline">
+                  {{ w.sample.number }}
+                </a>
+                <div class="text-slate-500 font-sans truncate max-w-xs">{{ w.sample.sample_name }}</div>
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-700">
+                <div class="font-medium text-slate-900">{{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username|default:"Unassigned" }}</div>
+                <div class="text-slate-500">Sched: {{ w.scheduled_date|default:"—" }}</div>
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">
+                <div class="font-medium text-slate-800">{{ w.instrument.name|default:w.instrument_name|default:"—" }}</div>
+                {% if w.reagent_lot_number %}
+                  <div class="text-slate-400 font-mono">Lot: {{ w.reagent_lot_number }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 font-medium text-sm">
+                {% if w.numeric_result is not None %}
+                  <div class="{% if not w.is_within_specification %}text-red-600 font-bold{% else %}text-slate-900{% endif %}">
+                    {{ w.numeric_result }} {{ w.specification.parameter_unit }}
+                  </div>
+                  {% if w.relative_standard_deviation %}
+                    <div class="text-xs text-slate-400">% RSD: {{ w.relative_standard_deviation }}%</div>
+                  {% endif %}
+                {% elif w.qualitative_result %}
+                  <div class="text-slate-800 text-xs">{{ w.qualitative_result }}</div>
+                {% else %}
+                  <span class="text-slate-400 font-normal">Pending</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ w.get_status_badge }}">{{ w.get_status_display }}</span>
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ w.get_disposition_badge }}">{{ w.get_disposition_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-right table-actions">
+                <div class="flex items-center justify-end gap-1">
+                  {% if w.status == "in_progress" or w.status == "assigned" %}
+                    <form method="post" action="{% url 'quality:lab_test_worksheet_complete' w.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-icon text-blue-600 hover:bg-blue-50" title="Submit Complete">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                  <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="btn btn-icon" title="View Detail">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'quality:lab_test_worksheet_edit' w.pk %}" class="btn btn-icon" title="Edit">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  {% if w.status != "approved" %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'quality:lab_test_worksheet_delete' w.pk %}" class="inline" onsubmit="return confirm('Delete worksheet {{ w.number|escapejs }}?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                          <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="text-center py-12">
+                <div class="empty-state flex flex-col items-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="clipboard-list" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800">No Test Worksheets Found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">Assign analytical testing worksheets to qualified analysts against logged samples.</p>
+                  <a href="{% url 'quality:lab_test_worksheet_create' %}" class="btn btn-primary text-sm">
+                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Test Worksheet
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+      <div class="p-4 border-t border-slate-200 flex items-center justify-between">
+        <div class="text-xs text-slate-500">
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} worksheets
+        </div>
+        <div class="pagination flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_disposition %}&disposition={{ selected_disposition }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">Previous</a>
+          {% endif %}
+          <span class="py-1 px-3 text-xs text-slate-600 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_disposition %}&disposition={{ selected_disposition }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">Next</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
