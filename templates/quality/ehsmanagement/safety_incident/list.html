@@ -26,8 +26,8 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <div class="form-group md:col-span-2">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div class="form-group md:col-span-2 lg:col-span-2">
                 <label class="form-label" for="q">Search</label>
                 <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Search by number, title, location, person..." class="form-input">
             </div>
@@ -59,6 +59,15 @@
                 </select>
             </div>
             <div class="form-group">
+                <label class="form-label" for="org_unit">Facility / Org Unit</label>
+                <select name="org_unit" id="org_unit" class="form-select">
+                    <option value="">All Facilities</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
                 <label class="form-label" for="is_osha_recordable">OSHA Recordable</label>
                 <select name="is_osha_recordable" id="is_osha_recordable" class="form-select">
                     <option value="">All Cases</option>
@@ -66,7 +75,7 @@
                     <option value="0" {% if request.GET.is_osha_recordable == "0" %}selected{% endif %}>Non-Recordable Only</option>
                 </select>
             </div>
-            <div class="md:col-span-6 flex justify-end gap-2">
+            <div class="md:col-span-3 lg:col-span-6 flex justify-end gap-2">
                 <a href="{% url 'quality:safety_incident_list' %}" class="btn btn-outline">Reset</a>
                 <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply Filters</button>
             </div>
