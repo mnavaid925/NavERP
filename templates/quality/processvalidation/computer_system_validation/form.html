@@ -146,6 +146,11 @@
                         {% if form.periodic_review_frequency_months.errors %}<div class="form-error">{{ form.periodic_review_frequency_months.errors }}</div>{% endif %}
                     </div>
                     <div class="form-group">
+                        <label for="{{ form.last_review_date.id_for_label }}" class="form-label">Last Review Date</label>
+                        {{ form.last_review_date }}
+                        {% if form.last_review_date.errors %}<div class="form-error">{{ form.last_review_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
                         <label for="{{ form.next_review_due.id_for_label }}" class="form-label">Next Review Due</label>
                         {{ form.next_review_due }}
                         {% if form.next_review_due.errors %}<div class="form-error">{{ form.next_review_due.errors }}</div>{% endif %}
