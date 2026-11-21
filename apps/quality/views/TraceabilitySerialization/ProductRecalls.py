@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
@@ -86,7 +87,10 @@ def product_recall_create(request):
         if form.is_valid():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
+            if obj.status in ["completed", "terminated"] and not obj.closed_at:
+                obj.closed_at = timezone.now()
             obj.save()
+            form.save_m2m()
             write_audit_log(request.user, obj, "create", tenant=request.tenant)
             messages.success(request, f"Product Recall {obj.number} initiated successfully.")
             return redirect("quality:product_recall_detail", pk=obj.pk)
@@ -107,7 +111,11 @@ def product_recall_edit(request, pk):
     if request.method == "POST":
         form = ProductRecallForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save()
+            obj = form.save(commit=False)
+            if obj.status in ["completed", "terminated"] and not obj.closed_at:
+                obj.closed_at = timezone.now()
+            obj.save()
+            form.save_m2m()
             write_audit_log(request.user, obj, "update", tenant=request.tenant)
             messages.success(request, f"Product Recall {obj.number} updated successfully.")
             return redirect("quality:product_recall_detail", pk=obj.pk)
