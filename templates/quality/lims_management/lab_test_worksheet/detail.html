@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}Worksheet {{ worksheet.number }} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lab_test_worksheet_list' %}" class="hover:underline">Test Worksheets</a>
+        <span class="mx-1">/</span>
+        <span>{{ worksheet.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="clipboard-list" class="w-6 h-6 text-blue-600"></i>
+          {{ worksheet.title }}
+        </h1>
+        <span class="badge {{ worksheet.get_status_badge }}">{{ worksheet.get_status_display }}</span>
+        <span class="badge {{ worksheet.get_disposition_badge }}">{{ worksheet.get_disposition_display }}</span>
+      </div>
+      <p class="text-sm text-slate-500 font-mono mt-1">Worksheet ID: {{ worksheet.number }} | Method: {{ worksheet.specification.analytical_method_number|default:worksheet.specification.title }}</p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      {% if worksheet.status == "in_progress" or worksheet.status == "assigned" %}
+        <form method="post" action="{% url 'quality:lab_test_worksheet_complete' worksheet.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary flex items-center gap-1.5 text-sm">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Mark Complete</span>
+          </button>
+        </form>
+      {% endif %}
+      {% if worksheet.disposition == "oos_flagged" %}
+        <a href="{% url 'quality:oos_investigation_create' %}?worksheet={{ worksheet.pk }}" class="btn btn-danger flex items-center gap-1.5 text-sm">
+          <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+          <span>Initiate OOS</span>
+        </a>
+      {% endif %}
+      <a href="{% url 'quality:lab_test_worksheet_edit' worksheet.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+      {% if worksheet.status != "approved" %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'quality:lab_test_worksheet_delete' worksheet.pk %}" class="inline" onsubmit="return confirm('Delete worksheet {{ worksheet.number|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+              <span>Delete</span>
+            </button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Primary Metadata Grid -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+      Worksheet Execution Details & Assignments
+    </h2>
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Worksheet Title</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">{{ worksheet.title }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sample Tested</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          <a href="{% url 'quality:lab_sample_detail' worksheet.sample.pk %}" class="text-blue-600 hover:underline">
+            {{ worksheet.sample.number }} — {{ worksheet.sample.sample_name }}
+          </a>
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Analytical Specification</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          <a href="{% url 'quality:lab_specification_detail' worksheet.specification.pk %}" class="text-blue-600 hover:underline">
+            {{ worksheet.specification.number }} — {{ worksheet.specification.title }}
+          </a>
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Analyst</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          {{ worksheet.assigned_analyst.get_full_name|default:worksheet.assigned_analyst.username|default:"Unassigned" }}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">QA Reviewer</dt>
+        <dd class="text-sm text-slate-700 mt-1">
+          {{ worksheet.reviewer.get_full_name|default:worksheet.reviewer.username|default:"Pending Review" }}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Scheduled Testing Date</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ worksheet.scheduled_date|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Execution Date</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ worksheet.execution_date|default:"—" }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Completion Timestamp</dt>
+        <dd class="text-sm text-slate-700 mt-1">{{ worksheet.completion_timestamp|default:"In Progress" }}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Reagent & Instrument Traceability Card -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="microscope" class="w-4 h-4 text-blue-600"></i>
+      Laboratory Instrument & Reagent Lot Traceability
+    </h2>
+    <dl class="detail-grid">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Analytical Instrument</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          {% if worksheet.instrument %}
+            <a href="{% url 'quality:gage_detail' worksheet.instrument.pk %}" class="text-blue-600 hover:underline">
+              {{ worksheet.instrument.gage_id }} - {{ worksheet.instrument.name }}
+            </a>
+          {% elif worksheet.instrument_name %}
+            {{ worksheet.instrument_name }}
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reagent / Mobile Phase Lot #</dt>
+        <dd class="text-sm font-mono font-medium text-slate-900 mt-1">
+          {{ worksheet.reagent_lot_number|default:"—" }}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reagent Expiry Date</dt>
+        <dd class="text-sm text-slate-800 mt-1">
+          {{ worksheet.reagent_expiry_date|default:"—" }}
+          {% if worksheet.reagent_expired %}
+            <span class="badge badge-red ml-1">Expired</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reference Standard Lot #</dt>
+        <dd class="text-sm font-mono font-medium text-slate-900 mt-1">
+          {{ worksheet.standards_lot_number|default:"—" }}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Standards Expiry Date</dt>
+        <dd class="text-sm text-slate-800 mt-1">
+          {{ worksheet.standards_expiry_date|default:"—" }}
+          {% if worksheet.standards_expired %}
+            <span class="badge badge-red ml-1">Expired</span>
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Analytical Results & Raw Data Card -->
+  <div class="card p-6">
+    <h2 class="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+      <i data-lucide="calculator" class="w-4 h-4 text-blue-600"></i>
+      Analytical Results & Specification Evaluation
+    </h2>
+    <dl class="detail-grid mb-6">
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Target Parameter</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">{{ worksheet.specification.target_parameter_name }}</dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Specification Acceptance Range</dt>
+        <dd class="text-sm text-slate-700 mt-1 font-mono">
+          {% if worksheet.specification.lower_limit is not None and worksheet.specification.upper_limit is not None %}
+            {{ worksheet.specification.lower_limit }} – {{ worksheet.specification.upper_limit }} {{ worksheet.specification.parameter_unit }}
+          {% elif worksheet.specification.lower_limit is not None %}
+            ≥ {{ worksheet.specification.lower_limit }} {{ worksheet.specification.parameter_unit }}
+          {% elif worksheet.specification.upper_limit is not None %}
+            ≤ {{ worksheet.specification.upper_limit }} {{ worksheet.specification.parameter_unit }}
+          {% else %}
+            Qualitative Criteria
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Quantitative Result</dt>
+        <dd class="text-base font-bold mt-1 {% if not worksheet.is_within_specification %}text-red-600{% else %}text-green-700{% endif %}">
+          {% if worksheet.numeric_result is not None %}
+            {{ worksheet.numeric_result }} {{ worksheet.specification.parameter_unit }}
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Replicate Precision (% RSD)</dt>
+        <dd class="text-sm font-mono text-slate-800 mt-1">
+          {% if worksheet.relative_standard_deviation is not None %}
+            {{ worksheet.relative_standard_deviation }}%
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Specification Evaluation</dt>
+        <dd class="text-sm font-semibold mt-1">
+          {% if worksheet.is_within_specification %}
+            <span class="badge badge-green">Within Limits (Pass)</span>
+          {% else %}
+            <span class="badge badge-red">Out of Specification (OOS)</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Qualitative Finding</dt>
+        <dd class="text-sm text-slate-800 mt-1">{{ worksheet.qualitative_result|default:"—" }}</dd>
+      </div>
+    </dl>
+
+    {% if worksheet.raw_data_summary %}
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Raw Instrument Readings & Replicates</h3>
+        <pre class="bg-slate-50 p-3 rounded text-xs text-slate-700 font-mono whitespace-pre-wrap border border-slate-200">{{ worksheet.raw_data_summary }}</pre>
+      </div>
+    {% endif %}
+
+    {% if worksheet.notes %}
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Notes</h3>
+        <p class="text-sm text-slate-700">{{ worksheet.notes }}</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Related OOS Investigations -->
+  {% if oos_investigations %}
+    <div class="card p-6 border-l-4 border-red-500">
+      <div class="flex items-center justify-between mb-4 pb-2 border-b border-red-100">
+        <h2 class="text-base font-semibold text-red-900 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i>
+          Triggered Out-of-Specification Investigations ({{ oos_investigations|length }})
+        </h2>
+        <a href="{% url 'quality:oos_investigation_create' %}?worksheet={{ worksheet.pk }}" class="btn btn-outline text-xs">
+          <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Add OOS Record
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 bg-red-50/50 text-slate-700 font-semibold text-xs uppercase tracking-wider">
+              <th class="py-2.5 px-3">OOS #</th>
+              <th class="py-2.5 px-3">Title</th>
+              <th class="py-2.5 px-3">Phase</th>
+              <th class="py-2.5 px-3">Severity</th>
+              <th class="py-2.5 px-3">Status</th>
+              <th class="py-2.5 px-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for oos in oos_investigations %}
+              <tr class="hover:bg-slate-50/80">
+                <td class="py-2.5 px-3 font-mono font-medium">
+                  <a href="{% url 'quality:oos_investigation_detail' oos.pk %}" class="text-red-600 hover:underline">
+                    {{ oos.number }}
+                  </a>
+                </td>
+                <td class="py-2.5 px-3 font-medium text-slate-900">{{ oos.title }}</td>
+                <td class="py-2.5 px-3"><span class="badge {{ oos.get_phase_badge }}">{{ oos.get_investigation_phase_display }}</span></td>
+                <td class="py-2.5 px-3"><span class="badge {{ oos.get_severity_badge }}">{{ oos.get_severity_display }}</span></td>
+                <td class="py-2.5 px-3"><span class="badge {{ oos.get_status_badge }}">{{ oos.get_status_display }}</span></td>
+                <td class="py-2.5 px-3 text-right table-actions">
+                  <a href="{% url 'quality:oos_investigation_detail' oos.pk %}" class="btn btn-icon">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
