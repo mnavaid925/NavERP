@@ -41,12 +41,12 @@
                     <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Report Identity & Scope</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="form-group md:col-span-2">
-                            <label class="form-label" for="{{ form.report_title.id_for_label }}">Surveillance Report Title *</label>
+                            <label class="form-label" for="{{ form.report_title.id_for_label }}">Surveillance Report Title <span class="req">*</span></label>
                             {{ form.report_title }}
                             {% if form.report_title.errors %}<div class="form-error">{{ form.report_title.errors.0 }}</div>{% endif %}
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="{{ form.report_type.id_for_label }}">Report Type *</label>
+                            <label class="form-label" for="{{ form.report_type.id_for_label }}">Report Type <span class="req">*</span></label>
                             {{ form.report_type }}
                             {% if form.report_type.errors %}<div class="form-error">{{ form.report_type.errors.0 }}</div>{% endif %}
                         </div>
@@ -56,7 +56,7 @@
                             {% if form.product_registration.errors %}<div class="form-error">{{ form.product_registration.errors.0 }}</div>{% endif %}
                         </div>
                         <div class="form-group md:col-span-2">
-                            <label class="form-label" for="{{ form.device_model_family.id_for_label }}">Device Model / UDI Family Line *</label>
+                            <label class="form-label" for="{{ form.device_model_family.id_for_label }}">Device Model / UDI Family Line <span class="req">*</span></label>
                             {{ form.device_model_family }}
                             {% if form.device_model_family.errors %}<div class="form-error">{{ form.device_model_family.errors.0 }}</div>{% endif %}
                         </div>
@@ -67,12 +67,12 @@
                     <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Surveillance Timeframe & Field Volumes</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="form-group">
-                            <label class="form-label" for="{{ form.reporting_period_start.id_for_label }}">Period Start Date *</label>
+                            <label class="form-label" for="{{ form.reporting_period_start.id_for_label }}">Period Start Date <span class="req">*</span></label>
                             {{ form.reporting_period_start }}
                             {% if form.reporting_period_start.errors %}<div class="form-error">{{ form.reporting_period_start.errors.0 }}</div>{% endif %}
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="{{ form.reporting_period_end.id_for_label }}">Period End Date *</label>
+                            <label class="form-label" for="{{ form.reporting_period_end.id_for_label }}">Period End Date <span class="req">*</span></label>
                             {{ form.reporting_period_end }}
                             {% if form.reporting_period_end.errors %}<div class="form-error">{{ form.reporting_period_end.errors.0 }}</div>{% endif %}
                         </div>
@@ -105,7 +105,7 @@
                     <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Benefit-Risk Profile & Clinical Evaluation</h3>
                     <div class="space-y-4">
                         <div class="form-group">
-                            <label class="form-label" for="{{ form.benefit_risk_conclusion.id_for_label }}">Benefit-Risk Determination *</label>
+                            <label class="form-label" for="{{ form.benefit_risk_conclusion.id_for_label }}">Benefit-Risk Determination <span class="req">*</span></label>
                             {{ form.benefit_risk_conclusion }}
                             {% if form.benefit_risk_conclusion.errors %}<div class="form-error">{{ form.benefit_risk_conclusion.errors.0 }}</div>{% endif %}
                         </div>
@@ -135,7 +135,7 @@
                     <h3 class="text-base font-semibold text-slate-800 border-b pb-2 mb-4">Governance, Approval & Next Review</h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div class="form-group">
-                            <label class="form-label" for="{{ form.status.id_for_label }}">Report Status *</label>
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Report Status <span class="req">*</span></label>
                             {{ form.status }}
                             {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
                         </div>
