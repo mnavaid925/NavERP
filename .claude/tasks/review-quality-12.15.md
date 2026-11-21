@@ -68,7 +68,7 @@
   - **Issue**: Submodule subdirectories lack local package `__init__.py` re-export files required by NavERP architectural standard.
   - **Fix**: Create `__init__.py` in each directory and re-export classes/functions with `__all__`.
 
-- [ ] **[I3] Missing Cross-Field Consistency Validation in `CleaningValidationForm.clean()`**
+- [x] **[I3] Missing Cross-Field Consistency Validation in `CleaningValidationForm.clean()`** — fixed in 9c8b43db
   - **Location**: `apps/quality/forms/ProcessValidation/CleaningValidations.py:91-104`
   - **Issue**: If a user selects `calculation_basis="therapeutic_dose"` or `"toxicological_pde"` and leaves dose/PDE fields empty, form passes validation but limits silently cannot be computed.
   - **Fix**: Enforce required fields for the chosen `calculation_basis` in `CleaningValidationForm.clean()`.
