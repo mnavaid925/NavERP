@@ -26,8 +26,8 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div class="form-group md:col-span-2">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div class="form-group md:col-span-2 lg:col-span-2">
                 <label class="form-label" for="q">Search</label>
                 <input type="text" name="q" id="q" value="{{ request.GET.q }}" placeholder="Search by manifest #, EPA ID, waste description..." class="form-input">
             </div>
@@ -58,7 +58,25 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="md:col-span-5 flex justify-end gap-2">
+            <div class="form-group">
+                <label class="form-label" for="transporter">Transporter</label>
+                <select name="transporter" id="transporter" class="form-select">
+                    <option value="">All Transporters</option>
+                    {% for tr in transporters %}
+                    <option value="{{ tr.pk }}" {% if request.GET.transporter == tr.pk|stringformat:"d" %}selected{% endif %}>{{ tr.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="tsdf_facility">TSDF Facility</label>
+                <select name="tsdf_facility" id="tsdf_facility" class="form-select">
+                    <option value="">All TSDFs</option>
+                    {% for tsdf in tsdfs %}
+                    <option value="{{ tsdf.pk }}" {% if request.GET.tsdf_facility == tsdf.pk|stringformat:"d" or request.GET.tsdf == tsdf.pk|stringformat:"d" %}selected{% endif %}>{{ tsdf.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-3 lg:col-span-6 flex justify-end gap-2">
                 <a href="{% url 'quality:waste_disposal_manifest_list' %}" class="btn btn-outline">Reset</a>
                 <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply Filters</button>
             </div>
