@@ -63,6 +63,10 @@ from apps.quality.models import (
     ManagementReview,
     ManagementReviewInput,
     ManagementReviewAction,
+    HazardousMaterial,
+    SafetyIncident,
+    EnvironmentalMonitoringLog,
+    WasteDisposalManifest,
 )
 
 
@@ -2715,4 +2719,184 @@ def management_review_action_b(db, tenant_b, management_review_b, admin_b):
         assignee=admin_b,
         due_date=today + timedelta(days=30),
         status="open",
+    )
+
+
+# ==============================================================================
+# Sub-module 12.16: Environmental, Health & Safety (EHS) Fixtures
+# ==============================================================================
+
+
+@pytest.fixture
+def hazardous_material_a(db, tenant_a, admin_user, controlled_document_a):
+    return HazardousMaterial.objects.create(
+        tenant=tenant_a,
+        name="Isopropyl Alcohol 99% USP",
+        cas_number="67-63-0",
+        physical_state="liquid",
+        hazard_classification="flammable",
+        storage_location="Chemical Storage Room A - Flammable Cabinet 1",
+        storage_temperature_celsius=Decimal("21.0"),
+        un_number="UN1219",
+        nfpa_health=1,
+        nfpa_flammability=3,
+        nfpa_instability=0,
+        nfpa_special="",
+        sds_document=controlled_document_a,
+        sds_issue_date=timezone.now().date() - timedelta(days=180),
+        sds_expiry_date=timezone.now().date() + timedelta(days=730),
+        is_sara_title_iii=True,
+        is_reach_svhc=False,
+        is_rohs_restricted=False,
+        current_inventory_quantity=Decimal("150.00"),
+        reportable_quantity_threshold=Decimal("500.00"),
+        unit_of_measure="l",
+        status="active",
+        safety_contact=admin_user,
+    )
+
+
+@pytest.fixture
+def hazardous_material_b(db, tenant_b, admin_b):
+    return HazardousMaterial.objects.create(
+        tenant=tenant_b,
+        name="Acetone Technical Grade",
+        cas_number="67-64-1",
+        physical_state="liquid",
+        hazard_classification="flammable",
+        storage_location="Globex Solvent Cabinet B",
+        storage_temperature_celsius=Decimal("20.0"),
+        un_number="UN1090",
+        nfpa_health=1,
+        nfpa_flammability=3,
+        nfpa_instability=0,
+        current_inventory_quantity=Decimal("75.00"),
+        reportable_quantity_threshold=Decimal("1000.00"),
+        unit_of_measure="l",
+        status="active",
+        safety_contact=admin_b,
+    )
+
+
+@pytest.fixture
+def safety_incident_a(db, tenant_a, admin_user, staff_user, quality_department):
+    return SafetyIncident.objects.create(
+        tenant=tenant_a,
+        title="Minor Chemical Splash During Solvent Transfer",
+        incident_datetime=timezone.now() - timedelta(days=3),
+        location_description="Solvent Dispensing Hood #2, Building A",
+        org_unit=quality_department,
+        incident_type="first_aid",
+        severity="minor",
+        status="reported",
+        is_osha_recordable=False,
+        osha_form_300_logged=False,
+        lost_workdays_count=0,
+        restricted_workdays_count=0,
+        affected_person_name="Jane Doe",
+        reported_by=admin_user,
+        lead_investigator=admin_user,
+        immediate_action_taken="Flushed eyes with eyewash station for 15 minutes. Inspected PPE.",
+        root_cause_summary="Splash shield was positioned too high during pouring operation.",
+    )
+
+
+@pytest.fixture
+def safety_incident_b(db, tenant_b, admin_b, quality_department_b):
+    return SafetyIncident.objects.create(
+        tenant=tenant_b,
+        title="Slip on Wet Cleanroom Floor",
+        incident_datetime=timezone.now() - timedelta(days=2),
+        location_description="Cleanroom Gowning Air shower, Globex",
+        org_unit=quality_department_b,
+        incident_type="near_miss",
+        severity="minor",
+        status="reported",
+        is_osha_recordable=False,
+        reported_by=admin_b,
+        immediate_action_taken="Placed caution sign and dried floor.",
+    )
+
+
+@pytest.fixture
+def environmental_monitoring_log_a(db, tenant_a, admin_user):
+    return EnvironmentalMonitoringLog.objects.create(
+        tenant=tenant_a,
+        monitoring_type="cleanroom_particles",
+        sample_datetime=timezone.now() - timedelta(hours=4),
+        sampling_location="ISO 7 Cleanroom Station 4 - Laminar Flow Hood",
+        cleanroom_classification="iso_7",
+        measured_value=Decimal("125000.0000"),
+        unit_of_measure="particles_m3",
+        lower_specification_limit=Decimal("0.0000"),
+        upper_specification_limit=Decimal("352000.0000"),
+        status="normal",
+        recorded_by=admin_user,
+        is_excursion=False,
+    )
+
+
+@pytest.fixture
+def environmental_monitoring_log_b(db, tenant_b, admin_b):
+    return EnvironmentalMonitoringLog.objects.create(
+        tenant=tenant_b,
+        monitoring_type="cleanroom_particles",
+        sample_datetime=timezone.now() - timedelta(hours=2),
+        sampling_location="Globex Cleanroom Suite B",
+        cleanroom_classification="iso_8",
+        measured_value=Decimal("850000.0000"),
+        unit_of_measure="particles_m3",
+        lower_specification_limit=Decimal("0.0000"),
+        upper_specification_limit=Decimal("3520000.0000"),
+        status="normal",
+        recorded_by=admin_b,
+        is_excursion=False,
+    )
+
+
+@pytest.fixture
+def waste_disposal_manifest_a(db, tenant_a, admin_user, hazardous_material_a):
+    return WasteDisposalManifest.objects.create(
+        tenant=tenant_a,
+        waste_type="hazardous_chemical",
+        material_description="Spent Isopropyl Alcohol Rinsate (D001 Flammable)",
+        linked_hazardous_material=hazardous_material_a,
+        manifest_tracking_number="EPA-009182371-JJK",
+        shipment_date=timezone.now().date() + timedelta(days=7),
+        transporter_name="Clean Harbors Environmental Services Inc.",
+        transporter_epa_id="MAD039322250",
+        tsdf_name="Clean Harbors Braintree Facility",
+        tsdf_epa_id="MAD053452637",
+        quantity_shipped=Decimal("220.00"),
+        unit_of_measure="kg",
+        container_count=1,
+        container_type="drum_steel",
+        status="draft",
+        accumulation_start_date=timezone.now().date() - timedelta(days=20),
+        certificate_of_destruction_received=False,
+        prepared_by=admin_user,
+    )
+
+
+@pytest.fixture
+def waste_disposal_manifest_b(db, tenant_b, admin_b, hazardous_material_b):
+    return WasteDisposalManifest.objects.create(
+        tenant=tenant_b,
+        waste_type="hazardous_chemical",
+        material_description="Globex Acetone Waste Liquid",
+        linked_hazardous_material=hazardous_material_b,
+        manifest_tracking_number="EPA-998877665-GLB",
+        shipment_date=timezone.now().date() + timedelta(days=10),
+        transporter_name="Safety-Kleen Systems",
+        transporter_epa_id="TXR000081205",
+        tsdf_name="Safety-Kleen Service Center",
+        tsdf_epa_id="TXD980879438",
+        quantity_shipped=Decimal("150.00"),
+        unit_of_measure="kg",
+        container_count=1,
+        container_type="drum_steel",
+        status="draft",
+        accumulation_start_date=timezone.now().date() - timedelta(days=15),
+        certificate_of_destruction_received=False,
+        prepared_by=admin_b,
     )
