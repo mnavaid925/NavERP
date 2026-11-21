@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 6 | 8 | 0 |
-| **Total** | 25 | 6 | 19 | 0 |
+| **Minor** | 14 | 5 | 9 | 0 |
+| **Total** | 25 | 5 | 20 | 0 |
 
 ---
 
@@ -176,7 +176,7 @@
   - **Issue**: Form labels use literal raw string `*` instead of `<span class="req">*</span>`.
   - **Fix**: Replace `*` with `<span class="req">*</span>`.
 
-- [ ] **M9: Inconsistent Breadcrumb Naming in Product Registration Form**
+- [x] **M9: Inconsistent Breadcrumb Naming in Product Registration Form**
   - **File**: `templates/quality/regulatory_submissions/product_registration/form.html:13`
   - **Issue**: Parent breadcrumb reads `Registrations` instead of `Product Registrations`.
   - **Fix**: Update breadcrumb text to `Product Registrations`.
