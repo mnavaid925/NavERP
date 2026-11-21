@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}{{ hazardous_material.material_name }} ({{ hazardous_material.number }}) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:hazardous_material_list' %}">Hazardous Materials</a>
+            <span class="sep">/</span>
+            <span>{{ hazardous_material.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ hazardous_material.material_name }}</h1>
+            <span class="badge {{ hazardous_material.status_css }}">{{ hazardous_material.get_status_display }}</span>
+            <span class="badge {{ hazardous_material.signal_word_css }}">GHS: {{ hazardous_material.get_ghs_signal_word_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:hazardous_material_label' hazardous_material.pk %}" class="btn btn-outline" target="_blank">
+            <i data-lucide="tag"></i> Print GHS Label
+        </a>
+        <a href="{% url 'quality:hazardous_material_update' hazardous_material.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Material
+        </a>
+        <a href="{% url 'quality:hazardous_material_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Register
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Chemical & SDS Overview -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="flask-conical" class="w-5 h-5 text-primary"></i> Chemical Identification & SDS
+                </h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Material Number</dt>
+                        <dd class="font-mono font-medium">{{ hazardous_material.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Common / Chemical Name</dt>
+                        <dd class="font-medium text-slate-900">{{ hazardous_material.material_name }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Trade / Brand Name</dt>
+                        <dd>{{ hazardous_material.trade_name|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>CAS Registry Number</dt>
+                        <dd class="font-mono">{{ hazardous_material.cas_number|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>UN Transport Number</dt>
+                        <dd class="font-mono">{{ hazardous_material.un_number|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Chemical Formula</dt>
+                        <dd class="font-mono">{{ hazardous_material.chemical_formula|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Physical State</dt>
+                        <dd>{{ hazardous_material.get_physical_state_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>SDS Revision</dt>
+                        <dd>{{ hazardous_material.sds_revision|default:"Rev 1.0" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>SDS Issue Date</dt>
+                        <dd>{{ hazardous_material.sds_issue_date|date:"Y-m-d"|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>SDS Expiration Target</dt>
+                        <dd>
+                            {% if hazardous_material.sds_expiry_date %}
+                            <span class="badge {{ hazardous_material.sds_status_css }}">
+                                {{ hazardous_material.sds_expiry_date|date:"Y-m-d" }}
+                                {% if hazardous_material.is_sds_expired %}(Expired){% endif %}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Controlled Document Link</dt>
+                        <dd>
+                            {% if hazardous_material.sds_document %}
+                            <a href="{% url 'quality:controlled_document_detail' hazardous_material.sds_document.pk %}" class="text-primary hover:underline font-mono">
+                                {{ hazardous_material.sds_document.document_number }} — {{ hazardous_material.sds_document.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">None attached</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Chemical Hygiene Officer</dt>
+                        <dd>
+                            {% if hazardous_material.managed_by %}
+                            {{ hazardous_material.managed_by.get_full_name|default:hazardous_material.managed_by.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Hazards, GHS & Exposure Limits -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="shield-alert" class="w-5 h-5 text-amber-500"></i> GHS Classification & Exposure Standards
+                </h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">GHS Signal Word</div>
+                        <span class="badge {{ hazardous_material.signal_word_css }} text-sm py-1 px-3">
+                            {{ hazardous_material.get_ghs_signal_word_display }}
+                        </span>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">GHS Pictograms</div>
+                        <div class="flex flex-wrap gap-2">
+                            {% for pic in hazardous_material.pictograms_list %}
+                            <span class="badge badge-info">{{ pic }}</span>
+                            {% empty %}
+                            <span class="text-slate-400 text-sm">None registered</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">OSHA PEL (Permissible Exposure Limit)</div>
+                        <div class="font-medium text-slate-800">{{ hazardous_material.osha_pel|default:"Not established" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">ACGIH TLV (Threshold Limit Value)</div>
+                        <div class="font-medium text-slate-800">{{ hazardous_material.acgih_tlv|default:"Not established" }}</div>
+                    </div>
+                </div>
+
+                {% if hazardous_material.hazard_statements %}
+                <div class="pt-2 border-t border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Hazard Statements (H-Codes)</div>
+                    <div class="p-3 bg-red-50 text-red-900 rounded border border-red-200 text-sm whitespace-pre-line font-mono">{{ hazardous_material.hazard_statements }}</div>
+                </div>
+                {% endif %}
+
+                {% if hazardous_material.precautionary_statements %}
+                <div class="pt-2 border-t border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Precautionary Statements (P-Codes)</div>
+                    <div class="p-3 bg-slate-50 text-slate-800 rounded border border-slate-200 text-sm whitespace-pre-line font-mono">{{ hazardous_material.precautionary_statements }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Handling, PPE & Emergency Spill -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="life-buoy" class="w-5 h-5 text-blue-500"></i> PPE & Emergency Spill Response
+                </h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Mandatory Personal Protective Equipment (PPE)</div>
+                    <div class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-line">
+                        {{ hazardous_material.ppe_requirements|default:"Standard lab coat, safety glasses, and nitrile gloves required." }}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Incompatible Materials & Storage Segregation</div>
+                    <div class="text-sm text-slate-800 bg-amber-50 p-3 rounded border border-amber-200 whitespace-pre-line">
+                        {{ hazardous_material.incompatible_materials|default:"None specified. Store according to standard chemical compatibility group." }}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Immediate Spill Cleanup & Neutralization Procedure</div>
+                    <div class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-line">
+                        {{ hazardous_material.spill_cleanup_procedure|default:"Evacuate personnel. Eliminate ignition sources. Absorb with inert chemical absorbent." }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: NFPA 704 Diamond, Storage & Inventory -->
+    <div class="space-y-6">
+        <!-- NFPA 704 Standard Fire Diamond Widget -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="flame" class="w-5 h-5 text-red-500"></i> NFPA 704 Fire Diamond
+                </h3>
+            </div>
+            <div class="card-body flex flex-col items-center justify-center p-6">
+                <!-- Diamond Representation -->
+                <div class="relative w-44 h-44 mb-4">
+                    <!-- Flammability (Top - Red) -->
+                    <div class="absolute top-0 left-12 w-20 h-20 bg-red-600 border-2 border-white text-white flex flex-col items-center justify-center transform rotate-45 shadow-sm">
+                        <span class="transform -rotate-45 text-2xl font-black">{{ hazardous_material.nfpa_flammability }}</span>
+                    </div>
+                    <!-- Health (Left - Blue) -->
+                    <div class="absolute top-12 left-0 w-20 h-20 bg-blue-600 border-2 border-white text-white flex flex-col items-center justify-center transform rotate-45 shadow-sm">
+                        <span class="transform -rotate-45 text-2xl font-black">{{ hazardous_material.nfpa_health }}</span>
+                    </div>
+                    <!-- Instability / Reactivity (Right - Yellow) -->
+                    <div class="absolute top-12 left-24 w-20 h-20 bg-yellow-400 border-2 border-white text-slate-900 flex flex-col items-center justify-center transform rotate-45 shadow-sm">
+                        <span class="transform -rotate-45 text-2xl font-black">{{ hazardous_material.nfpa_instability }}</span>
+                    </div>
+                    <!-- Special Hazard (Bottom - White) -->
+                    <div class="absolute top-24 left-12 w-20 h-20 bg-white border-2 border-slate-300 text-slate-900 flex flex-col items-center justify-center transform rotate-45 shadow-sm">
+                        <span class="transform -rotate-45 text-sm font-black uppercase">{{ hazardous_material.get_nfpa_special_hazard_display|slice:":3" }}</span>
+                    </div>
+                </div>
+                <div class="w-full text-xs text-slate-500 space-y-1 border-t border-slate-200 pt-3">
+                    <div class="flex justify-between">
+                        <span class="text-blue-700 font-semibold">Health (0-4):</span>
+                        <span>Level {{ hazardous_material.nfpa_health }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-red-700 font-semibold">Flammability (0-4):</span>
+                        <span>Level {{ hazardous_material.nfpa_flammability }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-yellow-600 font-semibold">Instability (0-4):</span>
+                        <span>Level {{ hazardous_material.nfpa_instability }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-800 font-semibold">Special Hazard:</span>
+                        <span>{{ hazardous_material.get_nfpa_special_hazard_display }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Storage & Logistics -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="package" class="w-5 h-5 text-primary"></i> Storage & Facility Allocation
+                </h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3">
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Storage Location</dt>
+                        <dd class="text-sm font-semibold font-mono text-slate-900">{{ hazardous_material.storage_location_code|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Facility / Org Unit</dt>
+                        <dd class="text-sm text-slate-900">
+                            {% if hazardous_material.org_unit %}{{ hazardous_material.org_unit.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Max Permitted Storage Quantity</dt>
+                        <dd class="text-sm font-semibold text-slate-900">{{ hazardous_material.maximum_storage_quantity }} {{ hazardous_material.quantity_uom }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-slate-500">Commercial Supplier / Vendor</dt>
+                        <dd class="text-sm text-slate-900">
+                            {% if hazardous_material.supplier %}{{ hazardous_material.supplier.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    {% if hazardous_material.notes %}
+                    <div class="border-t border-slate-200 pt-2">
+                        <dt class="text-xs font-medium text-slate-500">Additional Notes</dt>
+                        <dd class="text-xs text-slate-600 whitespace-pre-line">{{ hazardous_material.notes }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Linked Waste Disposal Manifests -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="trash-2" class="w-5 h-5 text-red-500"></i> Linked Hazardous Waste Disposal Manifests
+        </h3>
+        <a href="{% url 'quality:waste_disposal_manifest_create' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i> New Manifest
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Manifest #</th>
+                    <th>Regulatory ID</th>
+                    <th>Waste Type</th>
+                    <th>Quantity</th>
+                    <th>Accumulation Date</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for manifest in linked_waste_manifests %}
+                <tr>
+                    <td class="font-mono">
+                        <a href="{% url 'quality:waste_disposal_manifest_detail' manifest.pk %}" class="text-primary hover:underline">
+                            {{ manifest.number }}
+                        </a>
+                    </td>
+                    <td class="font-mono text-sm">{{ manifest.regulatory_manifest_id|default:"—" }}</td>
+                    <td>{{ manifest.get_manifest_type_display }}</td>
+                    <td>{{ manifest.quantity_value }} {{ manifest.get_quantity_uom_display }}</td>
+                    <td>{{ manifest.accumulation_start_date|date:"Y-m-d" }}</td>
+                    <td>
+                        <span class="badge {{ manifest.status_css }}">
+                            {{ manifest.get_status_display }}
+                        </span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-slate-400">
+                        No hazardous waste shipments recorded for this chemical.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
