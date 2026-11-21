@@ -4956,9 +4956,10 @@ class Command(BaseCommand):
         if not qa_dept:
             qa_dept = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
 
-        vendor = Party.objects.filter(tenant=tenant, is_vendor=True).order_by("pk").first()
-        if not vendor:
-            vendor = Party.objects.filter(tenant=tenant).order_by("pk").first()
+        vendor = (
+            Party.objects.filter(tenant=tenant, roles__name="vendor").order_by("pk").first()
+            or Party.objects.filter(tenant=tenant).order_by("pk").first()
+        )
 
         today = timezone.now().date()
         now = timezone.now()
