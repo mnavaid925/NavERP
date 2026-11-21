@@ -7,6 +7,130 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 12.19: Laboratory Information Management (LIMS) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.19.md` (2026-11-21)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 through 12.18.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0038_productregistration_idx_qreg_ten_stat_exp_and_more.py` (claims next available incremental migration `0039_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QSMP`** (`LabSample`), **`QSPC`** (`LabSpecification`), **`QWKS`** (`LabTestWorksheet`), **`QOOS`** (`OosInvestigation`).
+> Plan written from `.claude/tasks/research-quality-12.19.md` (Phase 1) and `NavERP.md` (`### 12.19 Laboratory Information Management (LIMS)`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/LimsManagement/<Entity>.py` (`LabSamples.py`, `LabSpecifications.py`, `LabTestWorksheets.py`, `OosInvestigations.py`, plus dedicated `LimsDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/lims_management/{lab_sample,lab_specification,lab_test_worksheet,oos_investigation}/{list,detail,form}.html` + `templates/quality/lims_management/lims_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QSMP`** (`LabSample`), **`QSPC`** (`LabSpecification`), **`QWKS`** (`LabTestWorksheet`), **`QOOS`** (`OosInvestigation`), all 4 model classes, and all URL stems (`lab_sample_*`, `lab_specification_*`, `lab_test_worksheet_*`, `oos_investigation_*`, `lims_dashboard`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `scm.WorkOrder` (`apps/scm/models/Manufacturing/WorkOrders.py`).
+  - Module 12 siblings (12.1, 12.4, 12.5, 12.10, 12.18): `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.CalibrationGage` (`apps/quality/models/CalibrationAnalysis/CalibrationGages.py`), `quality.BatchRecord` (`apps/quality/models/TraceabilitySerialization/BatchRecords.py`), `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`), `quality.NonConformanceReport` (`apps/quality/models/NonConformance/NonConformanceReports.py`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`): Text fields `item_code`, `item_name`, `lot_number`, `source_batch_number`, `unit_of_measure` with future migration path.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `quality.ControlledDocument`, `quality.CalibrationGage`, `quality.BatchRecord`, `quality.CapaInvestigation`, `quality.NonConformanceReport`, `scm.WorkOrder`, `core.OrgUnit`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Regulatory Alignment (FDA 21 CFR Part 211 §§211.160/165, FDA OOS Guidance Oct 2022, ISO/IEC 17025:2017 §7.2-§7.4, EU GMP Annex 11)**:
+  - Sample registration with barcode identifiers, chain of custody logging, multi-tier storage location mapping, and storage condition controls.
+  - Analytical specification repository with quantitative limits (lower, upper, nominal), units, qualitative criteria, and method validation records.
+  - Test worksheet assignment, instrument calibration linking, reagent/standards lot tracking and expiration alerts, replicate capture, % RSD calculation, and pass/fail limit verification.
+  - Two-phase Out-of-Specification (OOS) investigation: Phase I laboratory error check (interview, calculations, instrument, reagents) and Phase II manufacturing root cause investigation with hypothesis testing, authorized retest protocols, and closed-loop CAPA/NCR escalation.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `sampled_at`, `received_at`, `completion_timestamp`, `closed_at`), auto-numbers (`number`), MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_overdue`, `is_within_specification`, `reagent_expired`, `standards_expired`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-quality-12.19.md` with every field, choice, URL name, and view context key.
+
+### Phase 3.2: Entity by Entity Implementation
+- [ ] **Entity 1: LabSample** (`QSMP-`)
+  - [ ] `apps/quality/models/LimsManagement/LabSamples.py`
+  - [ ] `apps/quality/forms/LimsManagement/LabSamples.py`
+  - [ ] `apps/quality/views/LimsManagement/LabSamples.py`
+  - [ ] `apps/quality/urls/LimsManagement/LabSamples.py`
+  - [ ] `templates/quality/lims_management/lab_sample/list.html`
+  - [ ] `templates/quality/lims_management/lab_sample/detail.html`
+  - [ ] `templates/quality/lims_management/lab_sample/form.html`
+- [ ] **Entity 2: LabSpecification** (`QSPC-`)
+  - [ ] `apps/quality/models/LimsManagement/LabSpecifications.py`
+  - [ ] `apps/quality/forms/LimsManagement/LabSpecifications.py`
+  - [ ] `apps/quality/views/LimsManagement/LabSpecifications.py`
+  - [ ] `apps/quality/urls/LimsManagement/LabSpecifications.py`
+  - [ ] `templates/quality/lims_management/lab_specification/list.html`
+  - [ ] `templates/quality/lims_management/lab_specification/detail.html`
+  - [ ] `templates/quality/lims_management/lab_specification/form.html`
+- [ ] **Entity 3: LabTestWorksheet** (`QWKS-`)
+  - [ ] `apps/quality/models/LimsManagement/LabTestWorksheets.py`
+  - [ ] `apps/quality/forms/LimsManagement/LabTestWorksheets.py`
+  - [ ] `apps/quality/views/LimsManagement/LabTestWorksheets.py`
+  - [ ] `apps/quality/urls/LimsManagement/LabTestWorksheets.py`
+  - [ ] `templates/quality/lims_management/lab_test_worksheet/list.html`
+  - [ ] `templates/quality/lims_management/lab_test_worksheet/detail.html`
+  - [ ] `templates/quality/lims_management/lab_test_worksheet/form.html`
+- [ ] **Entity 4: OosInvestigation** (`QOOS-`)
+  - [ ] `apps/quality/models/LimsManagement/OosInvestigations.py`
+  - [ ] `apps/quality/forms/LimsManagement/OosInvestigations.py`
+  - [ ] `apps/quality/views/LimsManagement/OosInvestigations.py`
+  - [ ] `apps/quality/urls/LimsManagement/OosInvestigations.py`
+  - [ ] `templates/quality/lims_management/oos_investigation/list.html`
+  - [ ] `templates/quality/lims_management/oos_investigation/detail.html`
+  - [ ] `templates/quality/lims_management/oos_investigation/form.html`
+- [ ] **Dedicated LIMS Command Center Dashboard**
+  - [ ] `apps/quality/views/LimsManagement/LimsDashboard.py`
+  - [ ] `apps/quality/urls/LimsManagement/LimsDashboard.py`
+  - [ ] `templates/quality/lims_management/lims_dashboard.html`
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all models in `apps/quality/models/__init__.py`
+- [ ] Re-export all forms in `apps/quality/forms/__init__.py`
+- [ ] Re-export all views in `apps/quality/views/__init__.py`
+- [ ] Wire URL routes in `apps/quality/urls/__init__.py`
+- [ ] Register all 4 models in `apps/quality/admin.py`
+- [ ] Extend `apps/quality/management/commands/seed_quality.py` with 12.19 seed data
+- [ ] Wire `LIVE_LINKS["12.19"]` in `apps/core/navigation.py`
+- [ ] Run `makemigrations quality`
+- [ ] Run `migrate`
+- [ ] Run `seed_quality` twice (idempotency check)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] Execute smoke test verifying all URLs return 200/302, content checks pass, and cross-tenant IDOR returns 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] `code-reviewer` review
+- [ ] `explorer` review
+- [ ] `frontend-reviewer` review
+- [ ] `performance-reviewer` review
+- [ ] `qa-smoke-tester` review
+- [ ] `security-reviewer` review
+- [ ] Compile and deduplicate findings into `.claude/tasks/review-quality-12.19.md`
+
+### Phase 5: Code Fixer
+- [ ] Hand findings to code fixer, resolve Critical, Important, and Minor items one by one.
+
+### Phase 6: Automated Test Suite
+- [ ] Update `tests/conftest.py` with 12.19 fixtures
+- [ ] `tests/test_lims_models.py`
+- [ ] `tests/test_lims_forms.py`
+- [ ] `tests/test_lims_views.py`
+- [ ] `tests/test_lims_security.py`
+- [ ] Run full pytest suite unfiltered.
+
+### Phase 7: Skill & Documentation Closeout
+- [ ] Update `.claude/skills/quality/SKILL.md` with 12.19 details
+- [ ] Update `README.md` marking 12.19 complete
+- [ ] Document gap register in `.agents/tasks/gaps-quality-12.19.md`
+- [ ] Complete close-out section in `.claude/tasks/todo.md`
+
+---
+
 # Sub-module 12.17: Regulatory Compliance & Submissions (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.17.md` (2026-11-21)
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 through 12.16.
