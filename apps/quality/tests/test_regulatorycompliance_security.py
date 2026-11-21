@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 from apps.core.models import AuditLog
+from apps.quality.models import RegulatorySubmission
 
 
 @pytest.mark.django_db
