@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Validation Protocols (IQ/OQ/PQ) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_validation_dashboard' %}">Process Validation</a>
+            <span class="sep">/</span>
+            <span>Protocols</span>
+        </div>
+        <h1 class="page-title">Validation Protocols (IQ/OQ/PQ)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:validation_protocol_export' %}?{{ query_string }}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export CSV
+        </a>
+        <a href="{% url 'quality:validation_protocol_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Protocol
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-check"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Protocols</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="play-circle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Executions</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Final Approved</div>
+            <div class="stat-value">{{ completed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Milestone Overdue</div>
+            <div class="stat-value">{{ overdue_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+            <div>
+                <label for="q" class="form-label text-xs">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" placeholder="Protocol #, title, tag..." class="form-input">
+            </div>
+            <div>
+                <label for="stage" class="form-label text-xs">Stage</label>
+                <select name="stage" id="stage" class="form-select">
+                    <option value="">All Stages</option>
+                    {% for val, label in stage_choices %}
+                    <option value="{{ val }}" {% if request.GET.stage == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="target_type" class="form-label text-xs">Target Type</label>
+                <select name="target_type" id="target_type" class="form-select">
+                    <option value="">All Target Types</option>
+                    {% for val, label in target_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.target_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status" class="form-label text-xs">Lifecycle Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="department" class="form-label text-xs">Department</label>
+                <select name="department" id="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk }}" {% if request.GET.department == dept.pk|stringformat:"d" %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                {% if search_query or request.GET.stage or request.GET.target_type or request.GET.status or request.GET.department %}
+                <a href="{% url 'quality:validation_protocol_list' %}" class="btn btn-outline text-slate-500 hover:text-slate-700" title="Clear Filters" aria-label="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Protocol & Stage</th>
+                    <th>Target / Asset</th>
+                    <th>Test Runs</th>
+                    <th>Status</th>
+                    <th>Milestone Due</th>
+                    <th>Lead Author</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in page_obj %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'quality:validation_protocol_detail' p.pk %}" class="text-blue-600 hover:underline">
+                            {{ p.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ p.title }}</div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="badge {{ p.stage_css }}">{{ p.get_protocol_stage_display }}</span>
+                            <span class="text-xs text-slate-500">{{ p.get_target_type_display }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if p.equipment_tag %}
+                        <div class="text-sm font-mono text-slate-800">{{ p.equipment_tag }}</div>
+                        {% endif %}
+                        {% if p.process_name %}
+                        <div class="text-xs text-slate-500">{{ p.process_name }}</div>
+                        {% endif %}
+                        {% if not p.equipment_tag and not p.process_name %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium">{{ p.test_runs_completed }} / {{ p.test_runs_planned }} runs</div>
+                        <div class="w-24 bg-slate-200 rounded-full h-1.5 mt-1">
+                            <div class="bg-blue-600 h-1.5 rounded-full" style="width: {{ p.progress_percentage }}%"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ p.status_css }}">{{ p.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {% if p.target_completion_date %}
+                        <span class="{% if p.is_overdue %}text-red-600 font-semibold{% else %}text-slate-700{% endif %}">
+                            {{ p.target_completion_date|date:"Y-m-d" }}
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-700">{{ p.lead_author.get_full_name|default:p.lead_author.username }}</span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'quality:validation_protocol_detail' p.pk %}" class="btn-icon" title="View Protocol">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'quality:validation_protocol_edit' p.pk %}" class="btn-icon" title="Edit Protocol">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'quality:validation_protocol_delete' p.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete protocol {{ p.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete Protocol">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="file-check" class="empty-icon"></i>
+                            <div class="empty-title">No Validation Protocols Found</div>
+                            <div class="empty-desc">Get started by creating your first IQ, OQ, PQ, or CPV validation protocol.</div>
+                            <a href="{% url 'quality:validation_protocol_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i> New Protocol
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} protocols
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page=1{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">First</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-outline btn-sm">Last</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
