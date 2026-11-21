@@ -12,16 +12,16 @@
 
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
-| **Critical** | 2 | 2 | 0 | 0 |
+| **Critical** | 2 | 1 | 1 | 0 |
 | **Important** | 9 | 9 | 0 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 25 | 0 | 0 |
+| **Total** | 25 | 24 | 1 | 0 |
 
 ---
 
 ## Critical Findings
 
-- [ ] **C1: Unbounded In-Memory QuerySet Evaluation and Missing `.iterator()` in All 4 CSV Exports**
+- [x] **C1: Unbounded In-Memory QuerySet Evaluation and Missing `.iterator()` in All 4 CSV Exports**
   - **Files**:
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:198`
     - `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py:216`
