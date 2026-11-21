@@ -99,7 +99,7 @@
                     </div>
                     <div>
                         <div class="text-xs font-semibold uppercase text-slate-500">Target / Nominal</div>
-                        <div class="text-lg font-bold text-blue-700 font-mono">{{ capability_study.target_nominal|default:"None" }} {{ capability_study.unit_of_measure }}</div>
+                        <div class="text-lg font-bold text-blue-700 font-mono">{% if capability_study.target_nominal %}{{ capability_study.target_nominal }} {{ capability_study.unit_of_measure }}{% else %}—{% endif %}</div>
                     </div>
                     <div>
                         <div class="text-xs font-semibold uppercase text-slate-500">Upper Spec Limit (USL)</div>
