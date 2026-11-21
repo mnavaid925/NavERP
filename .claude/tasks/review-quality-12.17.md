@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 12 | 2 | 0 |
-| **Total** | 25 | 12 | 13 | 0 |
+| **Minor** | 14 | 11 | 3 | 0 |
+| **Total** | 25 | 11 | 14 | 0 |
 
 ---
 
@@ -132,7 +132,7 @@
   - **Issue**: `technical_dossier` and `linked_inspection` are rendered as plain text instead of links to their detail pages.
   - **Fix**: Hyperlink to `quality:controlled_document_detail` and `quality:regulatory_inspection_host_detail`.
 
-- [ ] **M3: Unused Imports in Views and Models**
+- [x] **M3: Unused Imports in Views and Models**
   - **Files**:
     - `apps/quality/models/RegulatorySubmissions/ProductRegistrations.py:1`
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:8, 9`
