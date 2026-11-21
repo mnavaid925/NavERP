@@ -55,7 +55,7 @@
 
 ## Important Findings
 
-- [ ] **[I1] Falsy `Decimal("0")` Comparison in `ProcessCapabilityStudy.calculate_indices()`**
+- [x] **[I1] Falsy `Decimal("0")` Comparison in `ProcessCapabilityStudy.calculate_indices()`** — fixed in 060b555f
   - **Location**: `apps/quality/models/ProcessValidation/ProcessCapabilityStudies.py:182`
   - **Issue**: `target_index = self.cpk_index or self.ppk_index` treats `Decimal("0.000")` as falsy, falling back to `ppk_index` when `cpk_index` is zero.
   - **Fix**: Use `self.cpk_index if self.cpk_index is not None else self.ppk_index`.
