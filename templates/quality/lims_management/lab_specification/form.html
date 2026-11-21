@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Specification {{ specification.number }}{% else %}New Analytical Specification{% endif %} — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lab_specification_list' %}" class="hover:underline">Lab Specifications</a>
+        <span class="mx-1">/</span>
+        <span>{% if is_edit %}Edit {{ specification.number }}{% else %}New Specification{% endif %}</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="book-open-check" class="w-6 h-6 text-blue-600"></i>
+        {% if is_edit %}Edit Specification: {{ specification.title }}{% else %}Author Analytical Specification & Method Limits{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Define product acceptance criteria, numerical tolerance limits, analytical methods, and method validation records.
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Identification & Product Alignment -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="tag" class="w-4 h-4 text-blue-600"></i>
+          1. Specification Identification & Product Information
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.title.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Specification Title <span class="text-red-500">*</span></label>
+            {{ form.title }}
+            {% if form.title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.specification_type.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Specification Type <span class="text-red-500">*</span></label>
+            {{ form.specification_type }}
+            {% if form.specification_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.specification_type.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.status.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lifecycle Status <span class="text-red-500">*</span></label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.product_code.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Product / Item Code <span class="text-red-500">*</span></label>
+            {{ form.product_code }}
+            {% if form.product_code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.product_code.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.product_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Product / Material Name <span class="text-red-500">*</span></label>
+            {{ form.product_name }}
+            {% if form.product_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.product_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.version.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Version <span class="text-red-500">*</span></label>
+            {{ form.version }}
+            {% if form.version.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.version.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.test_category.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Test Category <span class="text-red-500">*</span></label>
+            {{ form.test_category }}
+            {% if form.test_category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.test_category.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Method Reference & SOP Link -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="file-check" class="w-4 h-4 text-blue-600"></i>
+          2. Analytical Method Reference & Standard Operating Procedure
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.analytical_method_number.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Analytical Method Number (Compendial / Internal)</label>
+            {{ form.analytical_method_number }}
+            <p class="text-xs text-slate-500 mt-0.5">e.g. AM-QC-401, USP &lt;621&gt;, EP 2.2.29.</p>
+            {% if form.analytical_method_number.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.analytical_method_number.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.sop_document.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Governing Controlled SOP Document</label>
+            {{ form.sop_document }}
+            {% if form.sop_document.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sop_document.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Acceptance Criteria & Limits -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+          3. Acceptance Limits & Acceptance Criteria
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div class="form-group sm:col-span-3">
+            <label for="{{ form.target_parameter_name.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Primary Parameter Name <span class="text-red-500">*</span></label>
+            {{ form.target_parameter_name }}
+            <p class="text-xs text-slate-500 mt-0.5">e.g. Assay Purity, Dissolution Rate (Q at 45 min), Residual Solvents, Endotoxin.</p>
+            {% if form.target_parameter_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_parameter_name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-1">
+            <label for="{{ form.parameter_unit.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Parameter Unit</label>
+            {{ form.parameter_unit }}
+            <p class="text-xs text-slate-500 mt-0.5">%, pH, mg/mL, EU/mL, ppm</p>
+            {% if form.parameter_unit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.parameter_unit.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-1">
+            <label for="{{ form.lower_limit.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Lower Limit (LSL)</label>
+            {{ form.lower_limit }}
+            {% if form.lower_limit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.lower_limit.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-1">
+            <label for="{{ form.target_value.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Target / Nominal Value</label>
+            {{ form.target_value }}
+            {% if form.target_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_value.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-1">
+            <label for="{{ form.upper_limit.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Upper Limit (USL)</label>
+            {{ form.upper_limit }}
+            {% if form.upper_limit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.upper_limit.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-4">
+            <label for="{{ form.text_acceptance_criteria.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Qualitative Acceptance Criteria</label>
+            {{ form.text_acceptance_criteria }}
+            <p class="text-xs text-slate-500 mt-0.5">e.g. Clear, colorless liquid free from visible particulates; conforms to FT-IR reference standard.</p>
+            {% if form.text_acceptance_criteria.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.text_acceptance_criteria.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Method Validation & Governance -->
+      <div>
+        <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+          <i data-lucide="calendar" class="w-4 h-4 text-blue-600"></i>
+          4. Validation & Periodic Review Dates
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="form-group">
+            <label for="{{ form.method_validation_reference.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Method Validation Report #</label>
+            {{ form.method_validation_reference }}
+            {% if form.method_validation_reference.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.method_validation_reference.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.method_validation_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Validation Date</label>
+            {{ form.method_validation_date }}
+            {% if form.method_validation_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.method_validation_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.effective_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Effective Date</label>
+            {{ form.effective_date }}
+            {% if form.effective_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.effective_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.review_due_date.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Review Due Date</label>
+            {{ form.review_due_date }}
+            {% if form.review_due_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.review_due_date.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.approved_by.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Approved By (QA / Lab Manager)</label>
+            {{ form.approved_by }}
+            {% if form.approved_by.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.approved_by.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group sm:col-span-2">
+            <label for="{{ form.notes.id_for_label }}" class="form-label text-xs font-semibold text-slate-700">Notes & History</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'quality:lab_specification_detail' specification.pk %}{% else %}{% url 'quality:lab_specification_list' %}{% endif %}" class="btn btn-outline text-sm">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary text-sm flex items-center gap-1.5">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>{% if is_edit %}Save Changes{% else %}Save Specification{% endif %}</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
