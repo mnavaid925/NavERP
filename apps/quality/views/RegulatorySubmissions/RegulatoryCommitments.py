@@ -13,6 +13,7 @@ from apps.core.decorators import tenant_admin_required
 from apps.core.models import Party
 from apps.core.utils import write_audit_log
 from apps.quality.forms.RegulatorySubmissions.RegulatoryCommitments import RegulatoryCommitmentForm
+from apps.quality.models.AuditManagement.RegulatoryInspectionHosts import RegulatoryInspectionHost
 from apps.quality.models.RegulatorySubmissions.ProductRegistrations import ProductRegistration
 from apps.quality.models.RegulatorySubmissions.RegulatoryCommitments import RegulatoryCommitment
 from apps.quality.models.RegulatorySubmissions.RegulatorySubmissions import RegulatorySubmission
@@ -131,6 +132,15 @@ def regulatory_commitment_create(request):
         if reg:
             initial_data["linked_registration"] = reg
             initial_data["regulatory_agency"] = reg.regulatory_authority
+
+    insp_id = request.GET.get("inspection")
+    if insp_id and insp_id.isdigit():
+        insp = RegulatoryInspectionHost.objects.filter(tenant=request.tenant, pk=int(insp_id)).first()
+        if insp:
+            initial_data["linked_inspection"] = insp
+            agency_party = Party.objects.filter(tenant=request.tenant, name__icontains=insp.agency_name).first()
+            if agency_party:
+                initial_data["regulatory_agency"] = agency_party
 
     if request.method == "POST":
         form = RegulatoryCommitmentForm(request.POST, tenant=request.tenant)
