@@ -162,6 +162,28 @@ def cleaning_validation_export(request):
         "analytical_lead", "qa_approver", "validation_protocol", "cleaning_sop"
     )
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(title__icontains=q)
+            | Q(equipment_train_tag__icontains=q)
+            | Q(target_residue__icontains=q)
+            | Q(cleaning_agent_used__icontains=q)
+        )
+
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(cleaning_status=status_filter)
+
+    method_filter = request.GET.get("method", "").strip()
+    if method_filter:
+        qs = qs.filter(analytical_method=method_filter)
+
+    basis_filter = request.GET.get("basis", "").strip()
+    if basis_filter:
+        qs = qs.filter(calculation_basis=basis_filter)
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="cleaning_validations.csv"'
     response["X-Content-Type-Options"] = "nosniff"
