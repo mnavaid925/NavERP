@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Assessment {{ assessment.number }}{% else %}New Data Integrity Assessment{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_assessment_list' %}">ALCOA+ Assessments</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ assessment.number }}{% else %}New Assessment{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Data Integrity Assessment — {{ assessment.number }}{% else %}New ALCOA+ Data Integrity Assessment (DIRA){% endif %}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6 max-w-4xl">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200 p-4">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-red-700">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Assessment Scope & System Context</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Assessment Title *</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.assessment_scope.id_for_label }}">Scope Evaluated *</label>
+                {{ form.assessment_scope }}
+                {% if form.assessment_scope.errors %}<div class="form-error">{{ form.assessment_scope.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.system.id_for_label }}">Computerized System</label>
+                {{ form.system }}
+                {% if form.system.errors %}<div class="form-error">{{ form.system.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.org_unit.id_for_label }}">Operational Unit</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Assessment Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.assessment_date.id_for_label }}">Assessment Date</label>
+                {{ form.assessment_date }}
+                {% if form.assessment_date.errors %}<div class="form-error">{{ form.assessment_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.next_review_due.id_for_label }}">Next Review Due</label>
+                {{ form.next_review_due }}
+                {% if form.next_review_due.errors %}<div class="form-error">{{ form.next_review_due.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lead_assessor.id_for_label }}">Lead Assessor</label>
+                {{ form.lead_assessor }}
+                {% if form.lead_assessor.errors %}<div class="form-error">{{ form.lead_assessor.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.qa_reviewer.id_for_label }}">QA Reviewer</label>
+                {{ form.qa_reviewer }}
+                {% if form.qa_reviewer.errors %}<div class="form-error">{{ form.qa_reviewer.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">ALCOA+ 9-Dimension Compliance Ratings</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.attributable_rating.id_for_label }}">Attributable (A) *</label>
+                {{ form.attributable_rating }}
+                {% if form.attributable_rating.errors %}<div class="form-error">{{ form.attributable_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.legible_rating.id_for_label }}">Legible (L) *</label>
+                {{ form.legible_rating }}
+                {% if form.legible_rating.errors %}<div class="form-error">{{ form.legible_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.contemporaneous_rating.id_for_label }}">Contemporaneous (C) *</label>
+                {{ form.contemporaneous_rating }}
+                {% if form.contemporaneous_rating.errors %}<div class="form-error">{{ form.contemporaneous_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.original_rating.id_for_label }}">Original (O) *</label>
+                {{ form.original_rating }}
+                {% if form.original_rating.errors %}<div class="form-error">{{ form.original_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.accurate_rating.id_for_label }}">Accurate (A) *</label>
+                {{ form.accurate_rating }}
+                {% if form.accurate_rating.errors %}<div class="form-error">{{ form.accurate_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.complete_rating.id_for_label }}">Complete (+) *</label>
+                {{ form.complete_rating }}
+                {% if form.complete_rating.errors %}<div class="form-error">{{ form.complete_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.consistent_rating.id_for_label }}">Consistent (+) *</label>
+                {{ form.consistent_rating }}
+                {% if form.consistent_rating.errors %}<div class="form-error">{{ form.consistent_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.enduring_rating.id_for_label }}">Enduring (+) *</label>
+                {{ form.enduring_rating }}
+                {% if form.enduring_rating.errors %}<div class="form-error">{{ form.enduring_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.available_rating.id_for_label }}">Available (+) *</label>
+                {{ form.available_rating }}
+                {% if form.available_rating.errors %}<div class="form-error">{{ form.available_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-3">
+                <label class="form-label" for="{{ form.overall_risk_level.id_for_label }}">Overall Data Integrity Risk Level *</label>
+                {{ form.overall_risk_level }}
+                {% if form.overall_risk_level.errors %}<div class="form-error">{{ form.overall_risk_level.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Vulnerabilities, Remediation & Escalations</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.vulnerabilities_summary.id_for_label }}">Identified Vulnerabilities & Gaps</label>
+                {{ form.vulnerabilities_summary }}
+                {% if form.vulnerabilities_summary.errors %}<div class="form-error">{{ form.vulnerabilities_summary.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.remediation_plan.id_for_label }}">Remediation Action Plan & Controls</label>
+                {{ form.remediation_plan }}
+                {% if form.remediation_plan.errors %}<div class="form-error">{{ form.remediation_plan.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.linked_capa.id_for_label }}">Linked CAPA Investigation</label>
+                {{ form.linked_capa }}
+                {% if form.linked_capa.errors %}<div class="form-error">{{ form.linked_capa.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.linked_ncr.id_for_label }}">Linked Non-Conformance (NCR)</label>
+                {{ form.linked_ncr }}
+                {% if form.linked_ncr.errors %}<div class="form-error">{{ form.linked_ncr.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.comments.id_for_label }}">General Comments & Notes</label>
+                {{ form.comments }}
+                {% if form.comments.errors %}<div class="form-error">{{ form.comments.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-4">
+        <button type="submit" class="btn btn-primary">
+            {% if is_edit %}Save Changes{% else %}Create Assessment{% endif %}
+        </button>
+        <a href="{% if is_edit %}{% url 'quality:data_integrity_assessment_detail' assessment.pk %}{% else %}{% url 'quality:data_integrity_assessment_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</form>
+{% endblock %}
