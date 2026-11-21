@@ -149,6 +149,8 @@
                             Overdue by {{ item.days_remaining|stringformat:"d"|slice:"1:" }}d
                             {% elif item.status == "agency_accepted" %}
                             Completed
+                            {% elif item.status == "waived" %}
+                            Waived
                             {% else %}
                             in {{ item.days_remaining }} days
                             {% endif %}
