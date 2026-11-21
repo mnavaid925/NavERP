@@ -74,11 +74,11 @@
     </div>
 
     <div class="stat-card card p-4 flex items-center gap-4">
-      <div class="stat-icon {% if active_recalls > 0 %}red{% else %}slate{% endif %} p-3 rounded-lg {% if active_recalls > 0 %}bg-red-50 text-red-600{% else %}bg-slate-50 text-slate-600{% endif %}">
+      <div class="stat-icon {% if active_recalls > 0 %}orange{% else %}slate{% endif %} p-3 rounded-lg {% if active_recalls > 0 %}bg-orange-50 text-orange-600{% else %}bg-slate-50 text-slate-600{% endif %}">
         <i data-lucide="alert-octagon" class="w-6 h-6"></i>
       </div>
       <div>
-        <div class="text-2xl font-bold {% if active_recalls > 0 %}text-red-600{% else %}text-slate-900{% endif %}">
+        <div class="text-2xl font-bold {% if active_recalls > 0 %}text-orange-600{% else %}text-slate-900{% endif %}">
           {{ active_recalls }}
         </div>
         <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Active Recalls</div>
