@@ -70,7 +70,7 @@
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon {% if cleaning_validation.cleaning_status == 'validated_pass' %}green{% elif cleaning_validation.cleaning_status == 'failed_recleaning' %}red{% elif cleaning_validation.cleaning_status == 'sampling_in_progress' or cleaning_validation.cleaning_status == 'analytical_testing' %}orange{% else %}slate{% endif %}">
+        <div class="stat-icon {% if cleaning_validation.cleaning_status == 'validated_pass' %}green{% elif cleaning_validation.cleaning_status == 'failed_recleaning' %}orange{% elif cleaning_validation.cleaning_status == 'sampling_in_progress' or cleaning_validation.cleaning_status == 'analytical_testing' %}orange{% else %}slate{% endif %}">
             <i data-lucide="check-circle-2"></i>
         </div>
         <div>
