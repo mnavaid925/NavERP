@@ -20,7 +20,7 @@ def process_validation_dashboard(request):
         active=Count("id", filter=Q(status__in=["in_review", "approved_for_execution", "in_execution"])),
         completed=Count("id", filter=Q(status__in=["execution_completed", "final_approved"])),
         overdue=Count("id", filter=Q(target_completion_date__lt=today) & ~Q(status__in=["final_approved", "rejected", "superseded"])),
-        reval_overdue=Count("id", filter=Q(revalidation_due_date__lt=today)),
+        reval_overdue=Count("id", filter=Q(revalidation_due_date__lt=today) & ~Q(status__in=["rejected", "superseded"])),
     )
 
     capability_stats = ProcessCapabilityStudy.objects.filter(tenant=tenant).aggregate(
