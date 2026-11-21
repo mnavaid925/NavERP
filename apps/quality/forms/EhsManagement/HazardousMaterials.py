@@ -89,7 +89,7 @@ class HazardousMaterialForm(TenantModelForm):
             ).order_by("name")
             self.fields["sds_document"].queryset = ControlledDocument.objects.filter(
                 tenant=self.tenant
-            ).order_by("document_number", "title")
+            ).order_by("number", "title")
             self.fields["supplier"].queryset = Party.objects.filter(
                 tenant=self.tenant
             ).order_by("name")
