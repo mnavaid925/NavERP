@@ -175,15 +175,15 @@
                         {% endif %}
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'quality:cleaning_validation_detail' c.pk %}" class="btn-icon" title="View Study">
+                        <a href="{% url 'quality:cleaning_validation_detail' c.pk %}" class="btn-icon" title="View Study" aria-label="View Study {{ c.number }}">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'quality:cleaning_validation_edit' c.pk %}" class="btn-icon" title="Edit Study">
+                        <a href="{% url 'quality:cleaning_validation_edit' c.pk %}" class="btn-icon" title="Edit Study" aria-label="Edit Study {{ c.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'quality:cleaning_validation_delete' c.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete cleaning study {{ c.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete Study">
+                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete Study" aria-label="Delete Study {{ c.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
