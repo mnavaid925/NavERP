@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}OOS Investigations — Laboratory Information Management (LIMS) — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <span>OOS Investigations</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+        Out-of-Specification (OOS) Investigations
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        FDA/MHRA compliant Phase I laboratory error checks, Phase II manufacturing root cause investigations, hypothesis testing, and controlled retesting protocols.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:lims_dashboard' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>LIMS Command Center</span>
+      </a>
+      <a href="{% url 'quality:oos_investigation_create' %}" class="btn btn-danger flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Log OOS Event</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Card -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+      <div class="form-group md:col-span-2">
+        <label for="q" class="form-label text-xs font-semibold text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            name="q"
+            id="q"
+            value="{{ query }}"
+            placeholder="Search by title, OOS #, sample #, worksheet #, cause..."
+            class="form-input w-full pl-9"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="investigation_phase" class="form-label text-xs font-semibold text-slate-600 mb-1">Investigation Phase</label>
+        <select name="investigation_phase" id="investigation_phase" class="form-select w-full">
+          <option value="">All Phases</option>
+          {% for val, label in phase_choices %}
+            <option value="{{ val }}" {% if selected_phase == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="severity" class="form-label text-xs font-semibold text-slate-600 mb-1">Severity</label>
+        <select name="severity" id="severity" class="form-select w-full">
+          <option value="">All Severities</option>
+          {% for val, label in severity_choices %}
+            <option value="{{ val }}" {% if selected_severity == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group flex gap-2">
+        <div class="flex-1">
+          <label for="status" class="form-label text-xs font-semibold text-slate-600 mb-1">Status</label>
+          <select name="status" id="status" class="form-select w-full">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary self-end">Filter</button>
+        {% if query or selected_phase or selected_severity or selected_status %}
+          <a href="{% url 'quality:oos_investigation_list' %}" class="btn btn-outline self-end" title="Clear Filters">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Investigations Table -->
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table w-full text-left text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+            <th class="py-3 px-4">OOS ID</th>
+            <th class="py-3 px-4">Title / Triggering Worksheet</th>
+            <th class="py-3 px-4">Sample / Lot</th>
+            <th class="py-3 px-4">Severity</th>
+            <th class="py-3 px-4">Phase</th>
+            <th class="py-3 px-4">Lab Error Found</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for inv in investigations %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-slate-900">
+                <a href="{% url 'quality:oos_investigation_detail' inv.pk %}" class="text-red-600 hover:underline">
+                  {{ inv.number }}
+                </a>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ inv.title }}</div>
+                <div class="text-xs text-slate-500 font-mono">
+                  WS: <a href="{% url 'quality:lab_test_worksheet_detail' inv.test_worksheet.pk %}" class="text-blue-600 hover:underline">{{ inv.test_worksheet.number }}</a>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-xs font-mono">
+                <a href="{% url 'quality:lab_sample_detail' inv.sample.pk %}" class="text-blue-600 hover:underline">
+                  {{ inv.sample.number }}
+                </a>
+                <div class="text-slate-500 font-sans truncate max-w-xs">{{ inv.sample.sample_name }}</div>
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ inv.get_severity_badge }}">{{ inv.get_severity_display }}</span>
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ inv.get_phase_badge }}">{{ inv.get_investigation_phase_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-xs">
+                {% if inv.lab_error_identified %}
+                  <span class="badge badge-amber font-semibold">Yes — Lab Error</span>
+                {% elif inv.phase_1_completed %}
+                  <span class="text-slate-600">Lab Error Ruled Out</span>
+                {% else %}
+                  <span class="text-slate-400">Phase I Incomplete</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ inv.get_status_badge }}">{{ inv.get_status_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-right table-actions">
+                <div class="flex items-center justify-end gap-1">
+                  {% if inv.status != "closed" %}
+                    <form method="post" action="{% url 'quality:oos_investigation_close' inv.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-icon text-green-600 hover:bg-green-50" title="Close & Approve">
+                        <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                  <a href="{% url 'quality:oos_investigation_detail' inv.pk %}" class="btn btn-icon" title="View Detail">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'quality:oos_investigation_edit' inv.pk %}" class="btn btn-icon" title="Edit">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  {% if inv.status != "closed" %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'quality:oos_investigation_delete' inv.pk %}" class="inline" onsubmit="return confirm('Delete OOS investigation {{ inv.number|escapejs }}?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                          <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" class="text-center py-12">
+                <div class="empty-state flex flex-col items-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="shield-check" class="w-6 h-6 text-green-500"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800">No OOS Investigations Found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">No out-of-specification events currently open across analytical test worksheets.</p>
+                  <a href="{% url 'quality:oos_investigation_create' %}" class="btn btn-danger text-sm">
+                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Log OOS Investigation
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+      <div class="p-4 border-t border-slate-200 flex items-center justify-between">
+        <div class="text-xs text-slate-500">
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} investigations
+        </div>
+        <div class="pagination flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_phase %}&investigation_phase={{ selected_phase }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">Previous</a>
+          {% endif %}
+          <span class="py-1 px-3 text-xs text-slate-600 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_phase %}&investigation_phase={{ selected_phase }}{% endif %}{% if selected_severity %}&severity={{ selected_severity }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">Next</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
