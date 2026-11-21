@@ -8,6 +8,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.quality.forms.RegulatorySubmissions.PostMarketSurveillanceReports import PostMarketSurveillanceReportForm
 from apps.quality.models.RegulatorySubmissions.PostMarketSurveillanceReports import PostMarketSurveillanceReport
@@ -157,6 +158,7 @@ def post_market_surveillance_report_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def post_market_surveillance_report_delete(request, pk):
     report = quality_object(request, PostMarketSurveillanceReport, pk)
     num = report.number
