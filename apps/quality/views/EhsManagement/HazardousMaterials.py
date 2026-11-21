@@ -143,6 +143,9 @@ def hazardous_material_update(request, pk):
     return render(request, "quality/ehsmanagement/hazardous_material/form.html", context)
 
 
+hazardous_material_edit = hazardous_material_update
+
+
 @login_required
 @require_POST
 def hazardous_material_delete(request, pk):
