@@ -63,7 +63,7 @@ def post_market_surveillance_report_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    registrations = ProductRegistration.objects.filter(tenant=request.tenant).order_by("product_name")
+    registrations = ProductRegistration.objects.filter(tenant=request.tenant).only("id", "product_name", "jurisdiction_country").order_by("product_name")
 
     context = {
         "page_obj": page_obj,
