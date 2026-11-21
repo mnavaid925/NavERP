@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Electronic Record Policies — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <span>Electronic Record Policies</span>
+        </div>
+        <h1 class="page-title">21 CFR Part 11 Electronic Record Policies</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:electronic_record_policy_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Policy
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Record Policies</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active & Enforced</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="file-badge"></i>
+        </div>
+        <div>
+            <div class="stat-label">21 CFR Part 11 Regulated</div>
+            <div class="stat-value">{{ part11_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="lock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Legal Hold Freeze</div>
+            <div class="stat-value">{{ legal_hold_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" placeholder="Policy title, record type, model..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="category">Category</label>
+                <select name="category" id="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if category_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:electronic_record_policy_list' %}" class="btn btn-outline">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Policy #</th>
+                        <th>Record Type Name</th>
+                        <th>Category</th>
+                        <th>Part 11</th>
+                        <th>Signature Required</th>
+                        <th>Retention</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for policy in policies %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:electronic_record_policy_detail' policy.pk %}" class="font-medium text-brand">
+                                {{ policy.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium">{{ policy.record_type_name }}</div>
+                            <div class="text-xs text-muted">{{ policy.title }}</div>
+                        </td>
+                        <td>
+                            <span class="badge badge-slate">{{ policy.get_record_category_display }}</span>
+                        </td>
+                        <td>
+                            {% if policy.is_part_11_regulated %}
+                            <span class="badge badge-info">21 CFR Part 11</span>
+                            {% else %}
+                            <span class="badge badge-muted">Non-Part 11</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if policy.requires_signature %}
+                            <span class="badge badge-amber">{{ policy.get_signature_requirement_display }}</span>
+                            {% else %}
+                            <span class="badge badge-muted">None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-sm">{{ policy.retention_period_years }} yrs</span>
+                        </td>
+                        <td>
+                            {% if policy.status == 'active' %}
+                            <span class="badge badge-green">Active</span>
+                            {% elif policy.status == 'under_revision' %}
+                            <span class="badge badge-amber">Under Revision</span>
+                            {% elif policy.status == 'archived' %}
+                            <span class="badge badge-muted">Archived</span>
+                            {% else %}
+                            <span class="badge badge-slate">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions justify-end">
+                                <a href="{% url 'quality:electronic_record_policy_detail' policy.pk %}" class="btn btn-icon" title="View Details">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'quality:electronic_record_policy_edit' policy.pk %}" class="btn btn-icon" title="Edit">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'quality:electronic_record_policy_delete' policy.pk %}" onsubmit="return confirm('Are you sure you want to delete policy {{ policy.number }}?');" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red" title="Delete">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <i data-lucide="shield-alert" class="empty-state-icon"></i>
+                                <h3 class="empty-state-title">No Electronic Record Policies Found</h3>
+                                <p class="empty-state-desc">Create your first 21 CFR Part 11 and EU Annex 11 electronic record governance policy.</p>
+                                <a href="{% url 'quality:electronic_record_policy_create' %}" class="btn btn-primary mt-4">
+                                    <i data-lucide="plus"></i> New Policy
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="pagination">
+            <span class="pagination-info">
+                Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ total_count }}
+            </span>
+            <div class="pagination-links">
+                {% if page_obj.has_previous %}
+                <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if q %}&q={{ q }}{% endif %}{% if category_selected %}&category={{ category_selected }}{% endif %}{% if status_selected %}&status={{ status_selected }}{% endif %}" class="btn btn-outline btn-sm">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="btn btn-sm btn-disabled">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category_selected %}&category={{ category_selected }}{% endif %}{% if status_selected %}&status={{ status_selected }}{% endif %}" class="btn btn-outline btn-sm">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
