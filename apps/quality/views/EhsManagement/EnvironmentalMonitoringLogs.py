@@ -21,7 +21,7 @@ PAGE_SIZE = 15
 @login_required
 def environmental_monitoring_log_list(request):
     qs = quality_scope(EnvironmentalMonitoringLog.objects.all(), request).select_related(
-        "org_unit", "sampled_by", "measurement_instrument"
+        "org_unit", "sampled_by", "measurement_instrument", "verified_by"
     )
 
     q = request.GET.get("q", "").strip()
