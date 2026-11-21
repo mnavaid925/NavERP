@@ -179,7 +179,7 @@ class ProcessCapabilityStudy(TenantNumbered):
             self.cpk_index = min(cpu, cpl).quantize(Decimal("0.001"))
 
         # Determine capability status
-        target_index = self.cpk_index or self.ppk_index
+        target_index = self.cpk_index if self.cpk_index is not None else self.ppk_index
         if target_index is not None:
             if target_index >= Decimal("1.67"):
                 self.capability_determination = "highly_capable"
