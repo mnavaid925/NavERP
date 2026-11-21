@@ -208,7 +208,7 @@
             <div class="text-xs text-slate-500 uppercase font-semibold">Customer Complaint</div>
             <div class="text-sm text-slate-900 mt-0.5">
               {% if product_recall.customer_complaint %}
-                <a href="{% url 'quality:complaint_detail' product_recall.customer_complaint.pk %}" class="text-blue-600 hover:underline">
+                <a href="{% url 'quality:customer_complaint_detail' product_recall.customer_complaint.pk %}" class="text-blue-600 hover:underline">
                   {{ product_recall.customer_complaint.number }}
                 </a>
               {% else %}
