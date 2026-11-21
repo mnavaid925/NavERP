@@ -72,6 +72,14 @@ class ComputerSystemValidationForm(TenantModelForm):
 
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
+        for f in [
+            "urs_requirements_count",
+            "test_scripts_count",
+            "deviations_found_count",
+            "periodic_review_frequency_months",
+        ]:
+            if f in self.fields:
+                self.fields[f].required = False
         if self.tenant:
             user_qs = User.objects.filter(tenant=self.tenant, is_active=True).order_by("first_name", "last_name", "username")
             self.fields["system_owner"].queryset = user_qs
