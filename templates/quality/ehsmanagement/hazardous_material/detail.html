@@ -214,19 +214,19 @@
                 <!-- Diamond Representation -->
                 <div class="relative w-44 h-44 mb-4">
                     <!-- Flammability (Top - Red) -->
-                    <div class="absolute top-0 left-12 w-20 h-20 bg-red-600 border-2 border-white text-white flex flex-col items-center justify-center transform rotate-45 shadow-sm">
+                    <div class="absolute top-0 left-12 w-20 h-20 bg-red-600 border-2 border-white dark:border-slate-800 text-white flex flex-col items-center justify-center transform rotate-45 shadow-sm">
                         <span class="transform -rotate-45 text-2xl font-black">{{ hazardous_material.nfpa_flammability }}</span>
                     </div>
                     <!-- Health (Left - Blue) -->
-                    <div class="absolute top-12 left-0 w-20 h-20 bg-blue-600 border-2 border-white text-white flex flex-col items-center justify-center transform rotate-45 shadow-sm">
+                    <div class="absolute top-12 left-0 w-20 h-20 bg-blue-600 border-2 border-white dark:border-slate-800 text-white flex flex-col items-center justify-center transform rotate-45 shadow-sm">
                         <span class="transform -rotate-45 text-2xl font-black">{{ hazardous_material.nfpa_health }}</span>
                     </div>
                     <!-- Instability / Reactivity (Right - Yellow) -->
-                    <div class="absolute top-12 left-24 w-20 h-20 bg-yellow-400 border-2 border-white text-slate-900 flex flex-col items-center justify-center transform rotate-45 shadow-sm">
+                    <div class="absolute top-12 left-24 w-20 h-20 bg-yellow-400 border-2 border-white dark:border-slate-800 text-slate-900 flex flex-col items-center justify-center transform rotate-45 shadow-sm">
                         <span class="transform -rotate-45 text-2xl font-black">{{ hazardous_material.nfpa_instability }}</span>
                     </div>
                     <!-- Special Hazard (Bottom - White) -->
-                    <div class="absolute top-24 left-12 w-20 h-20 bg-white border-2 border-slate-300 text-slate-900 flex flex-col items-center justify-center transform rotate-45 shadow-sm">
+                    <div class="absolute top-24 left-12 w-20 h-20 bg-white dark:bg-slate-100 border-2 border-slate-300 dark:border-slate-800 text-slate-900 flex flex-col items-center justify-center transform rotate-45 shadow-sm">
                         <span class="transform -rotate-45 text-sm font-black uppercase">{{ hazardous_material.get_nfpa_special_hazard_display|slice:":3" }}</span>
                     </div>
                 </div>
