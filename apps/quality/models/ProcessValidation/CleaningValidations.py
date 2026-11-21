@@ -188,51 +188,69 @@ class CleaningValidation(TenantNumbered):
 
     def calculate_limits(self):
         """Calculates MACO, Swab limit, and Rinse limit using GMP regulatory formulas."""
-        limits = []
+        maco = None
 
-        # 1. 10 ppm general limit: MACO = 10 mg/kg * Batch Size (kg)
-        if self.smallest_batch_size_kg and self.smallest_batch_size_kg > Decimal("0"):
-            maco_10ppm = Decimal("10.0") * self.smallest_batch_size_kg
-            if self.calculation_basis == "ten_ppm_limit":
-                limits = [maco_10ppm]
-            else:
-                limits.append(maco_10ppm)
+        if self.calculation_basis == "ten_ppm_limit":
+            if self.smallest_batch_size_kg and self.smallest_batch_size_kg > Decimal("0"):
+                maco = Decimal("10.0") * self.smallest_batch_size_kg
 
-        # 2. Therapeutic dose limit: MACO = (Min Dose / Safety Factor) * (Smallest Batch / Max Daily Dose)
-        if (
-            self.min_daily_dose_active_mg
-            and self.max_daily_dose_subsequent_mg
-            and self.smallest_batch_size_kg
-            and self.safety_factor
-            and self.max_daily_dose_subsequent_mg > Decimal("0")
-            and self.safety_factor > Decimal("0")
-        ):
-            # Batch size in mg: smallest_batch_size_kg * 1,000,000 mg/kg
-            batch_mg = self.smallest_batch_size_kg * Decimal("1000000.0")
-            number_of_doses = batch_mg / self.max_daily_dose_subsequent_mg
-            maco_dose = (self.min_daily_dose_active_mg / self.safety_factor) * number_of_doses
-            if self.calculation_basis == "therapeutic_dose":
-                limits = [maco_dose]
-            else:
-                limits.append(maco_dose)
+        elif self.calculation_basis == "therapeutic_dose":
+            if (
+                self.min_daily_dose_active_mg
+                and self.max_daily_dose_subsequent_mg
+                and self.smallest_batch_size_kg
+                and self.safety_factor
+                and self.max_daily_dose_subsequent_mg > Decimal("0")
+                and self.safety_factor > Decimal("0")
+            ):
+                batch_mg = self.smallest_batch_size_kg * Decimal("1000000.0")
+                number_of_doses = batch_mg / self.max_daily_dose_subsequent_mg
+                maco = (self.min_daily_dose_active_mg / self.safety_factor) * number_of_doses
 
-        # 3. Toxicological PDE limit: MACO = PDE * (Smallest Batch / Max Daily Dose)
-        if (
-            self.toxicological_pde_mg_day
-            and self.max_daily_dose_subsequent_mg
-            and self.smallest_batch_size_kg
-            and self.max_daily_dose_subsequent_mg > Decimal("0")
-        ):
-            batch_mg = self.smallest_batch_size_kg * Decimal("1000000.0")
-            number_of_doses = batch_mg / self.max_daily_dose_subsequent_mg
-            maco_pde = self.toxicological_pde_mg_day * number_of_doses
-            if self.calculation_basis == "toxicological_pde":
-                limits = [maco_pde]
-            else:
-                limits.append(maco_pde)
+        elif self.calculation_basis == "toxicological_pde":
+            if (
+                self.toxicological_pde_mg_day
+                and self.max_daily_dose_subsequent_mg
+                and self.smallest_batch_size_kg
+                and self.max_daily_dose_subsequent_mg > Decimal("0")
+            ):
+                batch_mg = self.smallest_batch_size_kg * Decimal("1000000.0")
+                number_of_doses = batch_mg / self.max_daily_dose_subsequent_mg
+                maco = self.toxicological_pde_mg_day * number_of_doses
 
-        if limits:
-            self.calculated_maco_mg = min(limits).quantize(Decimal("0.0001"))
+        else:
+            # "most_stringent" (safety envelope across all available criteria)
+            limits = []
+            if self.smallest_batch_size_kg and self.smallest_batch_size_kg > Decimal("0"):
+                limits.append(Decimal("10.0") * self.smallest_batch_size_kg)
+
+            if (
+                self.min_daily_dose_active_mg
+                and self.max_daily_dose_subsequent_mg
+                and self.smallest_batch_size_kg
+                and self.safety_factor
+                and self.max_daily_dose_subsequent_mg > Decimal("0")
+                and self.safety_factor > Decimal("0")
+            ):
+                batch_mg = self.smallest_batch_size_kg * Decimal("1000000.0")
+                number_of_doses = batch_mg / self.max_daily_dose_subsequent_mg
+                limits.append((self.min_daily_dose_active_mg / self.safety_factor) * number_of_doses)
+
+            if (
+                self.toxicological_pde_mg_day
+                and self.max_daily_dose_subsequent_mg
+                and self.smallest_batch_size_kg
+                and self.max_daily_dose_subsequent_mg > Decimal("0")
+            ):
+                batch_mg = self.smallest_batch_size_kg * Decimal("1000000.0")
+                number_of_doses = batch_mg / self.max_daily_dose_subsequent_mg
+                limits.append(self.toxicological_pde_mg_day * number_of_doses)
+
+            if limits:
+                maco = min(limits)
+
+        if maco is not None:
+            self.calculated_maco_mg = maco.quantize(Decimal("0.0001"))
 
             # Swab limit: (MACO in ug / Surface Area) * Swab Area * Recovery %
             # MACO in ug = MACO in mg * 1000
