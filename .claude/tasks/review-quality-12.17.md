@@ -14,8 +14,8 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 14 | 8 | 6 | 0 |
-| **Total** | 25 | 8 | 17 | 0 |
+| **Minor** | 14 | 7 | 7 | 0 |
+| **Total** | 25 | 7 | 18 | 0 |
 
 ---
 
@@ -162,7 +162,7 @@
   - **Issue**: Renders `Expired (-5d)` instead of `Expired 5d ago`.
   - **Fix**: Strip negative sign using `|stringformat:"d"|slice:"1:"`.
 
-- [ ] **M7: Dashboard Expiring Registrations Can Crowd Out Upcoming Renewals**
+- [x] **M7: Dashboard Expiring Registrations Can Crowd Out Upcoming Renewals**
   - **File**: `apps/quality/views/RegulatorySubmissions/RegulatoryDashboard.py:33-36`
   - **Issue**: Orders by `expiration_date` ascending without filtering `expiration_date__gte=today`, crowding out upcoming renewals if historic expired records exist.
   - **Fix**: Filter `expiration_date__gte=today` (or include active/pending renewal status).
