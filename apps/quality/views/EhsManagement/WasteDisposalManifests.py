@@ -63,6 +63,8 @@ def waste_disposal_manifest_list(request):
     if "page" in query_params:
         del query_params["page"]
 
+    parties = list(Party.objects.filter(tenant=request.tenant).order_by("name"))
+
     context = {
         "waste_manifests": page_obj.object_list,
         "page_obj": page_obj,
@@ -71,8 +73,8 @@ def waste_disposal_manifest_list(request):
         "total_count": paginator.count,
         "status_choices": WasteDisposalManifest.STATUS_CHOICES,
         "manifest_type_choices": WasteDisposalManifest.MANIFEST_TYPE_CHOICES,
-        "transporters": Party.objects.filter(tenant=request.tenant).order_by("name"),
-        "tsdfs": Party.objects.filter(tenant=request.tenant).order_by("name"),
+        "transporters": parties,
+        "tsdfs": parties,
         "org_units": OrgUnit.objects.filter(tenant=request.tenant).order_by("name"),
         "query_string": query_params.urlencode(),
     }
