@@ -37622,3 +37622,247 @@ apps/quality/
 - **Navigation**: `LIVE_LINKS["12.16"]` active in `apps/core/navigation.py`.
 - **Seeder**: Idempotent demo data in `apps/quality/management/commands/seed_quality.py` (`_seed_submodule_12_16`).
 - **Test Suite**: 4 dedicated test files (`test_ehsmanagement_models.py`, `test_ehsmanagement_forms.py`, `test_ehsmanagement_views.py`, `test_ehsmanagement_security.py`) landing 49 passing tests. Full unfiltered quality test suite passing: 2,308 passed, 0 failures.
+
+
+---
+# Sub-module 12.18: Traceability & Serialization (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.18.md` (2026-11-21)
+
+> **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1–12.16.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: claims next available incremental migration (`0031_...`) (L43).
+> Free prefixes verified (0 collisions repo-wide): **`QBMR`** (`BatchRecord`), **`QUDI`** (`DeviceIdentifier`), **`QSER`** (`SerializedItem`), **`QRCL`** (`ProductRecall`).
+> Plan written from `.claude/tasks/research-quality-12.18.md` (Phase 1) and `NavERP.md` (`### 12.18 Traceability & Serialization`).
+> Package folder name: `apps/quality/{models,forms,views,urls}/TraceabilitySerialization/<Entity>.py` (`BatchRecords.py`, `DeviceIdentifiers.py`, `SerializedItems.py`, `ProductRecalls.py`, plus dedicated command center `TraceabilityDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/quality/traceabilityserialization/{batch_record,device_identifier,serialized_item,product_recall}/{list,detail,form}.html` + `templates/quality/traceabilityserialization/traceability_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`QBMR`** (`BatchRecord`), **`QUDI`** (`DeviceIdentifier`), **`QSER`** (`SerializedItem`), **`QRCL`** (`ProductRecall`), all 4 model classes, and all URL stems (`batch_record_*`, `device_identifier_*`, `serialized_item_*`, `product_recall_*`, `traceability_dashboard`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.Party` (`apps/core/models/Party.py`).
+  - SCM spine: `scm.WorkOrder` (`apps/scm/models/Manufacturing/WorkOrders.py`), `scm.Shipment` (`apps/scm/models/TransportationManagement/Shipments.py`).
+  - Module 12 siblings: `quality.ControlledDocument` (`apps/quality/models/DocumentControl/ControlledDocuments.py`), `quality.ElectronicSignatureRecord` (`apps/quality/models/DocumentControl/ElectronicSignatures.py`), `quality.NonConformanceReport` (`apps/quality/models/NonConformance/NonConformanceReports.py`), `quality.ProcessDeviation` (`apps/quality/models/NonConformance/ProcessDeviations.py`), `quality.CapaInvestigation` (`apps/quality/models/CapaManagement/CapaInvestigations.py`), `quality.FinalInspectionLot` (`apps/quality/models/FinalQuality/FinalInspectionLots.py`), `quality.CustomerComplaint` (`apps/quality/models/CustomerComplaints/CustomerComplaints.py`).
+  - Stand-in fields for unbuilt Module 5 masters (`Item`, `LotSerial`): Text fields `item_code`, `item_name`, `lot_number`, `serial_number`, `unit_of_measure`, `parent_sscc` with future migration path.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `quality.ControlledDocument`, `quality.ElectronicSignatureRecord`, `quality.NonConformanceReport`, `quality.ProcessDeviation`, `quality.CapaInvestigation`, `quality.FinalInspectionLot`, `quality.CustomerComplaint`, `scm.WorkOrder`, `scm.Shipment`, `core.Party`, `core.OrgUnit`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Regulatory Alignment (FDA DSCSA, EU FMD, FDA 21 CFR 830, EU MDR/IVDR, 21 CFR 211, 21 CFR 7, ISO 13485 §8.5.2, 21 CFR Part 11)**:
+  - Unit-level serialization and parent-child aggregation hierarchies (unit -> bundle -> carton -> pallet SSCC).
+  - GS1 standard identifiers (GTIN, SGTIN, SSCC) and medical device UDI management (Primary UDI-DI, Basic UDI-DI, GUDID/EUDAMED submission tracking).
+  - Electronic Batch Records (eBR) with component genealogy and review-by-exception checklist gating batch release.
+  - Product recall tracking with FDA recall classifications (Class I, II, III), containment reconciliation %, and mock recall drill benchmarks.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `qa_decision_at`, `commissioned_at`, `closed_at`), auto-numbers (`number`), and computed fields (`yield_percentage`, `recovery_rate_pct`) MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+---
+
+## Models (from research — 4)
+
+### 1. `BatchRecord` (`QBMR-`)
+- [ ] **File**: `apps/quality/models/TraceabilitySerialization/BatchRecords.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QBMR"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `batch_number`: `CharField(max_length=100, db_index=True)`
+  - `product_code`: `CharField(max_length=100, db_index=True)`
+  - `product_name`: `CharField(max_length=255)`
+  - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"in_production"` (13), `"production_complete"` (19), `"qa_review"` (9), `"released"` (8), `"rejected"` (8), `"quarantined"` (11) (longest: 19 <= 25)
+  - `release_status`: `CharField(max_length=25, choices=RELEASE_STATUS_CHOICES, default="pending", db_index=True)` — `"pending"` (7), `"approved_full"` (13), `"approved_concession"` (19), `"rejected"` (8), `"on_hold"` (7) (longest: 19 <= 25)
+  - `production_order_number`: `CharField(max_length=64, blank=True)`
+  - `work_order`: `ForeignKey("scm.WorkOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_batch_records")`
+  - `master_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="quality_batch_records")`
+  - `planned_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `actual_quantity`: `DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))`
+  - `unit_of_measure`: `CharField(max_length=25, default="EA")`
+  - `yield_percentage`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))`
+  - `manufacturing_date`: `DateField(null=True, blank=True)`
+  - `expiration_date`: `DateField(null=True, blank=True)`
+  - `retest_date`: `DateField(null=True, blank=True)`
+  - `supervisor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="supervised_batch_records")`
+  - `qa_reviewer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_batch_records")`
+  - `qa_decision_at`: `DateTimeField(null=True, blank=True)`
+  - `electronic_signature`: `ForeignKey("quality.ElectronicSignatureRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="batch_record_signatures")`
+  - `linked_ncr`: `ForeignKey("quality.NonConformanceReport", on_delete=models.SET_NULL, null=True, blank=True, related_name="batch_records")`
+  - `linked_deviation`: `ForeignKey("quality.ProcessDeviation", on_delete=models.SET_NULL, null=True, blank=True, related_name="batch_records")`
+  - `linked_fqc`: `ForeignKey("quality.FinalInspectionLot", on_delete=models.SET_NULL, null=True, blank=True, related_name="batch_records")`
+  - `component_genealogy`: `JSONField(default=list, blank=True)`
+  - `checklist_passed`: `BooleanField(default=False)`
+  - `is_quarantined`: `BooleanField(default=False)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Properties**:
+  - `@property can_release`: `checklist_passed and not is_quarantined and (linked_ncr is None or linked_ncr.status == "closed")`
+- [ ] **Form Exclusions**: `tenant`, `number`, `yield_percentage`, `qa_decision_at`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qbmr_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "batch_number"], name="idx_qbmr_ten_batch")` (18)
+  - `Index(fields=["tenant", "status"], name="idx_qbmr_ten_status")` (19)
+  - `Index(fields=["tenant", "release_status"], name="idx_qbmr_ten_release")` (20)
+
+### 2. `DeviceIdentifier` (`QUDI-`)
+- [ ] **File**: `apps/quality/models/TraceabilitySerialization/DeviceIdentifiers.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QUDI"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `device_name`: `CharField(max_length=255)`
+  - `model_number`: `CharField(max_length=100, blank=True)`
+  - `primary_di`: `CharField(max_length=64, db_index=True)`
+  - `issuing_agency`: `CharField(max_length=20, choices=ISSUING_AGENCY_CHOICES, default="gs1", db_index=True)` — `"gs1"` (3), `"hibcc"` (5), `"iccbba"` (6), `"other"` (5) (longest: 6 <= 20)
+  - `device_class`: `CharField(max_length=20, choices=DEVICE_CLASS_CHOICES, default="class_ii", db_index=True)` — `"class_i"` (7), `"class_iia"` (9), `"class_iib"` (9), `"class_iii"` (9), `"unclassified"` (12) (longest: 12 <= 20)
+  - `basic_udi_di`: `CharField(max_length=64, blank=True, db_index=True)`
+  - `gudid_status`: `CharField(max_length=25, choices=REGULATORY_STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"ready_to_submit"` (15), `"submitted"` (9), `"published"` (9), `"rejected"` (8) (longest: 15 <= 25)
+  - `eudamed_status`: `CharField(max_length=25, choices=REGULATORY_STATUS_CHOICES, default="draft", db_index=True)`
+  - `brand_name`: `CharField(max_length=255, blank=True)`
+  - `commercial_distribution_status`: `CharField(max_length=35, choices=DISTRIBUTION_STATUS_CHOICES, default="in_commercial_distribution", db_index=True)` — `"in_commercial_distribution"` (26), `"off_market"` (10), `"not_yet_distributed"` (20) (longest: 26 <= 35)
+  - `catalog_number`: `CharField(max_length=100, blank=True)`
+  - `barcode_format`: `CharField(max_length=25, choices=BARCODE_FORMAT_CHOICES, default="gs1_datamatrix", db_index=True)` — `"gs1_datamatrix"` (14), `"gs1_128"` (7), `"hibc_2d"` (7), `"qr_code"` (7) (longest: 14 <= 25)
+  - `is_sterile`: `BooleanField(default=False)`
+  - `contains_latex`: `BooleanField(default=False)`
+  - `is_single_use`: `BooleanField(default=True)`
+  - `mri_safety_status`: `CharField(max_length=20, choices=MRI_STATUS_CHOICES, default="mr_safe", db_index=True)` — `"mr_safe"` (7), `"mr_conditional"` (14), `"mr_unsafe"` (9), `"not_evaluated"` (13) (longest: 14 <= 20)
+  - `storage_handling_instructions`: `TextField(blank=True)`
+  - `fda_listing_number`: `CharField(max_length=64, blank=True)`
+  - `submission_date`: `DateField(null=True, blank=True)`
+  - `approval_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="device_identifiers")`
+  - `regulatory_contact`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="managed_device_identifiers")`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qudi_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "primary_di"], name="idx_qudi_ten_pdi")` (16)
+  - `Index(fields=["tenant", "gudid_status"], name="idx_qudi_ten_gudid")` (18)
+  - `Index(fields=["tenant", "eudamed_status"], name="idx_qudi_ten_euda")` (17)
+
+### 3. `SerializedItem` (`QSER-`)
+- [ ] **File**: `apps/quality/models/TraceabilitySerialization/SerializedItems.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QSER"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `serial_number`: `CharField(max_length=100, db_index=True)`
+  - `gtin_or_di`: `CharField(max_length=64, db_index=True)`
+  - `item_code`: `CharField(max_length=100, db_index=True)`
+  - `item_name`: `CharField(max_length=255)`
+  - `lot_number`: `CharField(max_length=100, db_index=True)`
+  - `batch_record`: `ForeignKey("quality.BatchRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="serialized_items")`
+  - `device_identifier`: `ForeignKey("quality.DeviceIdentifier", on_delete=models.SET_NULL, null=True, blank=True, related_name="serialized_items")`
+  - `packaging_level`: `CharField(max_length=25, choices=PACKAGING_LEVEL_CHOICES, default="unit", db_index=True)` — `"unit"` (4), `"bundle"` (6), `"carton"` (6), `"case"` (4), `"pallet"` (6) (longest: 6 <= 25)
+  - `parent_container`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="child_units")`
+  - `sscc_code`: `CharField(max_length=64, blank=True, db_index=True)`
+  - `commissioning_status`: `CharField(max_length=25, choices=COMMISSIONING_STATUS_CHOICES, default="allocated", db_index=True)` — `"allocated"` (9), `"commissioned"` (12), `"aggregated"` (10), `"shipped"` (7), `"decommissioned"` (14), `"destroyed"` (9), `"recalled"` (8) (longest: 14 <= 25)
+  - `epcis_state`: `CharField(max_length=25, choices=EPCIS_STATE_CHOICES, default="active", db_index=True)` — `"active"` (6), `"in_transit"` (10), `"delivered"` (9), `"quarantined"` (11), `"suspect"` (7) (longest: 11 <= 25)
+  - `verification_code`: `CharField(max_length=64, blank=True)`
+  - `is_cold_chain`: `BooleanField(default=False)`
+  - `temperature_limit_min`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)`
+  - `temperature_limit_max`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)`
+  - `custodian`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="custody_serialized_items")`
+  - `location_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="serialized_items")`
+  - `shipment`: `ForeignKey("scm.Shipment", on_delete=models.SET_NULL, null=True, blank=True, related_name="serialized_items")`
+  - `manufacturing_date`: `DateField(null=True, blank=True)`
+  - `expiration_date`: `DateField(null=True, blank=True)`
+  - `commissioned_at`: `DateTimeField(null=True, blank=True)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `commissioned_at`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qser_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "serial_number"], name="idx_qser_ten_serial")` (19)
+  - `Index(fields=["tenant", "commissioning_status"], name="idx_qser_ten_comm")` (17)
+  - `Index(fields=["tenant", "packaging_level"], name="idx_qser_ten_pkg")` (16)
+
+### 4. `ProductRecall` (`QRCL-`)
+- [ ] **File**: `apps/quality/models/TraceabilitySerialization/ProductRecalls.py`
+- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QRCL"`)
+- [ ] **Fields & Choices (L65 verified)**:
+  - `title`: `CharField(max_length=255)`
+  - `recall_class`: `CharField(max_length=25, choices=RECALL_CLASS_CHOICES, default="class_ii", db_index=True)` — `"class_i"` (7), `"class_ii"` (8), `"class_iii"` (9), `"market_withdrawal"` (17), `"safety_alert"` (12) (longest: 17 <= 25)
+  - `status`: `CharField(max_length=25, choices=RECALL_STATUS_CHOICES, default="initiated", db_index=True)` — `"initiated"` (9), `"containment_hold"` (16), `"notification_sent"` (17), `"recovery_in_progress"` (20), `"effectiveness_check"` (19), `"completed"` (9), `"terminated"` (10) (longest: 20 <= 25)
+  - `is_mock_recall`: `BooleanField(default=False)`
+  - `mock_drill_hours`: `DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)`
+  - `item_code`: `CharField(max_length=100, db_index=True)`
+  - `item_name`: `CharField(max_length=255)`
+  - `affected_lot_numbers`: `TextField()`
+  - `affected_serial_range`: `CharField(max_length=255, blank=True)`
+  - `hazard_summary`: `TextField()`
+  - `root_cause`: `TextField(blank=True)`
+  - `customer_complaint`: `ForeignKey("quality.CustomerComplaint", on_delete=models.SET_NULL, null=True, blank=True, related_name="product_recalls")`
+  - `capa_investigation`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="product_recalls")`
+  - `total_distributed_qty`: `PositiveIntegerField(default=0)`
+  - `total_quarantined_qty`: `PositiveIntegerField(default=0)`
+  - `total_recovered_qty`: `PositiveIntegerField(default=0)`
+  - `total_destroyed_qty`: `PositiveIntegerField(default=0)`
+  - `recovery_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))`
+  - `regulatory_agency_notified`: `CharField(max_length=100, blank=True)`
+  - `regulatory_notification_date`: `DateField(null=True, blank=True)`
+  - `coordinator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="coordinated_recalls")`
+  - `closure_approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="closed_recalls")`
+  - `closed_at`: `DateTimeField(null=True, blank=True)`
+  - `notes`: `TextField(blank=True)`
+- [ ] **Form Exclusions**: `tenant`, `number`, `recovery_rate_pct`, `closed_at`, `created_at`, `updated_at`
+- [ ] **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="quality_qrcl_ten_num_uniq")` (25)
+  - `Index(fields=["tenant", "recall_class"], name="idx_qrcl_ten_class")` (18)
+  - `Index(fields=["tenant", "status"], name="idx_qrcl_ten_status")` (19)
+  - `Index(fields=["tenant", "is_mock_recall"], name="idx_qrcl_ten_mock")` (17)
+
+---
+
+## Backend & Frontend Execution Plan
+
+- [ ] **Step 1: Contract Spec Freeze** -> `.claude/tasks/contract-quality-12.18.md`
+- [ ] **Step 2: Build Entity by Entity** (4 backend files + 3 templates per entity, strictly one by one):
+  - [ ] Entity 1: `BatchRecord`
+    - [ ] `apps/quality/models/TraceabilitySerialization/BatchRecords.py`
+    - [ ] `apps/quality/forms/TraceabilitySerialization/BatchRecords.py`
+    - [ ] `apps/quality/views/TraceabilitySerialization/BatchRecords.py`
+    - [ ] `apps/quality/urls/TraceabilitySerialization/BatchRecords.py`
+    - [ ] `templates/quality/traceabilityserialization/batch_record/list.html`
+    - [ ] `templates/quality/traceabilityserialization/batch_record/detail.html`
+    - [ ] `templates/quality/traceabilityserialization/batch_record/form.html`
+  - [ ] Entity 2: `DeviceIdentifier`
+    - [ ] `apps/quality/models/TraceabilitySerialization/DeviceIdentifiers.py`
+    - [ ] `apps/quality/forms/TraceabilitySerialization/DeviceIdentifiers.py`
+    - [ ] `apps/quality/views/TraceabilitySerialization/DeviceIdentifiers.py`
+    - [ ] `apps/quality/urls/TraceabilitySerialization/DeviceIdentifiers.py`
+    - [ ] `templates/quality/traceabilityserialization/device_identifier/list.html`
+    - [ ] `templates/quality/traceabilityserialization/device_identifier/detail.html`
+    - [ ] `templates/quality/traceabilityserialization/device_identifier/form.html`
+  - [ ] Entity 3: `SerializedItem`
+    - [ ] `apps/quality/models/TraceabilitySerialization/SerializedItems.py`
+    - [ ] `apps/quality/forms/TraceabilitySerialization/SerializedItems.py`
+    - [ ] `apps/quality/views/TraceabilitySerialization/SerializedItems.py`
+    - [ ] `apps/quality/urls/TraceabilitySerialization/SerializedItems.py`
+    - [ ] `templates/quality/traceabilityserialization/serialized_item/list.html`
+    - [ ] `templates/quality/traceabilityserialization/serialized_item/detail.html`
+    - [ ] `templates/quality/traceabilityserialization/serialized_item/form.html`
+  - [ ] Entity 4: `ProductRecall`
+    - [ ] `apps/quality/models/TraceabilitySerialization/ProductRecalls.py`
+    - [ ] `apps/quality/forms/TraceabilitySerialization/ProductRecalls.py`
+    - [ ] `apps/quality/views/TraceabilitySerialization/ProductRecalls.py`
+    - [ ] `apps/quality/urls/TraceabilitySerialization/ProductRecalls.py`
+    - [ ] `templates/quality/traceabilityserialization/product_recall/list.html`
+    - [ ] `templates/quality/traceabilityserialization/product_recall/detail.html`
+    - [ ] `templates/quality/traceabilityserialization/product_recall/form.html`
+  - [ ] Dedicated Dashboard: `TraceabilityDashboard`
+    - [ ] `apps/quality/views/TraceabilitySerialization/TraceabilityDashboard.py`
+    - [ ] `apps/quality/urls/TraceabilitySerialization/TraceabilityDashboard.py`
+    - [ ] `templates/quality/traceabilityserialization/traceability_dashboard.html`
+- [ ] **Step 3: Single-Writer Integrate & Migrations**
+  - [ ] Re-export models in `apps/quality/models/__init__.py`
+  - [ ] Re-export forms in `apps/quality/forms/__init__.py`
+  - [ ] Re-export views in `apps/quality/views/__init__.py`
+  - [ ] Re-export & include urls in `apps/quality/urls/__init__.py`
+  - [ ] Register 4 models in `apps/quality/admin.py`
+  - [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_18`)
+  - [ ] Wire `LIVE_LINKS["12.18"]` in `apps/core/navigation.py`
+  - [ ] Run `makemigrations quality` -> incremental migration `0031_...`
+  - [ ] Run `migrate quality`
+  - [ ] Run `seed_quality` twice (verify idempotency)
+  - [ ] Run `manage.py check` (0 issues)
+- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.18.md`
+- [ ] **Step 6: Code Fixer** -> burn down findings (All Critical, Important, Minor findings fixed; **Gaps**: registered in gap file)
+- [ ] **Step 7: Automated Tests** -> `test_traceabilityserialization_models.py`, `test_traceabilityserialization_forms.py`, `test_traceabilityserialization_views.py`, `test_traceabilityserialization_security.py` -> 100% green
+- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.18.md`
