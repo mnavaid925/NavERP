@@ -205,7 +205,7 @@ def validation_protocol_export(request):
     if dept_filter and dept_filter.isdigit():
         qs = qs.filter(department_id=int(dept_filter))
 
-    response = HttpResponse(content_type="text/csv")
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="validation_protocols.csv"'
     response["X-Content-Type-Options"] = "nosniff"
 
