@@ -43,5 +43,15 @@
   - `M4`: Detail templates render `system` and `governing_sop` as plain text instead of clickable links to `quality:computer_system_validation_detail` and `quality:controlled_document_detail`.
   - `M5`: Add index on `SystemChangeControl.target_date` for overdue/deadline queries.
 
+### Pass 3: `frontend-reviewer`
+- **Critical**: None.
+- **Important**: None.
+- **Minor**:
+  - `M6`: Undefined CSS utility `text-green` in `audit_trail_review/list.html` and `detail.html` (use `text-ok` or `badge-green`).
+  - Corroborates `I5` (secondary filter query parameter preservation during pagination).
+  - Corroborates `M4` (hyperlinks to Computer System Validation and Controlled Document details).
+  - `M7`: Redundant `has_previous` condition in `electronic_record_policy/list.html:201`.
+
+
 
 
