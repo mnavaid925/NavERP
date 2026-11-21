@@ -236,7 +236,7 @@ apps/quality/
       SafetyIncidents.py                      <- SafetyIncident [QSIR-]
       EnvironmentalMonitoringLogs.py          <- EnvironmentalMonitoringLog [QENV-]
       WasteDisposalManifests.py               <- WasteDisposalManifest [QWST-]
-    RegulatoryCompliance/                     <- Sub-module 12.17 models
+    RegulatorySubmissions/                    <- Sub-module 12.17 models
       ProductRegistrations.py                 <- ProductRegistration [QREG-]
       RegulatorySubmissions.py                <- RegulatorySubmission [QSUB-]
       RegulatoryCommitments.py                <- RegulatoryCommitment [QCOM-]
@@ -329,7 +329,7 @@ apps/quality/
       SafetyIncidents.py                      <- SafetyIncidentForm
       EnvironmentalMonitoringLogs.py          <- EnvironmentalMonitoringLogForm
       WasteDisposalManifests.py               <- WasteDisposalManifestForm
-    RegulatoryCompliance/                     <- Sub-module 12.17 forms
+    RegulatorySubmissions/                    <- Sub-module 12.17 forms
       ProductRegistrations.py                 <- ProductRegistrationForm
       RegulatorySubmissions.py                <- RegulatorySubmissionForm
       RegulatoryCommitments.py                <- RegulatoryCommitmentForm
@@ -437,7 +437,7 @@ apps/quality/
       EnvironmentalMonitoringLogs.py          <- List, Detail, Create, Edit, Delete, Export
       WasteDisposalManifests.py               <- List, Detail, Create, Edit, Delete, Export
       EhsDashboard.py                         <- EHS Command Center Dashboard
-    RegulatoryCompliance/                     <- Sub-module 12.17 views
+    RegulatorySubmissions/                    <- Sub-module 12.17 views
       ProductRegistrations.py                 <- List, Detail, Create, Edit, Delete, Export
       RegulatorySubmissions.py                <- List, Detail, Create, Edit, Delete, Export
       RegulatoryCommitments.py                <- List, Detail, Create, Edit, Delete, Export
@@ -546,7 +546,7 @@ apps/quality/
       EnvironmentalMonitoringLogs.py
       WasteDisposalManifests.py
       EhsDashboard.py
-    RegulatoryCompliance/                     <- Sub-module 12.17 URLs
+    RegulatorySubmissions/                    <- Sub-module 12.17 URLs
       ProductRegistrations.py
       RegulatorySubmissions.py
       RegulatoryCommitments.py
@@ -562,12 +562,16 @@ apps/quality/
   admin.py                                    <- Django admin registrations for all models
   management/commands/
     seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.18)
-  tests/                                      <- Pytest test suite (100% green, 2,400+ passing tests)
+  tests/                                      <- Pytest test suite (100% green, 2,405 passing tests)
     conftest.py                               <- Shared 12.1 through 12.18 fixtures
     test_traceabilityserialization_models.py  <- Sub-module 12.18 model tests (7 tests)
     test_traceabilityserialization_forms.py   <- Sub-module 12.18 form tests (6 tests)
     test_traceabilityserialization_views.py   <- Sub-module 12.18 view tests (6 tests)
     test_traceabilityserialization_security.py <- Sub-module 12.18 security tests (5 tests)
+    test_regulatorycompliance_models.py       <- Sub-module 12.17 model tests (10 tests)
+    test_regulatorycompliance_forms.py        <- Sub-module 12.17 form tests (9 tests)
+    test_regulatorycompliance_views.py        <- Sub-module 12.17 view tests (5 tests)
+    test_regulatorycompliance_security.py     <- Sub-module 12.17 security tests (5 tests)
     test_processvalidation_models.py          <- Sub-module 12.15 model tests (15 tests)
     test_processvalidation_forms.py           <- Sub-module 12.15 form tests (12 tests)
     test_processvalidation_views.py           <- Sub-module 12.15 view tests (25 tests)
@@ -913,6 +917,33 @@ apps/quality/
 - **Key Fields:** `number`, `title`, `equipment_train_tag`, `target_residue`, `cleaning_agent_used`, `worst_case_rationale` (`lowest_solubility`, `highest_toxicity_pde`, `highest_potency`, `hardest_to_clean`), `calculation_basis` (`therapeutic_dose`, `ten_ppm_limit`, `toxicological_pde`, `most_stringent`), `min_daily_dose_active_mg` (Decimal), `max_daily_dose_subsequent_mg` (Decimal), `smallest_batch_size_kg` (Decimal), `safety_factor` (Decimal), `toxicological_pde_mg_day` (Decimal), `calculated_maco_mg` (Decimal), `total_surface_area_sqcm` (Decimal), `swab_sampling_area_sqcm` (Decimal), `calculated_swab_limit_ug` (Decimal), `rinse_volume_liters` (Decimal), `calculated_rinse_limit_ppm` (Decimal), `analytical_method` (`hplc`, `toc`, `uv_vis`, `conductivity`, `visual_clean`), `method_recovery_percentage` (Decimal), `dirty_hold_time_hours` (Decimal), `clean_hold_time_hours` (Decimal), `consecutive_successful_runs` (int), `is_visually_clean` (bool), `worst_swab_result_ug` (Decimal), `worst_rinse_result_ppm` (Decimal), `cleaning_status` (`draft`, `protocol_approved`, `sampling_in_progress`, `analytical_testing`, `validated_pass`, `failed_recleaning`, `expired`), `next_revalidation_date`, `notes`, `validation_protocol` (`ValidationProtocol`), `cleaning_sop` (`quality.ControlledDocument`), `analytical_lead` (`accounts.User`), `qa_approver` (`accounts.User`), `linked_deviation` (`quality.ProcessDeviation`).
 - **Properties & Methods:** `is_revalidation_overdue`, `status_css`, `calculate_limits()`.
 - **Compound Indexes:** `idx_qcln_ten_created` on `(tenant, -created_at)`, `idx_qcln_ten_status` on `(tenant, cleaning_status)`, `idx_qcln_ten_method` on `(tenant, analytical_method)`, `idx_qcln_ten_reval_due` on `(tenant, next_revalidation_date)`.
+
+
+### Sub-module 12.17 Entities
+
+#### 49. `RegulatorySubmission` (Prefix: `QSUB-`)
+- **Table:** `quality_regulatory_submission`
+- **Key Fields:** `number`, `title`, `submission_type` (`510k`, `pma`, `de_novo`, `ce_tech_file`, `hde`, `ind`, `nda`, `health_canada`, `pmda`, `nmpa`, `other`), `target_authority` (`core.Party`), `org_unit` (`core.OrgUnit`), `product_name`, `product_code`, `device_class` (`class_i`, `class_iia`, `class_iib`, `class_iii`, `unclassified`), `application_number`, `status` (`draft`, `authoring`, `internal_review`, `submitted`, `under_review`, `deficiency_response`, `approved_cleared`, `rejected`, `withdrawn`), `planned_submission_date`, `actual_submission_date`, `decision_date`, `lead_author` (`accounts.User`), `qa_approver` (`accounts.User`), `technical_dossier` (`quality.ControlledDocument`), `technical_sections_summary`, `notes`.
+- **Properties & Methods:** `is_submitted`, `is_approved`, `days_under_review`, `status_css`.
+- **Compound Indexes:** `idx_qsub_ten_created` on `(tenant, -created_at)`, `idx_qsub_ten_status` on `(tenant, status)`, `idx_qsub_ten_subtype` on `(tenant, submission_type)`, `idx_qsub_ten_prod` on `(tenant, product_code)`.
+
+#### 50. `ProductRegistration` (Prefix: `QREG-`)
+- **Table:** `quality_product_registration`
+- **Key Fields:** `number`, `registration_title`, `registration_type` (`product_license`, `establishment_reg`, `national_listing`, `ce_certificate`, `import_permit`), `jurisdiction_country`, `regulatory_authority` (`core.Party`), `authorized_representative` (`core.Party`), `product_name`, `product_code`, `intended_purpose`, `license_certificate_number`, `establishment_id`, `status` (`active`, `pending_renewal`, `in_application`, `suspended`, `expired`, `withdrawn`), `initial_approval_date`, `effective_date`, `expiration_date`, `renewal_due_date`, `renewal_lead_days`, `regulatory_lead` (`accounts.User`), `linked_submission` (`quality.RegulatorySubmission`), `notes`.
+- **Properties & Methods:** `is_active`, `days_to_expiration`, `is_overdue_renewal`, `urgency_status`, `status_css`.
+- **Compound Indexes:** `idx_qreg_ten_status` on `(tenant, status)`, `idx_qreg_ten_stat_exp` on `(tenant, status, expiration_date)`, `idx_qreg_ten_type` on `(tenant, registration_type)`, `idx_qreg_ten_juris` on `(tenant, jurisdiction_country)`, `idx_qreg_ten_exp` on `(tenant, expiration_date)`.
+
+#### 51. `RegulatoryCommitment` (Prefix: `QCOM-`)
+- **Table:** `quality_regulatory_commitment`
+- **Key Fields:** `number`, `title`, `commitment_type` (`agency_deficiency`, `post_approval_study`, `annual_report`, `labeling_update`, `stability_monitoring`, `inspection_483_response`, `pmcf_commitment`, `other`), `regulatory_agency` (`core.Party`), `linked_submission` (`quality.RegulatorySubmission`), `linked_registration` (`quality.ProductRegistration`), `linked_inspection` (`quality.RegulatoryInspectionHost`), `agency_reference_number`, `correspondence_date`, `commitment_description`, `responsible_owner` (`accounts.User`), `due_date`, `completion_date`, `status` (`open`, `in_progress`, `submitted_to_agency`, `agency_accepted`, `overdue`, `waived`), `verification_method`, `agency_feedback`, `notes`.
+- **Properties & Methods:** `is_overdue`, `days_remaining`, `status_css`.
+- **Compound Indexes:** `idx_qcom_ten_status` on `(tenant, status)`, `idx_qcom_ten_stat_due` on `(tenant, status, due_date)`, `idx_qcom_ten_due` on `(tenant, due_date)`, `idx_qcom_ten_type` on `(tenant, commitment_type)`.
+
+#### 52. `PostMarketSurveillanceReport` (Prefix: `QPMS-`)
+- **Table:** `quality_post_market_surveillance_report`
+- **Key Fields:** `number`, `report_title`, `report_type` (`psur`, `pms_report`, `pmcf_evaluation`, `vigilance_trend`, `annual_safety`), `product_registration` (`quality.ProductRegistration`), `device_model_family`, `reporting_period_start`, `reporting_period_end`, `units_distributed`, `total_complaints_count`, `serious_incidents_count`, `field_actions_count`, `benefit_risk_conclusion` (`favorable`, `acceptable_monitoring`, `unfavorable_action`), `benefit_risk_rationale`, `pmcf_action_required`, `pmcf_action_summary`, `status` (`draft`, `in_review`, `approved`, `submitted_to_authority`, `archived`), `prepared_by` (`accounts.User`), `approved_by` (`accounts.User`), `approval_date`, `next_report_due_date`, `notes`.
+- **Properties & Methods:** `complaint_rate_pct`, `serious_incident_rate_pct`, `status_css`, `benefit_risk_css`.
+- **Compound Indexes:** `idx_qpms_ten_status` on `(tenant, status)`, `idx_qpms_ten_type` on `(tenant, report_type)`, `idx_qpms_ten_benrisk` on `(tenant, benefit_risk_conclusion)`, `idx_qpms_ten_period` on `(tenant, reporting_period_end)`.
 
 
 ---
@@ -1310,6 +1341,35 @@ All routes use the `quality:` namespace:
 | `/quality/validation/cleaning/<pk>/edit/` | `cleaning_validation_edit` | Edit cleaning validation protocol and recovery percentages |
 | `/quality/validation/cleaning/<pk>/delete/` | `cleaning_validation_delete` | POST-only delete for cleaning validation studies |
 | `/quality/validation/cleaning/export/` | `cleaning_validation_export` | CSV export of cleaning validation studies |
+
+### Sub-module 12.17 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/regulatory-compliance/dashboard/` | `regulatory_dashboard` | Regulatory Intelligence & Tracking Command Center |
+| `/quality/submissions/` | `regulatory_submission_list` | Regulatory submissions register with status, type, and device class filters |
+| `/quality/submissions/create/` | `regulatory_submission_create` | Author and register regulatory submission dossier |
+| `/quality/submissions/<pk>/` | `regulatory_submission_detail` | Detailed submission dossier with authority, dates, and technical sections |
+| `/quality/submissions/<pk>/edit/` | `regulatory_submission_edit` | Edit submission details and application tracking numbers |
+| `/quality/submissions/<pk>/delete/` | `regulatory_submission_delete` | POST-only delete for draft/withdrawn submissions with @tenant_admin_required |
+| `/quality/submissions/export/` | `regulatory_submission_export` | CSV export of regulatory submissions with formula injection sanitization |
+| `/quality/registrations/` | `product_registration_list` | Global product registrations directory with type, status, and jurisdiction filters |
+| `/quality/registrations/create/` | `product_registration_create` | Register product clearance, market license, or CE certificate |
+| `/quality/registrations/<pk>/` | `product_registration_detail` | Detailed market registration dossier with renewal countdown and authority links |
+| `/quality/registrations/<pk>/edit/` | `product_registration_edit` | Edit registration certificate details, lead times, and validity dates |
+| `/quality/registrations/<pk>/delete/` | `product_registration_delete` | POST-only delete for expired/withdrawn registrations with @tenant_admin_required |
+| `/quality/registrations/export/` | `product_registration_export` | CSV export of product registrations with formula sanitization |
+| `/quality/commitments/` | `regulatory_commitment_list` | Regulatory commitments & mandates register with status and type filters |
+| `/quality/commitments/create/` | `regulatory_commitment_create` | Create regulatory commitment, deficiency response, or post-approval action |
+| `/quality/commitments/<pk>/` | `regulatory_commitment_detail` | Detailed commitment dossier with statutory due date clocks and fulfillment tracking |
+| `/quality/commitments/<pk>/edit/` | `regulatory_commitment_edit` | Edit commitment milestones, verification methods, and feedback |
+| `/quality/commitments/<pk>/delete/` | `regulatory_commitment_delete` | POST-only delete for waived/fulfilled commitments with @tenant_admin_required |
+| `/quality/commitments/export/` | `regulatory_commitment_export` | CSV export of regulatory commitments with formula sanitization |
+| `/quality/pms-reports/` | `post_market_surveillance_report_list` | PMS & PSUR safety reports register with status, type, and benefit-risk filters |
+| `/quality/pms-reports/create/` | `post_market_surveillance_report_create` | Author Periodic Safety Update Report (PSUR) or PMS clinical evaluation |
+| `/quality/pms-reports/<pk>/` | `post_market_surveillance_report_detail` | Detailed PMS report dossier with calculated complaint/incident rates and benefit-risk profile |
+| `/quality/pms-reports/<pk>/edit/` | `post_market_surveillance_report_edit` | Edit surveillance report metrics, exposure volume, and conclusions |
+| `/quality/pms-reports/<pk>/delete/` | `post_market_surveillance_report_delete` | POST-only delete for draft/archived PMS reports with @tenant_admin_required |
+| `/quality/pms-reports/export/` | `post_market_surveillance_report_export` | CSV export of post-market surveillance reports with formula sanitization |
 
 ---
 
