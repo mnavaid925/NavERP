@@ -188,6 +188,18 @@ from apps.quality.models.DataIntegrity.AuditTrailReviews import (
 from apps.quality.models.DataIntegrity.SystemChangeControls import (
     SystemChangeControl,
 )
+from apps.quality.models.LimsManagement.LabSamples import (
+    LabSample,
+)
+from apps.quality.models.LimsManagement.LabSpecifications import (
+    LabSpecification,
+)
+from apps.quality.models.LimsManagement.LabTestWorksheets import (
+    LabTestWorksheet,
+)
+from apps.quality.models.LimsManagement.OosInvestigations import (
+    OosInvestigation,
+)
 
 
 
@@ -1643,6 +1655,120 @@ class SystemChangeControlAdmin(admin.ModelAdmin):
     list_filter = ("change_type", "change_priority", "gxp_impact", "status", "tenant")
     search_fields = ("number", "title", "description")
     list_select_related = ("tenant", "system", "requestor", "system_owner", "qa_lead", "org_unit")
+
+
+@admin.register(LabSample)
+class LabSampleAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "sample_name",
+        "sample_type",
+        "item_code",
+        "source_batch_number",
+        "status",
+        "current_custodian",
+        "tenant",
+    )
+    list_filter = ("sample_type", "status", "storage_condition", "tenant")
+    search_fields = ("number", "sample_name", "item_code", "source_batch_number", "barcode_identifier")
+    list_select_related = ("tenant", "sampled_by", "received_by", "current_custodian", "facility")
+
+
+@admin.register(LabSpecification)
+class LabSpecificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "product_code",
+        "version",
+        "specification_type",
+        "test_category",
+        "target_parameter_name",
+        "status",
+        "tenant",
+    )
+    list_filter = ("specification_type", "test_category", "status", "tenant")
+    search_fields = (
+        "number",
+        "title",
+        "product_code",
+        "product_name",
+        "analytical_method_number",
+        "target_parameter_name",
+    )
+    list_select_related = ("tenant", "sop_document", "approved_by")
+
+
+@admin.register(LabTestWorksheet)
+class LabTestWorksheetAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "sample",
+        "specification",
+        "status",
+        "disposition",
+        "assigned_analyst",
+        "scheduled_date",
+        "tenant",
+    )
+    list_filter = ("status", "disposition", "is_within_specification", "tenant")
+    search_fields = (
+        "number",
+        "title",
+        "sample__number",
+        "specification__title",
+        "instrument_name",
+        "reagent_lot_number",
+    )
+    list_select_related = (
+        "tenant",
+        "sample",
+        "specification",
+        "assigned_analyst",
+        "reviewer",
+        "instrument",
+    )
+
+
+@admin.register(OosInvestigation)
+class OosInvestigationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "test_worksheet",
+        "investigation_phase",
+        "severity",
+        "lab_error_identified",
+        "final_batch_disposition",
+        "status",
+        "tenant",
+    )
+    list_filter = (
+        "investigation_phase",
+        "severity",
+        "lab_error_identified",
+        "final_batch_disposition",
+        "status",
+        "tenant",
+    )
+    search_fields = (
+        "number",
+        "title",
+        "test_worksheet__number",
+        "sample__number",
+        "assignable_cause",
+    )
+    list_select_related = (
+        "tenant",
+        "test_worksheet",
+        "sample",
+        "investigation_lead",
+        "qa_approver",
+        "capa",
+        "non_conformance",
+    )
+
 
 
 
