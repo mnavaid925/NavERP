@@ -18,7 +18,6 @@ class BatchRecordForm(TenantUniqueMixin, TenantModelForm):
             "product_code",
             "product_name",
             "status",
-            "release_status",
             "production_order_number",
             "work_order",
             "master_document",
@@ -44,7 +43,6 @@ class BatchRecordForm(TenantUniqueMixin, TenantModelForm):
             "product_code": forms.TextInput(attrs={"class": "form-input"}),
             "product_name": forms.TextInput(attrs={"class": "form-input"}),
             "status": forms.Select(attrs={"class": "form-select"}),
-            "release_status": forms.Select(attrs={"class": "form-select"}),
             "production_order_number": forms.TextInput(attrs={"class": "form-input"}),
             "work_order": forms.Select(attrs={"class": "form-select"}),
             "master_document": forms.Select(attrs={"class": "form-select"}),
@@ -105,4 +103,10 @@ class BatchRecordForm(TenantUniqueMixin, TenantModelForm):
                 "linked_fqc",
             ],
         )
+        status = cleaned_data.get("status")
+        if status == "released" and (not self.instance.pk or self.instance.status != "released"):
+            self.add_error(
+                "status",
+                "Batch record cannot be transitioned to 'released' via edit form. Use the Release Batch workflow action.",
+            )
         return cleaned_data
