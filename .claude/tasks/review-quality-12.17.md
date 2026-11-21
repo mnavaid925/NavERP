@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 2 | 7 | 0 |
+| **Important** | 9 | 1 | 8 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 16 | 9 | 0 |
+| **Total** | 25 | 15 | 10 | 0 |
 
 ---
 
@@ -99,7 +99,7 @@
   - **Issue**: Calling `.count` on related querysets fires an extra `SELECT COUNT(*)` query immediately before the `{% for %}` loop runs `SELECT ...`.
   - **Fix**: Use `{{ linked_commitments|length }}` or evaluate related querysets to lists in the views.
 
-- [ ] **I8: Multiple Sequential Individual `.count()` Queries on List Views Instead of Conditional Aggregation**
+- [x] **I8: Multiple Sequential Individual `.count()` Queries on List Views Instead of Conditional Aggregation**
   - **Files**:
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:54-58`
     - `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py:54-63`
