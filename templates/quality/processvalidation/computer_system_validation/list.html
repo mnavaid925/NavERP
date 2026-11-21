@@ -179,15 +179,15 @@
                         {% endif %}
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'quality:computer_system_validation_detail' s.pk %}" class="btn-icon" title="View System">
+                        <a href="{% url 'quality:computer_system_validation_detail' s.pk %}" class="btn-icon" title="View System" aria-label="View System {{ s.number }}">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'quality:computer_system_validation_edit' s.pk %}" class="btn-icon" title="Edit System">
+                        <a href="{% url 'quality:computer_system_validation_edit' s.pk %}" class="btn-icon" title="Edit System" aria-label="Edit System {{ s.number }}">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'quality:computer_system_validation_delete' s.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete computer system {{ s.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete System">
+                            <button type="submit" class="btn-icon text-red-600 hover:text-red-800" title="Delete System" aria-label="Delete System {{ s.number }}">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
