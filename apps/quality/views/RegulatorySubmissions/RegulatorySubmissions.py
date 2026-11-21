@@ -178,6 +178,7 @@ def regulatory_submission_delete(request, pk):
 
 @login_required
 def regulatory_submission_export(request):
+    write_audit_log(request.user, RegulatorySubmission(), "export", tenant=request.tenant)
     qs = (
         quality_scope(RegulatorySubmission.objects.all(), request)
         .select_related("target_authority", "lead_author")
