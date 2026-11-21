@@ -139,6 +139,18 @@ from apps.quality.models.RegulatorySubmissions.RegulatoryCommitments import (
 from apps.quality.models.RegulatorySubmissions.PostMarketSurveillanceReports import (
     PostMarketSurveillanceReport,
 )
+from apps.quality.models.TraceabilitySerialization.BatchRecords import (
+    BatchRecord,
+)
+from apps.quality.models.TraceabilitySerialization.DeviceIdentifiers import (
+    DeviceIdentifier,
+)
+from apps.quality.models.TraceabilitySerialization.SerializedItems import (
+    SerializedItem,
+)
+from apps.quality.models.TraceabilitySerialization.ProductRecalls import (
+    ProductRecall,
+)
 
 
 User = get_user_model()
@@ -157,6 +169,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing quality module data...")
+            ProductRecall.objects.all().delete()
+            SerializedItem.objects.all().delete()
+            DeviceIdentifier.objects.all().delete()
+            BatchRecord.objects.all().delete()
             PostMarketSurveillanceReport.objects.all().delete()
             RegulatoryCommitment.objects.all().delete()
             ProductRegistration.objects.all().delete()
@@ -252,6 +268,7 @@ class Command(BaseCommand):
             self._seed_submodule_12_15(tenant)
             self._seed_submodule_12_16(tenant)
             self._seed_submodule_12_17(tenant)
+            self._seed_submodule_12_18(tenant)
 
 
         self.stdout.write(self.style.SUCCESS("Module 12 quality seeding complete."))
@@ -5590,6 +5607,337 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.17 Regulatory Compliance & Submissions seeded successfully."))
+
+    def _seed_submodule_12_18(self, tenant):
+        if BatchRecord.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 12.18 Traceability & Serialization data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 12.18 Traceability & Serialization...")
+
+        admin_user = (
+            User.objects.filter(tenant=tenant, is_superuser=True).order_by("pk").first()
+            or User.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        if not admin_user:
+            self.stdout.write(f"[{tenant.name}] Warning: No user found for tenant.")
+            return
+
+        users = list(User.objects.filter(tenant=tenant).order_by("pk"))
+        supervisor_user = users[1] if len(users) > 1 else admin_user
+        qa_reviewer_user = users[2] if len(users) > 2 else admin_user
+
+        custodian_party = (
+            Party.objects.filter(tenant=tenant, roles__role__in=("customer", "supplier", "vendor")).order_by("pk").first()
+            or Party.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        location_org = OrgUnit.objects.filter(tenant=tenant).order_by("pk").first()
+        controlled_doc = ControlledDocument.objects.filter(tenant=tenant).order_by("pk").first()
+        elec_sig = ElectronicSignatureRecord.objects.filter(tenant=tenant).order_by("pk").first()
+        complaint = CustomerComplaint.objects.filter(tenant=tenant).order_by("pk").first()
+        capa = CapaInvestigation.objects.filter(tenant=tenant).order_by("pk").first()
+
+        today = timezone.now().date()
+
+        with transaction.atomic():
+            # 1. Batch Manufacturing Records
+            br1 = BatchRecord.objects.create(
+                tenant=tenant,
+                title="ApexVent V500 Critical Care Ventilator Production Batch",
+                batch_number="BATCH-2026-V500-01",
+                product_code="CBK",
+                product_name="ApexVent V500 Critical Care Ventilator",
+                status="released",
+                release_status="approved_full",
+                production_order_number="PRD-2026-0881",
+                master_document=controlled_doc,
+                planned_quantity=Decimal("100.00"),
+                actual_quantity=Decimal("98.00"),
+                unit_of_measure="EA",
+                manufacturing_date=today - datetime.timedelta(days=30),
+                expiration_date=today + datetime.timedelta(days=700),
+                retest_date=today + datetime.timedelta(days=365),
+                supervisor=supervisor_user,
+                qa_reviewer=qa_reviewer_user,
+                qa_decision_at=timezone.now() - datetime.timedelta(days=28),
+                electronic_signature=elec_sig,
+                checklist_passed=True,
+                is_quarantined=False,
+                component_genealogy=[
+                    {"component_name": "Turbine Blower Assembly", "item_code": "CMP-BLW-01", "supplier_lot": "LOT-BLW-9912", "quantity_used": "98", "cert_number": "COA-9912"},
+                    {"component_name": "Oxygen Sensor Fuel Cell", "item_code": "CMP-O2-04", "supplier_lot": "LOT-O2-4411", "quantity_used": "98", "cert_number": "COA-4411"},
+                    {"component_name": "Main CPU Microcontroller PCB", "item_code": "CMP-PCB-88", "supplier_lot": "LOT-PCB-1108", "quantity_used": "98", "cert_number": "COA-1108"},
+                ],
+                notes="Standard commercial manufacturing run. All in-process IPC leak tests and functional verification passed with 100% compliance.",
+            )
+
+            br2 = BatchRecord.objects.create(
+                tenant=tenant,
+                title="BioPulse High-Flux Polysulfone Dialyzer Production Batch",
+                batch_number="BATCH-2026-DX-04",
+                product_code="MDR-DX-01",
+                product_name="BioPulse High-Flux Polysulfone Dialyzer",
+                status="qa_review",
+                release_status="pending",
+                production_order_number="PRD-2026-0940",
+                master_document=controlled_doc,
+                planned_quantity=Decimal("500.00"),
+                actual_quantity=Decimal("485.00"),
+                unit_of_measure="EA",
+                manufacturing_date=today - datetime.timedelta(days=10),
+                expiration_date=today + datetime.timedelta(days=500),
+                retest_date=today + datetime.timedelta(days=250),
+                supervisor=supervisor_user,
+                checklist_passed=True,
+                is_quarantined=False,
+                component_genealogy=[
+                    {"component_name": "Polysulfone Capillary Membrane Bundle", "item_code": "CMP-MEM-10", "supplier_lot": "LOT-MEM-7781", "quantity_used": "485", "cert_number": "COA-7781"},
+                    {"component_name": "Polycarbonate Clear Housing Casing", "item_code": "CMP-HOU-02", "supplier_lot": "LOT-HOU-3319", "quantity_used": "485", "cert_number": "COA-3319"},
+                ],
+                notes="Automated potting and sterile spin cycle completed. LAL endotoxin and sterility incubations under final technical review.",
+            )
+
+            br3 = BatchRecord.objects.create(
+                tenant=tenant,
+                title="Sterile 50mL Luer-Lock Syringe Batch with Excursion",
+                batch_number="BATCH-2026-SYR-99",
+                product_code="SYR-50ML",
+                product_name="Sterile 50mL Luer-Lock Syringe",
+                status="quarantined",
+                release_status="on_hold",
+                production_order_number="PRD-2026-1002",
+                master_document=controlled_doc,
+                planned_quantity=Decimal("5000.00"),
+                actual_quantity=Decimal("4200.00"),
+                unit_of_measure="EA",
+                manufacturing_date=today - datetime.timedelta(days=5),
+                expiration_date=today + datetime.timedelta(days=365),
+                supervisor=supervisor_user,
+                checklist_passed=False,
+                is_quarantined=True,
+                notes="Temperature spike detected during cleanroom gamma irradiation prep. Placed on mandatory containment hold pending MRB review.",
+            )
+
+            # 2. Device Identifiers (UDI)
+            udi1 = DeviceIdentifier.objects.create(
+                tenant=tenant,
+                device_name="ApexVent V500 Critical Care Ventilator",
+                model_number="V500-ICU",
+                primary_di="00850012345678",
+                issuing_agency="gs1",
+                device_class="class_iii",
+                basic_udi_di="0850012345APEXV500A7",
+                gudid_status="published",
+                eudamed_status="published",
+                brand_name="ApexVent",
+                commercial_distribution_status="in_commercial_distribution",
+                catalog_number="APX-V500-SYS",
+                barcode_format="gs1_datamatrix",
+                is_sterile=False,
+                contains_latex=False,
+                is_single_use=False,
+                mri_safety_status="mr_conditional",
+                storage_handling_instructions="Operating: 10°C to 40°C, 15% to 95% non-condensing relative humidity. Do not expose to direct magnetic resonance bore.",
+                fda_listing_number="D398201",
+                submission_date=today - datetime.timedelta(days=180),
+                approval_document=controlled_doc,
+                regulatory_contact=qa_reviewer_user,
+                notes="Global UDI published to FDA AccessGUDID and registered under EUDAMED SRN DE-MF-000012345.",
+            )
+
+            udi2 = DeviceIdentifier.objects.create(
+                tenant=tenant,
+                device_name="BioPulse High-Flux Polysulfone Dialyzer",
+                model_number="DX-180",
+                primary_di="00850098765432",
+                issuing_agency="gs1",
+                device_class="class_iib",
+                basic_udi_di="0850098765BIOPULSEB2",
+                gudid_status="published",
+                eudamed_status="submitted",
+                brand_name="BioPulse",
+                commercial_distribution_status="in_commercial_distribution",
+                catalog_number="BIO-DX180-HF",
+                barcode_format="gs1_datamatrix",
+                is_sterile=True,
+                contains_latex=False,
+                is_single_use=True,
+                mri_safety_status="mr_safe",
+                storage_handling_instructions="Store dry between 5°C and 30°C. Protect from freezing and direct sunlight. Sterile EO unless damaged.",
+                fda_listing_number="D412903",
+                submission_date=today - datetime.timedelta(days=60),
+                approval_document=controlled_doc,
+                regulatory_contact=admin_user,
+                notes="Single-use dialyzer cleared for hemodialysis and hemodiafiltration.",
+            )
+
+            udi3 = DeviceIdentifier.objects.create(
+                tenant=tenant,
+                device_name="OrthoFix Titanium Bone Screw 3.5mm",
+                model_number="OFS-35-18",
+                primary_di="+H12345678901",
+                issuing_agency="hibcc",
+                device_class="class_iib",
+                basic_udi_di="+H1234OFS35M0",
+                gudid_status="ready_to_submit",
+                eudamed_status="draft",
+                brand_name="OrthoFix",
+                commercial_distribution_status="not_yet_distributed",
+                catalog_number="OFS-3518-TI",
+                barcode_format="hibc_2d",
+                is_sterile=True,
+                contains_latex=False,
+                is_single_use=True,
+                mri_safety_status="mr_safe",
+                storage_handling_instructions="Implant grade titanium alloy Ti-6Al-4V ELI. Double sterile blister pack.",
+                fda_listing_number="D440812",
+                regulatory_contact=qa_reviewer_user,
+                notes="Pre-market verification complete; awaiting final batch release before GUDID publication.",
+            )
+
+            # 3. Serialized Items & Aggregation
+            pallet1 = SerializedItem.objects.create(
+                tenant=tenant,
+                serial_number="SSCC-008500123400000018",
+                gtin_or_di="00850012345678",
+                item_code="CBK",
+                item_name="ApexVent Master Shipping Pallet",
+                lot_number="BATCH-2026-V500-01",
+                packaging_level="pallet",
+                sscc_code="008500123400000018",
+                commissioning_status="shipped",
+                epcis_state="in_transit",
+                verification_code="8f9024ab7c6d5e12",
+                is_cold_chain=False,
+                custodian=custodian_party,
+                location_unit=location_org,
+                manufacturing_date=today - datetime.timedelta(days=30),
+                expiration_date=today + datetime.timedelta(days=700),
+                commissioned_at=timezone.now() - datetime.timedelta(days=25),
+                notes="Logistical shipping pallet carrying 20 shipper cases of ApexVent systems.",
+            )
+
+            case1 = SerializedItem.objects.create(
+                tenant=tenant,
+                serial_number="CASE-APEX-2026-001",
+                gtin_or_di="00850012345678",
+                item_code="CBK",
+                item_name="ApexVent Shipper Master Carton",
+                lot_number="BATCH-2026-V500-01",
+                parent_container=pallet1,
+                packaging_level="case",
+                sscc_code="008500123400000018",
+                commissioning_status="aggregated",
+                epcis_state="in_transit",
+                verification_code="1234ef56ab78cd90",
+                is_cold_chain=False,
+                custodian=custodian_party,
+                location_unit=location_org,
+                manufacturing_date=today - datetime.timedelta(days=30),
+                expiration_date=today + datetime.timedelta(days=700),
+                commissioned_at=timezone.now() - datetime.timedelta(days=25),
+                notes="Intermediate corrugated pack containing unit serials.",
+            )
+
+            unit1 = SerializedItem.objects.create(
+                tenant=tenant,
+                serial_number="SN-APEX-V500-1001",
+                gtin_or_di="00850012345678",
+                item_code="CBK",
+                item_name="ApexVent V500 Critical Care Ventilator",
+                lot_number="BATCH-2026-V500-01",
+                batch_record=br1,
+                device_identifier=udi1,
+                parent_container=case1,
+                packaging_level="unit",
+                commissioning_status="commissioned",
+                epcis_state="active",
+                verification_code="a8b7c6d5e4f32109",
+                is_cold_chain=False,
+                custodian=custodian_party,
+                location_unit=location_org,
+                manufacturing_date=today - datetime.timedelta(days=30),
+                expiration_date=today + datetime.timedelta(days=700),
+                commissioned_at=timezone.now() - datetime.timedelta(days=25),
+                notes="Individually serialized ICU ventilator with laser etched GS1 DataMatrix 2D barcode.",
+            )
+
+            unit2 = SerializedItem.objects.create(
+                tenant=tenant,
+                serial_number="SN-BIO-DX-8801",
+                gtin_or_di="00850098765432",
+                item_code="MDR-DX-01",
+                item_name="BioPulse High-Flux Polysulfone Dialyzer",
+                lot_number="BATCH-2026-DX-04",
+                batch_record=br2,
+                device_identifier=udi2,
+                packaging_level="unit",
+                commissioning_status="commissioned",
+                epcis_state="active",
+                verification_code="7f6e5d4c3b2a1098",
+                is_cold_chain=True,
+                temperature_limit_min=Decimal("2.0"),
+                temperature_limit_max=Decimal("8.0"),
+                custodian=custodian_party,
+                location_unit=location_org,
+                manufacturing_date=today - datetime.timedelta(days=10),
+                expiration_date=today + datetime.timedelta(days=500),
+                commissioned_at=timezone.now() - datetime.timedelta(days=8),
+                notes="Cold chain bio-reagent bundle requiring controlled 2°C to 8°C cold chain verification.",
+            )
+
+            # 4. Product Recalls
+            rc1 = ProductRecall.objects.create(
+                tenant=tenant,
+                title="Class II Recall — BioPulse Dialyzer Potting Conformance Issue",
+                recall_class="class_ii",
+                status="recovery_in_progress",
+                is_mock_recall=False,
+                item_code="MDR-DX-01",
+                item_name="BioPulse High-Flux Polysulfone Dialyzer",
+                affected_lot_numbers="BATCH-2026-DX-01, BATCH-2026-DX-02",
+                affected_serial_range="SN-BIO-DX-1000 to SN-BIO-DX-3000",
+                hazard_summary="Microscopic polyurethane potting void observed in 2 customer returns leading to blood leak alert on dialysis machine console. Low risk of blood exposure; zero patient harm reported.",
+                root_cause="Centrifugal potting curing oven heater element #3 temperature dropped 8°C below validated recipe parameter.",
+                customer_complaint=complaint,
+                capa_investigation=capa,
+                total_distributed_qty=2000,
+                total_quarantined_qty=500,
+                total_recovered_qty=1250,
+                total_destroyed_qty=100,
+                regulatory_agency_notified="US FDA CDRH / Health Canada",
+                regulatory_notification_date=today - datetime.timedelta(days=15),
+                coordinator=admin_user,
+                notes="Urgent Medical Device Recall notification sent to 24 hospital dialysis centers. 62.5% market recovery achieved.",
+            )
+
+            rc2 = ProductRecall.objects.create(
+                tenant=tenant,
+                title="Annual Mock Recall Drill 2026 — ApexVent Battery Lot Trace",
+                recall_class="class_i",
+                status="completed",
+                is_mock_recall=True,
+                mock_drill_hours=Decimal("2.75"),
+                item_code="CBK",
+                item_name="ApexVent V500 Critical Care Ventilator",
+                affected_lot_numbers="BATCH-2025-V500-44",
+                affected_serial_range="SN-APEX-V500-0500 to SN-APEX-V500-0999",
+                hazard_summary="Simulated annual mock drill testing hospital tracking, 3PL warehouse isolation, and recovery notification within 4.0h standard per ISO 13485:2016 Clause 8.5.2.",
+                root_cause="Simulated supplier cell defect scenario for audit readiness.",
+                total_distributed_qty=500,
+                total_quarantined_qty=0,
+                total_recovered_qty=500,
+                total_destroyed_qty=0,
+                regulatory_agency_notified="Internal Quality Audit Simulation",
+                regulatory_notification_date=today - datetime.timedelta(days=60),
+                coordinator=supervisor_user,
+                closure_approved_by=admin_user,
+                closed_at=timezone.now() - datetime.timedelta(days=59),
+                notes="Mock drill executed successfully in 2.75 hours (well within target 4.0h threshold). 100% reconciliation verified.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"[{tenant.name}] 12.18 Traceability & Serialization seeded successfully."))
+
 
 
 
