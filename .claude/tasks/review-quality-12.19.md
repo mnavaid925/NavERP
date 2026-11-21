@@ -63,3 +63,16 @@
 
 #### Minor
 - `templates/quality/lims_management/lab_sample/detail.html:252,298`, `templates/quality/lims_management/lab_specification/detail.html:228`, `templates/quality/lims_management/lab_test_worksheet/detail.html:286` — Related table eye action links lack `title` and `aria-label` attributes. Fix: add `title="View Detail" aria-label="View Detail"`.
+
+---
+
+### Pass 4: `performance-reviewer` Findings
+
+#### Important
+- `apps/quality/views/LimsManagement/LabSamples.py:80` — N+1 query loop on related worksheets in `lab_sample_detail`. Template iterates over `test_worksheets` accessing `w.specification` and `w.assigned_analyst` without `select_related()`. Fix: use `sample.test_worksheets.select_related("specification", "assigned_analyst").all()`.
+- `apps/quality/views/LimsManagement/LabSpecifications.py:72-76` — N+1 query loop on associated worksheets in `lab_specification_detail`. Template iterates over `worksheets` accessing `w.sample` and `w.assigned_analyst` without `select_related()`. Fix: use `specification.test_worksheets.select_related("sample", "assigned_analyst").all()[:15]`.
+
+#### Minor
+- `apps/quality/views/LimsManagement/OosInvestigations.py:97-99` — In `oos_investigation_create`, accessing `ws.sample.number` triggers secondary database query because `ws` was fetched without `select_related("sample")`. Fix: add `.select_related("sample")`.
+- `apps/quality/views/LimsManagement/LimsDashboard.py:28-29` — Dual `count()` roundtrips on `LabSample`. Fix: combine `total_samples` and `samples_in_testing` into single `aggregate(total=Count("id"), in_testing=Count("id", filter=Q(status="in_testing")))`.
+- `apps/quality/models/LimsManagement/LabSamples.py:159-165` — `storage_condition` filter in `lab_sample_list` lacks composite index `(tenant, storage_condition)`. Fix: add `models.Index(fields=["tenant", "storage_condition"], name="idx_qsmp_ten_storage")`.
