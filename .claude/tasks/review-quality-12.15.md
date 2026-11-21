@@ -162,6 +162,6 @@
   - **Location**: Export, dashboard, and list views in `apps/quality/views/ProcessValidation/`
   - **Fix**: Prune foreign keys not referenced in outputs or templates.
 
-- [ ] **[M11] Missing Explicit UTF-8 Charset in CSV Export Content-Type**
+- [x] **[M11] Missing Explicit UTF-8 Charset in CSV Export Content-Type** — fixed in 72fb4e72, 10bea16f, 24304e07, cf468376
   - **Location**: All 4 export views in `apps/quality/views/ProcessValidation/`
   - **Fix**: Specify `content_type="text/csv; charset=utf-8"`.
