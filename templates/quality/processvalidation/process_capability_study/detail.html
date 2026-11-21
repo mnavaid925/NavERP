@@ -235,7 +235,7 @@
                     </div>
                     <div class="detail-item">
                         <dt>Quality Approver</dt>
-                        <dd>{{ capability_study.approved_by.get_full_name|default:capability_study.approved_by.username|default:"Pending Approval" }}</dd>
+                        <dd>{% if capability_study.approved_by %}{{ capability_study.approved_by.get_full_name|default:capability_study.approved_by.username }}{% else %}Pending Approval{% endif %}</dd>
                     </div>
                 </dl>
             </div>
