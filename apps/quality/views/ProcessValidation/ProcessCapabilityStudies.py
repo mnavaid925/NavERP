@@ -203,7 +203,7 @@ def process_capability_study_export(request):
         "Investigator",
     ])
 
-    for s in qs:
+    for s in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(s.number),
             _csv_safe(s.title),
