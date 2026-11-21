@@ -153,6 +153,18 @@ from apps.quality.forms.ProcessValidation.ComputerSystemValidations import (
 from apps.quality.forms.ProcessValidation.CleaningValidations import (
     CleaningValidationForm,
 )
+from apps.quality.forms.EhsManagement.HazardousMaterials import (
+    HazardousMaterialForm,
+)
+from apps.quality.forms.EhsManagement.SafetyIncidents import (
+    SafetyIncidentForm,
+)
+from apps.quality.forms.EhsManagement.EnvironmentalMonitoringLogs import (
+    EnvironmentalMonitoringLogForm,
+)
+from apps.quality.forms.EhsManagement.WasteDisposalManifests import (
+    WasteDisposalManifestForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -228,5 +240,9 @@ __all__ = [
     "ProcessCapabilityStudyForm",
     "ComputerSystemValidationForm",
     "CleaningValidationForm",
+    "HazardousMaterialForm",
+    "SafetyIncidentForm",
+    "EnvironmentalMonitoringLogForm",
+    "WasteDisposalManifestForm",
 ]
 
