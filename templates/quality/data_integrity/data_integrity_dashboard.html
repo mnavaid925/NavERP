@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Data Integrity & Electronic Records Command Center — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <span>Data Integrity & Electronic Records</span>
+        </div>
+        <h1 class="page-title">Data Integrity, ER/ES & CSV Command Center</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:electronic_record_policy_create' %}" class="btn btn-outline">
+            <i data-lucide="plus"></i> New Policy
+        </a>
+        <a href="{% url 'quality:data_integrity_assessment_create' %}" class="btn btn-outline">
+            <i data-lucide="plus"></i> New Assessment
+        </a>
+        <a href="{% url 'quality:audit_trail_review_create' %}" class="btn btn-outline">
+            <i data-lucide="plus"></i> New Audit Review
+        </a>
+        <a href="{% url 'quality:system_change_control_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Change Control
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="stat-label">21 CFR Part 11 Policies</div>
+            <div class="stat-value">{{ part11_policies_count }} <span class="text-xs text-muted font-normal">/ {{ total_policies_count }}</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-label">Critical ALCOA+ Risks</div>
+            <div class="stat-value">{{ critical_risk_assessments_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="file-search"></i>
+        </div>
+        <div>
+            <div class="stat-label">Audit Log Exceptions</div>
+            <div class="stat-value">{{ anomaly_reviews_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="git-pull-request"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Change Controls</div>
+            <div class="stat-value">{{ open_changes_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Recent Policies -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title">Electronic Record Policies</h3>
+            <a href="{% url 'quality:electronic_record_policy_list' %}" class="text-sm font-medium text-brand">View All &rarr;</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Policy</th>
+                            <th>Record Type</th>
+                            <th>Part 11</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for policy in recent_policies %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'quality:electronic_record_policy_detail' policy.pk %}" class="font-medium text-brand">
+                                    {{ policy.number }}
+                                </a>
+                            </td>
+                            <td>{{ policy.record_type_name }}</td>
+                            <td>
+                                {% if policy.is_part_11_regulated %}
+                                <span class="badge badge-info">Part 11</span>
+                                {% else %}
+                                <span class="badge badge-muted">Non-Part 11</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if policy.status == 'active' %}
+                                <span class="badge badge-green">Active</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ policy.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-muted p-4">No record policies registered.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent ALCOA+ Assessments -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title">ALCOA+ Risk Assessments (DIRA)</h3>
+            <a href="{% url 'quality:data_integrity_assessment_list' %}" class="text-sm font-medium text-brand">View All &rarr;</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Assessment</th>
+                            <th>Scope</th>
+                            <th>Risk Level</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in recent_assessments %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'quality:data_integrity_assessment_detail' item.pk %}" class="font-medium text-brand">
+                                    {{ item.number }}
+                                </a>
+                            </td>
+                            <td>{{ item.assessment_scope }}</td>
+                            <td>
+                                {% if item.overall_risk_level == 'critical' %}
+                                <span class="badge badge-red">Critical</span>
+                                {% elif item.overall_risk_level == 'high' %}
+                                <span class="badge badge-amber">High</span>
+                                {% elif item.overall_risk_level == 'medium' %}
+                                <span class="badge badge-info">Medium</span>
+                                {% else %}
+                                <span class="badge badge-green">Low</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.status == 'approved' %}
+                                <span class="badge badge-green">Approved</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ item.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-muted p-4">No data integrity assessments recorded.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Recent Audit Reviews -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title">Audit Trail Reviews (ATR)</h3>
+            <a href="{% url 'quality:audit_trail_review_list' %}" class="text-sm font-medium text-brand">View All &rarr;</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Review</th>
+                            <th>Title</th>
+                            <th>Severity</th>
+                            <th>Disposition</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in recent_reviews %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'quality:audit_trail_review_detail' item.pk %}" class="font-medium text-brand">
+                                    {{ item.number }}
+                                </a>
+                            </td>
+                            <td>{{ item.title }}</td>
+                            <td>
+                                {% if item.anomaly_severity == 'critical' %}
+                                <span class="badge badge-red">Critical</span>
+                                {% elif item.anomaly_severity == 'major' %}
+                                <span class="badge badge-amber">Major</span>
+                                {% elif item.anomaly_severity == 'minor' %}
+                                <span class="badge badge-info">Minor</span>
+                                {% else %}
+                                <span class="badge badge-green">None</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.disposition == 'approved_clean' %}
+                                <span class="badge badge-green">Clean</span>
+                                {% elif item.disposition == 'rejected_escalated' %}
+                                <span class="badge badge-red">Escalated</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ item.get_disposition_display }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-muted p-4">No audit reviews recorded.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Change Controls -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title">System Change Controls (CCR)</h3>
+            <a href="{% url 'quality:system_change_control_list' %}" class="text-sm font-medium text-brand">View All &rarr;</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Change #</th>
+                            <th>Title</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in recent_changes %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'quality:system_change_control_detail' item.pk %}" class="font-medium text-brand">
+                                    {{ item.number }}
+                                </a>
+                            </td>
+                            <td>{{ item.title }}</td>
+                            <td>
+                                {% if item.change_priority == 'emergency' %}
+                                <span class="badge badge-red">Emergency</span>
+                                {% elif item.change_priority == 'urgent' %}
+                                <span class="badge badge-amber">Urgent</span>
+                                {% else %}
+                                <span class="badge badge-slate">Routine</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.status == 'implemented_closed' %}
+                                <span class="badge badge-green">Closed</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ item.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-muted p-4">No system change controls recorded.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
