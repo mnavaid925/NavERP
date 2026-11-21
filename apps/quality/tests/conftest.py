@@ -75,6 +75,10 @@ from apps.quality.models import (
     DeviceIdentifier,
     SerializedItem,
     ProductRecall,
+    RegulatorySubmission,
+    ProductRegistration,
+    RegulatoryCommitment,
+    PostMarketSurveillanceReport,
 )
 
 
@@ -3364,4 +3368,220 @@ def product_recall_b(db, tenant_b, admin_b):
         recovery_rate_pct=Decimal("10.00"),
         coordinator=admin_b,
     )
+
+
+# ==============================================================================
+# Submodule 12.17: Regulatory Compliance & Submissions Fixtures
+# ==============================================================================
+
+
+@pytest.fixture
+def regulatory_agency_party_a(db, tenant_a):
+    party = Party.objects.create(
+        tenant=tenant_a,
+        name="FDA CDRH Regulatory Body",
+        party_type="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_a,
+        party=party,
+        role_type="vendor",
+    )
+    return party
+
+
+@pytest.fixture
+def regulatory_agency_party_b(db, tenant_b):
+    party = Party.objects.create(
+        tenant=tenant_b,
+        name="TUV SUD Notified Body Globex",
+        party_type="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_b,
+        party=party,
+        role_type="vendor",
+    )
+    return party
+
+
+@pytest.fixture
+def regulatory_submission_a(db, tenant_a, regulatory_agency_party_a, quality_department, admin_user, quality_doc_effective):
+    today = timezone.now().date()
+    return RegulatorySubmission.objects.create(
+        tenant=tenant_a,
+        title="ApexVent 510(k) Premarket Notification",
+        submission_type="510k",
+        target_authority=regulatory_agency_party_a,
+        org_unit=quality_department,
+        product_name="ApexVent V500 Critical Care Ventilator",
+        product_code="CBK",
+        device_class="class_iib",
+        application_number="K230894",
+        status="approved_cleared",
+        planned_submission_date=today - timedelta(days=240),
+        actual_submission_date=today - timedelta(days=235),
+        decision_date=today - timedelta(days=75),
+        lead_author=admin_user,
+        qa_approver=admin_user,
+        technical_dossier=quality_doc_effective,
+        technical_sections_summary="Bench testing and biocompatibility verified.",
+        notes="FDA CDRH ODE cleared.",
+    )
+
+
+@pytest.fixture
+def regulatory_submission_b(db, tenant_b, regulatory_agency_party_b, quality_department_b, admin_b):
+    today = timezone.now().date()
+    return RegulatorySubmission.objects.create(
+        tenant=tenant_b,
+        title="Globex Infusion Pump 510(k)",
+        submission_type="510k",
+        target_authority=regulatory_agency_party_b,
+        org_unit=quality_department_b,
+        product_name="Globex Infusion Pump",
+        product_code="FRN",
+        device_class="class_iib",
+        application_number="K240112",
+        status="authoring",
+        planned_submission_date=today + timedelta(days=60),
+        lead_author=admin_b,
+        qa_approver=admin_b,
+        notes="Dossier in authoring phase.",
+    )
+
+
+@pytest.fixture
+def product_registration_a(db, tenant_a, regulatory_agency_party_a, regulatory_submission_a, admin_user):
+    today = timezone.now().date()
+    return ProductRegistration.objects.create(
+        tenant=tenant_a,
+        registration_title="US FDA 510(k) Device Listing - ApexVent V500",
+        registration_type="national_listing",
+        jurisdiction_country="USA",
+        regulatory_authority=regulatory_agency_party_a,
+        product_name="ApexVent V500 Critical Care Ventilator",
+        product_code="CBK",
+        intended_purpose="Continuous ventilator for intensive care support.",
+        license_certificate_number="D398201 / K230894",
+        establishment_id="FEI-3004819284",
+        status="active",
+        initial_approval_date=today - timedelta(days=75),
+        effective_date=today - timedelta(days=75),
+        expiration_date=today + timedelta(days=290),
+        renewal_due_date=today + timedelta(days=200),
+        renewal_lead_days=90,
+        regulatory_lead=admin_user,
+        linked_submission=regulatory_submission_a,
+        notes="Prescription only (Rx only).",
+    )
+
+
+@pytest.fixture
+def product_registration_b(db, tenant_b, regulatory_agency_party_b, regulatory_submission_b, admin_b):
+    today = timezone.now().date()
+    return ProductRegistration.objects.create(
+        tenant=tenant_b,
+        registration_title="Globex Infusion Pump National Listing",
+        registration_type="national_listing",
+        jurisdiction_country="USA",
+        regulatory_authority=regulatory_agency_party_b,
+        product_name="Globex Infusion Pump",
+        product_code="FRN",
+        intended_purpose="Intravenous medication infusion.",
+        license_certificate_number="D440192",
+        status="in_application",
+        renewal_lead_days=90,
+        regulatory_lead=admin_b,
+        linked_submission=regulatory_submission_b,
+    )
+
+
+@pytest.fixture
+def regulatory_commitment_a(db, tenant_a, regulatory_agency_party_a, regulatory_submission_a, product_registration_a, inspection_host_a, admin_user):
+    today = timezone.now().date()
+    return RegulatoryCommitment.objects.create(
+        tenant=tenant_a,
+        title="510(k) Post-Market Sensor Longevity Study",
+        commitment_type="post_approval_study",
+        regulatory_agency=regulatory_agency_party_a,
+        linked_submission=regulatory_submission_a,
+        linked_registration=product_registration_a,
+        linked_inspection=inspection_host_a,
+        agency_reference_number="FDA-CDRH-Q14",
+        correspondence_date=today - timedelta(days=60),
+        commitment_description="Perform 12-month post-market oxygen sensor longevity study.",
+        responsible_owner=admin_user,
+        due_date=today + timedelta(days=180),
+        status="in_progress",
+        verification_method="Interim data collection at 10 hospital sites.",
+    )
+
+
+@pytest.fixture
+def regulatory_commitment_b(db, tenant_b, regulatory_agency_party_b, regulatory_submission_b, product_registration_b, admin_b):
+    today = timezone.now().date()
+    return RegulatoryCommitment.objects.create(
+        tenant=tenant_b,
+        title="Globex Pump Software Verification Response",
+        commitment_type="agency_deficiency",
+        regulatory_agency=regulatory_agency_party_b,
+        linked_submission=regulatory_submission_b,
+        linked_registration=product_registration_b,
+        agency_reference_number="DEF-GLX-001",
+        correspondence_date=today - timedelta(days=10),
+        commitment_description="Address agency question on cybersecurity patch management.",
+        responsible_owner=admin_b,
+        due_date=today + timedelta(days=30),
+        status="open",
+        verification_method="Cybersecurity verification report review.",
+    )
+
+
+@pytest.fixture
+def post_market_surveillance_report_a(db, tenant_a, product_registration_a, admin_user):
+    today = timezone.now().date()
+    return PostMarketSurveillanceReport.objects.create(
+        tenant=tenant_a,
+        report_title="ApexVent V500 Annual PSUR",
+        report_type="psur",
+        product_registration=product_registration_a,
+        device_model_family="ApexVent V500 Family",
+        reporting_period_start=today - timedelta(days=365),
+        reporting_period_end=today - timedelta(days=30),
+        units_distributed=1450,
+        total_complaints_count=18,
+        serious_incidents_count=0,
+        field_actions_count=0,
+        benefit_risk_conclusion="favorable",
+        benefit_risk_rationale="Complaint rate of 1.24% within acceptable limit.",
+        pmcf_action_required=False,
+        status="approved",
+        prepared_by=admin_user,
+        approved_by=admin_user,
+        approval_date=today - timedelta(days=10),
+        next_report_due_date=today + timedelta(days=335),
+    )
+
+
+@pytest.fixture
+def post_market_surveillance_report_b(db, tenant_b, product_registration_b, admin_b):
+    today = timezone.now().date()
+    return PostMarketSurveillanceReport.objects.create(
+        tenant=tenant_b,
+        report_title="Globex Pump Vigilance Summary",
+        report_type="vigilance_trend",
+        product_registration=product_registration_b,
+        device_model_family="Globex Pump Family",
+        reporting_period_start=today - timedelta(days=180),
+        reporting_period_end=today - timedelta(days=1),
+        units_distributed=500,
+        total_complaints_count=5,
+        serious_incidents_count=0,
+        field_actions_count=0,
+        benefit_risk_conclusion="acceptable_monitoring",
+        status="draft",
+        prepared_by=admin_b,
+    )
+
 
