@@ -156,6 +156,9 @@ def waste_disposal_manifest_update(request, pk):
     return render(request, "quality/ehsmanagement/waste_disposal_manifest/form.html", context)
 
 
+waste_disposal_manifest_edit = waste_disposal_manifest_update
+
+
 @login_required
 @require_POST
 def waste_disposal_manifest_delete(request, pk):
