@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Lab Samples — Laboratory Information Management (LIMS) — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <a href="{% url 'quality:lims_dashboard' %}" class="hover:underline">LIMS</a>
+        <span class="mx-1">/</span>
+        <span>Lab Samples</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="test-tube" class="w-6 h-6 text-blue-600"></i>
+        Sample Management & Chain of Custody
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Sample registration, labeling barcodes, storage conditions, and custodial handoff tracking under GLP/GxP compliance.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:lims_dashboard' %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>LIMS Command Center</span>
+      </a>
+      <a href="{% url 'quality:lab_sample_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Log New Sample</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Card -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+      <div class="form-group md:col-span-2">
+        <label for="q" class="form-label text-xs font-semibold text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            name="q"
+            id="q"
+            value="{{ query }}"
+            placeholder="Search by sample #, name, batch, item, barcode..."
+            class="form-input w-full pl-9"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="sample_type" class="form-label text-xs font-semibold text-slate-600 mb-1">Sample Type</label>
+        <select name="sample_type" id="sample_type" class="form-select w-full">
+          <option value="">All Types</option>
+          {% for val, label in sample_type_choices %}
+            <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="status" class="form-label text-xs font-semibold text-slate-600 mb-1">Status</label>
+        <select name="status" id="status" class="form-select w-full">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group flex gap-2">
+        <div class="flex-1">
+          <label for="storage_condition" class="form-label text-xs font-semibold text-slate-600 mb-1">Storage</label>
+          <select name="storage_condition" id="storage_condition" class="form-select w-full">
+            <option value="">All Conditions</option>
+            {% for val, label in storage_condition_choices %}
+              <option value="{{ val }}" {% if selected_storage == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary self-end">Filter</button>
+        {% if query or selected_type or selected_status or selected_storage %}
+          <a href="{% url 'quality:lab_sample_list' %}" class="btn btn-outline self-end" title="Clear Filters">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Samples Table -->
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table w-full text-left text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+            <th class="py-3 px-4">Sample ID</th>
+            <th class="py-3 px-4">Sample Name / Matrix</th>
+            <th class="py-3 px-4">Type</th>
+            <th class="py-3 px-4">Item / Batch</th>
+            <th class="py-3 px-4">Storage Location</th>
+            <th class="py-3 px-4">Custodian</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for s in samples %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-slate-900">
+                <a href="{% url 'quality:lab_sample_detail' s.pk %}" class="text-blue-600 hover:underline">
+                  {{ s.number }}
+                </a>
+                {% if s.barcode_identifier %}
+                  <div class="text-xs text-slate-400 font-mono">{{ s.barcode_identifier }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ s.sample_name }}</div>
+                {% if s.matrix_description %}
+                  <div class="text-xs text-slate-500">{{ s.matrix_description }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ s.get_sample_type_badge }}">{{ s.get_sample_type_display }}</span>
+              </td>
+              <td class="py-3 px-4">
+                {% if s.item_code or s.item_name %}
+                  <div class="font-medium text-slate-800">{{ s.item_name|default:s.item_code }}</div>
+                {% endif %}
+                {% if s.source_batch_number %}
+                  <div class="text-xs text-slate-500 font-mono">Lot: {{ s.source_batch_number }}</div>
+                {% endif %}
+                {% if not s.item_code and not s.source_batch_number %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">
+                <div class="font-medium text-slate-800">{{ s.storage_location|default:"General Storage" }}</div>
+                <div class="text-slate-400">{{ s.get_storage_condition_display }}</div>
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">
+                {% if s.current_custodian %}
+                  <div class="font-medium text-slate-900">{{ s.current_custodian.get_full_name|default:s.current_custodian.username }}</div>
+                {% elif s.received_by %}
+                  <div class="text-slate-700">{{ s.received_by.get_full_name|default:s.received_by.username }}</div>
+                {% else %}
+                  <span class="text-slate-400">Unassigned</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <span class="badge {{ s.get_status_badge }}">{{ s.get_status_display }}</span>
+              </td>
+              <td class="py-3 px-4 text-right table-actions">
+                <div class="flex items-center justify-end gap-1">
+                  {% if s.status == "registered" %}
+                    <form method="post" action="{% url 'quality:lab_sample_receive' s.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-icon text-blue-600 hover:bg-blue-50" title="Receive in Lab">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                  <a href="{% url 'quality:lab_sample_detail' s.pk %}" class="btn btn-icon" title="View Detail">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'quality:lab_sample_edit' s.pk %}" class="btn btn-icon" title="Edit">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  {% if s.status not in "approved in_testing testing_completed" %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'quality:lab_sample_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete lab sample {{ s.number|escapejs }}?');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+                    </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" class="text-center py-12">
+                <div class="empty-state flex flex-col items-center">
+                  <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                    <i data-lucide="test-tube" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800">No Lab Samples Found</h3>
+                  <p class="text-sm text-slate-500 mt-1 mb-4">Register analytical samples for chemical, microbiological, and stability testing.</p>
+                  <a href="{% url 'quality:lab_sample_create' %}" class="btn btn-primary text-sm">
+                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Log First Sample
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+      <div class="p-4 border-t border-slate-200 flex items-center justify-between">
+        <div class="text-xs text-slate-500">
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} samples
+        </div>
+        <div class="pagination flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_type %}&sample_type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_storage %}&storage_condition={{ selected_storage }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">Previous</a>
+          {% endif %}
+          <span class="py-1 px-3 text-xs text-slate-600 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_type %}&sample_type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_storage %}&storage_condition={{ selected_storage }}{% endif %}" class="btn btn-outline py-1 px-2 text-xs">Next</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
