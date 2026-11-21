@@ -19,9 +19,7 @@ PAGE_SIZE = 15
 
 @login_required
 def computer_system_validation_list(request):
-    qs = quality_scope(ComputerSystemValidation.objects.all(), request).select_related(
-        "system_owner", "quality_lead", "validation_protocol"
-    )
+    qs = quality_scope(ComputerSystemValidation.objects.all(), request)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -163,7 +161,7 @@ def computer_system_validation_delete(request, pk):
 @login_required
 def computer_system_validation_export(request):
     qs = quality_scope(ComputerSystemValidation.objects.all(), request).select_related(
-        "system_owner", "quality_lead", "validation_protocol"
+        "system_owner", "quality_lead"
     )
 
     q = request.GET.get("q", "").strip()
