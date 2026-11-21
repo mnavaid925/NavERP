@@ -3,7 +3,7 @@ import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -20,10 +20,19 @@ PAGE_SIZE = 15
 
 @login_required
 def post_market_surveillance_report_list(request):
-    qs = quality_scope(
+    base_qs = quality_scope(
         PostMarketSurveillanceReport.objects.all(),
         request,
-    ).select_related("product_registration", "prepared_by", "approved_by")
+    )
+
+    stats = base_qs.aggregate(
+        total=Count("id"),
+        approved=Count("id", filter=Q(status__in=["approved", "submitted_to_authority"])),
+    )
+    total_reports = stats["total"]
+    approved_count = stats["approved"]
+
+    qs = base_qs.select_related("product_registration", "prepared_by", "approved_by")
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -49,9 +58,6 @@ def post_market_surveillance_report_list(request):
     product_registration_id = request.GET.get("product_registration", "").strip()
     if product_registration_id.isdigit():
         qs = qs.filter(product_registration_id=int(product_registration_id))
-
-    total_reports = qs.count()
-    approved_count = qs.filter(status__in=["approved", "submitted_to_authority"]).count()
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page", 1)
