@@ -183,6 +183,38 @@ def safety_incident_export(request):
     qs = quality_scope(SafetyIncident.objects.all(), request).select_related(
         "org_unit", "reported_by", "affected_person", "lead_investigator"
     )
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(number__icontains=q)
+            | Q(title__icontains=q)
+            | Q(location_details__icontains=q)
+            | Q(affected_party_name__icontains=q)
+            | Q(investigation_findings__icontains=q)
+        )
+
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    type_filter = request.GET.get("incident_type", "").strip()
+    if type_filter:
+        qs = qs.filter(incident_type=type_filter)
+
+    severity_filter = request.GET.get("severity", "").strip()
+    if severity_filter:
+        qs = qs.filter(severity=severity_filter)
+
+    osha_filter = request.GET.get("is_osha_recordable", "").strip()
+    if osha_filter in ("1", "true", "True"):
+        qs = qs.filter(is_osha_recordable=True)
+    elif osha_filter in ("0", "false", "False"):
+        qs = qs.filter(is_osha_recordable=False)
+
+    org_unit_filter = request.GET.get("org_unit", "").strip()
+    if org_unit_filter and org_unit_filter.isdigit():
+        qs = qs.filter(org_unit_id=int(org_unit_filter))
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="safety_incidents_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
     response["X-Content-Type-Options"] = "nosniff"
