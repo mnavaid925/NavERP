@@ -143,6 +143,7 @@ class ComputerSystemValidation(TenantNumbered):
         verbose_name = "Computer System Validation"
         verbose_name_plural = "Computer System Validations"
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_qcsv_ten_created"),
             models.Index(fields=["tenant", "status"], name="idx_qcsv_ten_status"),
             models.Index(fields=["tenant", "gamp_category"], name="idx_qcsv_ten_gamp"),
             models.Index(fields=["tenant", "next_review_due"], name="idx_qcsv_ten_review_due"),
