@@ -118,9 +118,10 @@ class ProductRecall(TenantNumbered):
 
     def save(self, *args, **kwargs):
         if self.total_distributed_qty and self.total_distributed_qty > 0:
-            self.recovery_rate_pct = (
+            calc_rate = (
                 (Decimal(str(self.total_recovered_qty)) / Decimal(str(self.total_distributed_qty))) * Decimal("100.00")
             ).quantize(Decimal("0.01"))
+            self.recovery_rate_pct = min(Decimal("999.99"), calc_rate)
         else:
             self.recovery_rate_pct = Decimal("0.00")
         super().save(*args, **kwargs)
