@@ -21,7 +21,7 @@ PAGE_SIZE = 15
 @login_required
 def safety_incident_list(request):
     qs = quality_scope(SafetyIncident.objects.all(), request).select_related(
-        "org_unit", "reported_by", "affected_person"
+        "org_unit", "reported_by", "affected_person", "lead_investigator"
     )
 
     q = request.GET.get("q", "").strip()
