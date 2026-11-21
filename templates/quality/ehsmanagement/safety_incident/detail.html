@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}{{ safety_incident.title }} ({{ safety_incident.number }}) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:ehs_dashboard' %}">EHS Command Center</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:safety_incident_list' %}">Safety Incidents</a>
+            <span class="sep">/</span>
+            <span>{{ safety_incident.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ safety_incident.title }}</h1>
+            <span class="badge {{ safety_incident.status_css }}">{{ safety_incident.get_status_display }}</span>
+            <span class="badge {{ safety_incident.severity_css }}">{{ safety_incident.get_severity_display }}</span>
+            {% if safety_incident.is_osha_recordable %}
+            <span class="badge badge-red">OSHA Recordable</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:safety_incident_update' safety_incident.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i> Edit Incident
+        </a>
+        <a href="{% url 'quality:safety_incident_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Incidents
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Incident Details & Timeline -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i> Incident Overview & Event Classification
+                </h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Incident Number</dt>
+                        <dd class="font-mono font-medium">{{ safety_incident.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Incident Title</dt>
+                        <dd class="font-medium text-slate-900">{{ safety_incident.title }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Occurrence Timestamp</dt>
+                        <dd class="font-medium">{{ safety_incident.incident_date|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Reported Date</dt>
+                        <dd>{{ safety_incident.report_date|date:"Y-m-d" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Incident Type</dt>
+                        <dd>{{ safety_incident.get_incident_type_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Severity Level</dt>
+                        <dd><span class="badge {{ safety_incident.severity_css }}">{{ safety_incident.get_severity_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Facility / Org Unit</dt>
+                        <dd>
+                            {% if safety_incident.org_unit %}{{ safety_incident.org_unit.name }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Specific Location</dt>
+                        <dd>{{ safety_incident.location_details|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Reported By</dt>
+                        <dd>
+                            {% if safety_incident.reported_by %}
+                            {{ safety_incident.reported_by.get_full_name|default:safety_incident.reported_by.username }}
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Lead Investigator</dt>
+                        <dd>
+                            {% if safety_incident.lead_investigator %}
+                            {{ safety_incident.lead_investigator.get_full_name|default:safety_incident.lead_investigator.username }}
+                            {% else %}<span class="text-slate-400">Unassigned</span>{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Injury & Clinical Details -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="activity" class="w-5 h-5 text-red-500"></i> Injury Classification & Medical Treatment
+                </h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Affected Individual</dt>
+                        <dd class="font-medium text-slate-900">{{ safety_incident.affected_person_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Party Type</dt>
+                        <dd>{{ safety_incident.get_affected_party_type_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Nature of Injury / Illness</dt>
+                        <dd>{{ safety_incident.get_nature_of_injury_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Body Part Affected</dt>
+                        <dd>{{ safety_incident.get_body_part_affected_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Medical Treatment Level</dt>
+                        <dd>{{ safety_incident.get_medical_treatment_level_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Return to Full Duty Date</dt>
+                        <dd>{{ safety_incident.date_returned_to_work|date:"Y-m-d"|default:"Not returned / Ongoing" }}</dd>
+                    </div>
+                </dl>
+
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Immediate First Aid & Containment Actions Taken</div>
+                    <div class="p-3 bg-slate-50 text-slate-800 rounded border border-slate-200 text-sm whitespace-pre-line">
+                        {{ safety_incident.immediate_actions_taken|default:"No immediate containment documented at initial intake." }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Root Cause Analysis & Investigation -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="search" class="w-5 h-5 text-primary"></i> Root Cause Analysis & Findings
+                </h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Root Cause Category</div>
+                        <div class="font-medium text-slate-800">{{ safety_incident.get_root_cause_category_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">PPE Compliance at Time of Event</div>
+                        <div class="font-medium text-slate-800">{{ safety_incident.get_ppe_compliance_status_display }}</div>
+                    </div>
+                </div>
+
+                {% if safety_incident.ppe_notes %}
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">PPE Observations & Notes</div>
+                    <div class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200">{{ safety_incident.ppe_notes }}</div>
+                </div>
+                {% endif %}
+
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Investigation Findings Narrative</div>
+                    <div class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-line">
+                        {{ safety_incident.investigation_findings|default:"Formal investigation in progress." }}
+                    </div>
+                </div>
+
+                <!-- Update Investigation Form -->
+                {% if safety_incident.status != 'closed' and safety_incident.status != 'cancelled' %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="font-semibold text-slate-800 text-sm mb-3">Record Investigation Findings & Advance Workflow</h4>
+                    <form method="post" action="{% url 'quality:safety_incident_investigate' safety_incident.pk %}" class="space-y-3">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label class="form-label" for="investigation_findings">Updated Findings</label>
+                            <textarea name="investigation_findings" id="investigation_findings" rows="3" class="form-textarea" placeholder="Summarize root cause determination, witness interviews, and corrective actions...">{{ safety_incident.investigation_findings }}</textarea>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-group">
+                                <label class="form-label" for="root_cause_category">Root Cause</label>
+                                <select name="root_cause_category" id="root_cause_category" class="form-select">
+                                    {% for val, label in safety_incident.ROOT_CAUSE_CATEGORY_CHOICES %}
+                                    <option value="{{ val }}" {% if safety_incident.root_cause_category == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="investigation_action">Workflow Transition</label>
+                                <select name="investigation_action" id="investigation_action" class="form-select">
+                                    <option value="review">Set Under Review</option>
+                                    <option value="capa">Escalate to CAPA Pending</option>
+                                    <option value="close">Approve & Close Incident</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i data-lucide="check-circle"></i> Save Investigation & Transition
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar: OSHA 300 Recordkeeping & Integrations -->
+    <div class="space-y-6">
+        <!-- OSHA 300 Metrics Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="file-check" class="w-5 h-5 text-blue-600"></i> OSHA 29 CFR 1904 Compliance
+                </h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-3 rounded border {% if safety_incident.is_osha_recordable %}bg-red-50 border-red-200{% else %}bg-slate-50 border-slate-200{% endif %}">
+                    <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Recordability Determination</div>
+                    <div class="flex items-center gap-2">
+                        <span class="badge {{ safety_incident.osha_css }}">
+                            {% if safety_incident.is_osha_recordable %}OSHA Recordable{% else %}Non-Recordable{% endif %}
+                        </span>
+                        <span class="text-xs text-slate-600">{{ safety_incident.get_osha_classification_display }}</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="stat-card">
+                        <div class="stat-value text-red-600">{{ safety_incident.lost_workdays_count }}</div>
+                        <div class="stat-label">Days Away From Work</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value text-amber-600">{{ safety_incident.restricted_workdays_count }}</div>
+                        <div class="stat-label">Restricted / Transfer Days</div>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-200 pt-3 text-xs text-slate-600 space-y-1">
+                    <div class="flex justify-between">
+                        <span>DART Incident:</span>
+                        <span class="font-semibold">{% if safety_incident.is_dart_incident %}YES{% else %}NO{% endif %}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Total Lost/Restricted Days:</span>
+                        <span class="font-semibold">{{ safety_incident.total_lost_and_restricted_days }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cross-Module QMS Integrations -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="link" class="w-5 h-5 text-primary"></i> Linked QMS Records
+                </h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <div class="text-xs font-medium text-slate-500 mb-1">Linked CAPA Investigation</div>
+                    {% if safety_incident.capa_investigation %}
+                    <a href="{% url 'quality:capa_investigation_detail' safety_incident.capa_investigation.pk %}" class="flex items-center gap-2 text-primary hover:underline font-mono text-sm">
+                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                        {{ safety_incident.capa_investigation.number }} — {{ safety_incident.capa_investigation.title|truncatechars:30 }}
+                    </a>
+                    {% else %}
+                    <span class="text-xs text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div class="border-t border-slate-200 pt-2">
+                    <div class="text-xs font-medium text-slate-500 mb-1">Linked Non-Conformance (NCR)</div>
+                    {% if safety_incident.non_conformance_report %}
+                    <a href="{% url 'quality:non_conformance_report_detail' safety_incident.non_conformance_report.pk %}" class="flex items-center gap-2 text-primary hover:underline font-mono text-sm">
+                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                        {{ safety_incident.non_conformance_report.number }} — {{ safety_incident.non_conformance_report.title|truncatechars:30 }}
+                    </a>
+                    {% else %}
+                    <span class="text-xs text-slate-400">None linked</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
