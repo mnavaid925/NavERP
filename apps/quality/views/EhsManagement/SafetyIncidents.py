@@ -222,6 +222,14 @@ def safety_incident_export(request):
     if org_unit_filter and org_unit_filter.isdigit():
         qs = qs.filter(org_unit_id=int(org_unit_filter))
 
+    write_audit_log(
+        request.user,
+        None,
+        "export",
+        changes={"model": "SafetyIncident", "records_exported": qs.count()},
+        tenant=request.tenant,
+    )
+
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="safety_incidents_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
     response["X-Content-Type-Options"] = "nosniff"
