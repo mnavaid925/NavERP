@@ -87,7 +87,7 @@
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Testing SOP Document</dt>
         <dd class="text-sm text-slate-800 mt-1">
           {% if specification.sop_document %}
-            <a href="{% url 'quality:document_detail' specification.sop_document.pk %}" class="text-blue-600 hover:underline">
+            <a href="{% url 'quality:controlled_document_detail' specification.sop_document.pk %}" class="text-blue-600 hover:underline">
               {{ specification.sop_document.number }} - {{ specification.sop_document.title }}
             </a>
           {% else %}
