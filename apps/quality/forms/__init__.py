@@ -201,6 +201,18 @@ from apps.quality.forms.DataIntegrity.AuditTrailReviews import (
 from apps.quality.forms.DataIntegrity.SystemChangeControls import (
     SystemChangeControlForm,
 )
+from apps.quality.forms.LimsManagement.LabSamples import (
+    LabSampleForm,
+)
+from apps.quality.forms.LimsManagement.LabSpecifications import (
+    LabSpecificationForm,
+)
+from apps.quality.forms.LimsManagement.LabTestWorksheets import (
+    LabTestWorksheetForm,
+)
+from apps.quality.forms.LimsManagement.OosInvestigations import (
+    OosInvestigationForm,
+)
 
 __all__ = [
     "ControlledDocumentForm",
@@ -292,5 +304,9 @@ __all__ = [
     "DataIntegrityAssessmentForm",
     "AuditTrailReviewForm",
     "SystemChangeControlForm",
+    "LabSampleForm",
+    "LabSpecificationForm",
+    "LabTestWorksheetForm",
+    "OosInvestigationForm",
 ]
 
