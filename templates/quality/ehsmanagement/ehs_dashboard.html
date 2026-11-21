@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}Environmental, Health & Safety (EHS) Command Center — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <span>EHS Command Center</span>
+        </div>
+        <h1 class="page-title">Environmental, Health & Safety (EHS) Command Center</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:ehs_dashboard_export' %}" class="btn btn-outline">
+            <i data-lucide="download"></i> Export KPIs
+        </a>
+        <a href="{% url 'quality:safety_incident_create' %}" class="btn btn-danger">
+            <i data-lucide="shield-alert"></i> Report Incident
+        </a>
+        <a href="{% url 'quality:environmental_monitoring_log_create' %}" class="btn btn-primary">
+            <i data-lucide="gauge"></i> Log Cleanroom Sample
+        </a>
+    </div>
+</div>
+
+<!-- Key EHS & OSHA Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-label">OSHA 300 Recordables</div>
+            <div class="stat-value">{{ osha_recordable_count }}</div>
+            <div class="text-xs text-slate-500">{{ total_incidents_count }} total incidents logged</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-label">DART Cases (Lost/Restricted)</div>
+            <div class="stat-value">{{ dart_cases_count }}</div>
+            <div class="text-xs text-slate-500">{{ total_lost_days }}L / {{ total_restricted_days }}R days</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div>
+            <div class="stat-label">Cleanroom Excursions</div>
+            <div class="stat-value">{{ active_excursions_count }}</div>
+            <div class="text-xs text-slate-500">Alert / action limits breached</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="flask-conical"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active Chemicals (SDS)</div>
+            <div class="stat-value">{{ active_materials_count }}</div>
+            <div class="text-xs {% if expiring_sds_count > 0 %}text-amber-600 font-semibold{% else %}text-slate-500{% endif %}">
+                {{ expiring_sds_count }} SDS expiring in 90 days
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Secondary Alert Strip if Overdue Items Exist -->
+{% if overdue_accumulation_count > 0 or expiring_sds_count > 0 %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    {% if overdue_accumulation_count > 0 %}
+    <div class="p-4 bg-red-50 border border-red-300 rounded-lg flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600"></i>
+            <div>
+                <div class="font-bold text-red-900 text-sm">RCRA Compliance Alert: Overdue Waste Accumulation</div>
+                <div class="text-xs text-red-700"><strong>{{ overdue_accumulation_count }}</strong> waste manifest(s) have exceeded the 90-day generator storage limit.</div>
+            </div>
+        </div>
+        <a href="{% url 'quality:waste_disposal_manifest_list' %}" class="btn btn-outline btn-sm">Review</a>
+    </div>
+    {% endif %}
+
+    {% if expiring_sds_count > 0 %}
+    <div class="p-4 bg-amber-50 border border-amber-300 rounded-lg flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <i data-lucide="clock" class="w-6 h-6 text-amber-600"></i>
+            <div>
+                <div class="font-bold text-amber-900 text-sm">GHS HazCom Alert: Safety Data Sheets Expiring</div>
+                <div class="text-xs text-amber-700"><strong>{{ expiring_sds_count }}</strong> hazardous chemical SDS(s) require 3-year revision renewal.</div>
+            </div>
+        </div>
+        <a href="{% url 'quality:hazardous_material_list' %}" class="btn btn-outline btn-sm">Review</a>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Quick Navigation to Registers -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <a href="{% url 'quality:hazardous_material_list' %}" class="card p-4 hover:border-primary transition flex items-center gap-3">
+        <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i data-lucide="flask-conical" class="w-6 h-6"></i></div>
+        <div>
+            <div class="font-bold text-slate-900 text-sm">Hazardous Materials</div>
+            <div class="text-xs text-slate-500">SDS & chemical inventory</div>
+        </div>
+    </a>
+    <a href="{% url 'quality:safety_incident_list' %}" class="card p-4 hover:border-primary transition flex items-center gap-3">
+        <div class="p-3 bg-red-50 text-red-600 rounded-lg"><i data-lucide="shield-alert" class="w-6 h-6"></i></div>
+        <div>
+            <div class="font-bold text-slate-900 text-sm">Safety Incidents</div>
+            <div class="text-xs text-slate-500">OSHA 300 & near-misses</div>
+        </div>
+    </a>
+    <a href="{% url 'quality:environmental_monitoring_log_list' %}" class="card p-4 hover:border-primary transition flex items-center gap-3">
+        <div class="p-3 bg-purple-50 text-purple-600 rounded-lg"><i data-lucide="gauge" class="w-6 h-6"></i></div>
+        <div>
+            <div class="font-bold text-slate-900 text-sm">Environmental Logs</div>
+            <div class="text-xs text-slate-500">Cleanroom optical & microbial</div>
+        </div>
+    </a>
+    <a href="{% url 'quality:waste_disposal_manifest_list' %}" class="card p-4 hover:border-primary transition flex items-center gap-3">
+        <div class="p-3 bg-green-50 text-green-600 rounded-lg"><i data-lucide="truck" class="w-6 h-6"></i></div>
+        <div>
+            <div class="font-bold text-slate-900 text-sm">Waste Manifests</div>
+            <div class="text-xs text-slate-500">RCRA cradle-to-grave tracking</div>
+        </div>
+    </a>
+</div>
+
+<!-- Two Column Dashboards -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Recent Safety Incidents -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i> Recent Workplace Incidents & Near-Misses
+            </h3>
+            <a href="{% url 'quality:safety_incident_list' %}" class="text-xs text-primary hover:underline font-medium">View All &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Incident</th>
+                        <th>Type / Severity</th>
+                        <th>OSHA 300</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inc in recent_incidents %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:safety_incident_detail' inc.pk %}" class="font-medium text-slate-900 hover:text-primary">
+                                {{ inc.title|truncatechars:35 }}
+                            </a>
+                            <div class="text-xs text-slate-500 font-mono">{{ inc.number }} &bull; {{ inc.incident_date|date:"M d, H:i" }}</div>
+                        </td>
+                        <td>
+                            <span class="badge {{ inc.severity_css }}">{{ inc.get_severity_display }}</span>
+                        </td>
+                        <td>
+                            {% if inc.is_osha_recordable %}
+                            <span class="badge badge-red text-xs">Recordable</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">Non-Recordable</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ inc.status_css }}">{{ inc.get_status_display }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-slate-400">No safety incidents reported.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Cleanroom Environmental Excursions -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="alert-octagon" class="w-5 h-5 text-amber-500"></i> Active Cleanroom Excursions
+            </h3>
+            <a href="{% url 'quality:environmental_monitoring_log_list' %}?evaluation_status=action_exceeded" class="text-xs text-primary hover:underline font-medium">View All &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Point ID</th>
+                        <th>Parameter</th>
+                        <th>Measured</th>
+                        <th>Excursion Level</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ex in recent_excursions %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:environmental_monitoring_log_detail' ex.pk %}" class="font-mono font-medium text-primary hover:underline">
+                                {{ ex.sampling_point_id }}
+                            </a>
+                            <div class="text-xs text-slate-500">{{ ex.cleanroom_display }}</div>
+                        </td>
+                        <td class="text-sm">{{ ex.parameter_name|truncatechars:25 }}</td>
+                        <td class="font-mono font-bold text-red-600">
+                            {{ ex.measured_value }} {{ ex.get_unit_of_measure_display }}
+                        </td>
+                        <td>
+                            <span class="badge {{ ex.evaluation_status_css }}">
+                                {{ ex.get_evaluation_status_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-slate-400">All cleanroom zones within normal operational limits.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Secondary Two Column Dashboards -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Expiring SDS Alerts -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="clock" class="w-5 h-5 text-amber-500"></i> Safety Data Sheets (SDS) Expiration Tracker
+            </h3>
+            <a href="{% url 'quality:hazardous_material_list' %}" class="text-xs text-primary hover:underline font-medium">View Catalog &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Chemical</th>
+                        <th>CAS #</th>
+                        <th>Location</th>
+                        <th>Expiry Target</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mat in expiring_sds_list %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:hazardous_material_detail' mat.pk %}" class="font-medium text-slate-900 hover:text-primary">
+                                {{ mat.material_name }}
+                            </a>
+                            <div class="text-xs text-slate-500 font-mono">{{ mat.number }}</div>
+                        </td>
+                        <td class="font-mono text-sm">{{ mat.cas_number|default:"—" }}</td>
+                        <td class="text-xs text-slate-600">{{ mat.storage_location_code|default:"General Hazmat" }}</td>
+                        <td>
+                            <span class="badge {{ mat.sds_status_css }}">
+                                {{ mat.sds_expiry_date|date:"Y-m-d" }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-slate-400">All chemical SDS versions are current and compliant.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Active Hazardous Waste Shipments -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="truck" class="w-5 h-5 text-primary"></i> Pending Hazardous Waste Manifests & TSDF Custody
+            </h3>
+            <a href="{% url 'quality:waste_disposal_manifest_list' %}" class="text-xs text-primary hover:underline font-medium">View Manifests &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Manifest</th>
+                        <th>Stream / Quantity</th>
+                        <th>Transporter</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for man in pending_manifests %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:waste_disposal_manifest_detail' man.pk %}" class="font-medium text-slate-900 hover:text-primary">
+                                {{ man.manifest_title|truncatechars:25 }}
+                            </a>
+                            <div class="text-xs text-slate-500 font-mono">{{ man.regulatory_manifest_id }}</div>
+                        </td>
+                        <td class="text-xs">
+                            <div>{{ man.get_manifest_type_display }}</div>
+                            <div class="font-mono font-bold">{{ man.quantity_value }} {{ man.get_quantity_uom_display }}</div>
+                        </td>
+                        <td class="text-xs text-slate-600">{{ man.transporter.name }}</td>
+                        <td>
+                            <span class="badge {{ man.status_css }}">{{ man.get_status_display }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-slate-400">No open or pending waste shipments in transit.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
