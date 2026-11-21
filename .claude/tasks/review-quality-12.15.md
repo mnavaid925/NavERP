@@ -29,7 +29,7 @@
   - **Issue**: The demo data seeder `_seed_submodule_12_15` passes choice strings that do not exist on the models' `CHOICES` tuples (`weight_mass` vs `fill_volume_weight`, `highly_capable` vs `capable_excellent`, `approved` vs `completed`, `matrix_verified` vs `verified_100_percent`, `traditional_csv` vs `traditional_v_model`, `on_premises` vs `on_premise`, `sampling_in_progress` vs `in_cleaning_runs`). Causes badge lookup failures and breaks dashboard KPI filtering.
   - **Fix**: Update `_seed_submodule_12_15` in `apps/quality/management/commands/seed_quality.py` to use canonical choice keys.
 
-- [ ] **[C2] `CleaningValidation.calculate_limits()` Logic Flaw Overriding Chosen `calculation_basis`**
+- [x] **[C2] `CleaningValidation.calculate_limits()` Logic Flaw Overriding Chosen `calculation_basis`** — fixed in 56a664eb
   - **Location**: `apps/quality/models/ProcessValidation/CleaningValidations.py:196-235`
   - **Issue**: Sequential `else: limits.append(...)` appends alternate calculations when a specific basis is chosen, causing `min(limits)` to take the minimum across all formulas rather than strictly honoring the selected calculation basis (`ten_ppm_limit`, `therapeutic_dose`, `toxicological_pde`).
   - **Fix**: Restructure `calculate_limits()` using explicit `if/elif/elif/else` branches for `"ten_ppm_limit"`, `"therapeutic_dose"`, `"toxicological_pde"`, and `"most_stringent"`.
