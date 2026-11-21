@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 7 | 2 | 0 |
+| **Important** | 9 | 6 | 3 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 21 | 4 | 0 |
+| **Total** | 25 | 20 | 5 | 0 |
 
 ---
 
@@ -57,7 +57,7 @@
   - **Issue**: Template references `technical_dossier.revision_number`, but the attribute on `ControlledDocument` is `revision`. Resolves silently to empty string `(Rev )`.
   - **Fix**: Update template expression to `{{ regulatory_submission.technical_dossier.revision }}`.
 
-- [ ] **I3: Missing `@tenant_admin_required` on Destructive Deletion Views**
+- [x] **I3: Missing `@tenant_admin_required` on Destructive Deletion Views**
   - **Files**:
     - `apps/quality/views/RegulatorySubmissions/RegulatorySubmissions.py:160`
     - `apps/quality/views/RegulatorySubmissions/ProductRegistrations.py:176`
