@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ computer_system.number }}{% else %}New Computer System Validation{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:process_validation_dashboard' %}">Process Validation</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:computer_system_validation_list' %}">Computer Systems</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ computer_system.number }}{% else %}New System{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Computer System: {{ computer_system.number }}{% else %}Register Computer System (GAMP 5 / CSV){% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    1. System Identity & Architecture
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.system_name.id_for_label }}" class="form-label">System / Software Name *</label>
+                        {{ form.system_name }}
+                        {% if form.system_name.errors %}<div class="form-error">{{ form.system_name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.version_release.id_for_label }}" class="form-label">Version / Build Release *</label>
+                        {{ form.version_release }}
+                        {% if form.version_release.errors %}<div class="form-error">{{ form.version_release.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.vendor_name.id_for_label }}" class="form-label">Vendor / Developer Provider *</label>
+                        {{ form.vendor_name }}
+                        {% if form.vendor_name.errors %}<div class="form-error">{{ form.vendor_name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.hosting_model.id_for_label }}" class="form-label">Hosting & Deployment Model *</label>
+                        {{ form.hosting_model }}
+                        {% if form.hosting_model.errors %}<div class="form-error">{{ form.hosting_model.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2 form-group">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">Intended GxP Purpose & Scope</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    2. GAMP 5 Classification & Regulatory Strategy
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.gamp_category.id_for_label }}" class="form-label">GAMP 5 Category *</label>
+                        {{ form.gamp_category }}
+                        {% if form.gamp_category.errors %}<div class="form-error">{{ form.gamp_category.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.gxp_impact.id_for_label }}" class="form-label">GxP Impact Level *</label>
+                        {{ form.gxp_impact }}
+                        {% if form.gxp_impact.errors %}<div class="form-error">{{ form.gxp_impact.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.validation_approach.id_for_label }}" class="form-label">Validation Strategy *</label>
+                        {{ form.validation_approach }}
+                        {% if form.validation_approach.errors %}<div class="form-error">{{ form.validation_approach.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                        <div class="flex items-center gap-2">
+                            {{ form.is_part_11_compliant }}
+                            <label for="{{ form.is_part_11_compliant.id_for_label }}" class="text-sm text-slate-700 font-medium">
+                                21 CFR Part 11 / Annex 11 Mandated
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {{ form.requires_audit_trail }}
+                            <label for="{{ form.requires_audit_trail.id_for_label }}" class="text-sm text-slate-700 font-medium">
+                                Tamper-Evident Audit Trail Enforced
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {{ form.has_disaster_recovery_plan }}
+                            <label for="{{ form.has_disaster_recovery_plan.id_for_label }}" class="text-sm text-slate-700 font-medium">
+                                Disaster Recovery & Backup Plan
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    3. Traceability Metrics & Status
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.traceability_status.id_for_label }}" class="form-label">Matrix Status *</label>
+                        {{ form.traceability_status }}
+                        {% if form.traceability_status.errors %}<div class="form-error">{{ form.traceability_status.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.urs_requirements_count.id_for_label }}" class="form-label">URS Requirements</label>
+                        {{ form.urs_requirements_count }}
+                        {% if form.urs_requirements_count.errors %}<div class="form-error">{{ form.urs_requirements_count.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.test_scripts_count.id_for_label }}" class="form-label">Test Scripts (IQ/OQ/PQ)</label>
+                        {{ form.test_scripts_count }}
+                        {% if form.test_scripts_count.errors %}<div class="form-error">{{ form.test_scripts_count.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.deviations_found_count.id_for_label }}" class="form-label">Software Deviations</label>
+                        {{ form.deviations_found_count }}
+                        {% if form.deviations_found_count.errors %}<div class="form-error">{{ form.deviations_found_count.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Validation Status *</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.validated_date.id_for_label }}" class="form-label">Live Release Date</label>
+                        {{ form.validated_date }}
+                        {% if form.validated_date.errors %}<div class="form-error">{{ form.validated_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.periodic_review_frequency_months.id_for_label }}" class="form-label">Review Cadence (Months)</label>
+                        {{ form.periodic_review_frequency_months }}
+                        {% if form.periodic_review_frequency_months.errors %}<div class="form-error">{{ form.periodic_review_frequency_months.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.next_review_due.id_for_label }}" class="form-label">Next Review Due</label>
+                        {{ form.next_review_due }}
+                        {% if form.next_review_due.errors %}<div class="form-error">{{ form.next_review_due.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100">
+                    4. Governance Dossier & Responsibilities
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.system_owner.id_for_label }}" class="form-label">System Business Owner *</label>
+                        {{ form.system_owner }}
+                        {% if form.system_owner.errors %}<div class="form-error">{{ form.system_owner.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.quality_lead.id_for_label }}" class="form-label">QA Validation Lead *</label>
+                        {{ form.quality_lead }}
+                        {% if form.quality_lead.errors %}<div class="form-error">{{ form.quality_lead.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.validation_protocol.id_for_label }}" class="form-label">Qualification Protocol</label>
+                        {{ form.validation_protocol }}
+                        {% if form.validation_protocol.errors %}<div class="form-error">{{ form.validation_protocol.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.risk_assessment.id_for_label }}" class="form-label">Software Risk Assessment</label>
+                        {{ form.risk_assessment }}
+                        {% if form.risk_assessment.errors %}<div class="form-error">{{ form.risk_assessment.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.urs_document.id_for_label }}" class="form-label">Controlled URS Document</label>
+                        {{ form.urs_document }}
+                        {% if form.urs_document.errors %}<div class="form-error">{{ form.urs_document.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.vsr_document.id_for_label }}" class="form-label">Controlled VSR Document</label>
+                        {{ form.vsr_document }}
+                        {% if form.vsr_document.errors %}<div class="form-error">{{ form.vsr_document.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'quality:computer_system_validation_detail' computer_system.pk %}{% else %}{% url 'quality:computer_system_validation_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Update Computer System{% else %}Register System{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
