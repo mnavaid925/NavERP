@@ -36825,9 +36825,9 @@ apps/quality/
 ## Models (from research — 4)
 
 ### 1. `ValidationProtocol` (`QVAL-`)
-- [ ] **File**: `apps/quality/models/ProcessValidation/ValidationProtocols.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QVAL"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/ProcessValidation/ValidationProtocols.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QVAL"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Concise protocol title e.g. Autoclave 04 IQ/OQ Qualification Protocol")`
   - `description`: `TextField(blank=True, help_text="Scope, objectives, and regulatory background of the validation protocol")`
   - `protocol_stage`: `CharField(max_length=24, choices=STAGE_CHOICES, default="iq", db_index=True)` — `"dq"` (2), `"iq"` (2), `"oq"` (2), `"pq"` (2), `"ppq"` (3), `"cpv"` (3), `"revalidation"` (12) (longest: 12 <= 24)
@@ -36849,7 +36849,7 @@ apps/quality/
   - `last_review_date`: `DateField(null=True, blank=True, help_text="Date protocol was last re-evaluated")`
   - `next_review_due`: `DateField(null=True, blank=True, db_index=True, help_text="Next scheduled periodic revalidation due date")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Foreign Keys (tenant-scoped)**:
+- [x] **Foreign Keys (tenant-scoped)**:
   - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="validation_protocols", help_text="Plant or department facility")`
   - `lead_author`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="authored_validation_protocols", help_text="Author of validation protocol")`
   - `lead_executor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="executed_validation_protocols", help_text="Lead engineer executing qualification protocol")`
@@ -36859,15 +36859,15 @@ apps/quality/
   - `linked_deviation`: `ForeignKey("quality.ProcessDeviation", on_delete=models.SET_NULL, null=True, blank=True, related_name="validation_protocols", help_text="Execution anomaly or out-of-spec deviation")`
   - `linked_capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="validation_protocols", help_text="Triggered CAPA investigation")`
   - `parent_protocol`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="revalidation_cycles", help_text="Prior qualification version for revalidation cycles")`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `draft`: `badge-slate`, `in_review`: `badge-amber`, `approved_for_execution`: `badge-info`, `in_execution`: `badge-info`, `deviation_hold`: `badge-red`, `execution_completed`: `badge-amber`, `final_approved`: `badge-green`, `rejected`: `badge-red`, `superseded`: `badge-muted`
   - `STAGE_CSS`: `dq`: `badge-slate`, `iq`: `badge-info`, `oq`: `badge-info`, `pq`: `badge-green`, `ppq`: `badge-green`, `cpv`: `badge-info`, `revalidation`: `badge-amber`
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `is_overdue`: Returns boolean indicating if `target_completion_date` has passed without `execution_end_date`.
   - `is_review_overdue`: Returns boolean indicating if `next_review_due` is past current date.
   - `status_css`: CSS badge class for status.
   - `stage_css`: CSS badge class for protocol stage.
-- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+- [x] **Constraints & Indexes (L65 <= 30 chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="qval_ten_num_uniq")` (17 chars)
   - `Index(fields=["tenant", "status"], name="idx_qval_ten_status")` (19 chars)
   - `Index(fields=["tenant", "protocol_stage"], name="idx_qval_ten_stage")` (18 chars)
@@ -36878,9 +36878,9 @@ apps/quality/
 ---
 
 ### 2. `ProcessCapabilityStudy` (`QCPK-`)
-- [ ] **File**: `apps/quality/models/ProcessValidation/ProcessCapabilityStudies.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCPK"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/ProcessValidation/ProcessCapabilityStudies.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCPK"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Study title e.g. Tablet Press 02 Fill Weight Capability Study")`
   - `parameter_name`: `CharField(max_length=150, help_text="Critical Quality Attribute (CQA) or Critical Process Parameter (CPP) measured")`
   - `parameter_category`: `CharField(max_length=30, choices=PARAMETER_CATEGORY_CHOICES, default="dimensional_thickness", db_index=True)` — `"dimensional_thickness"` (21), `"temperature"` (11), `"pressure"` (8), `"speed_feed"` (10), `"torque"` (6), `"ph_chemical"` (11), `"humidity"` (8), `"voltage_current"` (15), `"cycle_time"` (10), `"weight_mass"` (11), `"other"` (5) (longest: 21 <= 30)
@@ -36908,22 +36908,22 @@ apps/quality/
   - `lot_number`: `CharField(max_length=100, blank=True, help_text="Batch or production run identifier stand-in")`
   - `analysis_summary`: `TextField(blank=True, help_text="Statistical conclusions, assignable causes, and process capability assessment notes")`
   - `study_date`: `DateField(null=True, blank=True, help_text="Date capability study data was acquired")`
-- [ ] **Foreign Keys (tenant-scoped)**:
+- [x] **Foreign Keys (tenant-scoped)**:
   - `validation_protocol`: `ForeignKey("quality.ValidationProtocol", on_delete=models.SET_NULL, null=True, blank=True, related_name="capability_studies", help_text="Associated qualification protocol (PQ/PPQ/CPV)")`
   - `investigator`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="capability_studies", help_text="Quality engineer / statistician performing study")`
   - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_capability_studies", help_text="Quality manager approving capability determination")`
   - `linked_parameter_log`: `ForeignKey("quality.ProcessParameterLog", on_delete=models.SET_NULL, null=True, blank=True, related_name="capability_studies", help_text="Source shop-floor parameter log run")`
   - `linked_calibration_gage`: `ForeignKey("quality.CalibrationGage", on_delete=models.SET_NULL, null=True, blank=True, related_name="capability_studies", help_text="Measurement instrument used for data capture")`
   - `linked_capa`: `ForeignKey("quality.CapaInvestigation", on_delete=models.SET_NULL, null=True, blank=True, related_name="capability_studies", help_text="Triggered CAPA if process is incapable (Cpk < 1.00)")`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `DETERMINATION_CSS`: `highly_capable`: `badge-green`, `capable`: `badge-green`, `marginally_capable`: `badge-amber`, `incapable`: `badge-red`, `undetermined`: `badge-slate`
   - `STATUS_CSS`: `draft`: `badge-slate`, `data_collection`: `badge-info`, `analyzed`: `badge-amber`, `approved`: `badge-green`, `action_required`: `badge-red`
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `tolerance_width`: `upper_spec_limit - lower_spec_limit`
   - `determination_css`: CSS badge class for capability classification.
   - `status_css`: CSS badge class for status.
   - `compute_indices()`: Python calculation routine computing $C_p, C_{pk}, P_p, P_{pk}$, normal defect PPM, and assigning `capability_determination`.
-- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+- [x] **Constraints & Indexes (L65 <= 30 chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="qcpk_ten_num_uniq")` (17 chars)
   - `Index(fields=["tenant", "status"], name="idx_qcpk_ten_status")` (19 chars)
   - `Index(fields=["tenant", "capability_determination"], name="idx_qcpk_ten_determ")` (19 chars)
@@ -36933,9 +36933,9 @@ apps/quality/
 ---
 
 ### 3. `ComputerSystemValidation` (`QCSV-`)
-- [ ] **File**: `apps/quality/models/ProcessValidation/ComputerSystemValidations.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCSV"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/ProcessValidation/ComputerSystemValidations.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCSV"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `system_name`: `CharField(max_length=200, help_text="Commercial software product or internal application name")`
   - `version_release`: `CharField(max_length=50, help_text="Software build or version identifier (e.g. v3.2.1)")`
   - `vendor_name`: `CharField(max_length=150, help_text="Commercial software vendor or development provider")`
@@ -36956,21 +36956,21 @@ apps/quality/
   - `last_review_date`: `DateField(null=True, blank=True, help_text="Date of last formal periodic software review")`
   - `next_review_due`: `DateField(null=True, blank=True, db_index=True, help_text="Next scheduled periodic review deadline")`
   - `description`: `TextField(blank=True, help_text="System purpose, functional scope, and interfaces")`
-- [ ] **Foreign Keys (tenant-scoped)**:
+- [x] **Foreign Keys (tenant-scoped)**:
   - `system_owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_computer_systems", help_text="Business system owner / departmental administrator")`
   - `quality_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="qa_computer_systems", help_text="Quality Assurance validation lead")`
   - `validation_protocol`: `ForeignKey("quality.ValidationProtocol", on_delete=models.SET_NULL, null=True, blank=True, related_name="computer_system_validations", help_text="Associated qualification protocol")`
   - `urs_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="csv_urs_docs", help_text="Linked User Requirements Specification (URS)")`
   - `vsr_document`: `ForeignKey("quality.ControlledDocument", on_delete=models.SET_NULL, null=True, blank=True, related_name="csv_vsr_docs", help_text="Linked Validation Summary Report (VSR)")`
   - `risk_assessment`: `ForeignKey("quality.RiskAssessment", on_delete=models.SET_NULL, null=True, blank=True, related_name="computer_system_validations", help_text="GxP / GAMP 5 software risk assessment")`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `GAMP_CSS`: `cat_1_infrastructure`: `badge-slate`, `cat_3_non_configured`: `badge-info`, `cat_4_configured`: `badge-green`, `cat_5_custom`: `badge-amber`
   - `STATUS_CSS`: `inventory_only`: `badge-slate`, `planning`: `badge-info`, `in_qualification`: `badge-amber`, `validated_live`: `badge-green`, `periodic_review_due`: `badge-red`, `decommissioned`: `badge-muted`
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `is_review_overdue`: Returns boolean indicating if `next_review_due` is past current date.
   - `status_css`: CSS badge class for lifecycle status.
   - `gamp_css`: CSS badge class for GAMP category.
-- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+- [x] **Constraints & Indexes (L65 <= 30 chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="qcsv_ten_num_uniq")` (17 chars)
   - `Index(fields=["tenant", "status"], name="idx_qcsv_ten_status")` (19 chars)
   - `Index(fields=["tenant", "gamp_category"], name="idx_qcsv_ten_gamp")` (17 chars)
@@ -36981,9 +36981,9 @@ apps/quality/
 ---
 
 ### 4. `CleaningValidation` (`QCLN-`)
-- [ ] **File**: `apps/quality/models/ProcessValidation/CleaningValidations.py`
-- [ ] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCLN"`)
-- [ ] **Fields & Choices (L65 verified)**:
+- [x] **File**: `apps/quality/models/ProcessValidation/CleaningValidations.py`
+- [x] **Inherits**: `TenantNumbered` (`NUMBER_PREFIX = "QCLN"`)
+- [x] **Fields & Choices (L65 verified)**:
   - `title`: `CharField(max_length=255, help_text="Title e.g. Solid Dose Granulation Train Cleaning Validation")`
   - `equipment_train_tag`: `CharField(max_length=150, help_text="Equipment train or shared asset identifier (e.g. Mixer + Granulator + Coater)")`
   - `target_residue`: `CharField(max_length=150, help_text="Target active ingredient (API), marker substance, or detergent of interest")`
@@ -37012,19 +37012,19 @@ apps/quality/
   - `cleaning_status`: `CharField(max_length=28, choices=CLEANING_STATUS_CHOICES, default="draft", db_index=True)` — `"draft"` (5), `"protocol_approved"` (17), `"sampling_in_progress"` (20), `"analytical_testing"` (18), `"validated_pass"` (14), `"failed_recleaning"` (17), `"expired"` (7) (longest: 20 <= 28)
   - `next_revalidation_date`: `DateField(null=True, blank=True, db_index=True, help_text="Date for routine periodic revalidation")`
   - `notes`: `TextField(blank=True)`
-- [ ] **Foreign Keys (tenant-scoped)**:
+- [x] **Foreign Keys (tenant-scoped)**:
   - `validation_protocol`: `ForeignKey("quality.ValidationProtocol", on_delete=models.SET_NULL, null=True, blank=True, related_name="cleaning_studies", help_text="Parent qualification protocol")`
   - `cleaning_sop`: `ForeignKey("quality.ControlledDocument", on_delete=models.PROTECT, related_name="cleaning_validation_studies", help_text="Standard Operating Procedure governing the cleaning procedure")`
   - `analytical_lead`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="cleaning_studies", help_text="Chemist / analytical scientist performing test")`
   - `qa_approver`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_cleaning_studies", help_text="Quality Assurance release authority")`
   - `linked_deviation`: `ForeignKey("quality.ProcessDeviation", on_delete=models.SET_NULL, null=True, blank=True, related_name="cleaning_studies", help_text="Out of specification cleaning deviation")`
-- [ ] **Badge CSS Dicts**:
+- [x] **Badge CSS Dicts**:
   - `STATUS_CSS`: `draft`: `badge-slate`, `protocol_approved`: `badge-info`, `sampling_in_progress`: `badge-amber`, `analytical_testing`: `badge-amber`, `validated_pass`: `badge-green`, `failed_recleaning`: `badge-red`, `expired`: `badge-muted`
-- [ ] **Properties & Methods**:
+- [x] **Properties & Methods**:
   - `is_revalidation_overdue`: Returns boolean indicating if `next_revalidation_date` has passed.
   - `status_css`: CSS badge class for cleaning validation status.
   - `compute_maco_and_limits()`: Python method evaluating therapeutic dose, 10 ppm, and PDE criteria to derive `calculated_maco_mg`, `calculated_swab_limit_ug`, and `calculated_rinse_limit_ppm`.
-- [ ] **Constraints & Indexes (L65 <= 30 chars)**:
+- [x] **Constraints & Indexes (L65 <= 30 chars)**:
   - `UniqueConstraint(fields=["tenant", "number"], name="qcln_ten_num_uniq")` (17 chars)
   - `Index(fields=["tenant", "cleaning_status"], name="idx_qcln_ten_status")` (19 chars)
   - `Index(fields=["tenant", "analytical_method"], name="idx_qcln_ten_method")` (19 chars)
@@ -37035,19 +37035,19 @@ apps/quality/
 
 ## Forms (in `apps/quality/forms/ProcessValidation/`)
 
-- [ ] `ValidationProtocolForm`: ModelForm for `ValidationProtocol`.
+- [x] `ValidationProtocolForm`: ModelForm for `ValidationProtocol`.
   - Excludes `number`, `created_at`, `updated_at`, `is_acceptance_criteria_met`, `open_deviations_count`.
   - Tenant-scoped querysets in `__init__` for `org_unit`, `lead_author`, `lead_executor`, `qa_approver`, `vmp_document`, `change_order`, `linked_deviation`, `linked_capa`, `parent_protocol`.
   - Enforces `reject_foreign(...)` in `clean()`.
-- [ ] `ProcessCapabilityStudyForm`: ModelForm for `ProcessCapabilityStudy`.
+- [x] `ProcessCapabilityStudyForm`: ModelForm for `ProcessCapabilityStudy`.
   - Excludes `number`, `created_at`, `updated_at`, `cp_index`, `cpk_index`, `pp_index`, `ppk_index`, `expected_ppm`, `capability_determination`.
   - Tenant-scoped querysets in `__init__` for `validation_protocol`, `investigator`, `approved_by`, `linked_parameter_log`, `linked_calibration_gage`, `linked_capa`.
   - Enforces `reject_foreign(...)` in `clean()`.
-- [ ] `ComputerSystemValidationForm`: ModelForm for `ComputerSystemValidation`.
+- [x] `ComputerSystemValidationForm`: ModelForm for `ComputerSystemValidation`.
   - Excludes `number`, `created_at`, `updated_at`.
   - Tenant-scoped querysets in `__init__` for `system_owner`, `quality_lead`, `validation_protocol`, `urs_document`, `vsr_document`, `risk_assessment`.
   - Enforces `reject_foreign(...)` in `clean()`.
-- [ ] `CleaningValidationForm`: ModelForm for `CleaningValidation`.
+- [x] `CleaningValidationForm`: ModelForm for `CleaningValidation`.
   - Excludes `number`, `created_at`, `updated_at`, `calculated_maco_mg`, `calculated_swab_limit_ug`, `calculated_rinse_limit_ppm`.
   - Tenant-scoped querysets in `__init__` for `validation_protocol`, `cleaning_sop`, `analytical_lead`, `qa_approver`, `linked_deviation`.
   - Enforces `reject_foreign(...)` in `clean()`.
@@ -37056,7 +37056,7 @@ apps/quality/
 
 ## Views & URLs (in `apps/quality/views/ProcessValidation/` & `urls/ProcessValidation/`)
 
-- [ ] **Validation Protocol Routes**:
+- [x] **Validation Protocol Routes**:
   - `validation_protocol_list`: Filterable list view by `status`, `stage`, `target_type`, `search` query with pagination.
   - `validation_protocol_create`: Creation form view with audit log entry.
   - `validation_protocol_detail`: Comprehensive detail view rendering metadata, scope, acceptance criteria, execution results, open deviations, and workflow action bar.
@@ -37066,7 +37066,7 @@ apps/quality/
   - `validation_protocol_approve_execution`: Workflow action transitioning status from `in_review` -> `approved_for_execution`.
   - `validation_protocol_complete_run`: Workflow action recording execution results and transitioning to `execution_completed`.
   - `validation_protocol_final_approval`: QA release action transitioning to `final_approved`.
-- [ ] **Process Capability Study Routes**:
+- [x] **Process Capability Study Routes**:
   - `process_capability_study_list`: Filterable list view by `status`, `determination`, `category`, `search` with pagination.
   - `process_capability_study_create`: Create study view.
   - `process_capability_study_detail`: Detail view displaying specification limits, sample counts, calculated capability indices ($C_p, C_{pk}, P_p, P_{pk}$), expected defect PPM, and visual bell-curve distribution meter.
@@ -37074,14 +37074,14 @@ apps/quality/
   - `process_capability_study_delete`: Protected POST delete view.
   - `process_capability_study_recalculate`: POST action to trigger `compute_indices()`.
   - `process_capability_study_approve`: Formal quality approval action.
-- [ ] **Computer System Validation Routes**:
+- [x] **Computer System Validation Routes**:
   - `computer_system_validation_list`: Filterable list view by `status`, `gamp_category`, `gxp_impact`, `hosting_model`, `search`.
   - `computer_system_validation_create`: Create CSV inventory entry.
   - `computer_system_validation_detail`: Detail view showing GAMP 5 category badge, CSA/CSV approach, 21 CFR Part 11 checklist, URS traceability, and periodic review status.
   - `computer_system_validation_edit`: Edit CSV entry.
   - `computer_system_validation_delete`: Protected POST delete view.
   - `computer_system_validation_release`: Action releasing system to `validated_live`.
-- [ ] **Cleaning Validation Routes**:
+- [x] **Cleaning Validation Routes**:
   - `cleaning_validation_list`: Filterable list view by `status`, `method`, `worst_case_rationale`, `search`.
   - `cleaning_validation_create`: Create cleaning validation study.
   - `cleaning_validation_detail`: Detail view showing equipment train, MACO breakdown table, swab/rinse limits, recovery factor %, hold time compliance (DHT/CHT), and consecutive run counter.
@@ -37090,7 +37090,7 @@ apps/quality/
   - `cleaning_validation_recalculate`: POST action to run `compute_maco_and_limits()`.
   - `cleaning_validation_log_run`: Action incrementing consecutive successful cleaning runs.
   - `cleaning_validation_approve`: QA release action setting `validated_pass`.
-- [ ] **Process Validation Dashboard / Command Center**:
+- [x] **Process Validation Dashboard / Command Center**:
   - `process_validation_dashboard` (`ProcessValidationDashboard.py`): Integrated dashboard with telemetry cards:
     - Active qualification protocols by stage (IQ, OQ, PQ, PPQ, CPV)
     - Protocol execution pipeline (Draft, In Review, Ready, Running, Completed)
@@ -37103,46 +37103,70 @@ apps/quality/
 
 ## Templates (in `templates/quality/processvalidation/`)
 
-- [ ] `process_validation_dashboard.html`: Command center with KPI metric cards, stage pipeline breakdown, capability distribution meters, and revalidation alerts.
-- [ ] `validation_protocol/list.html`: Search, filter controls (status, stage, target type), responsive table with color-named badges, paginator.
-- [ ] `validation_protocol/detail.html`: Structured `<dl class="detail-grid">`, execution summary, deviation/CAPA linking, workflow transition action buttons.
-- [ ] `validation_protocol/form.html`: Crisp Tailwind form with validation feedback and field groupings.
-- [ ] `process_capability_study/list.html`: Capability studies table with $C_p/C_{pk}$ index displays and RAG status badges.
-- [ ] `process_capability_study/detail.html`: Detail view with statistical metrics summary, USL/LSL tolerance bar, and PPM defect estimations.
-- [ ] `process_capability_study/form.html`: Form with engineering specification fields.
-- [ ] `computer_system_validation/list.html`: System inventory list with GAMP 5 category badges and 21 CFR Part 11 indicators.
-- [ ] `computer_system_validation/detail.html`: Comprehensive system dossier showing CSA/CSV methodology, URS counts, and review cadence.
-- [ ] `computer_system_validation/form.html`: Form with GAMP choices, hosting models, and regulatory compliance flags.
-- [ ] `cleaning_validation/list.html`: Cleaning studies list with equipment train tags and validation run indicators.
-- [ ] `cleaning_validation/detail.html`: Detail view displaying MACO calculation breakdown, swab/rinse limit values, and DHT/CHT hold times.
-- [ ] `cleaning_validation/form.html`: Form with toxicological, dosing, and equipment surface area inputs.
+- [x] `process_validation_dashboard.html`: Command center with KPI metric cards, stage pipeline breakdown, capability distribution meters, and revalidation alerts.
+- [x] `validation_protocol/list.html`: Search, filter controls (status, stage, target type), responsive table with color-named badges, paginator.
+- [x] `validation_protocol/detail.html`: Structured `<dl class="detail-grid">`, execution summary, deviation/CAPA linking, workflow transition action buttons.
+- [x] `validation_protocol/form.html`: Crisp Tailwind form with validation feedback and field groupings.
+- [x] `process_capability_study/list.html`: Capability studies table with $C_p/C_{pk}$ index displays and RAG status badges.
+- [x] `process_capability_study/detail.html`: Detail view with statistical metrics summary, USL/LSL tolerance bar, and PPM defect estimations.
+- [x] `process_capability_study/form.html`: Form with engineering specification fields.
+- [x] `computer_system_validation/list.html`: System inventory list with GAMP 5 category badges and 21 CFR Part 11 indicators.
+- [x] `computer_system_validation/detail.html`: Comprehensive system dossier showing CSA/CSV methodology, URS counts, and review cadence.
+- [x] `computer_system_validation/form.html`: Form with GAMP choices, hosting models, and regulatory compliance flags.
+- [x] `cleaning_validation/list.html`: Cleaning studies list with equipment train tags and validation run indicators.
+- [x] `cleaning_validation/detail.html`: Detail view displaying MACO calculation breakdown, swab/rinse limit values, and DHT/CHT hold times.
+- [x] `cleaning_validation/form.html`: Form with toxicological, dosing, and equipment surface area inputs.
 
 ---
 
 ## Integration, Migration & Verification Steps
 
-- [ ] Re-export 4 models in `apps/quality/models/__init__.py`
-- [ ] Re-export forms in `apps/quality/forms/__init__.py`
-- [ ] Re-export views in `apps/quality/views/__init__.py`
-- [ ] Re-export & include urls in `apps/quality/urls/__init__.py`
-- [ ] Register 4 models in `apps/quality/admin.py`
-- [ ] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_15`)
-- [ ] Wire `LIVE_LINKS["12.15"]` in `apps/core/navigation.py`:
+- [x] Re-export 4 models in `apps/quality/models/__init__.py`
+- [x] Re-export forms in `apps/quality/forms/__init__.py`
+- [x] Re-export views in `apps/quality/views/__init__.py`
+- [x] Re-export & include urls in `apps/quality/urls/__init__.py`
+- [x] Register 4 models in `apps/quality/admin.py`
+- [x] Extend `apps/quality/management/commands/seed_quality.py` with idempotent demo data (`_seed_submodule_12_15`)
+- [x] Wire `LIVE_LINKS["12.15"]` in `apps/core/navigation.py`:
   - `"Process Validation Planning (IQ/OQ/PQ)": "quality:validation_protocol_list"`
   - `"Process Capability Studies (Cp/Cpk)": "quality:process_capability_study_list"`
   - `"Computer System Validation (CSV)": "quality:computer_system_validation_list"`
   - `"Cleaning Validation": "quality:cleaning_validation_list"`
   - `"Revalidation & Periodic Review": "quality:process_validation_dashboard"`
-- [ ] Run `makemigrations quality` -> incremental migration `0027_...`
-- [ ] Run `migrate quality`
-- [ ] Run `seed_quality` twice (verify idempotency)
-- [ ] Run `manage.py check` (0 issues)
-- [ ] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
-- [ ] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.15.md`
-- [ ] **Step 6: Code Fixer** -> burn down findings
-- [ ] **Step 7: Automated Tests** -> `test_processvalidation_models.py`, `test_processvalidation_forms.py`, `test_processvalidation_views.py`, `test_processvalidation_security.py` -> 100% green
-- [ ] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
-- [ ] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.15.md`
+- [x] Run `makemigrations quality` -> incremental migration `0027_...`
+- [x] Run `migrate quality`
+- [x] Run `seed_quality` twice (verify idempotency)
+- [x] Run `manage.py check` (0 issues)
+- [x] **Step 4: Smoke Test** (`qa-smoke-tester` verification: all new endpoints 200/302, 0 comment leaks, 100% IDOR 404s)
+- [x] **Step 5: Review Passes (6 reviewers sequentially)** -> `.claude/tasks/review-quality-12.15.md`
+- [x] **Step 6: Code Fixer** -> burn down findings
+- [x] **Step 7: Automated Tests** -> `test_processvalidation_models.py`, `test_processvalidation_forms.py`, `test_processvalidation_views.py`, `test_processvalidation_security.py` -> 100% green
+- [x] **Step 8: Skill & README Update** -> `.claude/skills/quality/SKILL.md` and `README.md`
+- [x] **Step 9: Close-out & Gaps Declarations** -> `.agents/tasks/gaps-quality-12.15.md`
+
+---
+
+## Later passes / deferred
+
+1. **Automated GAMP Category 5 Source Code Static Analysis & AST Ingestion** — Automated ingestion of AST static security scans, SonarQube quality gate outputs, and commit change summaries into the validation record. (`GAP-quality-12.15-01`)
+2. **Direct CDS / LIMS Analytical Instrument Gateway for Swab & Rinse Telemetry** — Automated pull of HPLC chromatogram peaks, TOC ppm readouts, and spectrophotometer recoveries directly into `CleaningValidation` swab result registers without manual entry. (`GAP-quality-12.15-02`)
+3. **Continuous Process Verification (CPV) Advanced Non-Normal Distribution Fitting** — Integration of advanced mathematical distribution fitting (Box-Cox, Johnson, Weibull transformations) into background analytical workers for skewed parameter distributions. (`GAP-quality-12.15-03`)
+
+---
+
+## Review notes — Sub-module 12.15 Close-out (2026-11-21)
+
+- **Research Artifact**: `.claude/tasks/research-quality-12.15.md` (committed: `7a3f8b73`)
+- **Pre-build Contract**: `.claude/tasks/contract-quality-12.15.md` (committed: `e982eb4c`)
+- **Review Findings**: `.claude/tasks/review-quality-12.15.md` (committed: `2ec50703`)
+- **Gap Register**: `.agents/tasks/gaps-quality-12.15.md` (committed: `cd3f4e7c`)
+- **Gaps**: None. All 28 review findings (4 Critical, 9 Important, 11 Minor) fixed and verified with 0 open items.
+- **Models Landed (4)**: `ValidationProtocol` [QVAL-], `ProcessCapabilityStudy` [QCPK-], `ComputerSystemValidation` [QCSV-], `CleaningValidation` [QCLN-].
+- **Command Center Landed**: `process_validation_dashboard` with active protocol telemetry, capability radar ($C_{pk} \ge 1.33$ vs Incapable), GAMP 5 inventory, MACO equipment train status, and revalidation alerts.
+- **Migrations**: `0027_cleaningvalidation_validationprotocol_and_more.py`.
+- **Navigation**: `LIVE_LINKS["12.15"]` active in `apps/core/navigation.py`.
+- **Seeder**: Idempotent demo data in `apps/quality/management/commands/seed_quality.py` (`_seed_submodule_12_15`).
+- **Test Suite**: 4 dedicated test files (`test_processvalidation_models.py`, `test_processvalidation_forms.py`, `test_processvalidation_views.py`, `test_processvalidation_security.py`) landing 59 passing tests. Full unfiltered quality test suite passing: 2,367 passed, 0 failures.
 
 
 ---
