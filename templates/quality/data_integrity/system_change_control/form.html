@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Change Control {{ change.number }}{% else %}New System Change Control{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:system_change_control_list' %}">Change Controls</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ change.number }}{% else %}New Change Control{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit System Change Control — {{ change.number }}{% else %}New Computerized System Validation (CSV) Change Control{% endif %}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6 max-w-4xl">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200 p-4">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-red-700">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Change Scope & System Context</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Change Title *</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.system.id_for_label }}">Computerized System</label>
+                {{ form.system }}
+                {% if form.system.errors %}<div class="form-error">{{ form.system.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.change_type.id_for_label }}">Change Type *</label>
+                {{ form.change_type }}
+                {% if form.change_type.errors %}<div class="form-error">{{ form.change_type.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.change_priority.id_for_label }}">Change Priority *</label>
+                {{ form.change_priority }}
+                {% if form.change_priority.errors %}<div class="form-error">{{ form.change_priority.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.gxp_impact.id_for_label }}">GxP Impact *</label>
+                {{ form.gxp_impact }}
+                {% if form.gxp_impact.errors %}<div class="form-error">{{ form.gxp_impact.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.org_unit.id_for_label }}">Operational Unit</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Change Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_date.id_for_label }}">Target Implementation Date</label>
+                {{ form.target_date }}
+                {% if form.target_date.errors %}<div class="form-error">{{ form.target_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.post_review_due_date.id_for_label }}">Post-Review Due Date</label>
+                {{ form.post_review_due_date }}
+                {% if form.post_review_due_date.errors %}<div class="form-error">{{ form.post_review_due_date.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Technical Description & Risk Impact</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Technical Description *</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.business_justification.id_for_label }}">Business & Regulatory Justification</label>
+                {{ form.business_justification }}
+                {% if form.business_justification.errors %}<div class="form-error">{{ form.business_justification.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.data_integrity_risk.id_for_label }}">ALCOA+ Data Integrity Impact</label>
+                {{ form.data_integrity_risk }}
+                {% if form.data_integrity_risk.errors %}<div class="form-error">{{ form.data_integrity_risk.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.validation_deliverables.id_for_label }}">Validation Deliverables Required</label>
+                {{ form.validation_deliverables }}
+                {% if form.validation_deliverables.errors %}<div class="form-error">{{ form.validation_deliverables.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.rollback_plan.id_for_label }}">Rollback / Backout Plan</label>
+                {{ form.rollback_plan }}
+                {% if form.rollback_plan.errors %}<div class="form-error">{{ form.rollback_plan.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Validation Checklists & Personnel</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.ccb_approved }}
+                <label class="form-label mb-0" for="{{ form.ccb_approved.id_for_label }}">Change Control Board (CCB) Approved</label>
+            </div>
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.data_backup_verified }}
+                <label class="form-label mb-0" for="{{ form.data_backup_verified.id_for_label }}">Pre-Deployment Data Backup Verified</label>
+            </div>
+            <div class="form-group flex items-center gap-2 pt-2">
+                {{ form.testing_successful }}
+                <label class="form-label mb-0" for="{{ form.testing_successful.id_for_label }}">Qualification & Testing Completed Successfully</label>
+            </div>
+            <div class="form-group">
+                <!-- spacer -->
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.requestor.id_for_label }}">Change Requestor</label>
+                {{ form.requestor }}
+                {% if form.requestor.errors %}<div class="form-error">{{ form.requestor.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.system_owner.id_for_label }}">System Owner</label>
+                {{ form.system_owner }}
+                {% if form.system_owner.errors %}<div class="form-error">{{ form.system_owner.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.qa_lead.id_for_label }}">QA Validation Lead</label>
+                {{ form.qa_lead }}
+                {% if form.qa_lead.errors %}<div class="form-error">{{ form.qa_lead.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.closure_summary.id_for_label }}">Closure Summary & Notes</label>
+                {{ form.closure_summary }}
+                {% if form.closure_summary.errors %}<div class="form-error">{{ form.closure_summary.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-4">
+        <button type="submit" class="btn btn-primary">
+            {% if is_edit %}Save Changes{% else %}Create Change Control{% endif %}
+        </button>
+        <a href="{% if is_edit %}{% url 'quality:system_change_control_detail' change.pk %}{% else %}{% url 'quality:system_change_control_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</form>
+{% endblock %}
