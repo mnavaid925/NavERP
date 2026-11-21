@@ -152,6 +152,18 @@ from apps.quality.models.EhsManagement.EnvironmentalMonitoringLogs import (
 from apps.quality.models.EhsManagement.WasteDisposalManifests import (
     WasteDisposalManifest,
 )
+from apps.quality.models.RegulatorySubmissions.RegulatorySubmissions import (
+    RegulatorySubmission,
+)
+from apps.quality.models.RegulatorySubmissions.ProductRegistrations import (
+    ProductRegistration,
+)
+from apps.quality.models.RegulatorySubmissions.RegulatoryCommitments import (
+    RegulatoryCommitment,
+)
+from apps.quality.models.RegulatorySubmissions.PostMarketSurveillanceReports import (
+    PostMarketSurveillanceReport,
+)
 
 
 
@@ -1397,6 +1409,81 @@ class WasteDisposalManifestAdmin(admin.ModelAdmin):
     list_filter = ("manifest_type", "physical_state", "status", "tenant")
     search_fields = ("number", "generator_epa_id", "transporter_epa_id", "tsdf_epa_id", "epa_waste_codes")
     list_select_related = ("tenant", "associated_hazardous_material", "generator_org_unit", "transporter", "tsdf_facility")
+
+
+@admin.register(RegulatorySubmission)
+class RegulatorySubmissionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "submission_type",
+        "product_name",
+        "device_class",
+        "application_number",
+        "status",
+        "actual_submission_date",
+        "decision_date",
+        "tenant",
+    )
+    list_filter = ("submission_type", "device_class", "status", "tenant")
+    search_fields = ("number", "title", "product_name", "product_code", "application_number")
+    list_select_related = ("tenant", "target_authority", "org_unit", "lead_author", "qa_approver")
+
+
+@admin.register(ProductRegistration)
+class ProductRegistrationAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "registration_title",
+        "registration_type",
+        "jurisdiction_country",
+        "product_name",
+        "license_certificate_number",
+        "status",
+        "expiration_date",
+        "tenant",
+    )
+    list_filter = ("registration_type", "status", "jurisdiction_country", "tenant")
+    search_fields = ("number", "registration_title", "product_name", "product_code", "license_certificate_number")
+    list_select_related = ("tenant", "regulatory_authority", "authorized_representative", "regulatory_lead")
+
+
+@admin.register(RegulatoryCommitment)
+class RegulatoryCommitmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "commitment_type",
+        "due_date",
+        "completion_date",
+        "status",
+        "responsible_owner",
+        "tenant",
+    )
+    list_filter = ("commitment_type", "status", "tenant")
+    search_fields = ("number", "title", "agency_reference_number", "commitment_description")
+    list_select_related = ("tenant", "regulatory_agency", "responsible_owner")
+
+
+@admin.register(PostMarketSurveillanceReport)
+class PostMarketSurveillanceReportAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "report_title",
+        "report_type",
+        "device_model_family",
+        "reporting_period_end",
+        "units_distributed",
+        "total_complaints_count",
+        "serious_incidents_count",
+        "benefit_risk_conclusion",
+        "status",
+        "tenant",
+    )
+    list_filter = ("report_type", "benefit_risk_conclusion", "status", "tenant")
+    search_fields = ("number", "report_title", "device_model_family", "benefit_risk_rationale")
+    list_select_related = ("tenant", "product_registration", "prepared_by", "approved_by")
+
 
 
 
