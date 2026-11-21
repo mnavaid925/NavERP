@@ -138,7 +138,7 @@
   - **Location**: `templates/quality/processvalidation/computer_system_validation/list.html:68-110`
   - **Fix**: Add `approach` select element to filter grid and clear-filter condition.
 
-- [ ] **[M5] Missing Hyperlink on `linked_deviation` in `cleaning_validation/detail.html`**
+- [x] **[M5] Missing Hyperlink on `linked_deviation` in `cleaning_validation/detail.html`** — fixed in 8c771051
   - **Location**: `templates/quality/processvalidation/cleaning_validation/detail.html:267-270`
   - **Fix**: Link to `quality:process_deviation_detail` when present.
 
