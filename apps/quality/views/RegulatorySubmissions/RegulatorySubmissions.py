@@ -169,8 +169,10 @@ def regulatory_submission_delete(request, pk):
 
 @login_required
 def regulatory_submission_export(request):
-    qs = quality_scope(RegulatorySubmission.objects.all(), request).select_related(
-        "target_authority", "org_unit", "lead_author"
+    qs = (
+        quality_scope(RegulatorySubmission.objects.all(), request)
+        .select_related("target_authority", "org_unit", "lead_author")
+        .defer("technical_sections_summary", "notes")
     )
 
     response = HttpResponse(content_type="text/csv")
@@ -195,7 +197,7 @@ def regulatory_submission_export(request):
         "Days Under Review",
     ])
 
-    for item in qs:
+    for item in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(item.number),
             _csv_safe(item.title),
