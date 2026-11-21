@@ -154,6 +154,7 @@ class EnvironmentalMonitoringLog(TenantNumbered):
             models.Index(fields=["tenant", "sampling_point_id"], name="idx_qenv_ten_pt"),
             models.Index(fields=["tenant", "org_unit"], name="idx_qenv_ten_org"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qenv_ten_created"),
+            models.Index(fields=["tenant", "evaluation_status", "-sampling_timestamp"], name="idx_qenv_ten_stat_time"),
         ]
 
     def __str__(self):
