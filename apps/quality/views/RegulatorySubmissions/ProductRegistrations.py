@@ -185,8 +185,10 @@ def product_registration_delete(request, pk):
 
 @login_required
 def product_registration_export(request):
-    qs = quality_scope(ProductRegistration.objects.all(), request).select_related(
-        "regulatory_authority", "authorized_representative", "regulatory_lead"
+    qs = (
+        quality_scope(ProductRegistration.objects.all(), request)
+        .select_related("regulatory_authority", "authorized_representative", "regulatory_lead")
+        .defer("intended_purpose", "notes")
     )
 
     response = HttpResponse(content_type="text/csv")
@@ -213,7 +215,7 @@ def product_registration_export(request):
         "Regulatory Lead",
     ])
 
-    for item in qs:
+    for item in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(item.number),
             _csv_safe(item.registration_title),
