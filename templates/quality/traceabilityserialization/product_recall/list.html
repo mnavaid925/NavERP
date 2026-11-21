@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Product Recalls & Market Withdrawals — Quality Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="breadcrumb text-sm text-slate-500 mb-1">
+        <a href="{% url 'dashboard:home' %}" class="hover:underline">Home</a>
+        <span class="mx-1">/</span>
+        <span>Quality</span>
+        <span class="mx-1">/</span>
+        <span>Traceability & Serialization</span>
+        <span class="mx-1">/</span>
+        <span>Product Recalls</span>
+      </div>
+      <h1 class="page-title text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600"></i>
+        Product Recalls & Market Withdrawals
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Rapid containment orchestration, FDA recall classifications (Class I/II/III), reconciliation recovery rate %, and simulated mock recall drills.
+      </p>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+      <a href="{% url 'quality:product_recall_create' %}" class="btn btn-primary flex items-center gap-1.5 text-sm">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Initiate Recall Case</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Card -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+      <div class="form-group md:col-span-2">
+        <label for="q" class="form-label text-xs font-semibold text-slate-600 mb-1">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            name="q"
+            id="q"
+            value="{{ query }}"
+            placeholder="Search by recall title, item, lot #, record #..."
+            class="form-input w-full pl-9"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="recall_class" class="form-label text-xs font-semibold text-slate-600 mb-1">Recall Class</label>
+        <select name="recall_class" id="recall_class" class="form-select w-full">
+          <option value="">All Classes</option>
+          {% for val, label in recall_class_choices %}
+            <option value="{{ val }}" {% if selected_class == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="status" class="form-label text-xs font-semibold text-slate-600 mb-1">Status</label>
+        <select name="status" id="status" class="form-select w-full">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group flex gap-2">
+        <div class="flex-1">
+          <label for="is_mock_recall" class="form-label text-xs font-semibold text-slate-600 mb-1">Recall Type</label>
+          <select name="is_mock_recall" id="is_mock_recall" class="form-select w-full">
+            <option value="">All Recalls</option>
+            <option value="true" {% if selected_mock == "true" %}selected{% endif %}>Mock Drills Only</option>
+            <option value="false" {% if selected_mock == "false" %}selected{% endif %}>Live Recalls Only</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary self-end">Filter</button>
+        {% if query or selected_class or selected_status or selected_mock %}
+          <a href="{% url 'quality:product_recall_list' %}" class="btn btn-outline self-end" title="Clear Filters">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Records Table -->
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table w-full text-left text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+            <th class="py-3 px-4">Recall # / Title</th>
+            <th class="py-3 px-4">Severity Class</th>
+            <th class="py-3 px-4">Product & Affected Lots</th>
+            <th class="py-3 px-4">Drill Type</th>
+            <th class="py-3 px-4 text-right">Recovery Rate</th>
+            <th class="py-3 px-4">Status</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for recall in product_recalls %}
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4">
+                <a href="{% url 'quality:product_recall_detail' recall.pk %}" class="font-mono font-medium text-blue-600 hover:underline">
+                  {{ recall.number }}
+                </a>
+                <div class="text-sm font-medium text-slate-900 mt-0.5">{{ recall.title }}</div>
+              </td>
+              <td class="py-3 px-4">
+                {% if recall.recall_class == "class_i" %}
+                  <span class="badge badge-red">{{ recall.get_recall_class_display }}</span>
+                {% elif recall.recall_class == "class_ii" %}
+                  <span class="badge badge-amber">{{ recall.get_recall_class_display }}</span>
+                {% elif recall.recall_class == "class_iii" %}
+                  <span class="badge badge-info">{{ recall.get_recall_class_display }}</span>
+                {% elif recall.recall_class == "safety_alert" %}
+                  <span class="badge badge-purple">{{ recall.get_recall_class_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ recall.get_recall_class_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ recall.item_name }}</div>
+                <div class="text-xs text-slate-500 font-mono">Lot(s): {{ recall.affected_lot_numbers|truncatechars:35 }}</div>
+              </td>
+              <td class="py-3 px-4 text-xs">
+                {% if recall.is_mock_recall %}
+                  <span class="badge badge-info">Mock Drill ({% if recall.mock_drill_hours %}{{ recall.mock_drill_hours }}h{% else %}Simulated{% endif %})</span>
+                {% else %}
+                  <span class="badge badge-red">Live Event</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right">
+                <span class="font-bold {% if recall.recovery_rate_pct >= 95 %}text-green-600{% elif recall.recovery_rate_pct >= 80 %}text-slate-900{% else %}text-red-600{% endif %}">
+                  {{ recall.recovery_rate_pct }}%
+                </span>
+                <div class="text-xs text-slate-400">{{ recall.total_recovered_qty }} / {{ recall.total_distributed_qty }} units</div>
+              </td>
+              <td class="py-3 px-4">
+                {% if recall.status == "completed" %}
+                  <span class="badge badge-green">{{ recall.get_status_display }}</span>
+                {% elif recall.status == "containment_hold" %}
+                  <span class="badge badge-red">{{ recall.get_status_display }}</span>
+                {% elif recall.status == "recovery_in_progress" or recall.status == "initiated" %}
+                  <span class="badge badge-amber">{{ recall.get_status_display }}</span>
+                {% elif recall.status == "notification_sent" or recall.status == "effectiveness_check" %}
+                  <span class="badge badge-info">{{ recall.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ recall.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4 text-right table-actions">
+                <div class="flex items-center justify-end gap-1">
+                  <a href="{% url 'quality:product_recall_detail' recall.pk %}" class="btn btn-icon" title="View Detail">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'quality:product_recall_edit' recall.pk %}" class="btn btn-icon" title="Edit">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'quality:product_recall_delete' recall.pk %}" class="inline" onsubmit="return confirm('Delete recall record {{ recall.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="py-8 text-center">
+                <div class="empty-state max-w-sm mx-auto text-center py-6">
+                  <i data-lucide="alert-octagon" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                  <h3 class="text-sm font-semibold text-slate-900">No Product Recalls Found</h3>
+                  <p class="text-xs text-slate-500 mt-1">No active market recalls or simulated audit mock drills recorded.</p>
+                  <div class="mt-4">
+                    <a href="{% url 'quality:product_recall_create' %}" class="btn btn-primary text-xs">
+                      Initiate Recall Case
+                    </a>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+      <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-xs text-slate-500">
+          Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </div>
+        <div class="flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_class %}&recall_class={{ selected_class }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_mock %}&is_mock_recall={{ selected_mock }}{% endif %}" class="btn btn-outline text-xs px-2.5 py-1">
+              Previous
+            </a>
+          {% endif %}
+          <span class="text-xs text-slate-600 font-medium px-2">{{ page_obj.number }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_class %}&recall_class={{ selected_class }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_mock %}&is_mock_recall={{ selected_mock }}{% endif %}" class="btn btn-outline text-xs px-2.5 py-1">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
