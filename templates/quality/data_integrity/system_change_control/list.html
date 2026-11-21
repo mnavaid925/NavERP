@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}System Change Controls (CSV) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span class="sep">/</span>
+            <a href="{% url 'quality:data_integrity_dashboard' %}">Data Integrity</a>
+            <span class="sep">/</span>
+            <span>System Change Controls</span>
+        </div>
+        <h1 class="page-title">Computerized System Validation (CSV) Change Controls</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'quality:system_change_control_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Change Control
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="git-pull-request"></i>
+        </div>
+        <div>
+            <div class="stat-label">Total Change Controls</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-label">Active / Open Changes</div>
+            <div class="stat-value">{{ open_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="flame"></i>
+        </div>
+        <div>
+            <div class="stat-label">Emergency Changes</div>
+            <div class="stat-value">{{ emergency_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-label">Direct GxP Impact</div>
+            <div class="stat-value">{{ direct_gxp_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" placeholder="Change title, description, justification, number..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="change_type">Type</label>
+                <select name="change_type" id="change_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if type_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="priority">Priority</label>
+                <select name="priority" id="priority" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for val, label in priority_choices %}
+                    <option value="{{ val }}" {% if priority_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i> Filter
+                </button>
+                <a href="{% url 'quality:system_change_control_list' %}" class="btn btn-outline">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>CCR #</th>
+                        <th>Title & Description</th>
+                        <th>Computerized System</th>
+                        <th>Change Type</th>
+                        <th>Priority</th>
+                        <th>GxP Impact</th>
+                        <th>Target Date</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in changes %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'quality:system_change_control_detail' item.pk %}" class="font-medium text-brand">
+                                {{ item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium">{{ item.title }}</div>
+                            <div class="text-xs text-muted truncate max-w-xs">{{ item.description }}</div>
+                        </td>
+                        <td>
+                            {% if item.system %}
+                            <span class="text-sm font-medium">{{ item.system.system_name }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge badge-slate">{{ item.get_change_type_display }}</span>
+                        </td>
+                        <td>
+                            {% if item.change_priority == 'emergency' %}
+                            <span class="badge badge-red">Emergency</span>
+                            {% elif item.change_priority == 'urgent' %}
+                            <span class="badge badge-amber">Urgent</span>
+                            {% else %}
+                            <span class="badge badge-slate">Routine</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.gxp_impact == 'direct_gxp' %}
+                            <span class="badge badge-red">Direct GxP</span>
+                            {% elif item.gxp_impact == 'indirect_gxp' %}
+                            <span class="badge badge-amber">Indirect GxP</span>
+                            {% else %}
+                            <span class="badge badge-slate">Non-GxP</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-sm">{{ item.target_date|default:"TBD" }}</span>
+                            {% if item.is_overdue %}
+                            <span class="badge badge-red ml-1">Overdue</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.status == 'implemented_closed' %}
+                            <span class="badge badge-green">Closed</span>
+                            {% elif item.status == 'approved_for_build' %}
+                            <span class="badge badge-info">Approved Build</span>
+                            {% elif item.status == 'testing_verification' %}
+                            <span class="badge badge-amber">Testing Active</span>
+                            {% elif item.status == 'ccb_review' %}
+                            <span class="badge badge-amber">CCB Review</span>
+                            {% elif item.status == 'rejected' %}
+                            <span class="badge badge-red">Rejected</span>
+                            {% elif item.status == 'cancelled' %}
+                            <span class="badge badge-muted">Cancelled</span>
+                            {% else %}
+                            <span class="badge badge-slate">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions justify-end">
+                                <a href="{% url 'quality:system_change_control_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'quality:system_change_control_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'quality:system_change_control_delete' item.pk %}" onsubmit="return confirm('Delete change control {{ item.number }}?');" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red" title="Delete">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9">
+                            <div class="empty-state">
+                                <i data-lucide="git-commit" class="empty-state-icon"></i>
+                                <h3 class="empty-state-title">No System Change Controls Found</h3>
+                                <p class="empty-state-desc">Initiate formal GxP change management for computerized systems, cloud patches, and software upgrades.</p>
+                                <a href="{% url 'quality:system_change_control_create' %}" class="btn btn-primary mt-4">
+                                    <i data-lucide="plus"></i> New Change Control
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="pagination">
+            <span class="pagination-info">
+                Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ total_count }}
+            </span>
+            <div class="pagination-links">
+                {% if page_obj.has_previous %}
+                <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if q %}&q={{ q }}{% endif %}{% if type_selected %}&change_type={{ type_selected }}{% endif %}{% if priority_selected %}&priority={{ priority_selected }}{% endif %}" class="btn btn-outline btn-sm">
+                    Previous
+                </a>
+                {% endif %}
+                <span class="btn btn-sm btn-disabled">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if type_selected %}&change_type={{ type_selected }}{% endif %}{% if priority_selected %}&priority={{ priority_selected }}{% endif %}" class="btn btn-outline btn-sm">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
