@@ -210,7 +210,7 @@ def cleaning_validation_export(request):
         "Analytical Lead",
     ])
 
-    for c in qs:
+    for c in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(c.number),
             _csv_safe(c.title),
