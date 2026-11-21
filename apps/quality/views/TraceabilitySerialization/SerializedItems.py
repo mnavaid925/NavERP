@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.quality.forms.TraceabilitySerialization.SerializedItems import SerializedItemForm
 from apps.quality.models.TraceabilitySerialization.SerializedItems import SerializedItem
@@ -128,6 +129,7 @@ def serialized_item_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def serialized_item_delete(request, pk):
     obj = quality_object(request, SerializedItem, pk)
     number = obj.serial_number
