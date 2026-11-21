@@ -22,3 +22,19 @@
 - **[CR-M1]** `apps/quality/views/TraceabilitySerialization/TraceabilityDashboard.py:9`: Unused import `write_audit_log` in dashboard.
 - **[CR-M2]** `apps/quality/views/TraceabilitySerialization/TraceabilityDashboard.py:4`: Unused import `Count` in dashboard.
 - **[CR-M3]** `apps/quality/views/TraceabilitySerialization/DeviceIdentifiers.py:49`: Unused context key `eudamed_status_choices` passed to list view. Add filter or remove.
+
+---
+
+## Pass 2: Explorer (`explorer`)
+
+### Critical
+- **[EX-C1]** `templates/quality/traceabilityserialization/product_recall/detail.html:211`: Duplicate of CR-C1. Broken route target `'quality:complaint_detail'` -> change to `'quality:customer_complaint_detail'`.
+- **[EX-C2]** `templates/quality/traceabilityserialization/product_recall/detail.html:223`: Duplicate of CR-C2. Broken route target `'quality:capa_detail'` -> change to `'quality:capa_investigation_detail'`.
+
+### Important
+- **[EX-I1]** Duplicate of CR-I4. `badge-purple` used in `product_recall/detail.html:32`, `serialized_item/detail.html:30`, and models. Replace with `badge-info`/`badge-slate`.
+- **[EX-I2]** Duplicate of CR-M3. `eudamed_status_choices` passed in view context but missing filter dropdown in template.
+
+### Minor
+- **[EX-M1]** Duplicate of CR-M1. Unused import `write_audit_log` in `TraceabilityDashboard.py:9`.
+- **[EX-M2]** Duplicate of CR-M2. Unused import `Count` in `TraceabilityDashboard.py:4`.
