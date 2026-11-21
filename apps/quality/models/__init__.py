@@ -151,6 +151,18 @@ from apps.quality.models.EhsManagement.EnvironmentalMonitoringLogs import (
 from apps.quality.models.EhsManagement.WasteDisposalManifests import (
     WasteDisposalManifest,
 )
+from apps.quality.models.RegulatorySubmissions.RegulatorySubmissions import (
+    RegulatorySubmission,
+)
+from apps.quality.models.RegulatorySubmissions.ProductRegistrations import (
+    ProductRegistration,
+)
+from apps.quality.models.RegulatorySubmissions.RegulatoryCommitments import (
+    RegulatoryCommitment,
+)
+from apps.quality.models.RegulatorySubmissions.PostMarketSurveillanceReports import (
+    PostMarketSurveillanceReport,
+)
 
 __all__ = [
     "TenantOwned",
@@ -219,5 +231,9 @@ __all__ = [
     "SafetyIncident",
     "EnvironmentalMonitoringLog",
     "WasteDisposalManifest",
+    "RegulatorySubmission",
+    "ProductRegistration",
+    "RegulatoryCommitment",
+    "PostMarketSurveillanceReport",
 ]
 
