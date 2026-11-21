@@ -13,9 +13,9 @@
 | Severity | Count | Open | Fixed | Skipped |
 | :--- | :---: | :---: | :---: | :---: |
 | **Critical** | 2 | 0 | 2 | 0 |
-| **Important** | 9 | 9 | 0 | 0 |
+| **Important** | 9 | 8 | 1 | 0 |
 | **Minor** | 14 | 14 | 0 | 0 |
-| **Total** | 25 | 23 | 2 | 0 |
+| **Total** | 25 | 22 | 3 | 0 |
 
 ---
 
@@ -43,7 +43,7 @@
 
 ## Important Findings
 
-- [ ] **I1: Missing Filter Query Parameter Retention in Pagination Links across All 4 List Views**
+- [x] **I1: Missing Filter Query Parameter Retention in Pagination Links across All 4 List Views**
   - **Files**:
     - `templates/quality/regulatory_submissions/regulatory_submission/list.html:211, 219`
     - `templates/quality/regulatory_submissions/product_registration/list.html:215, 223`
