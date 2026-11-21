@@ -218,7 +218,7 @@ def computer_system_validation_export(request):
         "QA Lead",
     ])
 
-    for s in qs:
+    for s in qs.iterator(chunk_size=1000):
         writer.writerow([
             _csv_safe(s.number),
             _csv_safe(s.system_name),
