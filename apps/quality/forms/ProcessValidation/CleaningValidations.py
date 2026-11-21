@@ -101,4 +101,19 @@ class CleaningValidationForm(TenantModelForm):
                 "linked_deviation",
             ],
         )
+
+        basis = cleaned.get("calculation_basis")
+        if basis == "therapeutic_dose":
+            if not cleaned.get("min_daily_dose_active_mg"):
+                self.add_error("min_daily_dose_active_mg", "Minimum daily dose of active is required for therapeutic dose calculation basis.")
+            if not cleaned.get("max_daily_dose_subsequent_mg"):
+                self.add_error("max_daily_dose_subsequent_mg", "Maximum daily dose of subsequent product is required for therapeutic dose calculation basis.")
+            if not cleaned.get("safety_factor"):
+                self.add_error("safety_factor", "Safety factor is required for therapeutic dose calculation basis.")
+        elif basis == "toxicological_pde":
+            if not cleaned.get("toxicological_pde_mg_day"):
+                self.add_error("toxicological_pde_mg_day", "Toxicological PDE / ADE is required for toxicological PDE calculation basis.")
+            if not cleaned.get("max_daily_dose_subsequent_mg"):
+                self.add_error("max_daily_dose_subsequent_mg", "Maximum daily dose of subsequent product is required for toxicological PDE calculation basis.")
+
         return cleaned
