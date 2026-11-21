@@ -92,7 +92,14 @@ def safety_incident_create(request):
             messages.success(request, f"Safety incident report {obj.number} logged successfully.")
             return redirect("quality:safety_incident_detail", pk=obj.pk)
     else:
-        form = SafetyIncidentForm(tenant=request.tenant, initial={"incident_date": timezone.now()})
+        form = SafetyIncidentForm(
+            tenant=request.tenant,
+            initial={
+                "incident_date": timezone.now(),
+                "report_date": timezone.now().date(),
+                "reported_by": request.user,
+            },
+        )
 
     context = {
         "form": form,
