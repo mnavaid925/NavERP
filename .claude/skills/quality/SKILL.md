@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; 12.14 Management Review & Quality Planning — Quality Objectives [QOBJ-], Management Reviews [QMRV-], Review Inputs [QMRI-], Review Actions [QMRA-], Quality Planning Dashboard, and FDA/ISO Audit Dossier; and 12.16 Environmental, Health & Safety (EHS) — Hazardous Materials [QHAZ-], Workplace Safety Incidents [QSIR-], Environmental Monitoring Logs [QENV-], Waste Disposal Manifests [QWST-], and EHS Command Center Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.16), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; 12.14 Management Review & Quality Planning — Quality Objectives [QOBJ-], Management Reviews [QMRV-], Review Inputs [QMRI-], Review Actions [QMRA-], Quality Planning Dashboard, and FDA/ISO Audit Dossier; 12.15 Process Validation & Verification — Validation Protocols [QVAL-], Process Capability Studies [QCPK-], Computer System Validation [QCSV-], Cleaning Validation [QCLN-], and Process Validation Dashboard; and 12.16 Environmental, Health & Safety (EHS) — Hazardous Materials [QHAZ-], Workplace Safety Incidents [QSIR-], Environmental Monitoring Logs [QENV-], Waste Disposal Manifests [QWST-], and EHS Command Center Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.16), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -118,6 +118,13 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Quality Planning & Continuous Improvement Command Center**: High-level executive dashboard (`quality_planning_dashboard`) monitoring overall objective achievement rates, active reviews, action closure rates, RAG status distributions, category allocations, upcoming review schedules, and overdue action items.
   - **Printable FDA/ISO Management Review Audit Dossier**: Audit-ready inspection dossier ([dossier.html]) compiling executive summaries, attendance rosters, quorum checks, input summaries, output decisions, suitability conclusions, and 21 CFR Part 11 electronic signature certificates.
 
+- **12.15 Process Validation & Verification**:
+  - **Process Validation Protocols (IQ/OQ/PQ/PPQ/CPV)** [`QVAL-`]: Life-cycle qualification conforming to FDA 21 CFR § 820.75, EU Annex 15, and GAMP 5. Governs qualification stages (`dq`, `iq`, `oq`, `pq`, `ppq`, `cpv`, `revalidation`), target types (`equipment`, `process`, `facility_utility`, `cleaning_procedure`, `computerized_system`), revalidation triggers (`initial`, `periodic_review`, `change_control`, `deviation`, `regulatory`), planned vs. completed test replicates, acceptance criteria, deviation logging, VSR summary conclusions, critical parameters verification, and formal Quality Authority approvals.
+  - **Process Capability Studies ($C_p$/$C_{pk}$/$P_p$/$P_{pk}$)** [`QCPK-`]: Statistical process capability analysis conforming to ISO 22514 and AIAG SPC standards. Tracks parameter categories, USL/LSL specification limits, target nominals, subgroup sizes ($n$), number of subgroups ($k$), total observations ($N$), sample averages ($\bar{X}$), short-term within-subgroup variation ($\sigma_{\text{within}}$), total overall variation ($s_{\text{overall}}$), automated index computation ($C_p$, $C_{pk}$, $P_p$, $P_{pk}$), estimated non-conforming PPM, normality verification, and capability determination categorization (`highly_capable`, `capable`, `marginally_capable`, `incapable`, `undetermined`).
+  - **Computer System Validation (CSV / FDA CSA)** [`QCSV-`]: GAMP 5 Category 1-5 computerized software qualification and FDA CSA risk-based testing. Governs GAMP categories (`cat_1_infrastructure`, `cat_3_non_configured`, `cat_4_configured`, `cat_5_custom`), GxP impact (`direct_gxp`, `indirect_gxp`, `non_gxp`), validation approach (`traditional_csv`, `csa_risk_based`), cloud hosting architectures, 21 CFR Part 11 / EU Annex 11 compliance verification, audit trail mandates, disaster recovery planning, URS/traceability matrix status, qualification test script counts, bug ticket tracking, and scheduled periodic software review intervals.
+  - **Cleaning Validation & Residue Limits (MACO)** [`QCLN-`]: Cleaning validation studies for shared pharmaceutical/medical processing trains conforming to FDA, EMA, and PIC/S guidelines. Features worst-case rationale evaluation, calculation bases (`ten_ppm_limit`, `therapeutic_dose`, `toxicological_pde`, `most_stringent`), automated Maximum Allowable Carryover (MACO in mg) calculation, surface area limits, swab coupon limits ($\mu\text{g}$), final rinse allowable concentrations (ppm), analytical method selection (HPLC, TOC, UV-Vis, conductivity, visual cleanliness), analytical recovery factor adjustments, Validated Dirty Hold Time (DHT in hours), Validated Clean Hold Time (CHT in hours), consecutive successful validation runs, and routine periodic revalidation cycles.
+  - **Process Validation & Continuous Verification Command Center**: Operational validation portal (`process_validation_dashboard`) displaying total protocols, active executions, completed qualifications, target date overdue alerts, process capability breakdowns (capable, marginal, incapable), validated computer systems, validated cleaning trains, upcoming revalidation deadlines, and recent validation activity stream.
+
 - **12.16 Environmental, Health & Safety (EHS)**:
   - **Hazardous Chemical Registry & GHS/SDS Management** [`QHAZ-`]: Comprehensive chemical master inventory satisfying OSHA 29 CFR 1910.1200 (Hazard Communication), EPA SARA Title III (EPCRA), and EU REACH/CLP regulations. Tracks CAS registry numbers, UN transport numbers, chemical formulas, physical states (`gas`, `liquid`, `solid`, `aerosol`, `plasma`), GHS hazard classifications, signal words (`danger`, `warning`), GHS pictogram arrays, H/P statements, full NFPA 704 fire diamond ratings (Health 0-4, Flammability 0-4, Instability 0-4, Special Hazards), 3-year SDS expiration cycles, document control linkage (`ControlledDocument`), OSHA PEL and ACGIH TLV exposure thresholds, mandatory PPE specifications, incompatible substances matrix, spill cleanup instructions, facility storage locations, maximum storage capacities, vendor linkage (`core.Party`), Chemical Hygiene Officer (`accounts.User`), and printable workplace GHS/NFPA container secondary hazard labels.
   - **Workplace Safety Incidents & OSHA 300 Log** [`QSIR-`]: Occupational incident reporting conforming to OSHA 29 CFR 1904 and ISO 45001. Features incident categories (`injury_illness`, `near_miss`, `environmental_spill`, `property_damage`, `hazard_observation`, `vehicle_accident`), severity triage (`minor`, `moderate`, `severe`, `critical`, `fatal`), OSHA recordability determination, OSHA 300 log classification (`days_away_from_work`, `job_transfer_restriction`, `other_recordable_case`, `first_aid`, `non_recordable`), lost and restricted workday accounting (DART rate calculations), affected party tracking (company employees via `accounts.User` or contractors/visitors), injury nature and body part mapping, medical treatment tier classification, PPE compliance evaluations, immediate containment logging, formal root cause investigation (human factors, equipment failure, procedure gap, training deficiency, ergonomic strain), direct cross-spawning of CAPA (`QCAP-`) and NCR (`QNCR-`), and statutory 5-year OSHA retention deletion guards.
@@ -205,6 +212,11 @@ apps/quality/
       ManagementReviews.py                    <- ManagementReview [QMRV-]
       ManagementReviewInputs.py               <- ManagementReviewInput [QMRI-]
       ManagementReviewActions.py              <- ManagementReviewAction [QMRA-]
+    ProcessValidation/                        <- Sub-module 12.15 models
+      ValidationProtocols.py                  <- ValidationProtocol [QVAL-]
+      ProcessCapabilityStudies.py             <- ProcessCapabilityStudy [QCPK-]
+      ComputerSystemValidations.py            <- ComputerSystemValidation [QCSV-]
+      CleaningValidations.py                  <- CleaningValidation [QCLN-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -278,6 +290,11 @@ apps/quality/
       ManagementReviews.py                    <- ManagementReviewForm, ManagementReviewMinutesForm, ManagementReviewApproveForm
       ManagementReviewInputs.py               <- ManagementReviewInputForm
       ManagementReviewActions.py              <- ManagementReviewActionForm, ManagementReviewActionCompleteForm, ManagementReviewActionVerifyForm
+    ProcessValidation/                        <- Sub-module 12.15 forms
+      ValidationProtocols.py                  <- ValidationProtocolForm
+      ProcessCapabilityStudies.py             <- ProcessCapabilityStudyForm
+      ComputerSystemValidations.py            <- ComputerSystemValidationForm
+      CleaningValidations.py                  <- CleaningValidationForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -364,6 +381,12 @@ apps/quality/
       ManagementReviewInputs.py               <- List, Detail, Create, Edit, Delete, Present, Accept, Export
       ManagementReviewActions.py              <- List, Detail, Create, Edit, Delete, Start, Complete, Verify, Escalate CAPA, Export
       QualityPlanningDashboard.py             <- Quality Planning & Continuous Improvement Command Center
+    ProcessValidation/                        <- Sub-module 12.15 views
+      ValidationProtocols.py                  <- List, Detail, Create, Edit, Delete, Export
+      ProcessCapabilityStudies.py             <- List, Detail, Create, Edit, Delete, Export
+      ComputerSystemValidations.py            <- List, Detail, Create, Edit, Delete, Export
+      CleaningValidations.py                  <- List, Detail, Create, Edit, Delete, Export
+      ProcessValidationDashboard.py           <- Operational Process Validation & Verification Command Center
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -449,12 +472,22 @@ apps/quality/
       ManagementReviewInputs.py
       ManagementReviewActions.py
       QualityPlanningDashboard.py
+    ProcessValidation/                        <- Sub-module 12.15 URLs
+      ValidationProtocols.py
+      ProcessCapabilityStudies.py
+      ComputerSystemValidations.py
+      CleaningValidations.py
+      ProcessValidationDashboard.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.14)
-  tests/                                      <- Pytest test suite (100% green, 2,316+ passing tests)
-    conftest.py                               <- Shared 12.1 through 12.14 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.16)
+  tests/                                      <- Pytest test suite (100% green, 2,367+ passing tests)
+    conftest.py                               <- Shared 12.1 through 12.16 fixtures
+    test_processvalidation_models.py          <- Sub-module 12.15 model tests (15 tests)
+    test_processvalidation_forms.py           <- Sub-module 12.15 form tests (12 tests)
+    test_processvalidation_views.py           <- Sub-module 12.15 view tests (25 tests)
+    test_processvalidation_security.py        <- Sub-module 12.15 security tests (7 tests)
     test_managementreview_models.py           <- Sub-module 12.14 model tests (32 tests)
     test_managementreview_forms.py            <- Sub-module 12.14 form tests (45 tests)
     test_managementreview_views.py            <- Sub-module 12.14 view tests (57 tests)
@@ -770,6 +803,32 @@ apps/quality/
 - **Key Fields:** `number`, `management_review` (`ManagementReview`), `title`, `description`, `action_type` (`qms_improvement`, `product_improvement`, `resource_allocation`, `capa_initiation`, `procedure_revision`, `training_competency`, `regulatory_filing`), `priority` (`critical`, `high`, `medium`, `low`), `assignee` (`accounts.User`), `due_date`, `status` (`open`, `in_progress`, `pending_verification`, `completed`, `cancelled`), `completion_date`, `resolution_summary`, `spawned_capa` (`CapaInvestigation`), `spawned_change_order` (`DocumentChangeOrder`), `verified_by` (`accounts.User`), `verification_notes`, `notes`.
 - **Properties & Methods:** `is_overdue`, `days_open` (clamped >= 0), `action_type_badge_class`, `priority_badge_class`, `status_badge_class`.
 - **Compound Indexes:** `idx_qmra_ten_mrv` on `(tenant, management_review)`, `idx_qmra_ten_status` on `(tenant, status)`, `idx_qmra_ten_pri` on `(tenant, priority)`, `idx_qmra_ten_duedate` on `(tenant, due_date)`, `idx_qmra_ten_created` on `(tenant, -created_at)`, `idx_qmra_ten_stat_due` on `(tenant, status, due_date)`.
+
+### Sub-module 12.15 Entities
+
+#### 41. `ValidationProtocol` (Prefix: `QVAL-`)
+- **Table:** `quality_validation_protocol`
+- **Key Fields:** `number`, `title`, `description`, `protocol_stage` (`dq`, `iq`, `oq`, `pq`, `ppq`, `cpv`, `revalidation`), `target_type` (`equipment`, `process`, `facility_utility`, `cleaning_procedure`, `computerized_system`), `status` (`draft`, `in_review`, `approved_for_execution`, `in_execution`, `deviation_hold`, `execution_completed`, `final_approved`, `rejected`, `superseded`), `revalidation_trigger` (`initial`, `periodic_review`, `change_control`, `deviation`, `regulatory`), `equipment_tag`, `process_name`, `facility_area`, `item_code`, `target_completion_date`, `actual_completion_date`, `revalidation_due_date`, `test_runs_planned`, `test_runs_completed`, `acceptance_criteria`, `summary_conclusions`, `deviations_encountered`, `critical_parameters_verified`, `department` (`core.OrgUnit`), `lead_author` (`accounts.User`), `qa_reviewer` (`accounts.User`), `final_approver` (`accounts.User`), `governing_document` (`quality.ControlledDocument`), `triggering_change` (`quality.DocumentChangeOrder`), `calibration_gage` (`quality.CalibrationGage`).
+- **Properties & Methods:** `is_overdue`, `is_revalidation_overdue`, `progress_percentage`, `status_css`, `stage_css`.
+- **Compound Indexes:** `idx_qval_ten_created` on `(tenant, -created_at)`, `idx_qval_ten_status` on `(tenant, status)`, `idx_qval_ten_stage` on `(tenant, protocol_stage)`, `idx_qval_ten_target` on `(tenant, target_type)`, `idx_qval_ten_target_due` on `(tenant, target_completion_date)`, `idx_qval_ten_reval_due` on `(tenant, revalidation_due_date)`.
+
+#### 42. `ProcessCapabilityStudy` (Prefix: `QCPK-`)
+- **Table:** `quality_process_capability_study`
+- **Key Fields:** `number`, `title`, `parameter_name`, `parameter_category` (`dimensional_thickness`, `temperature`, `pressure`, `speed_feed`, `torque`, `ph_chemical`, `humidity`, `voltage_current`, `cycle_time`, `weight_mass`, `other`), `unit_of_measure`, `upper_spec_limit` (Decimal), `lower_spec_limit` (Decimal), `target_nominal` (Decimal), `subgroup_size` (int), `number_of_subgroups` (int), `total_samples` (int), `mean_value` (Decimal), `within_subgroup_stdev` (Decimal), `overall_stdev` (Decimal), `cp_index` (Decimal), `cpk_index` (Decimal), `pp_index` (Decimal), `ppk_index` (Decimal), `expected_ppm` (Decimal), `is_normally_distributed` (bool), `capability_determination` (`highly_capable`, `capable`, `marginally_capable`, `incapable`, `undetermined`), `status` (`draft`, `data_collection`, `analyzed`, `approved`, `action_required`), `process_name`, `equipment_tag`, `item_code`, `lot_number`, `analysis_summary`, `study_date`, `validation_protocol` (`ValidationProtocol`), `investigator` (`accounts.User`), `approved_by` (`accounts.User`), `linked_parameter_log` (`quality.ProcessParameterLog`).
+- **Properties & Methods:** `tolerance_width`, `status_css`, `determination_css`, `calculate_indices()`.
+- **Compound Indexes:** `idx_qcpk_ten_created` on `(tenant, -created_at)`, `idx_qcpk_ten_status` on `(tenant, status)`, `idx_qcpk_ten_det` on `(tenant, capability_determination)`, `idx_qcpk_ten_param_cat` on `(tenant, parameter_category)`.
+
+#### 43. `ComputerSystemValidation` (Prefix: `QCSV-`)
+- **Table:** `quality_computer_system_validation`
+- **Key Fields:** `number`, `system_name`, `version_release`, `vendor_name`, `gamp_category` (`cat_1_infrastructure`, `cat_3_non_configured`, `cat_4_configured`, `cat_5_custom`), `gxp_impact` (`direct_gxp`, `indirect_gxp`, `non_gxp`), `validation_approach` (`traditional_csv`, `csa_risk_based`), `hosting_model` (`cloud_saas`, `cloud_dedicated`, `on_premises`, `hybrid`, `embedded_firmware`), `is_part_11_compliant` (bool), `requires_audit_trail` (bool), `has_disaster_recovery_plan` (bool), `traceability_status` (`not_started`, `drafting`, `matrix_verified`, `gaps_identified`), `urs_requirements_count` (int), `test_scripts_count` (int), `deviations_found_count` (int), `status` (`inventory_only`, `planning`, `in_qualification`, `validated_live`, `periodic_review_due`, `decommissioned`), `validated_date`, `periodic_review_frequency_months` (int), `last_review_date`, `next_review_due`, `description`, `system_owner` (`accounts.User`), `quality_lead` (`accounts.User`), `validation_protocol` (`ValidationProtocol`), `urs_document` (`quality.ControlledDocument`), `vsr_document` (`quality.ControlledDocument`), `risk_assessment` (`quality.RiskAssessment`).
+- **Properties & Methods:** `is_review_overdue`, `status_css`, `gamp_css`.
+- **Compound Indexes:** `idx_qcsv_ten_created` on `(tenant, -created_at)`, `idx_qcsv_ten_status` on `(tenant, status)`, `idx_qcsv_ten_gamp` on `(tenant, gamp_category)`, `idx_qcsv_ten_review_due` on `(tenant, next_review_due)`.
+
+#### 44. `CleaningValidation` (Prefix: `QCLN-`)
+- **Table:** `quality_cleaning_validation`
+- **Key Fields:** `number`, `title`, `equipment_train_tag`, `target_residue`, `cleaning_agent_used`, `worst_case_rationale` (`lowest_solubility`, `highest_toxicity_pde`, `highest_potency`, `hardest_to_clean`), `calculation_basis` (`therapeutic_dose`, `ten_ppm_limit`, `toxicological_pde`, `most_stringent`), `min_daily_dose_active_mg` (Decimal), `max_daily_dose_subsequent_mg` (Decimal), `smallest_batch_size_kg` (Decimal), `safety_factor` (Decimal), `toxicological_pde_mg_day` (Decimal), `calculated_maco_mg` (Decimal), `total_surface_area_sqcm` (Decimal), `swab_sampling_area_sqcm` (Decimal), `calculated_swab_limit_ug` (Decimal), `rinse_volume_liters` (Decimal), `calculated_rinse_limit_ppm` (Decimal), `analytical_method` (`hplc`, `toc`, `uv_vis`, `conductivity`, `visual_clean`), `method_recovery_percentage` (Decimal), `dirty_hold_time_hours` (Decimal), `clean_hold_time_hours` (Decimal), `consecutive_successful_runs` (int), `is_visually_clean` (bool), `worst_swab_result_ug` (Decimal), `worst_rinse_result_ppm` (Decimal), `cleaning_status` (`draft`, `protocol_approved`, `sampling_in_progress`, `analytical_testing`, `validated_pass`, `failed_recleaning`, `expired`), `next_revalidation_date`, `notes`, `validation_protocol` (`ValidationProtocol`), `cleaning_sop` (`quality.ControlledDocument`), `analytical_lead` (`accounts.User`), `qa_approver` (`accounts.User`), `linked_deviation` (`quality.ProcessDeviation`).
+- **Properties & Methods:** `is_revalidation_overdue`, `status_css`, `calculate_limits()`.
+- **Compound Indexes:** `idx_qcln_ten_created` on `(tenant, -created_at)`, `idx_qcln_ten_status` on `(tenant, cleaning_status)`, `idx_qcln_ten_method` on `(tenant, analytical_method)`, `idx_qcln_ten_reval_due` on `(tenant, next_revalidation_date)`.
 
 
 ---
@@ -1139,6 +1198,35 @@ All routes use the `quality:` namespace:
 | `/quality/actions/<pk>/delete/` | `management_review_action_delete` | POST-only delete (locked when review is approved or action is completed) |
 | `/quality/actions/export/csv/` | `management_review_action_export_csv` | CSV export of review action items |
 
+### Sub-module 12.15 Routes
+| URL Pattern | View Name | Purpose |
+|---|---|---|
+| `/quality/validation/dashboard/` | `process_validation_dashboard` | Operational Process Validation & Verification Command Center |
+| `/quality/validation/protocols/` | `validation_protocol_list` | Validation protocols register with stage, target type, and status filters |
+| `/quality/validation/protocols/create/` | `validation_protocol_create` | Author and register qualification protocol (IQ/OQ/PQ/PPQ/CPV) |
+| `/quality/validation/protocols/<pk>/` | `validation_protocol_detail` | Detailed qualification protocol dossier with replicate test metrics and approvals |
+| `/quality/validation/protocols/<pk>/edit/` | `validation_protocol_edit` | Edit protocol parameters and target completion deadlines |
+| `/quality/validation/protocols/<pk>/delete/` | `validation_protocol_delete` | POST-only delete for validation protocols |
+| `/quality/validation/protocols/export/` | `validation_protocol_export` | CSV export of validation protocols with formula sanitization |
+| `/quality/validation/capability-studies/` | `process_capability_study_list` | Process capability studies register with parameter category and determination filters |
+| `/quality/validation/capability-studies/create/` | `process_capability_study_create` | Create statistical capability study with USL/LSL limits and automated index calculations |
+| `/quality/validation/capability-studies/<pk>/` | `process_capability_study_detail` | Detailed capability study with Cp, Cpk, Pp, Ppk index display and PPM estimates |
+| `/quality/validation/capability-studies/<pk>/edit/` | `process_capability_study_edit` | Edit study parameters, subgroup counts, and sample observations |
+| `/quality/validation/capability-studies/<pk>/delete/` | `process_capability_study_delete` | POST-only delete for capability studies |
+| `/quality/validation/capability-studies/export/` | `process_capability_study_export` | CSV export of process capability studies |
+| `/quality/validation/computer-systems/` | `computer_system_validation_list` | Computer system validation register with GAMP category, GxP impact, and status filters |
+| `/quality/validation/computer-systems/create/` | `computer_system_validation_create` | Register software asset for CSV/CSA qualification |
+| `/quality/validation/computer-systems/<pk>/` | `computer_system_validation_detail` | Detailed CSV dossier with 21 CFR Part 11 audit trail checklist and review tracking |
+| `/quality/validation/computer-systems/<pk>/edit/` | `computer_system_validation_edit` | Edit software validation record and periodic review intervals |
+| `/quality/validation/computer-systems/<pk>/delete/` | `computer_system_validation_delete` | POST-only delete for computer system validation records |
+| `/quality/validation/computer-systems/export/` | `computer_system_validation_export` | CSV export of computer system validation records |
+| `/quality/validation/cleaning/` | `cleaning_validation_list` | Cleaning validation studies register with method, status, and calculation basis filters |
+| `/quality/validation/cleaning/create/` | `cleaning_validation_create` | Create cleaning validation protocol with automated MACO and swab/rinse limit calculations |
+| `/quality/validation/cleaning/<pk>/` | `cleaning_validation_detail` | Detailed cleaning study with worst-case rationale, hold time tracking, and test results |
+| `/quality/validation/cleaning/<pk>/edit/` | `cleaning_validation_edit` | Edit cleaning validation protocol and recovery percentages |
+| `/quality/validation/cleaning/<pk>/delete/` | `cleaning_validation_delete` | POST-only delete for cleaning validation studies |
+| `/quality/validation/cleaning/export/` | `cleaning_validation_export` | CSV export of cleaning validation studies |
+
 ---
 
 ## Seeder (`seed_quality`)
@@ -1268,6 +1356,12 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
   - 2 Management Reviews per tenant (one approved historic review with signed minutes, attendee roster, and suitability conclusion; one upcoming scheduled review).
   - 4 Management Review Inputs per tenant covering mandatory ISO 5.6.2 topics linked to real upstream QMS records (`QualityAudit`, `CapaInvestigation`, `CustomerComplaint`, `NonConformanceReport`).
   - 4 Management Review Actions per tenant spanning resource allocation, procedure revisions, training, and systemic CAPA escalation.
+
+- **12.15 Data**:
+  - 2 Validation Protocols per tenant (`Autoclave 04 IQ/OQ Qualification Protocol`, `Depyrogenation Tunnel PPQ Revalidation Protocol`) with planned test runs, acceptance criteria, and approvals.
+  - 2 Process Capability Studies per tenant (`Tablet Press 02 Fill Weight Capability Study` [Cp 2.01, Cpk 1.99], `Vial Capping Torque Capability Study` [Cp 1.85, Cpk 1.78]) with calculated indices and normality verification.
+  - 2 Computer System Validations per tenant (`MasterQMS Document Management System` [GAMP Category 4], `Empower 3 Chromatography Data System` [FDA CSA Risk-Based]) with 21 CFR Part 11 compliance checklists and periodic reviews.
+  - 2 Cleaning Validations per tenant (`Solid Dose Granulation Train Cleaning Validation`, `Packaging Line Aseptic Fill Train Cleaning Validation`) with automated MACO, swab limit, and rinse concentration calculations.
 
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
@@ -1468,6 +1562,13 @@ LIVE_LINKS = {
         "Review Inputs & Data Compilation": "quality:management_review_input_list",
         "Management Review Outputs & Decisions": "quality:management_review_action_list",
         "Quality Planning & Continuous Improvement": "quality:quality_planning_dashboard",
+    },
+    "12.15": {
+        "Process Validation Planning (IQ/OQ/PQ)": "quality:validation_protocol_list",
+        "Process Capability Studies (Cp/Cpk)": "quality:process_capability_study_list",
+        "Computer System Validation (CSV)": "quality:computer_system_validation_list",
+        "Cleaning Validation": "quality:cleaning_validation_list",
+        "Revalidation & Periodic Review": "quality:process_validation_dashboard",
     },
     "12.16": {
         "Hazardous Material Management": "quality:hazardous_material_list",
