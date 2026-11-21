@@ -64,13 +64,15 @@
       </a>
 
       {% if batch_record.status != "released" %}
-      <form method="post" action="{% url 'quality:batch_record_delete' batch_record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete batch record {{ batch_record.number }}?');">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
-          <i data-lucide="trash-2" class="w-4 h-4"></i>
-          <span>Delete</span>
-        </button>
-      </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'quality:batch_record_delete' batch_record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete batch record {{ batch_record.number }}?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger flex items-center gap-1.5 text-sm">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            <span>Delete</span>
+          </button>
+        </form>
+        {% endif %}
       {% endif %}
     </div>
   </div>
