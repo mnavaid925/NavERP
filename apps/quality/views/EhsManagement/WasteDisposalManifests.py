@@ -93,7 +93,11 @@ def waste_disposal_manifest_create(request):
             return redirect("quality:waste_disposal_manifest_detail", pk=obj.pk)
     else:
         form = WasteDisposalManifestForm(
-            tenant=request.tenant, initial={"accumulation_start_date": timezone.now().date()}
+            tenant=request.tenant,
+            initial={
+                "accumulation_start_date": timezone.now().date(),
+                "certifying_officer": request.user,
+            },
         )
 
     context = {
