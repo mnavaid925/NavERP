@@ -113,7 +113,7 @@
   - **Issue**: Direct queryset evaluation populates Django's internal cache with all rows in memory.
   - **Fix**: Iterate using `qs.iterator(chunk_size=1000)`.
 
-- [ ] **[I9] Missing Index on `ValidationProtocol.target_completion_date`**
+- [x] **[I9] Missing Index on `ValidationProtocol.target_completion_date`** — fixed in 3be7766e, d0dd6d72
   - **Location**: `apps/quality/models/ProcessValidation/ValidationProtocols.py:84, 154-159`
   - **Issue**: Overdue range filter queries scan unindexed dates.
   - **Fix**: Add composite index `idx_qval_ten_target_due` on `("tenant", "target_completion_date")`.
