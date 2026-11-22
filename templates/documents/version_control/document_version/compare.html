@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Version Comparison & Diff View — NavERP DMS{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* difflib HtmlDiff styling integration with NavERP theme */
+    .diff-container table.diff {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+    }
+    .diff-container table.diff td {
+        padding: 2px 6px;
+        vertical-align: top;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    .diff-container .diff_header {
+        background-color: #f1f5f9;
+        color: #64748b;
+        text-align: right;
+        border-right: 1px solid #cbd5e1;
+        user-select: none;
+        width: 40px;
+    }
+    .diff-container .diff_next {
+        background-color: #f8fafc;
+        width: 15px;
+        text-align: center;
+    }
+    .diff-container .diff_add {
+        background-color: #dcfce7;
+        color: #166534;
+    }
+    .diff-container .diff_sub {
+        background-color: #fee2e2;
+        color: #991b1b;
+        text-decoration: line-through;
+    }
+    .diff-container .diff_chg {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            {% if document %}
+            <a href="{% url 'documents:document_detail' document.pk %}">{{ document.number }}</a>
+            <span>/</span>
+            {% endif %}
+            <span>Version Comparison</span>
+        </nav>
+        <h1 class="page-title">Version Comparison & Diff View</h1>
+        <p class="text-sm text-slate-500">Side-by-side redline comparison, text insertions & deletions, and metadata property deltas.</p>
+    </div>
+    {% if document %}
+    <div class="page-actions">
+        <a href="{% url 'documents:document_detail' document.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to Document
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Selector Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div class="form-group">
+                <label for="comp-doc" class="form-label text-xs">1. Select Document</label>
+                <select id="comp-doc" name="document" class="form-select" onchange="this.form.submit()">
+                    <option value="">Choose a document...</option>
+                    {% for doc in documents %}
+                    <option value="{{ doc.pk }}" {% if document and document.pk == doc.pk %}selected{% endif %}>
+                        {{ doc.number }} — {{ doc.title|truncatechars:30 }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {% if document and versions %}
+            <div class="form-group">
+                <label for="comp-va" class="form-label text-xs">2. Base Version (A)</label>
+                <select id="comp-va" name="version_a" class="form-select">
+                    {% for ver in versions %}
+                    <option value="{{ ver.pk }}" {% if version_a and version_a.pk == ver.pk %}selected{% endif %}>
+                        v{{ ver.version_label }} ({{ ver.created_at|date:"M d, Y" }}){% if ver.is_official %} [Official]{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="comp-vb" class="form-label text-xs">3. Comparison Version (B)</label>
+                <select id="comp-vb" name="version_b" class="form-select">
+                    {% for ver in versions %}
+                    <option value="{{ ver.pk }}" {% if version_b and version_b.pk == ver.pk %}selected{% endif %}>
+                        v{{ ver.version_label }} ({{ ver.created_at|date:"M d, Y" }}){% if ver.is_official %} [Official]{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="git-compare"></i> Run Diff Comparison
+                </button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+{% if document and version_a and version_b %}
+<!-- Diff Summary Statistics -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="plus-circle"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-value text-green-600">+{{ diff_stats.lines_added }}</div>
+            <div class="stat-label">Lines Inserted</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="minus-circle"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-value text-red-600">-{{ diff_stats.lines_removed }}</div>
+            <div class="stat-label">Lines Deleted</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="layers"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-value">{{ diff_stats.metadata_changes }}</div>
+            <div class="stat-label">Metadata Properties Changed</div>
+        </div>
+    </div>
+</div>
+
+<!-- Metadata Delta Table -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Metadata Property Deltas</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table text-xs">
+            <thead>
+                <tr>
+                    <th>Property</th>
+                    <th>Base Version (v{{ version_a.version_label }})</th>
+                    <th>Comparison Version (v{{ version_b.version_label }})</th>
+                    <th>State</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key, delta in metadata_diff.items %}
+                <tr {% if delta.changed %}class="bg-amber-50/40"{% endif %}>
+                    <td class="font-semibold text-slate-700">{{ key }}</td>
+                    <td class="text-slate-600">{{ delta.val_a }}</td>
+                    <td class="text-slate-900 font-medium">{{ delta.val_b }}</td>
+                    <td>
+                        {% if delta.changed %}
+                        <span class="badge badge-amber">Modified</span>
+                        {% else %}
+                        <span class="badge badge-slate">Unchanged</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Side-by-Side Visual Redline Diff -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Visual Redline & Text Diff</h2>
+            <p class="text-xs text-slate-500">Comparing extracted text between v{{ version_a.version_label }} and v{{ version_b.version_label }}.</p>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-3 bg-green-200 inline-block rounded"></span> Inserted</span>
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-3 bg-red-200 inline-block rounded"></span> Deleted</span>
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-3 bg-amber-200 inline-block rounded"></span> Changed</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="diff-container overflow-x-auto p-4">
+            {% if diff_html %}
+            {{ diff_html|safe }}
+            {% else %}
+            <div class="text-center py-8 text-xs text-slate-400">
+                Identical text layers. Zero differences detected between v{{ version_a.version_label }} and v{{ version_b.version_label }}.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% elif not document %}
+<div class="card">
+    <div class="card-body text-center py-12">
+        <i data-lucide="git-compare" class="mx-auto h-12 w-12 text-slate-300 mb-3"></i>
+        <h3 class="text-base font-semibold text-slate-700">Select a document to begin comparison</h3>
+        <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            Choose a controlled document with multiple recorded revisions above to inspect side-by-side text redlines and property deltas.
+        </p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
