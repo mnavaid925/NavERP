@@ -97,6 +97,10 @@ def template_section_create(request):
 @login_required
 def template_section_edit(request, pk):
     section = documents_object(request, TemplateSection, pk)
+    if section.is_locked and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request, "is_tenant_admin", False)):
+        messages.error(request, f"Template section '{section.title}' is locked and can only be modified by an administrator.")
+        return redirect("documents:template_section_detail", pk=section.pk)
+
     if request.method == "POST":
         form = TemplateSectionForm(request.POST, instance=section, tenant=request.tenant)
         if form.is_valid():
@@ -123,6 +127,12 @@ def template_section_edit(request, pk):
 @require_POST
 def template_section_delete(request, pk):
     section = documents_object(request, TemplateSection, pk)
+    if section.is_locked and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request, "is_tenant_admin", False)):
+        messages.error(request, f"Template section '{section.title}' is locked and cannot be deleted.")
+        if section.template_id:
+            return redirect("documents:template_detail", pk=section.template_id)
+        return redirect("documents:template_section_list")
+
     title = section.title
     parent_template_pk = section.template_id
     with transaction.atomic():
