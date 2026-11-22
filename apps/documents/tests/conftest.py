@@ -227,8 +227,7 @@ def document_folder(db, tenant_a, admin_user):
         tenant=tenant_a,
         name="Corporate Policies",
         slug="corporate-policies",
-        folder_type="standard",
-        classification="internal",
+        default_classification="internal",
         description="Official enterprise governance policies.",
         color_code="#2563eb",
         icon_name="folder",
@@ -245,8 +244,7 @@ def child_document_folder(db, tenant_a, admin_user, document_folder):
         name="HR Policies",
         slug="hr-policies",
         parent=document_folder,
-        folder_type="standard",
-        classification="internal",
+        default_classification="internal",
         description="Human resource rules and operating guidelines.",
         color_code="#059669",
         icon_name="users",
@@ -261,9 +259,10 @@ def storage_volume(db, tenant_a):
     return StorageVolume.objects.create(
         tenant=tenant_a,
         name="Primary NVMe SSD Store",
+        code="VOL-SSD-01",
         backend_type="local_filesystem",
         base_path="/var/storage/nav_docs",
-        storage_tier="hot",
+        tier="hot",
         max_capacity_bytes=100 * 1024 * 1024 * 1024,  # 100 GB
         utilized_bytes=10 * 1024 * 1024 * 1024,      # 10 GB
         is_default=True,
@@ -307,14 +306,14 @@ def document_batch_import(db, tenant_a, admin_user, storage_volume):
     """Fixture providing a DocumentBatchImport record in tenant_a."""
     return DocumentBatchImport.objects.create(
         tenant=tenant_a,
-        title="Q4 Historical Document Ingestion",
+        batch_name="Q4 Historical Document Ingestion",
         source_type="zip_archive",
         storage_volume=storage_volume,
-        status="pending",
-        total_files=5,
-        processed_files=0,
-        failed_files=0,
-        total_bytes=1024 * 1024,
+        status="queued",
+        total_files_detected=5,
+        processed_files_count=0,
+        failed_files_count=0,
+        total_bytes_processed=1024 * 1024,
         created_by=admin_user,
     )
 
