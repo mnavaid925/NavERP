@@ -38848,3 +38848,258 @@ apps/quality/
 - **Review findings**: 27 total (2 Critical, 14 Important, 11 Minor) — all 27 resolved in `.claude/tasks/review-documents-13.2.md`.
 - **Test Suite**: 49 passed (100% green unfiltered suite in `apps/documents/tests/`).
 - **Gaps**: None. Declared in `.agents/tasks/gaps-documents-13.2.md` and `.claude/tasks/gaps-documents-13.2.md`.
+
+---
+# Sub-module 13.3: Document Approval & Review Workflow (Module 13: Document Management System, `documents`) — plan from `research-documents-13.3.md` (2026-11-22)
+
+> **This plan EXTENDS an existing app.** `apps/documents/` is live with Sub-modules 13.1 and 13.2.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0004_alter_documentversion_status_and_more.py` (claims next available incremental migration `0005_...`).
+> Free prefixes verified (0 collisions repo-wide): **`DWF`** (`DocumentApprovalWorkflow`), **`DAPR`** (`DocumentApprovalRequest`), **`DSIG`** (`DocumentSignature`), **`DREV`** (`DocumentReviewComment`).
+> Plan written from `.claude/tasks/research-documents-13.3.md` (Phase 1) and `NavERP.md` (`### 13.3 Document Approval & Review Workflow`).
+> Package folder name: `apps/documents/{models,forms,views,urls}/ApprovalWorkflow/<Entity>.py` (`DocumentApprovalWorkflows.py`, `DocumentApprovalRequests.py`, `DocumentSignatures.py`, `DocumentReviewComments.py`, plus dedicated `ApprovalDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/documents/approval_workflow/{document_approval_workflow,document_approval_request,document_signature,document_review_comment}/{list,detail,form}.html` + `designer.html`, `manifest.html`, `verify.html`, `approval_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DWF`** (`DocumentApprovalWorkflow`), **`DAPR`** (`DocumentApprovalRequest`), **`DSIG`** (`DocumentSignature`), **`DREV`** (`DocumentReviewComment`), all 4 model classes, and all URL stems (`document_approval_workflow_*`, `document_approval_request_*`, `document_signature_*`, `document_review_comment_*`, `approval_dashboard`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `accounts.Role` (`apps/accounts/models.py:Role`).
+  - Sibling DMS models (13.1 & 13.2): `documents.Document` (`apps/documents/models/VersionControl/Documents.py`, `DOC`), `documents.DocumentVersion` (`apps/documents/models/VersionControl/DocumentVersions.py`, `DVER`).
+  - Internal relationships: `DocumentApprovalWorkflow.document` -> `Document`, `DocumentApprovalWorkflow.version` -> `DocumentVersion`; `DocumentApprovalRequest.workflow` -> `DocumentApprovalWorkflow`, `DocumentApprovalRequest.assigned_role` -> `accounts.Role`; `DocumentSignature.approval_request` -> `DocumentApprovalRequest`; `DocumentReviewComment.workflow` -> `DocumentApprovalWorkflow`, `DocumentReviewComment.parent` -> `self`.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `accounts.Role`, `core.OrgUnit`, `Document`, `DocumentVersion`, `DocumentApprovalWorkflow`, `DocumentApprovalRequest`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Enterprise Commercial Standards Alignment (DocuSign, Adobe Acrobat Sign, Veeva Vault QualityDocs, OpenText Documentum D2, PandaDoc, Power Automate)**:
+  - **Sequential & Parallel Routing Engine**: Configurable routing rules (`sequential`, `parallel`, `conditional_matrix`) supporting multi-stage approval sequences, unanimous consensus (`unanimous_all`), and first-response quorum (`first_response_any`).
+  - **Electronic Signature & 21 CFR Part 11 Compliance**: Click-to-sign, digital certificate hash, and biometric PIN authentication; mandatory regulatory signature meaning declarations (`approval`, `authorship`, `review`, `technical_verification`, `legal_signoff`, `witness`); SHA-256 document checksum cryptographic binding and tamper-evident Certificate of Completion execution manifests.
+  - **Delegation of Authority & Escalation Automation**: Out-of-office delegate reassignment with dual-attribution audit logging, target turnaround SLA monitoring with automated bottleneck timeout escalation, and executive emergency approval bypass with recorded justification.
+  - **Rich Review Annotations & Resolution Interlock**: Multi-type annotations (`inline_comment`, `highlight`, `redline`, `sticky_note`, `drawing_callout`) with geometry/page positioning, threaded parent-child review discussions, and workflow gating enforcing that all blocking review comments must be marked `resolved` before final approval sign-off.
+  - **Unified Approvals Dashboard & Analytics**: Centralized operational cockpit aggregating "Awaiting My Action", in-flight routing pipelines, SLA aging bottleneck analytics (`turnaround_hours`), and cycle-time performance metrics.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `started_at`, `completed_at`, `responded_at`, `delegated_at`, `escalated_at`, `signed_at`, `resolved_at`), auto-numbers (`number`), cryptographic tokens (`signature_token`, `document_checksum`), and computed turnaround metrics MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_overdue`, `is_pending_my_action`, `has_unresolved_blocking_comments`, `signature_manifest_summary`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+## Models (from research — 4 representative tenant-scoped models)
+
+### 1. `DocumentApprovalWorkflow` [PREFIX: `DWF-`]
+- **Purpose**: Parent approval workflow governing a document or document revision through multi-stage review and sign-off.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DWF"`)
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="approval_workflows", db_index=True)`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="approval_workflows")`
+  - `title`: `CharField(max_length=255)`
+  - `workflow_type`: `CharField(max_length=30, choices=WORKFLOW_TYPE_CHOICES, default="sequential", db_index=True)` (`sequential`, `parallel`, `conditional_matrix`)
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="in_progress", db_index=True)` (`draft`, `in_progress`, `approved`, `rejected`, `cancelled`, `bypassed`)
+  - `current_step_sequence`: `PositiveIntegerField(default=1)`
+  - `total_steps`: `PositiveIntegerField(default=1)`
+  - `target_sla_hours`: `PositiveIntegerField(default=48, help_text="Target turnaround SLA in hours")`
+  - `require_all_comments_resolved`: `BooleanField(default=True, help_text="Enforces all blocking review comments resolved before final sign-off")`
+  - `allow_delegation`: `BooleanField(default=True, help_text="Allows assigned approvers to delegate to proxies")`
+  - `emergency_bypassed`: `BooleanField(default=False)`
+  - `bypass_reason`: `TextField(blank=True)`
+  - `bypassed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bypassed_document_workflows")`
+  - `bypassed_at`: `DateTimeField(null=True, blank=True)`
+  - `initiated_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="initiated_document_workflows")`
+  - `started_at`: `DateTimeField(auto_now_add=True)`
+  - `completed_at`: `DateTimeField(null=True, blank=True)`
+  - `notes`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dwf_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "status", "started_at"], name="doc_dwf_tnt_stat_start_idx")` (26 chars)
+  - `models.Index(fields=["tenant", "document", "status"], name="doc_dwf_tnt_doc_stat_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `current_step_sequence`, `total_steps`, `emergency_bypassed`, `bypass_reason`, `bypassed_by`, `bypassed_at`, `started_at`, `completed_at`, `created_at`, `updated_at`.
+
+### 2. `DocumentApprovalRequest` [PREFIX: `DAPR-`]
+- **Purpose**: Individual stage participant task handling routing rules, quorum, reviewer assignment, delegation, and timeout escalation.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DAPR"`)
+  - `workflow`: `ForeignKey("documents.DocumentApprovalWorkflow", on_delete=models.CASCADE, related_name="requests", db_index=True)`
+  - `step_sequence`: `PositiveIntegerField(default=1, db_index=True)`
+  - `step_name`: `CharField(max_length=150)`
+  - `step_type`: `CharField(max_length=30, choices=STEP_TYPE_CHOICES, default="approval", db_index=True)` (`review`, `approval`, `e_sign`, `acknowledgement`)
+  - `routing_rule`: `CharField(max_length=30, choices=ROUTING_RULE_CHOICES, default="first_response_any")` (`unanimous_all`, `first_response_any`, `majority`)
+  - `assigned_approver`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="document_approval_requests")`
+  - `assigned_role`: `ForeignKey("accounts.Role", on_delete=models.SET_NULL, null=True, blank=True, related_name="document_approval_requests")`
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="pending", db_index=True)` (`pending`, `under_review`, `approved`, `rejected`, `delegated`, `escalated`, `bypassed`, `cancelled`)
+  - `due_at`: `DateTimeField(null=True, blank=True, db_index=True)`
+  - `responded_at`: `DateTimeField(null=True, blank=True)`
+  - `turnaround_hours`: `DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)`
+  - `decision_comments`: `TextField(blank=True)`
+  - `rejection_reason`: `TextField(blank=True)`
+  - `is_delegated`: `BooleanField(default=False)`
+  - `delegated_to`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="delegated_document_approvals")`
+  - `delegation_reason`: `CharField(max_length=255, blank=True)`
+  - `delegated_at`: `DateTimeField(null=True, blank=True)`
+  - `is_escalated`: `BooleanField(default=False)`
+  - `escalated_to`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="escalated_document_approvals")`
+  - `escalated_at`: `DateTimeField(null=True, blank=True)`
+  - `escalation_notes`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dapr_ten_num_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "status", "due_at"], name="doc_dapr_tnt_stat_due_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "assigned_approver", "status"], name="doc_dapr_tnt_appr_stat_idx")` (26 chars)
+  - `models.Index(fields=["tenant", "workflow", "step_sequence"], name="doc_dapr_tnt_wf_step_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `turnaround_hours`, `responded_at`, `delegated_at`, `escalated_at`, `created_at`, `updated_at`. Dedicated modal forms for `delegate`, `escalate`, and `decision` (approve/reject).
+
+### 3. `DocumentSignature` [PREFIX: `DSIG-`]
+- **Purpose**: Legally binding electronic signature audit record adhering to 21 CFR Part 11 with SHA-256 cryptographic checksums.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DSIG"`)
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="signatures", db_index=True)`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="signatures")`
+  - `approval_request`: `ForeignKey("documents.DocumentApprovalRequest", on_delete=models.SET_NULL, null=True, blank=True, related_name="signatures")`
+  - `signer`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="document_signatures")`
+  - `signer_name`: `CharField(max_length=150)`
+  - `signer_title`: `CharField(max_length=120, blank=True)`
+  - `signer_email`: `EmailField(blank=True)`
+  - `signature_type`: `CharField(max_length=30, choices=SIGNATURE_TYPE_CHOICES, default="click_to_sign", db_index=True)` (`click_to_sign`, `digital_cert`, `biometric_pin`)
+  - `signature_meaning`: `CharField(max_length=40, choices=SIGNATURE_MEANING_CHOICES, default="approval", db_index=True)` (`approval`, `authorship`, `review`, `technical_verification`, `legal_signoff`, `witness`)
+  - `document_checksum`: `CharField(max_length=64, help_text="SHA-256 hash of document version at signing time")`
+  - `signature_token`: `CharField(max_length=128, unique=True, help_text="Cryptographic signature verification token / UUID")`
+  - `signature_glyph`: `TextField(blank=True, help_text="Drawn SVG signature data or seal stamp")`
+  - `certificate_serial`: `CharField(max_length=100, blank=True, help_text="Digital X.509 or eIDAS certificate identifier")`
+  - `ip_address`: `GenericIPAddressField(null=True, blank=True)`
+  - `user_agent`: `CharField(max_length=255, blank=True)`
+  - `signed_at`: `DateTimeField(auto_now_add=True)`
+  - `is_valid`: `BooleanField(default=True, db_index=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dsig_ten_num_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "document", "is_valid"], name="doc_dsig_tnt_doc_valid_idx")` (26 chars)
+  - `models.Index(fields=["tenant", "signer", "signed_at"], name="doc_dsig_tnt_sgn_date_idx")` (25 chars)
+- **Form exclusions**: `tenant`, `number`, `signature_token`, `document_checksum`, `ip_address`, `user_agent`, `signed_at`, `created_at`, `updated_at`.
+
+### 4. `DocumentReviewComment` [PREFIX: `DREV-`]
+- **Purpose**: Collaborative review annotations, inline markup, threaded discussions, and comment resolution tracking.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DREV"`)
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="review_comments", db_index=True)`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="review_comments")`
+  - `workflow`: `ForeignKey("documents.DocumentApprovalWorkflow", on_delete=models.SET_NULL, null=True, blank=True, related_name="review_comments")`
+  - `author`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="document_review_comments")`
+  - `annotation_type`: `CharField(max_length=30, choices=ANNOTATION_TYPE_CHOICES, default="inline_comment", db_index=True)` (`inline_comment`, `highlight`, `redline`, `sticky_note`, `drawing_callout`)
+  - `page_number`: `PositiveIntegerField(default=1)`
+  - `coordinate_ref`: `CharField(max_length=255, blank=True, help_text="Coordinates 'x,y,w,h' or DOM text anchor")`
+  - `selected_text`: `TextField(blank=True, help_text="Highlighted or quoted snippet")`
+  - `content`: `TextField()`
+  - `parent`: `ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="replies")`
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="open", db_index=True)` (`open`, `addressed`, `resolved`, `dismissed`)
+  - `is_blocking`: `BooleanField(default=False, help_text="Blocks workflow approval until marked resolved")`
+  - `resolved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="resolved_document_comments")`
+  - `resolved_at`: `DateTimeField(null=True, blank=True)`
+  - `resolution_notes`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_drev_ten_num_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "document", "status"], name="doc_drev_tnt_doc_stat_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "workflow", "is_blocking"], name="doc_drev_tnt_wf_block_idx")` (25 chars)
+- **Form exclusions**: `tenant`, `number`, `resolved_by`, `resolved_at`, `resolution_notes`, `created_at`, `updated_at`. Dedicated reply and resolve forms.
+
+---
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-documents-13.3.md` with every field, choice, URL name, and view context key.
+
+### Phase 3.2: Entity by Entity Implementation
+- [ ] **Entity 1: DocumentApprovalWorkflow** (`DWF-`)
+  - [ ] `apps/documents/models/ApprovalWorkflow/DocumentApprovalWorkflows.py`
+  - [ ] `apps/documents/forms/ApprovalWorkflow/DocumentApprovalWorkflows.py`
+  - [ ] `apps/documents/views/ApprovalWorkflow/DocumentApprovalWorkflows.py`
+  - [ ] `apps/documents/urls/ApprovalWorkflow/DocumentApprovalWorkflows.py`
+  - [ ] `templates/documents/approval_workflow/document_approval_workflow/list.html`
+  - [ ] `templates/documents/approval_workflow/document_approval_workflow/detail.html`
+  - [ ] `templates/documents/approval_workflow/document_approval_workflow/form.html`
+  - [ ] `templates/documents/approval_workflow/document_approval_workflow/designer.html`
+- [ ] **Entity 2: DocumentApprovalRequest** (`DAPR-`)
+  - [ ] `apps/documents/models/ApprovalWorkflow/DocumentApprovalRequests.py`
+  - [ ] `apps/documents/forms/ApprovalWorkflow/DocumentApprovalRequests.py`
+  - [ ] `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py`
+  - [ ] `apps/documents/urls/ApprovalWorkflow/DocumentApprovalRequests.py`
+  - [ ] `templates/documents/approval_workflow/document_approval_request/list.html`
+  - [ ] `templates/documents/approval_workflow/document_approval_request/detail.html`
+  - [ ] `templates/documents/approval_workflow/document_approval_request/form.html`
+- [ ] **Entity 3: DocumentSignature** (`DSIG-`)
+  - [ ] `apps/documents/models/ApprovalWorkflow/DocumentSignatures.py`
+  - [ ] `apps/documents/forms/ApprovalWorkflow/DocumentSignatures.py`
+  - [ ] `apps/documents/views/ApprovalWorkflow/DocumentSignatures.py`
+  - [ ] `apps/documents/urls/ApprovalWorkflow/DocumentSignatures.py`
+  - [ ] `templates/documents/approval_workflow/document_signature/list.html`
+  - [ ] `templates/documents/approval_workflow/document_signature/detail.html`
+  - [ ] `templates/documents/approval_workflow/document_signature/form.html`
+  - [ ] `templates/documents/approval_workflow/document_signature/manifest.html`
+  - [ ] `templates/documents/approval_workflow/document_signature/verify.html`
+- [ ] **Entity 4: DocumentReviewComment** (`DREV-`)
+  - [ ] `apps/documents/models/ApprovalWorkflow/DocumentReviewComments.py`
+  - [ ] `apps/documents/forms/ApprovalWorkflow/DocumentReviewComments.py`
+  - [ ] `apps/documents/views/ApprovalWorkflow/DocumentReviewComments.py`
+  - [ ] `apps/documents/urls/ApprovalWorkflow/DocumentReviewComments.py`
+  - [ ] `templates/documents/approval_workflow/document_review_comment/list.html`
+  - [ ] `templates/documents/approval_workflow/document_review_comment/detail.html`
+  - [ ] `templates/documents/approval_workflow/document_review_comment/form.html`
+- [ ] **Dedicated Approval Dashboard & Command Center**
+  - [ ] `apps/documents/views/ApprovalWorkflow/ApprovalDashboard.py`
+  - [ ] `apps/documents/urls/ApprovalWorkflow/ApprovalDashboard.py`
+  - [ ] `templates/documents/approval_workflow/approval_dashboard.html`
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/__init__.py`
+- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
+- [ ] Register all 4 models in `apps/documents/admin.py`
+- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.3 seed data
+- [ ] Wire `LIVE_LINKS["13.3"]` in `apps/core/navigation.py`
+- [ ] Run `makemigrations documents`
+- [ ] Run `migrate`
+- [ ] Run `seed_documents` twice (idempotency check)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.3.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite (Unfiltered)
+- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [ ] Implement `apps/documents/tests/test_approval_workflow_models.py`
+- [ ] Implement `apps/documents/tests/test_approval_workflow_forms.py`
+- [ ] Implement `apps/documents/tests/test_approval_workflow_views.py`
+- [ ] Implement `apps/documents/tests/test_approval_workflow_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.3 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.3 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.3.md` and `.claude/tasks/gaps-documents-13.3.md`
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+
+## Later passes / deferred (from research-documents-13.3.md)
+- **Folder-Level Access Inheritance & Repository Storage Quotas** → Sub-module 13.4 (Document Storage & Repository).
+- **Custom Metadata Schemas & Automated OCR Indexing** → Sub-module 13.5 (Metadata & Indexing).
+- **Faceted Full-Text Search & Saved Search Alerts** → Sub-module 13.6 (Search & Discovery).
+- **Dynamic Watermarking & DRM Copy/Paste Protection** → Sub-module 13.7 (Document Security & Access Control).
+- **External Guest Link Sharing & Expiration Dates** → Sub-module 13.8 (Collaboration & Sharing).
+- **System-Wide DMS Event Audit Log & Compliance Certification** → Sub-module 13.10 (Audit Trail & Reporting).
+- **Third-Party External e-Signature Cloud Gateways (DocuSign / Adobe Sign API Connectors)** → Sub-module 13.12 (Integration & APIs).
+- **Contract Clauses, Fallback Negotiation & Obligation Tracking** → Sub-module 13.16 (Contract Lifecycle Management).
+- **Hardware Security Module (HSM) PKCS#11 Integration & WebAuthn / FIDO2 Biometric Handshake** → Deferred to future enterprise security integrations.
+
+## Review notes
+(to be filled in at Phase 7 close-out)
