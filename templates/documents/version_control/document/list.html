@@ -199,15 +199,15 @@
                         <span class="badge {{ doc.status_badge_class }}">{{ doc.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'documents:document_detail' doc.pk %}" class="btn btn-icon" title="View Document">
+                        <a href="{% url 'documents:document_detail' doc.pk %}" class="btn btn-icon" title="View Document" aria-label="View Document">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'documents:document_edit' doc.pk %}" class="btn btn-icon" title="Edit Document Metadata">
+                        <a href="{% url 'documents:document_edit' doc.pk %}" class="btn btn-icon" title="Edit Document Metadata" aria-label="Edit Document Metadata">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'documents:document_delete' doc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete document {{ doc.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Document">
+                            <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Document" aria-label="Delete Document">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
