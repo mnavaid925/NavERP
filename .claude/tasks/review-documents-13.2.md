@@ -48,8 +48,8 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
 
 ## Minor Findings
 
-- [ ] **M1**: `apps/documents/views/VersionControl/DocumentBranches.py:199` — `change_summary=f"[Merged from {branch.name}] {summary}"` can exceed `max_length=500` if summary is long.
-  - *Fix*: Clamp combined string to `[:500]`.
+- [x] **M1**: `apps/documents/views/VersionControl/DocumentBranches.py:199` — `change_summary=f"[Merged from {branch.name}] {summary}"` can exceed `max_length=500` if summary is long.
+  - *Fix*: Clamp combined string to `[:500]`. — fixed: `fix(documents): clamp branch merge change_summary to 500 characters`
 - [ ] **M2**: `templates/documents/version_control/document_version/compare.html:217` — Empty state missing when a document has zero versions recorded.
   - *Fix*: Add empty state card in template explaining that the selected document has no versions recorded yet.
 - [ ] **M3**: `apps/documents/management/commands/seed_documents.py:23` — Lacks `--flush` option and tenant user credential notice.
