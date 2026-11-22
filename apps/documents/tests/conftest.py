@@ -29,7 +29,7 @@ def template_section(db, tenant_a, document_template):
         tenant=tenant_a,
         template=document_template,
         title="Quality Assurance Clause",
-        section_type="boilerplate_clause",
+        section_type="boilerplate",
         content="All actions must strictly comply with current Good Manufacturing Practices (cGMP).",
         order=10,
         is_locked=False,
