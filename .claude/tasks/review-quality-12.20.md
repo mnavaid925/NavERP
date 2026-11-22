@@ -25,55 +25,67 @@ All six specialized review agents (`code-reviewer`, `explorer`, `frontend-review
 
 ### Important
 
-- [ ] **`I1`**: Missing `system` filter dropdown in `templates/quality/data_integrity/data_integrity_assessment/list.html`.
+- [x] **`I1`**: Missing `system` filter dropdown in `templates/quality/data_integrity/data_integrity_assessment/list.html`.
   - *Detail*: View passes `systems` in context and filters on `system`, but template filter grid lacks the `<select name="system">` control.
+  - *Resolution*: Added `system` filter dropdown comparing `sys.pk|stringformat:"d"` against `system_selected` in grid.
 
-- [ ] **`I2`**: Missing `gxp_impact` and `status` filter dropdowns in `templates/quality/data_integrity/system_change_control/list.html`.
+- [x] **`I2`**: Missing `gxp_impact` and `status` filter dropdowns in `templates/quality/data_integrity/system_change_control/list.html`.
   - *Detail*: View filters on both and passes choices and selected values, but template filter grid omits them.
+  - *Resolution*: Added `gxp_impact` and `status` filter dropdowns in responsive grid.
 
-- [ ] **`I3`**: Missing `status` filter dropdown in `templates/quality/data_integrity/audit_trail_review/list.html`.
+- [x] **`I3`**: Missing `status` filter dropdown in `templates/quality/data_integrity/audit_trail_review/list.html`.
   - *Detail*: View filters on `status` and passes `status_choices`, but template lacks the dropdown.
+  - *Resolution*: Added `status` filter dropdown to the filter grid.
 
-- [ ] **`I4`**: Missing `part11` filter dropdown in `templates/quality/data_integrity/electronic_record_policy/list.html`.
+- [x] **`I4`**: Missing `part11` filter dropdown in `templates/quality/data_integrity/electronic_record_policy/list.html`.
   - *Detail*: View processes `part11` query parameter (`1`/`0`) and passes `part11_selected`, but template omits the dropdown.
+  - *Resolution*: Added `part11` filter dropdown for 21 CFR Part 11 filtering.
 
-- [ ] **`I5`**: Active filter query parameters dropped during pagination across list templates.
+- [x] **`I5`**: Active filter query parameters dropped during pagination across list templates.
   - *Detail*: Navigating pages via pagination links drops active filter parameters (`system`, `status`, `gxp_impact`, `part11`, `category`, `q`).
+  - *Resolution*: Preserved all query parameters in pagination Previous/Next links across all 4 list templates.
 
-- [ ] **`I6`**: Missing date range order validation in `AuditTrailReviewForm`.
+- [x] **`I6`**: Missing date range order validation in `AuditTrailReviewForm`.
   - *Detail*: `clean()` does not verify that `period_start <= period_end`, permitting inverted audit review intervals.
+  - *Resolution*: Added validation in `AuditTrailReviewForm.clean()` asserting `period_start <= period_end`.
 
-- [ ] **`I7`**: Missing `closure_summary` requirement when closing in `SystemChangeControlForm`.
+- [x] **`I7`**: Missing `closure_summary` requirement when closing in `SystemChangeControlForm`.
   - *Detail*: A change control can be marked `status="implemented_closed"` with an empty `closure_summary`.
+  - *Resolution*: Added validation requiring non-empty `closure_summary` when `status == "implemented_closed"`.
 
-- [ ] **`I8`**: Missing `remediation_plan` or `linked_capa` requirement for non-compliant ALCOA+ assessments in `DataIntegrityAssessmentForm`.
+- [x] **`I8`**: Missing `remediation_plan` or `linked_capa` requirement for non-compliant ALCOA+ assessments in `DataIntegrityAssessmentForm`.
   - *Detail*: An assessment can be marked `status="approved"` even when ALCOA+ ratings are `non_compliant` without requiring remediation details.
+  - *Resolution*: Added validation requiring `remediation_plan` or `linked_capa` for approval if any ALCOA+ dimension is non-compliant.
 
-- [ ] **`I9`**: Missing `db_index=True` on `SystemChangeControl.change_type`.
+- [x] **`I9`**: Missing `db_index=True` on `SystemChangeControl.change_type`.
   - *Detail*: `change_type` is filtered in list views but lacks database index coverage.
+  - *Resolution*: Added `db_index=True` to `change_type` and applied migration `0042`.
 
-- [ ] **`I10`**: Pagination page size alignment to 20 items/page standard.
+- [x] **`I10`**: Pagination page size alignment to 20 items/page standard.
   - *Detail*: List views currently define `PAGE_SIZE = 15`. Standardize to `20` items/page across all four 12.20 list views.
+  - *Resolution*: Updated `PAGE_SIZE = 20` across all four 12.20 list views.
 
-- [ ] **`I11`**: Missing Legal Hold deletion guard in `electronic_record_policy_delete`.
+- [x] **`I11`**: Missing Legal Hold deletion guard in `electronic_record_policy_delete`.
   - *Detail*: `policy.legal_hold == True` policies should not be deleted under active regulatory or litigation freeze.
+  - *Resolution*: Added check preventing deletion if `policy.legal_hold == True` with error message and redirect.
 
-- [ ] **`I12`**: Missing server-side audit timestamping for terminal state transitions.
+- [x] **`I12`**: Missing server-side audit timestamping for terminal state transitions.
   - *Detail*: Auto-populate `qa_approved_at = timezone.now()` on assessment approval, `completed_at = timezone.now()` on review completion, and `actual_implementation_date = timezone.now().date()` on change control closure.
+  - *Resolution*: Added automatic terminal timestamp population in view create and edit actions.
 
 ---
 
 ### Minor
 
-- [ ] **`M1`**: Pagination footer references unfiltered `total_count` instead of filtered `paginator.count` in list templates.
-- [ ] **`M2`**: Lack of server-side minimum validation for `retention_period_years >= 1` in `ElectronicRecordPolicyForm`.
-- [ ] **`M3`**: Validation consistency between `anomalies_detected_count > 0` and `disposition="approved_clean"` in `AuditTrailReviewForm`.
-- [ ] **`M4`**: Detail templates render related `system` and `governing_sop` as plain text instead of clickable links to `quality:computer_system_validation_detail` and `quality:controlled_document_detail`.
-- [ ] **`M5`**: Missing composite or field index on `SystemChangeControl.target_date` for deadline/overdue queries.
-- [ ] **`M6`**: Undefined CSS utility `text-green` in `audit_trail_review/list.html` and `detail.html` (replace with `text-ok` or `badge-green`).
-- [ ] **`M7`**: Redundant `has_previous` condition in `electronic_record_policy/list.html:201`.
-- [ ] **`M8`**: `data_integrity_dashboard.html:42` uses `stat-icon red`; standardize to `stat-icon orange` per L33 standard.
-- [ ] **`M9`**: URL encoding and query preservation in pagination links.
+- [x] **`M1`**: Pagination footer references unfiltered `total_count` instead of filtered `paginator.count` in list templates.
+- [x] **`M2`**: Lack of server-side minimum validation for `retention_period_years >= 1` in `ElectronicRecordPolicyForm`.
+- [x] **`M3`**: Validation consistency between `anomalies_detected_count > 0` and `disposition="approved_clean"` in `AuditTrailReviewForm`.
+- [x] **`M4`**: Detail templates render related `system` and `governing_sop` as plain text instead of clickable links to `quality:computer_system_validation_detail` and `quality:controlled_document_detail`.
+- [x] **`M5`**: Missing composite or field index on `SystemChangeControl.target_date` for deadline/overdue queries.
+- [x] **`M6`**: Undefined CSS utility `text-green` in `audit_trail_review/list.html` and `detail.html` (replace with `text-ok` or `badge-green`).
+- [x] **`M7`**: Redundant `has_previous` condition in `electronic_record_policy/list.html:201`.
+- [x] **`M8`**: `data_integrity_dashboard.html:42` uses `stat-icon red`; standardize to `stat-icon orange` per L33 standard.
+- [x] **`M9`**: URL encoding and query preservation in pagination links.
 
 ---
 
