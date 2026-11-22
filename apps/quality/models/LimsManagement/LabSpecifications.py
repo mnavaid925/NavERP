@@ -48,7 +48,7 @@ class LabSpecification(TenantNumbered):
         "chemical": "badge-info",
         "physical": "badge-slate",
         "microbiological": "badge-red",
-        "chromatographic": "badge-purple",
+        "chromatographic": "badge-info",
         "spectroscopic": "badge-info",
         "biological_assay": "badge-amber",
     }
