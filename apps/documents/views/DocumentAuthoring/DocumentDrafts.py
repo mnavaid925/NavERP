@@ -155,7 +155,7 @@ def draft_canvas(request, pk):
         select_related=("template", "author", "department"),
         prefetch_related=("collaborations", "collaborations__author"),
     )
-    collaborations = draft.collaborations.filter(status="open").order_by("-created_at")
+    collaborations = [c for c in draft.collaborations.all() if c.status == "open"]
     available_tokens = draft.template.available_tokens if draft.template else {}
 
     return render(
