@@ -133,10 +133,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Calling `docs_qs.count()` and then `Paginator(docs_qs, 15)` triggers two count queries.
   - **Fix**: Use `total_files = page_obj.paginator.count`. [x] fixed — 8874721d: use paginator count to avoid duplicate total files count query in folder_detail
 
-- [ ] **M4**: Materialized Path Update Cascade on Folder Rename/Move.
+- [x] **M4**: Materialized Path Update Cascade on Folder Rename/Move.
   - **Location**: `apps/documents/models/StorageRepository/DocumentFolders.py:111`
   - **Problem**: When a parent folder's slug/name changes, child folders retain old materialized path prefixes.
-  - **Fix**: Recursively update children paths when folder path changes.
+  - **Fix**: Recursively update children paths when folder path changes. [x] fixed — ac37687e: cascade materialized path updates to child folders on folder rename or move
 
 - [ ] **M5**: Hardcoded Extension List in `DocumentBatchImportForm`.
   - **Location**: `apps/documents/forms/StorageRepository/DocumentBatchImports.py:45`
