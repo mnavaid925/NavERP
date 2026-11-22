@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ section.title }}{% else %}New Template Section{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'documents:template_section_list' %}">Sections</a>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+        </nav>
+        <h1 class="page-title mt-1">{% if is_edit %}Edit Template Section{% else %}Create Template Section{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:template_section_detail' section.pk %}{% else %}{% url 'documents:template_section_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header py-3 px-5">
+        <h2 class="text-sm font-semibold text-slate-800">
+            {% if is_edit %}Edit Section: {{ section.number }}{% else %}New Section / Clause Specifications{% endif %}
+        </h2>
+    </div>
+    <div class="card-body p-6">
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Section Title <span class="text-red-500">*</span></label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.section_type.id_for_label }}">Section Type</label>
+                    {{ form.section_type }}
+                    {% if form.section_type.errors %}<div class="form-error">{{ form.section_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.template.id_for_label }}">Parent Template</label>
+                    {{ form.template }}
+                    <span class="text-xs text-slate-400">Leave blank for global reusable boilerplate</span>
+                    {% if form.template.errors %}<div class="form-error">{{ form.template.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.order.id_for_label }}">Display Sort Order</label>
+                    {{ form.order }}
+                    {% if form.order.errors %}<div class="form-error">{{ form.order.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group flex items-center gap-6 pt-5">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_locked }}
+                        <span class="text-sm text-slate-700 font-medium text-amber-700">
+                            <i data-lucide="lock" class="w-3.5 h-3.5 inline"></i> Locked Clause
+                        </span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_mandatory }}
+                        <span class="text-sm text-slate-700 font-medium text-red-700">
+                            Mandatory Inclusion
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.content.id_for_label }}">Clause / Section Text</label>
+                {{ form.content }}
+                {% if form.content.errors %}<div class="form-error">{{ form.content.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:template_section_detail' section.pk %}{% else %}{% url 'documents:template_section_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 mr-1.5"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Section{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
