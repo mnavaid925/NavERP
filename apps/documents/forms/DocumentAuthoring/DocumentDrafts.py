@@ -44,4 +44,6 @@ class DocumentDraftForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["template", "department", "related_party"])
+        if self.instance and self.instance.pk and self.instance.status in ("promoted", "discarded"):
+            raise forms.ValidationError(f"Cannot modify draft because it is {self.instance.get_status_display().lower()}.")
         return cleaned_data
