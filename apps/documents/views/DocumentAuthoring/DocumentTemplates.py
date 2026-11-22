@@ -20,7 +20,7 @@ def template_list(request):
 
     q = request.GET.get("q", "").strip()
     if q:
-        qs = qs.filter(Q(name__icontains(q)) | Q(number__icontains(q)) | Q(description__icontains(q)))
+        qs = qs.filter(Q(name__icontains=q) | Q(number__icontains=q) | Q(description__icontains=q))
 
     template_type = request.GET.get("template_type", "").strip()
     if template_type:
