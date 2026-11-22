@@ -19,7 +19,7 @@ from apps.documents.views._helpers import compute_text_diff, count_words, substi
 
 @login_required
 def draft_list(request):
-    qs = documents_scope(DocumentDraft.objects.select_related("template", "author", "department"), request)
+    qs = documents_scope(DocumentDraft.objects.select_related("template", "author", "department").defer("content"), request)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -37,8 +37,8 @@ def draft_list(request):
     if sync_status:
         qs = qs.filter(sync_status=sync_status)
 
-    total_count = qs.count()
     paginator = Paginator(qs, 15)
+    total_count = paginator.count
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
