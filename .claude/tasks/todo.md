@@ -39005,90 +39005,90 @@ apps/quality/
 ## Detailed Checkable Work Items
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze `.claude/tasks/contract-documents-13.3.md` with every field, choice, URL name, and view context key.
+- [x] Freeze `.claude/tasks/contract-documents-13.3.md` with every field, choice, URL name, and view context key.
 
 ### Phase 3.2: Entity by Entity Implementation
-- [ ] **Entity 1: DocumentApprovalWorkflow** (`DWF-`)
-  - [ ] `apps/documents/models/ApprovalWorkflow/DocumentApprovalWorkflows.py`
-  - [ ] `apps/documents/forms/ApprovalWorkflow/DocumentApprovalWorkflows.py`
-  - [ ] `apps/documents/views/ApprovalWorkflow/DocumentApprovalWorkflows.py`
-  - [ ] `apps/documents/urls/ApprovalWorkflow/DocumentApprovalWorkflows.py`
-  - [ ] `templates/documents/approval_workflow/document_approval_workflow/list.html`
-  - [ ] `templates/documents/approval_workflow/document_approval_workflow/detail.html`
-  - [ ] `templates/documents/approval_workflow/document_approval_workflow/form.html`
-  - [ ] `templates/documents/approval_workflow/document_approval_workflow/designer.html`
-- [ ] **Entity 2: DocumentApprovalRequest** (`DAPR-`)
-  - [ ] `apps/documents/models/ApprovalWorkflow/DocumentApprovalRequests.py`
-  - [ ] `apps/documents/forms/ApprovalWorkflow/DocumentApprovalRequests.py`
-  - [ ] `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py`
-  - [ ] `apps/documents/urls/ApprovalWorkflow/DocumentApprovalRequests.py`
-  - [ ] `templates/documents/approval_workflow/document_approval_request/list.html`
-  - [ ] `templates/documents/approval_workflow/document_approval_request/detail.html`
-  - [ ] `templates/documents/approval_workflow/document_approval_request/form.html`
-- [ ] **Entity 3: DocumentSignature** (`DSIG-`)
-  - [ ] `apps/documents/models/ApprovalWorkflow/DocumentSignatures.py`
-  - [ ] `apps/documents/forms/ApprovalWorkflow/DocumentSignatures.py`
-  - [ ] `apps/documents/views/ApprovalWorkflow/DocumentSignatures.py`
-  - [ ] `apps/documents/urls/ApprovalWorkflow/DocumentSignatures.py`
-  - [ ] `templates/documents/approval_workflow/document_signature/list.html`
-  - [ ] `templates/documents/approval_workflow/document_signature/detail.html`
-  - [ ] `templates/documents/approval_workflow/document_signature/form.html`
-  - [ ] `templates/documents/approval_workflow/document_signature/manifest.html`
-  - [ ] `templates/documents/approval_workflow/document_signature/verify.html`
-- [ ] **Entity 4: DocumentReviewComment** (`DREV-`)
-  - [ ] `apps/documents/models/ApprovalWorkflow/DocumentReviewComments.py`
-  - [ ] `apps/documents/forms/ApprovalWorkflow/DocumentReviewComments.py`
-  - [ ] `apps/documents/views/ApprovalWorkflow/DocumentReviewComments.py`
-  - [ ] `apps/documents/urls/ApprovalWorkflow/DocumentReviewComments.py`
-  - [ ] `templates/documents/approval_workflow/document_review_comment/list.html`
-  - [ ] `templates/documents/approval_workflow/document_review_comment/detail.html`
-  - [ ] `templates/documents/approval_workflow/document_review_comment/form.html`
-- [ ] **Dedicated Approval Dashboard & Command Center**
-  - [ ] `apps/documents/views/ApprovalWorkflow/ApprovalDashboard.py`
-  - [ ] `apps/documents/urls/ApprovalWorkflow/ApprovalDashboard.py`
-  - [ ] `templates/documents/approval_workflow/approval_dashboard.html`
+- [x] **Entity 1: DocumentApprovalWorkflow** (`DWF-`)
+  - [x] `apps/documents/models/ApprovalWorkflow/DocumentApprovalWorkflows.py`
+  - [x] `apps/documents/forms/ApprovalWorkflow/DocumentApprovalWorkflows.py`
+  - [x] `apps/documents/views/ApprovalWorkflow/DocumentApprovalWorkflows.py`
+  - [x] `apps/documents/urls/ApprovalWorkflow/DocumentApprovalWorkflows.py`
+  - [x] `templates/documents/approval_workflow/document_approval_workflow/list.html`
+  - [x] `templates/documents/approval_workflow/document_approval_workflow/detail.html`
+  - [x] `templates/documents/approval_workflow/document_approval_workflow/form.html`
+  - [x] `templates/documents/approval_workflow/document_approval_workflow/designer.html`
+- [x] **Entity 2: DocumentApprovalRequest** (`DAPR-`)
+  - [x] `apps/documents/models/ApprovalWorkflow/DocumentApprovalRequests.py`
+  - [x] `apps/documents/forms/ApprovalWorkflow/DocumentApprovalRequests.py`
+  - [x] `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py`
+  - [x] `apps/documents/urls/ApprovalWorkflow/DocumentApprovalRequests.py`
+  - [x] `templates/documents/approval_workflow/document_approval_request/list.html`
+  - [x] `templates/documents/approval_workflow/document_approval_request/detail.html`
+  - [x] `templates/documents/approval_workflow/document_approval_request/form.html`
+- [x] **Entity 3: DocumentSignature** (`DSIG-`)
+  - [x] `apps/documents/models/ApprovalWorkflow/DocumentSignatures.py`
+  - [x] `apps/documents/forms/ApprovalWorkflow/DocumentSignatures.py`
+  - [x] `apps/documents/views/ApprovalWorkflow/DocumentSignatures.py`
+  - [x] `apps/documents/urls/ApprovalWorkflow/DocumentSignatures.py`
+  - [x] `templates/documents/approval_workflow/document_signature/list.html`
+  - [x] `templates/documents/approval_workflow/document_signature/detail.html`
+  - [x] `templates/documents/approval_workflow/document_signature/form.html`
+  - [x] `templates/documents/approval_workflow/document_signature/manifest.html`
+  - [x] `templates/documents/approval_workflow/document_signature/verify.html`
+- [x] **Entity 4: DocumentReviewComment** (`DREV-`)
+  - [x] `apps/documents/models/ApprovalWorkflow/DocumentReviewComments.py`
+  - [x] `apps/documents/forms/ApprovalWorkflow/DocumentReviewComments.py`
+  - [x] `apps/documents/views/ApprovalWorkflow/DocumentReviewComments.py`
+  - [x] `apps/documents/urls/ApprovalWorkflow/DocumentReviewComments.py`
+  - [x] `templates/documents/approval_workflow/document_review_comment/list.html`
+  - [x] `templates/documents/approval_workflow/document_review_comment/detail.html`
+  - [x] `templates/documents/approval_workflow/document_review_comment/form.html`
+- [x] **Dedicated Approval Dashboard & Command Center**
+  - [x] `apps/documents/views/ApprovalWorkflow/ApprovalDashboard.py`
+  - [x] `apps/documents/urls/ApprovalWorkflow/ApprovalDashboard.py`
+  - [x] `templates/documents/approval_workflow/approval_dashboard.html`
 
 ### Phase 3.3: Integration & Migration
-- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
-- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
-- [ ] Re-export all views in `apps/documents/views/__init__.py`
-- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
-- [ ] Register all 4 models in `apps/documents/admin.py`
-- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.3 seed data
-- [ ] Wire `LIVE_LINKS["13.3"]` in `apps/core/navigation.py`
-- [ ] Run `makemigrations documents`
-- [ ] Run `migrate`
-- [ ] Run `seed_documents` twice (idempotency check)
-- [ ] Run `manage.py check`
+- [x] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [x] Re-export all forms in `apps/documents/forms/__init__.py`
+- [x] Re-export all views in `apps/documents/views/__init__.py`
+- [x] Wire URL routes in `apps/documents/urls/__init__.py`
+- [x] Register all 4 models in `apps/documents/admin.py`
+- [x] Extend `apps/documents/management/commands/seed_documents.py` with 13.3 seed data
+- [x] Wire `LIVE_LINKS["13.3"]` in `apps/core/navigation.py`
+- [x] Run `makemigrations documents`
+- [x] Run `migrate`
+- [x] Run `seed_documents` twice (idempotency check)
+- [x] Run `manage.py check`
 
 ### Phase 3.4: Smoke Verification
-- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+- [x] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
-- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
-- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
-- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
-- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.3.md`
-- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
-- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.3.md`
+- [x] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [x] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [x] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [x] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [x] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [x] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.3.md`
+- [x] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.3.md`
 
 ### Phase 5: Code Fixer Burn-down
-- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+- [x] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
 
 ### Phase 6: Automated Test Suite (Unfiltered)
-- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
-- [ ] Implement `apps/documents/tests/test_approval_workflow_models.py`
-- [ ] Implement `apps/documents/tests/test_approval_workflow_forms.py`
-- [ ] Implement `apps/documents/tests/test_approval_workflow_views.py`
-- [ ] Implement `apps/documents/tests/test_approval_workflow_security.py`
-- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+- [x] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [x] Implement `apps/documents/tests/test_approval_workflow_models.py`
+- [x] Implement `apps/documents/tests/test_approval_workflow_forms.py`
+- [x] Implement `apps/documents/tests/test_approval_workflow_views.py`
+- [x] Implement `apps/documents/tests/test_approval_workflow_security.py`
+- [x] Run full unfiltered app test suite: `pytest apps/documents/tests/`
 
 ### Phase 7: Skill, README & Close-out
-- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.3 models, routes, templates, and seed details
-- [ ] Update `README.md` marking 13.3 complete and recording test statistics
-- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.3.md` and `.claude/tasks/gaps-documents-13.3.md`
-- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+- [x] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.3 models, routes, templates, and seed details
+- [x] Update `README.md` marking 13.3 complete and recording test statistics
+- [x] Record any gaps in `.agents/tasks/gaps-documents-13.3.md` and `.claude/tasks/gaps-documents-13.3.md`
+- [x] Document final review notes and close out in `.claude/tasks/todo.md`
 
 ## Later passes / deferred (from research-documents-13.3.md)
 - **Folder-Level Access Inheritance & Repository Storage Quotas** → Sub-module 13.4 (Document Storage & Repository).
@@ -39101,8 +39101,28 @@ apps/quality/
 - **Contract Clauses, Fallback Negotiation & Obligation Tracking** → Sub-module 13.16 (Contract Lifecycle Management).
 - **Hardware Security Module (HSM) PKCS#11 Integration & WebAuthn / FIDO2 Biometric Handshake** → Deferred to future enterprise security integrations.
 
-## Review notes
-(to be filled in at Phase 7 close-out)
+## Review notes — Sub-module 13.3 Close-out (2026-11-22)
+- **Delivery Unit**: Sub-module 13.3: Document Approval & Review Workflow in `apps.documents` (Module 13: Document Management System).
+- **Models**: 4 tenant-scoped models subclassing `TenantNumbered`:
+  - `DocumentApprovalWorkflow` [`DWF-`]: Multi-stage approval routing pipeline with sequential, parallel, and conditional rules, urgency classification, stage progression tracking, and emergency bypass mechanics.
+  - `DocumentApprovalRequest` [`DAPR-`]: Granular stage participant task handling routing rules (`sequential`, `parallel_all`, `parallel_first`), out-of-office delegation with audit trails, and timeout escalation.
+  - `DocumentSignature` [`DSIG-`]: 21 CFR Part 11 compliant electronic signature records capturing SHA-256 document version checksums, auto-generated UUID verification tokens, biometric glyph seals, and certificate serial numbers.
+  - `DocumentReviewComment` [`DREV-`]: Collaborative review annotations with multi-type categories (`inline_comment`, `highlight`, `redline`, `sticky_note`, `drawing_callout`), coordinate/page anchors, threaded discussion replies, and blocking gate interlocks.
+- **Forms**: 8 specialized ModelForms and Form classes with tenant isolation, immutable field locking on edit, and document-version foreign consistency validation (`DocumentApprovalWorkflowForm`, `WorkflowBypassForm`, `DocumentApprovalRequestForm`, `ApprovalDecisionForm`, `ApprovalDelegationForm`, `ApprovalEscalationForm`, `DocumentSignatureForm`, `SignatureVerificationForm`, `DocumentReviewCommentForm`, `CommentReplyForm`, `CommentResolveForm`).
+- **Views & Routes**: 26 function-based views across workflows, requests, signatures, comments, and the dedicated cockpit `approval_dashboard` (calculating average turnaround hours using database-level `DurationField` aggregates).
+- **Templates**: 16 Tailwind CSS templates under `templates/documents/approval_workflow/` (`list.html`, `detail.html`, `form.html` per entity + `designer.html` visual stage editor, `manifest.html` printable 21 CFR Part 11 certificate manifest, `verify.html` public cryptographic token lookup, and `approval_dashboard.html`).
+- **Wire-up**: `LIVE_LINKS["13.3"]` registered in `apps/core/navigation.py`, admin registered in `apps/documents/admin.py`, package re-exports across `__init__.py`.
+- **Migrations**: `0005_documentapprovalworkflow_documentapprovalrequest_and_more.py` and `0006_documentapprovalrequest_doc_dapr_tnt_dlg_stat_idx_and_more.py`.
+- **Seeder**: Extended `seed_documents` with realistic multi-stage workflows, requests, valid e-signatures, and threaded review annotations; 100% idempotent across multiple runs.
+- **Phase 4 & 5 Review Burn-down**: 28 total findings (5 Critical, 15 Important, 8 Minor) recorded in `.claude/tasks/review-documents-13.3.md` and 100% resolved:
+  - Stored XSS defense on `signature_glyph` by removing `|safe`.
+  - Strict authorization checks in `approval_request_decide`, `workflow_bypass`, `review_comment_edit`, `review_comment_delete`.
+  - View-level status guards rejecting non-draft workflow and request deletions.
+  - Atomic transactions on decision mutations and sequential stage enforcement.
+  - Null-safety guards on user FKs (`escalated_to`, `bypassed_by`, `resolved_by`, `signer.email`) preventing L10 template crashes.
+  - Dropdown optimization via `.select_related()` and composite database indexing.
+- **Phase 6 Tests**: 4 dedicated test files (`test_approval_workflow_models.py`, `_forms.py`, `_views.py`, `_security.py`) providing 20 comprehensive unit, integration, and security tests. Full unfiltered DMS suite passes with **69 green tests** (100% pass, 0 failures, 0 errors).
+- **Gaps**: None. Declared in `.agents/tasks/gaps-documents-13.3.md`.
 
 
 ---
