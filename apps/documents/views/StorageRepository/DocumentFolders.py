@@ -3,6 +3,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -118,12 +119,13 @@ def folder_create(request):
     if request.method == "POST":
         form = DocumentFolderForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            folder = form.save(commit=False)
-            folder.tenant = request.tenant
-            if not folder.owner_id:
-                folder.owner = request.user
-            folder.save()
-            write_audit_log(request.user, folder, "create", tenant=request.tenant)
+            with transaction.atomic():
+                folder = form.save(commit=False)
+                folder.tenant = request.tenant
+                if not folder.owner_id:
+                    folder.owner = request.user
+                folder.save()
+                write_audit_log(request.user, folder, "create", tenant=request.tenant)
             messages.success(request, f"Folder '{folder.name}' created successfully.")
             return redirect("documents:folder_detail", pk=folder.pk)
     else:
@@ -190,8 +192,9 @@ def folder_edit(request, pk):
     if request.method == "POST":
         form = DocumentFolderForm(request.POST, instance=folder, tenant=request.tenant)
         if form.is_valid():
-            folder = form.save()
-            write_audit_log(request.user, folder, "update", tenant=request.tenant)
+            with transaction.atomic():
+                folder = form.save()
+                write_audit_log(request.user, folder, "update", tenant=request.tenant)
             messages.success(request, f"Folder '{folder.name}' updated successfully.")
             return redirect("documents:folder_detail", pk=folder.pk)
     else:
@@ -219,7 +222,8 @@ def folder_delete(request, pk):
         return redirect("documents:folder_detail", pk=folder.pk)
 
     name = folder.name
-    write_audit_log(request.user, folder, "delete", tenant=request.tenant)
-    folder.delete()
+    with transaction.atomic():
+        write_audit_log(request.user, folder, "delete", tenant=request.tenant)
+        folder.delete()
     messages.success(request, f"Folder '{name}' deleted successfully.")
     return redirect("documents:folder_list")
