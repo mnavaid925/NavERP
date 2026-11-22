@@ -20,7 +20,7 @@ from apps.documents.forms.ApprovalWorkflow.DocumentSignatures import (
     DocumentSignatureForm,
     SignatureVerificationForm,
 )
-from apps.documents.models import DocumentVersion
+from apps.documents.models import Document, DocumentVersion
 
 
 @pytest.mark.django_db
