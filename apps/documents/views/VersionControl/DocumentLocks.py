@@ -59,7 +59,7 @@ def document_lock_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    documents = Document.objects.filter(tenant=request.tenant).order_by("title")
+    documents = Document.objects.filter(tenant=request.tenant).only("id", "title", "number").order_by("title")
 
     context = {
         "page_obj": page_obj,
