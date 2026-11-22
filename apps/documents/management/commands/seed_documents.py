@@ -8,14 +8,18 @@ from apps.documents.models import (
     Document,
     DocumentApprovalRequest,
     DocumentApprovalWorkflow,
+    DocumentBatchImport,
     DocumentBranch,
     DocumentDraft,
+    DocumentFolder,
     DocumentLock,
+    DocumentRelationship,
     DocumentReviewComment,
     DocumentSignature,
     DocumentTemplate,
     DocumentVersion,
     DraftCollaboration,
+    StorageVolume,
     TemplateSection,
 )
 from apps.documents.views._helpers import count_words
@@ -34,6 +38,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options.get("flush"):
             self.stdout.write("Flushing documents module data...")
+            DocumentRelationship.objects.all().delete()
+            DocumentBatchImport.objects.all().delete()
+            DocumentFolder.objects.all().delete()
+            StorageVolume.objects.all().delete()
             DocumentReviewComment.objects.all().delete()
             DocumentSignature.objects.all().delete()
             DocumentApprovalRequest.objects.all().delete()
@@ -746,6 +754,220 @@ class Command(BaseCommand):
                             status="open",
                             is_blocking=False,
                         )
+
+                # ---------------------------------------------------------
+                # 13.4 Document Storage & Repository Demo Data
+                # ---------------------------------------------------------
+                if not StorageVolume.objects.filter(tenant=tenant).exists():
+                    self.stdout.write(f"Seeding Document Storage & Repository records for tenant '{tenant.slug}'...")
+
+                    # 1. Storage Volumes
+                    vol1 = StorageVolume.objects.create(
+                        tenant=tenant,
+                        name="Primary NVMe High-Performance Store",
+                        code="VOL-HOT-01",
+                        backend_type="local_filesystem",
+                        tier="hot",
+                        base_path="/var/nav_erp/storage/hot_tier",
+                        region="us-east-1",
+                        max_capacity_bytes=107374182400,  # 100 GB
+                        utilized_bytes=21474836480,       # 20 GB
+                        warning_threshold_pct=85,
+                        is_default=True,
+                        is_active=True,
+                        compression_type="none",
+                        deduplication_enabled=True,
+                        encryption_type="aes_256",
+                        description="Primary low-latency local SSD volume for active document authoring, revisions, and approval workflows.",
+                    )
+
+                    vol2 = StorageVolume.objects.create(
+                        tenant=tenant,
+                        name="AWS S3 Standard Object Repository",
+                        code="VOL-S3-01",
+                        backend_type="s3_compatible",
+                        tier="warm",
+                        base_path="nav-erp-dms-standard",
+                        region="us-east-1",
+                        endpoint_url="https://s3.us-east-1.amazonaws.com",
+                        max_capacity_bytes=536870912000,  # 500 GB
+                        utilized_bytes=53687091200,       # 50 GB
+                        warning_threshold_pct=85,
+                        is_default=False,
+                        is_active=True,
+                        compression_type="zstandard",
+                        deduplication_enabled=True,
+                        encryption_type="kms_managed",
+                        rollover_volume=vol1,
+                        description="Warm cloud object repository for published documents, operational reports, and multi-year records.",
+                    )
+
+                    StorageVolume.objects.create(
+                        tenant=tenant,
+                        name="Deep Compliance Glacier Archive",
+                        code="VOL-GLAC-01",
+                        backend_type="air_gapped",
+                        tier="glacier_archive",
+                        base_path="/mnt/secure_vault/cold_archive",
+                        region="us-east-1",
+                        max_capacity_bytes=2147483648000,  # 2 TB
+                        utilized_bytes=107374182400,       # 100 GB
+                        warning_threshold_pct=90,
+                        is_default=False,
+                        is_active=True,
+                        compression_type="gzip",
+                        deduplication_enabled=True,
+                        encryption_type="aes_256",
+                        description="Air-gapped long-term compliance storage for superseded contracts, tax records, and regulatory archives.",
+                    )
+
+                    # 2. Folder Taxonomy & Hierarchy
+                    fld_root = DocumentFolder.objects.create(
+                        tenant=tenant,
+                        name="Corporate Repository",
+                        slug="corporate",
+                        department=org_unit,
+                        owner=user,
+                        color_code="#2563EB",
+                        icon_name="briefcase",
+                        default_classification="internal",
+                        default_document_type="general",
+                        is_system=True,
+                        is_active=True,
+                        description="Master root directory for corporate organization, governance, and operating documentation.",
+                    )
+
+                    fld_legal = DocumentFolder.objects.create(
+                        tenant=tenant,
+                        parent=fld_root,
+                        name="Legal & Corporate Agreements",
+                        slug="legal-agreements",
+                        department=org_unit,
+                        owner=user,
+                        color_code="#4F46E5",
+                        icon_name="shield",
+                        default_classification="confidential",
+                        default_document_type="contract",
+                        is_active=True,
+                        description="Repository folder holding Master Services Agreements, NDAs, and corporate governance contracts.",
+                    )
+
+                    fld_sop = DocumentFolder.objects.create(
+                        tenant=tenant,
+                        parent=fld_root,
+                        name="Standard Operating Procedures (SOP)",
+                        slug="sop-library",
+                        department=org_unit,
+                        owner=user,
+                        color_code="#059669",
+                        icon_name="file-text",
+                        default_classification="internal",
+                        default_document_type="sop",
+                        is_active=True,
+                        description="Authorized procedures, work instructions, and quality management manuals.",
+                    )
+
+                    DocumentFolder.objects.create(
+                        tenant=tenant,
+                        parent=fld_root,
+                        name="Engineering & Technical Specifications",
+                        slug="engineering-specs",
+                        department=org_unit,
+                        owner=user,
+                        color_code="#D97706",
+                        icon_name="cpu",
+                        default_classification="restricted",
+                        default_document_type="technical",
+                        is_active=True,
+                        description="Product blueprints, technical specifications, and system architecture manuals.",
+                    )
+
+                    # Smart Virtual Folder
+                    DocumentFolder.objects.create(
+                        tenant=tenant,
+                        name="Confidential Contracts Vault",
+                        slug="confidential-contracts-vault",
+                        department=org_unit,
+                        owner=user,
+                        color_code="#7C3AED",
+                        icon_name="sparkles",
+                        default_classification="confidential",
+                        default_document_type="contract",
+                        is_virtual=True,
+                        virtual_criteria_json='{"classification": "confidential", "document_type": "contract"}',
+                        is_active=True,
+                        description="Smart Virtual Folder dynamically aggregating all confidential commercial contracts across departments.",
+                    )
+
+                    # 3. Document Relationships
+                    tenant_docs = Document.objects.filter(tenant=tenant).order_by("created_at")
+                    if tenant_docs.count() >= 2:
+                        doc_a = tenant_docs[0]
+                        doc_b = tenant_docs[1]
+
+                        DocumentRelationship.objects.create(
+                            tenant=tenant,
+                            source_document=doc_a,
+                            target_document=doc_b,
+                            relationship_type="references",
+                            dependency_level="contractual",
+                            is_bidirectional=True,
+                            description=f"{doc_a.title} cross-references terms and specifications in {doc_b.title}.",
+                            created_by=user,
+                        )
+
+                        if tenant_docs.count() >= 3:
+                            doc_c = tenant_docs[2]
+                            DocumentRelationship.objects.create(
+                                tenant=tenant,
+                                source_document=doc_a,
+                                target_document=doc_c,
+                                relationship_type="contract_exhibit",
+                                dependency_level="strict_blocking",
+                                is_bidirectional=True,
+                                description=f"{doc_c.title} serves as Exhibit Schedule A to {doc_a.title}.",
+                                created_by=user,
+                            )
+
+                    # 4. Document Batch Imports
+                    DocumentBatchImport.objects.create(
+                        tenant=tenant,
+                        batch_name="2026 Q1 Corporate Agreements Migration",
+                        source_type="zip_archive",
+                        target_folder=fld_legal,
+                        storage_volume=vol1,
+                        status="completed",
+                        total_files_detected=12,
+                        processed_files_count=12,
+                        success_files_count=12,
+                        failed_files_count=0,
+                        total_bytes_processed=14680064,  # ~14 MB
+                        log_summary=(
+                            f"[{timezone.now().strftime('%Y-%m-%d %H:%M:%S')}] Ingestion job initialized.\n"
+                            "Archive inspection: 12 valid documents identified in ZIP container.\n"
+                            "Extraction completed into target folder '/corporate/legal-agreements/'.\n"
+                            "Integrity check: 100% SHA-256 checksums verified."
+                        ),
+                        created_by=user,
+                        started_at=timezone.now(),
+                        completed_at=timezone.now(),
+                    )
+
+                    DocumentBatchImport.objects.create(
+                        tenant=tenant,
+                        batch_name="Legacy Standard Operating Procedures Archive",
+                        source_type="legacy_migration",
+                        target_folder=fld_sop,
+                        storage_volume=vol2,
+                        status="queued",
+                        total_files_detected=8,
+                        processed_files_count=0,
+                        success_files_count=0,
+                        failed_files_count=0,
+                        total_bytes_processed=0,
+                        log_summary="Ingestion job registered in queue. Waiting for extraction trigger.",
+                        created_by=user,
+                    )
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
 
