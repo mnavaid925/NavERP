@@ -23,7 +23,7 @@ def draft_list(request):
 
     q = request.GET.get("q", "").strip()
     if q:
-        qs = qs.filter(Q(title__icontains(q)) | Q(number__icontains(q)) | Q(content__icontains(q)))
+        qs = qs.filter(Q(title__icontains=q) | Q(number__icontains=q) | Q(content__icontains=q))
 
     status = request.GET.get("status", "").strip()
     if status:
