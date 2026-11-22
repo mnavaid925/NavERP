@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Document Versions — NavERP DMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Version Register</span>
+        </nav>
+        <h1 class="page-title">Document Version History</h1>
+        <p class="text-sm text-slate-500">Cross-document revision register, snapshot releases, and historical rollback checkpoints.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_version_compare' %}" class="btn btn-outline">
+            <i data-lucide="git-compare"></i> Compare Versions
+        </a>
+        <a href="{% url 'documents:document_version_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Version
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            <div class="form-group md:col-span-2">
+                <label for="filter-q" class="form-label text-xs">Search Version / Document</label>
+                <input type="text" id="filter-q" name="q" class="form-input" placeholder="Version label, document title, notes..." value="{{ request.GET.q }}">
+            </div>
+            <div class="form-group">
+                <label for="filter-doc" class="form-label text-xs">Document</label>
+                <select id="filter-doc" name="document" class="form-select">
+                    <option value="">All Documents</option>
+                    {% for doc in documents %}
+                    <option value="{{ doc.pk }}" {% if request.GET.document == doc.pk|stringformat:"d" %}selected{% endif %}>{{ doc.number }} — {{ doc.title|truncatechars:25 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filter-vtype" class="form-label text-xs">Version Type</label>
+                <select id="filter-vtype" name="version_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in version_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.version_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filter-status" class="form-label text-xs">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary text-xs">
+                    <i data-lucide="filter"></i> Apply Filters
+                </button>
+                <a href="{% url 'documents:document_version_list' %}" class="btn btn-outline text-xs">
+                    <i data-lucide="rotate-ccw"></i> Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Version History ({{ page_obj.paginator.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Version #</th>
+                    <th>Document</th>
+                    <th>Type</th>
+                    <th>File Payload</th>
+                    <th>Author</th>
+                    <th>Change Summary</th>
+                    <th>Created At</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ver in versions %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="font-mono font-bold text-blue-600 hover:underline">
+                            v{{ ver.version_label }}
+                        </a>
+                        <div class="font-mono text-[10px] text-slate-400">{{ ver.number }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:document_detail' ver.document.pk %}" class="font-medium text-slate-900 hover:underline">
+                            {{ ver.document.title }}
+                        </a>
+                        <div class="font-mono text-[10px] text-slate-400">{{ ver.document.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ ver.version_type_badge_class }}">{{ ver.get_version_type_display }}</span>
+                        {% if ver.is_official %}
+                        <span class="badge badge-green text-[10px] block mt-1">Official</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ver.file %}
+                        <a href="{{ ver.file.url }}" class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline" download>
+                            <i data-lucide="download" class="w-3 h-3"></i> {{ ver.file_name|default:"Download" }}
+                        </a>
+                        <span class="text-[10px] text-slate-400 block">{{ ver.file_size }} bytes</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">Text-only</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ver.author %}
+                        {{ ver.author.get_full_name|default:ver.author.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td class="max-w-xs truncate text-xs text-slate-700">
+                        {{ ver.change_summary|default:"—" }}
+                    </td>
+                    <td class="text-xs text-slate-500 whitespace-nowrap">
+                        {{ ver.created_at|date:"M d, Y H:i" }}
+                    </td>
+                    <td>
+                        <span class="badge {{ ver.status_badge_class }}">{{ ver.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right whitespace-nowrap">
+                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="btn btn-icon" title="View Version">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:document_version_edit' ver.pk %}" class="btn btn-icon" title="Edit Metadata">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:document_version_rollback' ver.pk %}" class="inline" onsubmit="return confirm('Restore document to v{{ ver.version_label }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-amber-600" title="Rollback to this revision">
+                                <i data-lucide="history"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="history" class="mx-auto h-12 w-12 text-slate-300 mb-3"></i>
+                            <h3 class="text-sm font-semibold text-slate-700">No versions found</h3>
+                            <p class="text-xs text-slate-500 mt-1">Check in documents or create versions manually to build version history.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <span class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </span>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&document={{ request.GET.document }}&version_type={{ request.GET.version_type }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&document={{ request.GET.document }}&version_type={{ request.GET.version_type }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
