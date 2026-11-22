@@ -21,6 +21,10 @@ from apps.documents.forms.DocumentAuthoring.DocumentDrafts import DocumentDraftF
 from apps.documents.forms.DocumentAuthoring.DocumentTemplates import DocumentTemplateForm
 from apps.documents.forms.DocumentAuthoring.DraftCollaborations import DraftCollaborationForm
 from apps.documents.forms.DocumentAuthoring.TemplateSections import TemplateSectionForm
+from apps.documents.forms.StorageRepository.DocumentBatchImports import DocumentBatchImportForm
+from apps.documents.forms.StorageRepository.DocumentFolders import DocumentFolderForm
+from apps.documents.forms.StorageRepository.DocumentRelationships import DocumentRelationshipForm
+from apps.documents.forms.StorageRepository.StorageVolumes import StorageVolumeForm
 from apps.documents.forms.VersionControl.DocumentBranches import (
     BranchMergeForm,
     DocumentBranchForm,
@@ -64,4 +68,8 @@ __all__ = [
     "DocumentReviewCommentForm",
     "CommentReplyForm",
     "CommentResolveForm",
+    "DocumentFolderForm",
+    "StorageVolumeForm",
+    "DocumentRelationshipForm",
+    "DocumentBatchImportForm",
 ]
