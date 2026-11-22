@@ -121,15 +121,15 @@
                         <span class="badge {{ b.status_badge_class }}">{{ b.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right whitespace-nowrap">
-                        <a href="{% url 'documents:document_branch_detail' b.pk %}" class="btn btn-icon" title="View Branch">
+                        <a href="{% url 'documents:document_branch_detail' b.pk %}" class="btn btn-icon" title="View Branch" aria-label="View Branch">
                             <i data-lucide="eye"></i>
                         </a>
                         {% if b.status == 'active' %}
-                        <a href="{% url 'documents:document_branch_merge' b.pk %}" class="btn btn-icon text-green-600" title="Merge into Mainline">
+                        <a href="{% url 'documents:document_branch_merge' b.pk %}" class="btn btn-icon text-green-600" title="Merge into Mainline" aria-label="Merge into Mainline">
                             <i data-lucide="git-merge"></i>
                         </a>
                         {% endif %}
-                        <a href="{% url 'documents:document_branch_edit' b.pk %}" class="btn btn-icon" title="Edit Metadata">
+                        <a href="{% url 'documents:document_branch_edit' b.pk %}" class="btn btn-icon" title="Edit Metadata" aria-label="Edit Metadata">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% if request.user.is_superuser or request.user.is_tenant_admin %}
