@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Revision Branches — NavERP DMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Revision Branches</span>
+        </nav>
+        <h1 class="page-title">Parallel Revision Streams & Branches</h1>
+        <p class="text-sm text-slate-500">Manage what-if drafting scenarios, localized variants, and parallel document revisions.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_branch_create' %}" class="btn btn-primary">
+            <i data-lucide="git-branch"></i> New Branch
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            <div class="form-group md:col-span-2">
+                <label for="filter-q" class="form-label text-xs">Search Branch / Document</label>
+                <input type="text" id="filter-q" name="q" class="form-input" placeholder="Branch name, description, document..." value="{{ request.GET.q }}">
+            </div>
+            <div class="form-group">
+                <label for="filter-btype" class="form-label text-xs">Branch Type</label>
+                <select id="filter-btype" name="branch_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in branch_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.branch_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filter-status" class="form-label text-xs">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filter-doc" class="form-label text-xs">Document</label>
+                <select id="filter-doc" name="document" class="form-select">
+                    <option value="">All Documents</option>
+                    {% for doc in documents %}
+                    <option value="{{ doc.pk }}" {% if request.GET.document == doc.pk|stringformat:"d" %}selected{% endif %}>{{ doc.number }} — {{ doc.title|truncatechars:20 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary text-xs">
+                    <i data-lucide="filter"></i> Apply Filters
+                </button>
+                <a href="{% url 'documents:document_branch_list' %}" class="btn btn-outline text-xs">
+                    <i data-lucide="rotate-ccw"></i> Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Branch Register ({{ page_obj.paginator.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Branch Name</th>
+                    <th>Document</th>
+                    <th>Base Version</th>
+                    <th>Type</th>
+                    <th>Created By</th>
+                    <th>Created At</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in branches %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:document_branch_detail' b.pk %}" class="font-semibold text-blue-600 hover:underline">
+                            {{ b.name }}
+                        </a>
+                        <div class="font-mono text-[10px] text-slate-400">{{ b.number }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:document_detail' b.document.pk %}" class="font-medium text-slate-900 hover:underline">
+                            {{ b.document.title }}
+                        </a>
+                        <div class="font-mono text-[10px] text-slate-400">{{ b.document.number }}</div>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs text-slate-700">v{{ b.base_version.version_label }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ b.branch_type_badge_class }}">{{ b.get_branch_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if b.created_by %}
+                        {{ b.created_by.get_full_name|default:b.created_by.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-500 whitespace-nowrap">{{ b.created_at|date:"M d, Y" }}</td>
+                    <td>
+                        <span class="badge {{ b.status_badge_class }}">{{ b.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right whitespace-nowrap">
+                        <a href="{% url 'documents:document_branch_detail' b.pk %}" class="btn btn-icon" title="View Branch">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if b.status == 'active' %}
+                        <a href="{% url 'documents:document_branch_merge' b.pk %}" class="btn btn-icon text-green-600" title="Merge into Mainline">
+                            <i data-lucide="git-merge"></i>
+                        </a>
+                        {% endif %}
+                        <a href="{% url 'documents:document_branch_edit' b.pk %}" class="btn btn-icon" title="Edit Metadata">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="git-branch" class="mx-auto h-12 w-12 text-slate-300 mb-3"></i>
+                            <h3 class="text-sm font-semibold text-slate-700">No revision branches found</h3>
+                            <p class="text-xs text-slate-500 mt-1">Fork what-if scenarios or localized variants from any document baseline.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'documents:document_branch_create' %}" class="btn btn-primary text-xs">
+                                    <i data-lucide="plus"></i> Fork Branch
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <span class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </span>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&document={{ request.GET.document }}&branch_type={{ request.GET.branch_type }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&document={{ request.GET.document }}&branch_type={{ request.GET.branch_type }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
