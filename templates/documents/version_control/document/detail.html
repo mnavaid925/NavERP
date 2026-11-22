@@ -238,12 +238,12 @@
                         <span class="badge {{ ver.status_badge_class }}">{{ ver.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right whitespace-nowrap">
-                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="btn btn-icon" title="View Version Detail">
+                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="btn btn-icon" title="View Version Detail" aria-label="View Version Detail">
                             <i data-lucide="eye"></i>
                         </a>
                         <form method="post" action="{% url 'documents:document_version_rollback' ver.pk %}" class="inline" onsubmit="return confirm('Rollback document to version {{ ver.version_label }}? A new restored revision will be generated.');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-amber-600 hover:text-amber-800" title="Rollback to this version">
+                            <button type="submit" class="btn btn-icon text-amber-600 hover:text-amber-800" title="Rollback to this version" aria-label="Rollback to this version">
                                 <i data-lucide="history"></i>
                             </button>
                         </form>
@@ -314,11 +314,11 @@
                     </td>
                     <td class="text-xs text-slate-500">{{ branch.created_at|date:"M d, Y" }}</td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'documents:document_branch_detail' branch.pk %}" class="btn btn-icon" title="View Branch">
+                        <a href="{% url 'documents:document_branch_detail' branch.pk %}" class="btn btn-icon" title="View Branch" aria-label="View Branch">
                             <i data-lucide="eye"></i>
                         </a>
                         {% if branch.status == 'active' %}
-                        <a href="{% url 'documents:document_branch_merge' branch.pk %}" class="btn btn-icon text-green-600" title="Merge into Mainline">
+                        <a href="{% url 'documents:document_branch_merge' branch.pk %}" class="btn btn-icon text-green-600" title="Merge into Mainline" aria-label="Merge into Mainline">
                             <i data-lucide="git-merge"></i>
                         </a>
                         {% endif %}
