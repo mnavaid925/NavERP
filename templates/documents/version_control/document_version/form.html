@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit v{{ version.version_label }}{% else %}New Document Version{% endif %} — NavERP DMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Version v{{ version.version_label }}{% else %}New Version Snapshot{% endif %}</span>
+        </nav>
+        <h1 class="page-title">{% if is_edit %}Edit Version Properties{% else %}Publish New Version Snapshot{% endif %}</h1>
+        <p class="text-sm text-slate-500">Record an immutable document revision snapshot with payload file and change description.</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Version Specifications</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group col-span-2">
+                    <label for="{{ form.document.id_for_label }}" class="form-label">Target Document <span class="text-red-500">*</span></label>
+                    {{ form.document }}
+                    {% if form.document.errors %}<div class="form-error">{{ form.document.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.version_label.id_for_label }}" class="form-label">Version Label <span class="text-red-500">*</span></label>
+                    {{ form.version_label }}
+                    {% if form.version_label.errors %}<div class="form-error">{{ form.version_label.errors.0 }}</div>{% endif %}
+                    <span class="text-[11px] text-slate-400">e.g. 1.0, 1.1, 2.0, 2.0.1</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.version_type.id_for_label }}" class="form-label">Version Classification <span class="text-red-500">*</span></label>
+                    {{ form.version_type }}
+                    {% if form.version_type.errors %}<div class="form-error">{{ form.version_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.major_number.id_for_label }}" class="form-label">Major Number</label>
+                    {{ form.major_number }}
+                    {% if form.major_number.errors %}<div class="form-error">{{ form.major_number.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.minor_number.id_for_label }}" class="form-label">Minor Number</label>
+                    {{ form.minor_number }}
+                    {% if form.minor_number.errors %}<div class="form-error">{{ form.minor_number.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.patch_number.id_for_label }}" class="form-label">Patch Number</label>
+                    {{ form.patch_number }}
+                    {% if form.patch_number.errors %}<div class="form-error">{{ form.patch_number.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.status.id_for_label }}" class="form-label">Revision Status <span class="text-red-500">*</span></label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.author.id_for_label }}" class="form-label">Author / Committer</label>
+                    {{ form.author }}
+                    {% if form.author.errors %}<div class="form-error">{{ form.author.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.branch.id_for_label }}" class="form-label">Originating Branch</label>
+                    {{ form.branch }}
+                    {% if form.branch.errors %}<div class="form-error">{{ form.branch.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-2">
+                    <label for="{{ form.file.id_for_label }}" class="form-label">Document File Payload</label>
+                    {{ form.file }}
+                    {% if form.file.errors %}<div class="form-error">{{ form.file.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-2">
+                    <label for="{{ form.change_summary.id_for_label }}" class="form-label">Change Summary</label>
+                    {{ form.change_summary }}
+                    {% if form.change_summary.errors %}<div class="form-error">{{ form.change_summary.errors.0 }}</div>{% endif %}
+                    <span class="text-[11px] text-slate-400">Explain the modifications made in this release.</span>
+                </div>
+
+                <div class="form-group col-span-2">
+                    <label for="{{ form.extracted_text.id_for_label }}" class="form-label">Extracted Text Content (for redline diffing)</label>
+                    {{ form.extracted_text }}
+                    {% if form.extracted_text.errors %}<div class="form-error">{{ form.extracted_text.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-2">
+                    <label class="inline-flex items-center gap-2 cursor-pointer">
+                        {{ form.is_official }}
+                        <span class="text-xs font-semibold text-slate-800">Designate as Official / Published Version</span>
+                    </label>
+                    <p class="text-[11px] text-slate-400 ml-6">Updating this will advance the document's active public baseline.</p>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:document_version_detail' version.pk %}{% else %}{% url 'documents:document_version_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Update Version{% else %}Save Version{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
