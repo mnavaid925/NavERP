@@ -29,12 +29,12 @@ def template_section_list(request):
     if template_id.isdigit():
         qs = qs.filter(template_id=int(template_id))
 
-    total_count = qs.count()
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
+    total_count = paginator.count
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    template_choices = documents_scope(DocumentTemplate.objects.all(), request).order_by("name")
+    template_choices = documents_scope(DocumentTemplate.objects.only("id", "name", "number"), request).order_by("name")
 
     return render(
         request,
@@ -96,7 +96,7 @@ def template_section_create(request):
 
 @login_required
 def template_section_edit(request, pk):
-    section = documents_object(request, TemplateSection, pk)
+    section = documents_object(request, TemplateSection, pk, select_related=("template",))
     if section.is_locked and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request, "is_tenant_admin", False)):
         messages.error(request, f"Template section '{section.title}' is locked and can only be modified by an administrator.")
         return redirect("documents:template_section_detail", pk=section.pk)
@@ -126,7 +126,7 @@ def template_section_edit(request, pk):
 @login_required
 @require_POST
 def template_section_delete(request, pk):
-    section = documents_object(request, TemplateSection, pk)
+    section = documents_object(request, TemplateSection, pk, select_related=("template",))
     if section.is_locked and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request, "is_tenant_admin", False)):
         messages.error(request, f"Template section '{section.title}' is locked and cannot be deleted.")
         if section.template_id:
