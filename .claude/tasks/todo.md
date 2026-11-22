@@ -38547,37 +38547,38 @@ apps/quality/
 - [ ] Run Django system checks: `python manage.py check`
 
 ### Phase 3.5: Smoke Testing Gate
-- [ ] Run test client smoke sweep script in `temp/` as `admin_acme` / `password`
-- [ ] Assert HTTP 200/302 for all 13.1 routes (list, create, detail, edit, canvas, compare, resolve-conflict)
-- [ ] Assert content presence (table headers, seeded records, form inputs, no raw template tags `{#` / `{% comment`)
-- [ ] Assert cross-tenant IDOR isolation (Acme accessing Beta record returns HTTP 404)
-- [ ] Verify sidebar navigation displays `13.1` Live
+### Phase 3.5: Smoke Verification
+- [x] Run test client smoke sweep script in `temp/` as `admin_acme` / `password`
+- [x] Assert HTTP 200/302 for all 13.1 routes (list, create, detail, edit, canvas, compare, resolve-conflict)
+- [x] Assert content presence (table headers, seeded records, form inputs, no raw template tags `{#` / `{% comment`)
+- [x] Assert cross-tenant IDOR isolation (Acme accessing Beta record returns HTTP 404)
+- [x] Verify sidebar navigation displays `13.1` Live
 
 ### Phase 4: Six Specialist Reviewers (One after another)
-- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
-- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
-- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
-- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
-- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.1.md`
-- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
-- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.1.md`
+- [x] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [x] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [x] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [x] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [x] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [x] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [x] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.1.md`
 
 ### Phase 5: Code Fixer Burn-down
-- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+- [x] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
 
 ### Phase 6: Automated Test Suite (Unfiltered)
-- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
-- [ ] Implement `apps/documents/tests/test_authoring_models.py`
-- [ ] Implement `apps/documents/tests/test_authoring_forms.py`
-- [ ] Implement `apps/documents/tests/test_authoring_views.py`
-- [ ] Implement `apps/documents/tests/test_authoring_security.py`
-- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+- [x] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [x] Implement `apps/documents/tests/test_document_authoring_models.py`
+- [x] Implement `apps/documents/tests/test_document_authoring_forms.py`
+- [x] Implement `apps/documents/tests/test_document_authoring_views.py`
+- [x] Implement `apps/documents/tests/test_document_authoring_security.py`
+- [x] Run full unfiltered app test suite: `pytest apps/documents/tests/` (26/26 passed)
 
 ### Phase 7: Skill, README & Close-out
-- [ ] Author `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.1 models, routes, templates, and seed details
-- [ ] Update `README.md` marking 13.1 complete and recording test statistics
-- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.1.md` (or declare None)
-- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+- [x] Author `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.1 models, routes, templates, and seed details
+- [x] Update `README.md` marking 13.1 complete and recording test statistics
+- [x] Record any gaps in `.agents/tasks/gaps-documents-13.1.md` (or declare None)
+- [x] Document final review notes and close out in `.claude/tasks/todo.md`
 
 ## Later passes / deferred
 - **WebSocket Real-Time Collaborative Cursor Engine (OT / CRDT)**: True Google Docs style simultaneous multi-cursor typing requires Daphne/Redis/Channels. In this Django 5.1 HTMX pass, collaborative editing is supported through optimistic concurrency, async auto-save polling, suggestion mode (propose/accept/reject), and author lockouts.
@@ -38588,7 +38589,13 @@ apps/quality/
 - **Nested taxonomy, folder hierarchy, and storage quotas**: Scoped for Sub-module 13.4 (Document Storage & Repository).
 
 ## Review notes
-(filled in at the end)
+- **Completed**: 2026-11-22
+- **Sub-module**: 13.1 Document Creation & Authoring (`apps/documents/`)
+- **Models**: `DocumentTemplate` (`DTMPL-`), `TemplateSection` (`DSEC-`), `DocumentDraft` (`DDFT-`), `DraftCollaboration` (`DCMT-`)
+- **Review**: 27 findings (8 Critical, 12 Important, 7 Minor) 100% resolved in `.claude/tasks/review-documents-13.1.md`
+- **Tests**: 26 passed, 0 failed in `apps/documents/tests/` (unfiltered suite green)
+- **Gaps Register**: `.agents/tasks/gaps-documents-13.1.md` committed. `**Gaps**: None` (zero open or deferred items for 13.1).
+- **Documentation**: `.claude/skills/documents/SKILL.md` and `README.md` updated and committed.
 
 ---
 # Sub-module 13.2: Version Control & Revision Management (Module 13: Document Management System, `documents`) — plan from `research-documents-13.2.md` (2026-11-22)
