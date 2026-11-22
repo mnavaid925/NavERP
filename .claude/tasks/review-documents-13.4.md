@@ -109,10 +109,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Standard tenant users could delete other users' folders and batch jobs.
   - **Fix**: Ensure user is owner/creator, superuser, or tenant admin. [x] fixed — 3241f9f5, e0f2f179: verify owner or administrator authority before deleting folders and batch imports
 
-- [ ] **I11**: Missing pagination controls on folder detail contained documents table.
+- [x] **I11**: Missing pagination controls on folder detail contained documents table.
   - **Location**: `templates/documents/storage_repository/document_folder/detail.html:270`
   - **Problem**: `folder_detail` paginates documents to 15 items but detail template lacks pagination links.
-  - **Fix**: Add pagination controls footer when `page_obj.paginator.num_pages > 1`.
+  - **Fix**: Add pagination controls footer when `page_obj.paginator.num_pages > 1`. [x] fixed — dbc312fe: add pagination controls to folder detail contained documents table
 
 ---
 
