@@ -220,7 +220,7 @@ def document_branch_merge(request, pk):
                     file=file or base.file,
                     file_name=file.name if file else base.file_name,
                     extracted_text=extracted_text or base.extracted_text,
-                    change_summary=f"[Merged from {branch.name}] {summary}",
+                    change_summary=f"[Merged from {branch.name}] {summary}"[:500],
                     is_official=True,
                     status="approved",
                     author=request.user,
