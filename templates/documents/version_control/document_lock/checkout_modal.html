@@ -32,7 +32,7 @@
                     Checking out this document locks it under your user account. Other users will be notified with a reservation alert and restricted to read-only viewing until you complete check-in.
                 </p>
                 <p class="mt-1 font-mono text-[11px] text-blue-800">
-                    Base version: v{{ base_version.version_label }} ({{ base_version.number }})
+                    Base version: {% if base_version %}v{{ base_version.version_label }} ({{ base_version.number }}){% else %}v{{ document.current_version_label|default:"1.0" }} (Initial baseline){% endif %}
                 </p>
             </div>
         </div>
