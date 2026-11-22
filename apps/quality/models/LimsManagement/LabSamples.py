@@ -161,6 +161,7 @@ class LabSample(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_qsmp_ten_status"),
             models.Index(fields=["tenant", "item_code"], name="idx_qsmp_ten_item"),
             models.Index(fields=["tenant", "source_batch_number"], name="idx_qsmp_ten_batch"),
+            models.Index(fields=["tenant", "storage_condition"], name="idx_qsmp_ten_storage"),
             models.Index(fields=["tenant", "-created_at"], name="idx_qsmp_ten_created"),
         ]
 
