@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ volume.name }}{% else %}New Storage Volume{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <a href="{% url 'documents:storage_volume_list' %}">Storage Volumes</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Volume{% else %}New Volume{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:storage_volume_detail' volume.pk %}{% else %}{% url 'documents:storage_volume_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Storage Volume Parameters & Backend Topology</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 text-sm text-red-700 bg-red-50 rounded border border-red-200">
+                {% for err in form.non_field_errors %}{{ err }}<br>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Volume Friendly Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.code.id_for_label }}">System Identifier Code *</label>
+                    {{ form.code }}
+                    <span class="text-xs text-muted">Uppercase alphanumeric e.g. VOL-HOT-01, S3-ARCHIVE-01</span>
+                    {% if form.code.errors %}<div class="form-error">{{ form.code.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.backend_type.id_for_label }}">Storage Backend Architecture *</label>
+                    {{ form.backend_type }}
+                    {% if form.backend_type.errors %}<div class="form-error">{{ form.backend_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.tier.id_for_label }}">Storage Lifecycle Tier *</label>
+                    {{ form.tier }}
+                    {% if form.tier.errors %}<div class="form-error">{{ form.tier.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.base_path.id_for_label }}">Mount Base Path / Bucket Name *</label>
+                    {{ form.base_path }}
+                    <span class="text-xs text-muted">Local filesystem mount point (e.g. /mnt/dms_storage) or cloud bucket name</span>
+                    {% if form.base_path.errors %}<div class="form-error">{{ form.base_path.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.region.id_for_label }}">Cloud Region / Datacenter</label>
+                    {{ form.region }}
+                    {% if form.region.errors %}<div class="form-error">{{ form.region.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.endpoint_url.id_for_label }}">Custom API Endpoint URL</label>
+                    {{ form.endpoint_url }}
+                    {% if form.endpoint_url.errors %}<div class="form-error">{{ form.endpoint_url.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.max_capacity_bytes.id_for_label }}">Max Capacity Quota (Bytes) *</label>
+                    {{ form.max_capacity_bytes }}
+                    <span class="text-xs text-muted">e.g. 107374182400 for 100 GB, 1073741824000 for 1 TB</span>
+                    {% if form.max_capacity_bytes.errors %}<div class="form-error">{{ form.max_capacity_bytes.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.warning_threshold_pct.id_for_label }}">Warning Threshold Percentage *</label>
+                    {{ form.warning_threshold_pct }}
+                    <span class="text-xs text-muted">Triggers capacity alert and automatic rollover (default 85%)</span>
+                    {% if form.warning_threshold_pct.errors %}<div class="form-error">{{ form.warning_threshold_pct.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.compression_type.id_for_label }}">Compression Protocol</label>
+                    {{ form.compression_type }}
+                    {% if form.compression_type.errors %}<div class="form-error">{{ form.compression_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.encryption_type.id_for_label }}">Data Encryption Standard</label>
+                    {{ form.encryption_type }}
+                    {% if form.encryption_type.errors %}<div class="form-error">{{ form.encryption_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.rollover_volume.id_for_label }}">Automatic Rollover Volume Target</label>
+                    {{ form.rollover_volume }}
+                    <span class="text-xs text-muted">When this volume reaches capacity or warning threshold, ingest flows here</span>
+                    {% if form.rollover_volume.errors %}<div class="form-error">{{ form.rollover_volume.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Architecture & Governance Description</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-full space-y-2">
+                    <div class="flex items-center gap-2">
+                        {{ form.is_default }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.is_default.id_for_label }}">
+                            Primary Default Storage Volume for New Ingestions
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ form.deduplication_enabled }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.deduplication_enabled.id_for_label }}">
+                            Enable SHA-256 Block Deduplication Optimization
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ form.is_active }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.is_active.id_for_label }}">
+                            Volume is Active, Online, and Writable
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:storage_volume_detail' volume.pk %}{% else %}{% url 'documents:storage_volume_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Volume{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
