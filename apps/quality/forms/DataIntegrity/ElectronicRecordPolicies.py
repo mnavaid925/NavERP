@@ -78,4 +78,7 @@ class ElectronicRecordPolicyForm(TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["system", "governing_sop", "system_owner", "qa_approver"])
+        retention = cleaned_data.get("retention_period_years")
+        if retention is not None and retention < 1:
+            self.add_error("retention_period_years", "Retention period must be at least 1 year.")
         return cleaned_data
