@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -40,13 +40,13 @@ def storage_volume_list(request):
     if tier:
         qs = qs.filter(tier=tier)
 
-    total_count = qs.count()
-
-    # Aggregate total capacities
+    # Aggregate total count and capacities in single query
     totals = qs.aggregate(
+        total_count=Count("id"),
         total_cap=Sum("max_capacity_bytes"),
         total_util=Sum("utilized_bytes"),
     )
+    total_count = totals["total_count"] or 0
     total_cap_bytes = totals["total_cap"] or 0
     total_util_bytes = totals["total_util"] or 0
     total_capacity_gb = round(total_cap_bytes / (1024**3), 2)
