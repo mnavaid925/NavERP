@@ -75,3 +75,5 @@ class DocumentTemplate(TenantNumbered):
         super().clean()
         if self.target_org_unit_id and self.target_org_unit.tenant_id != self.tenant_id:
             raise ValidationError({"target_org_unit": "Organization unit must belong to the same workspace."})
+        if self.owner_id and self.owner.tenant_id != self.tenant_id:
+            raise ValidationError({"owner": "Template owner must belong to the same workspace."})
