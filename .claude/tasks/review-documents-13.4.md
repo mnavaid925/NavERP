@@ -97,10 +97,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Windows backslashes in zip archive entries can bypass path stripping on POSIX environments, and unvetted file extensions could be ingested.
   - **Fix**: Normalize backslashes with `replace("\\", "/")` and check extension against `ALLOWED_DOC_EXTENSIONS`. [x] fixed — 71e59d1f: normalize backslashes and enforce ALLOWED_DOC_EXTENSIONS in batch ingestion
 
-- [ ] **I9**: Missing upload file size limit on `DocumentBatchImportForm`.
+- [x] **I9**: Missing upload file size limit on `DocumentBatchImportForm`.
   - **Location**: `apps/documents/forms/StorageRepository/DocumentBatchImports.py:45`
   - **Problem**: Unbounded file uploads could exhaust disk space.
-  - **Fix**: Validate archive size <= 50 MB (`MAX_BATCH_UPLOAD_BYTES = 50 * 1024 * 1024`).
+  - **Fix**: Validate archive size <= 50 MB (`MAX_BATCH_UPLOAD_BYTES = 50 * 1024 * 1024`). [x] fixed — 1fc2c9c1: enforce 50 MB upload limit on batch import archive files
 
 - [ ] **I10**: Missing ownership or administrator check on folder and batch deletions.
   - **Locations**:
