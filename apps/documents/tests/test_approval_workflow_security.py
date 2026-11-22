@@ -11,15 +11,16 @@ from apps.documents.models import (
 
 
 @pytest.fixture
-def other_user(db, django_user_model, tenant_a):
+def other_user(db, tenant_a):
     """Fixture providing a second distinct user belonging to tenant_a."""
-    user = django_user_model.objects.create_user(
-        username="other_acme",
+    from apps.accounts.models import User
+    return User.objects.create_user(
         email="other@acme.com",
-        password="password123",
+        username="other_acme",
+        password="TestPass123!",
+        tenant=tenant_a,
+        is_tenant_admin=False,
     )
-    user.tenants.add(tenant_a)
-    return user
 
 
 @pytest.mark.django_db
