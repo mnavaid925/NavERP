@@ -84,4 +84,8 @@ class AuditTrailReviewForm(TenantModelForm):
         period_end = cleaned_data.get("period_end")
         if period_start and period_end and period_start > period_end:
             self.add_error("period_end", "Period end date cannot precede period start date.")
+        anomalies_count = cleaned_data.get("anomalies_detected_count")
+        disposition = cleaned_data.get("disposition")
+        if anomalies_count and anomalies_count > 0 and disposition == "approved_clean":
+            self.add_error("disposition", "Disposition cannot be 'Approved Clean' when anomalies are detected.")
         return cleaned_data
