@@ -77,3 +77,12 @@
 - [ ] `apps/documents/views/DocumentAuthoring/*.py` — Redundant dual `COUNT(*)` query in list pagination. Fix: construct `paginator = Paginator(qs, 15)` first, then use `total_count = paginator.count`.
 - [ ] `apps/documents/views/DocumentAuthoring/TemplateSections.py:33` & `DraftCollaborations.py:35` — Non-standard page size (20 vs NavERP standard 15). Fix: standardize `Paginator(qs, 15)`.
 - [ ] `apps/documents/models/DocumentAuthoring/DocumentDrafts.py:96-102` & `TemplateSections.py:39-45` — Missing composite index on `(tenant, -updated_at)` on DocumentDraft and `(tenant, template, order)` on TemplateSection.
+
+## 5. QA Smoke Review Findings
+
+### Critical
+- [ ] `apps/documents/views/DocumentAuthoring/DocumentDrafts.py:240-244` — TypeError on Document Promotion (`draft_promote`): `core.Document.objects.create(tenant=request.tenant, title=draft.title, description=...)` crashes with `TypeError: Document() got unexpected keyword arguments: 'title', 'description'`. `core.Document` defines `name`, `file`, `classification`, `version`. In addition, `core.Document.file` is non-nullable and requires `ContentFile(draft.content.encode('utf-8'), name=f"{draft.number}.html")` or similar.
+
+### Important
+- [ ] `apps/documents/views/DocumentAuthoring/TemplateSections.py:22`, `DocumentDrafts.py:25`, `DraftCollaborations.py:24` — Runtime `NameError` on Search Queries `?q=test`: function call syntax `Q(field__icontains(q))` raises `NameError` on any search. Fix: change to `field__icontains=q`.
+- [ ] `templates/documents/document_authoring/document_template/detail.html:139` — Detail page crashes with HTTP 500 when `template.owner = None` due to `django.template.base.VariableDoesNotExist` evaluating `template.owner.username` as filter argument. Fix: guard with `{% if template.owner %}`.
