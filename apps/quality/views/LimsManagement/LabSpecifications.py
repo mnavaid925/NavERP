@@ -70,7 +70,7 @@ def lab_specification_detail(request, pk):
         select_related=["sop_document", "approved_by"],
     )
     worksheets = (
-        specification.test_worksheets.all()[:15]
+        specification.test_worksheets.select_related("sample", "assigned_analyst").all()[:15]
         if hasattr(specification, "test_worksheets")
         else []
     )
