@@ -122,7 +122,7 @@
                     </td>
                     <td>
                         <div class="font-medium text-slate-900">{{ s.signer_name }}</div>
-                        <div class="text-xs text-slate-500">{{ s.signer_title|default:s.signer.username }}</div>
+                        <div class="text-xs text-slate-500">{% if s.signer_title %}{{ s.signer_title }}{% elif s.signer %}{{ s.signer.username }}{% else %}—{% endif %}</div>
                     </td>
                     <td><span class="badge {{ s.signature_type_css_class }}">{{ s.get_signature_type_display }}</span></td>
                     <td><span class="badge {{ s.signature_meaning_css_class }}">{{ s.get_signature_meaning_display }}</span></td>
@@ -180,13 +180,13 @@
         </div>
         <div class="flex gap-1">
             {% if signatures.has_previous %}
-            <a href="?page={{ signatures.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.signature_type %}&signature_type={{ request.GET.signature_type }}{% endif %}{% if request.GET.signature_meaning %}&signature_meaning={{ request.GET.signature_meaning }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+            <a href="?page={{ signatures.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.signature_type %}&signature_type={{ request.GET.signature_type }}{% endif %}{% if request.GET.signature_meaning %}&signature_meaning={{ request.GET.signature_meaning }}{% endif %}{% if request.GET.is_valid %}&is_valid={{ request.GET.is_valid }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
             {% endif %}
 
             {% if signatures.has_next %}
-            <a href="?page={{ signatures.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.signature_type %}&signature_type={{ request.GET.signature_type }}{% endif %}{% if request.GET.signature_meaning %}&signature_meaning={{ request.GET.signature_meaning }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ signatures.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.signature_type %}&signature_type={{ request.GET.signature_type }}{% endif %}{% if request.GET.signature_meaning %}&signature_meaning={{ request.GET.signature_meaning }}{% endif %}{% if request.GET.is_valid %}&is_valid={{ request.GET.is_valid }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
             {% endif %}
