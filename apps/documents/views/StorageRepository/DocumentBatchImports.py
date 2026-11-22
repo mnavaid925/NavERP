@@ -81,12 +81,13 @@ def batch_import_create(request):
     if request.method == "POST":
         form = DocumentBatchImportForm(request.POST, request.FILES, tenant=request.tenant)
         if form.is_valid():
-            batch = form.save(commit=False)
-            batch.tenant = request.tenant
-            batch.created_by = request.user
-            batch.status = "queued"
-            batch.save()
-            write_audit_log(request.user, batch, "create", tenant=request.tenant)
+            with transaction.atomic():
+                batch = form.save(commit=False)
+                batch.tenant = request.tenant
+                batch.created_by = request.user
+                batch.status = "queued"
+                batch.save()
+                write_audit_log(request.user, batch, "create", tenant=request.tenant)
             messages.success(request, f"Batch import '{batch.batch_name}' queued for processing.")
             return redirect("documents:batch_import_detail", pk=batch.pk)
     else:
@@ -131,8 +132,9 @@ def batch_import_edit(request, pk):
     if request.method == "POST":
         form = DocumentBatchImportForm(request.POST, request.FILES, instance=batch_import, tenant=request.tenant)
         if form.is_valid():
-            batch = form.save()
-            write_audit_log(request.user, batch, "update", tenant=request.tenant)
+            with transaction.atomic():
+                batch = form.save()
+                write_audit_log(request.user, batch, "update", tenant=request.tenant)
             messages.success(request, f"Batch import '{batch.batch_name}' updated.")
             return redirect("documents:batch_import_detail", pk=batch.pk)
     else:
@@ -156,8 +158,9 @@ def batch_import_delete(request, pk):
         return redirect("documents:batch_import_detail", pk=batch_import.pk)
 
     name = batch_import.batch_name
-    write_audit_log(request.user, batch_import, "delete", tenant=request.tenant)
-    batch_import.delete()
+    with transaction.atomic():
+        write_audit_log(request.user, batch_import, "delete", tenant=request.tenant)
+        batch_import.delete()
     messages.success(request, f"Batch import '{name}' deleted.")
     return redirect("documents:batch_import_list")
 
@@ -251,23 +254,24 @@ def batch_import_process(request, pk):
             total_bytes = 2097152
             logs.append("No physical payload attached; registered demo catalog batch records.")
 
-        batch.total_files_detected = extracted_count
-        batch.processed_files_count = extracted_count
-        batch.success_files_count = success_count
-        batch.failed_files_count = extracted_count - success_count
-        batch.total_bytes_processed = total_bytes
-        batch.status = "completed"
-        batch.completed_at = timezone.now()
-        logs.append(f"[{timezone.now().strftime('%Y-%m-%d %H:%M:%S')}] Ingestion completed. Successfully filed {success_count} documents.")
-        batch.log_summary = "\n".join(logs)
-        batch.save()
+        with transaction.atomic():
+            batch.total_files_detected = extracted_count
+            batch.processed_files_count = extracted_count
+            batch.success_files_count = success_count
+            batch.failed_files_count = extracted_count - success_count
+            batch.total_bytes_processed = total_bytes
+            batch.status = "completed"
+            batch.completed_at = timezone.now()
+            logs.append(f"[{timezone.now().strftime('%Y-%m-%d %H:%M:%S')}] Ingestion completed. Successfully filed {success_count} documents.")
+            batch.log_summary = "\n".join(logs)
+            batch.save()
 
-        # Update storage volume utilization if associated
-        if batch.storage_volume:
-            batch.storage_volume.utilized_bytes += total_bytes
-            batch.storage_volume.save()
+            # Update storage volume utilization if associated
+            if batch.storage_volume:
+                batch.storage_volume.utilized_bytes += total_bytes
+                batch.storage_volume.save()
 
-        write_audit_log(request.user, batch, "process", tenant=request.tenant)
+            write_audit_log(request.user, batch, "process", tenant=request.tenant)
         messages.success(request, f"Batch import completed: {success_count} document(s) filed into repository.")
 
     except Exception as exc:
