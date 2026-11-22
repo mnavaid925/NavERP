@@ -85,4 +85,8 @@ class SystemChangeControlForm(TenantModelForm):
             cleaned_data,
             ["system", "requestor", "system_owner", "qa_lead", "org_unit"],
         )
+        status = cleaned_data.get("status")
+        closure_summary = (cleaned_data.get("closure_summary") or "").strip()
+        if status == "implemented_closed" and not closure_summary:
+            self.add_error("closure_summary", "Closure summary is required when status is marked Implemented & Closed.")
         return cleaned_data
