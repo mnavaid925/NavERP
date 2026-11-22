@@ -148,10 +148,18 @@
                         </a>
                         <form method="post" action="{% url 'documents:document_version_rollback' ver.pk %}" class="inline" onsubmit="return confirm('Restore document to v{{ ver.version_label }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-amber-600" title="Rollback to this revision">
+                            <button type="submit" class="btn btn-icon text-amber-600" title="Rollback to this revision" aria-label="Rollback to this revision">
                                 <i data-lucide="history"></i>
                             </button>
                         </form>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'documents:document_version_delete' ver.pk %}" class="inline" onsubmit="return confirm('Permanently delete version v{{ ver.version_label }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete Version" aria-label="Delete Version">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
