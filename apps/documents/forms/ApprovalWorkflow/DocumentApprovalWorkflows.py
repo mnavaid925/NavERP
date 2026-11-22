@@ -45,6 +45,7 @@ class DocumentApprovalWorkflowForm(TenantUniqueMixin, TenantModelForm):
         self.fields["version"].required = False
         self.fields["department"].required = False
         self.fields["due_date"].required = False
+        self.fields["target_turnaround_hours"].required = False
         self.fields["definition_json"].required = False
 
     def clean(self):
