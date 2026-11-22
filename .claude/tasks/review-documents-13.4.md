@@ -26,10 +26,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: `storage_volume_create`, `storage_volume_edit`, and `storage_volume_delete` allow standard tenant members to reconfigure or delete core storage infrastructure and S3 mount endpoints.
   - **Fix**: Decorate `storage_volume_create`, `storage_volume_edit`, and `storage_volume_delete` with `@tenant_admin_required`. [x] fixed — 6f60e5c1: enforce tenant_admin_required on storage volume mutation views
 
-- [ ] **C2**: Direct `.path` call in `batch_import_process` breaks remote/cloud storage backends.
+- [x] **C2**: Direct `.path` call in `batch_import_process` breaks remote/cloud storage backends.
   - **Location**: `apps/documents/views/StorageRepository/DocumentBatchImports.py:180`
   - **Problem**: `batch.archive_file.path` raises `NotImplementedError` on S3/Azure/GCS object storage backends.
-  - **Fix**: Open the file stream directly using `batch.archive_file.open("rb")` and pass stream to `zipfile.ZipFile(archive_stream)`.
+  - **Fix**: Open the file stream directly using `batch.archive_file.open("rb")` and pass stream to `zipfile.ZipFile(archive_stream)`. [x] fixed — 3f58c3f3: use stream access instead of path for remote storage compatibility
 
 - [ ] **C3**: Unbounded batch ingestion allows zip bombs and database denial of service.
   - **Location**: `apps/documents/views/StorageRepository/DocumentBatchImports.py:190`
