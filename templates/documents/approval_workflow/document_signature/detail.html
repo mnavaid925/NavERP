@@ -29,10 +29,21 @@
             <i data-lucide="award"></i>
             <span>View Certificate Manifest</span>
         </a>
-        <a href="{% url 'documents:signature_verify_token' signature.signature_token %}" class="btn btn-outline">
+        <a href="{% url 'documents:signature_verify' signature.signature_token %}" class="btn btn-outline">
             <i data-lucide="shield-check"></i>
             <span>Verify Token</span>
         </a>
+        <a href="{% url 'documents:signature_edit' signature.pk %}" class="btn btn-outline">
+            <i data-lucide="edit"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'documents:signature_delete' signature.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this signature record?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-outline">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
         <a href="{% url 'documents:signature_list' %}" class="btn btn-outline">
             <span>Back to List</span>
         </a>
@@ -69,7 +80,7 @@
                     </div>
                     <div class="detail-item">
                         <dt>Signer Title & Email</dt>
-                        <dd>{{ signature.signer_title|default:"—" }} &lt;{{ signature.signer_email|default:signature.signer.email }}&gt;</dd>
+                        <dd>{{ signature.signer_title|default:"—" }} &lt;{% if signature.signer_email %}{{ signature.signer_email }}{% elif signature.signer %}{{ signature.signer.email }}{% else %}—{% endif %}&gt;</dd>
                     </div>
                     <div class="detail-item">
                         <dt>Signing User Account</dt>
@@ -124,8 +135,8 @@
             </div>
             <div class="card-body flex flex-col items-center justify-center p-6 bg-slate-50 min-h-[220px]">
                 {% if signature.signature_glyph %}
-                <div class="w-full bg-white p-4 rounded border border-slate-200 text-center font-mono text-xs overflow-hidden">
-                    {{ signature.signature_glyph|safe }}
+                <div class="w-full bg-white p-4 rounded border border-slate-200 text-center font-mono text-xs overflow-hidden break-all">
+                    {{ signature.signature_glyph }}
                 </div>
                 {% else %}
                 <div class="w-full bg-white p-6 rounded-lg border-2 border-dashed border-slate-300 text-center">
