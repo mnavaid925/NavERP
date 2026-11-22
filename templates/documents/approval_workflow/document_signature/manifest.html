@@ -79,7 +79,7 @@
                 </tr>
                 <tr class="border-b border-slate-200 bg-slate-50">
                     <td class="p-2 font-semibold text-slate-600">Notification Email:</td>
-                    <td class="p-2 text-slate-900">{{ signature.signer_email|default:signature.signer.email }}</td>
+                    <td class="p-2 text-slate-900">{% if signature.signer_email %}{{ signature.signer_email }}{% elif signature.signer %}{{ signature.signer.email }}{% else %}—{% endif %}</td>
                 </tr>
                 <tr class="border-b border-slate-200">
                     <td class="p-2 font-semibold text-slate-600">Signature Meaning:</td>
