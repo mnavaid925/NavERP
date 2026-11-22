@@ -9,6 +9,10 @@ from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
 from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.VersionControl.DocumentVersions import DocumentVersion
+from apps.documents.models.ApprovalWorkflow.DocumentApprovalWorkflows import DocumentApprovalWorkflow
+from apps.documents.models.ApprovalWorkflow.DocumentApprovalRequests import DocumentApprovalRequest
+from apps.documents.models.ApprovalWorkflow.DocumentSignatures import DocumentSignature
+from apps.documents.models.ApprovalWorkflow.DocumentReviewComments import DocumentReviewComment
 
 
 @pytest.fixture
@@ -139,5 +143,75 @@ def document_branch(db, tenant_a, admin_user, document, document_version):
         status="active",
         created_by=admin_user,
         description="Exploring high-voltage quarantine protocols.",
+    )
+
+
+@pytest.fixture
+def approval_workflow(db, tenant_a, admin_user, document, document_version):
+    """Fixture providing a pending DocumentApprovalWorkflow in tenant_a."""
+    return DocumentApprovalWorkflow.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        title="Official Procedure Sign-Off Pipeline",
+        workflow_type="parallel",
+        status="pending",
+        urgency="medium",
+        initiator=admin_user,
+        total_stages=2,
+        current_stage=1,
+        allow_emergency_bypass=True,
+    )
+
+
+@pytest.fixture
+def approval_request(db, tenant_a, member_user, approval_workflow):
+    """Fixture providing an active pending DocumentApprovalRequest."""
+    return DocumentApprovalRequest.objects.create(
+        tenant=tenant_a,
+        workflow=approval_workflow,
+        stage_number=1,
+        stage_name="Department Review",
+        stage_type="parallel_all",
+        approver=member_user,
+        status="pending",
+    )
+
+
+@pytest.fixture
+def document_signature(db, tenant_a, member_user, document, document_version, approval_request):
+    """Fixture providing a cryptographically valid DocumentSignature."""
+    return DocumentSignature.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        approval_request=approval_request,
+        signer=member_user,
+        signer_name="Jane Doe",
+        signer_title="Lead Quality Analyst",
+        signer_email="jane@acme.com",
+        signature_type="biometric",
+        signature_meaning="approval",
+        document_checksum="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        is_valid=True,
+    )
+
+
+@pytest.fixture
+def review_comment(db, tenant_a, member_user, document, document_version, approval_workflow):
+    """Fixture providing an open blocking DocumentReviewComment."""
+    return DocumentReviewComment.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        workflow=approval_workflow,
+        author=member_user,
+        annotation_type="critique",
+        page_number=2,
+        coordinate_ref="120,450,200,80",
+        selected_text="Verify all calibrations",
+        content="Specify calibration tolerance standard ISO 17025.",
+        status="open",
+        is_blocking=True,
     )
 
