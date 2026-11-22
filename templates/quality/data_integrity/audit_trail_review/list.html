@@ -62,7 +62,7 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div class="form-group">
                 <label class="form-label" for="q">Search</label>
                 <input type="text" name="q" id="q" value="{{ q }}" placeholder="Review title, findings, number..." class="form-input">
@@ -82,6 +82,15 @@
                     <option value="">All Severities</option>
                     {% for val, label in severity_choices %}
                     <option value="{{ val }}" {% if severity_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_selected == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
