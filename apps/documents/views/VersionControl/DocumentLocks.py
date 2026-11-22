@@ -91,27 +91,9 @@ def document_checkout(request, doc_pk):
     document = documents_object(request, Document, doc_pk)
 
     if document.is_locked:
-        messages.error(request, f"Document '{document.number}' is already checked out by {document.locked_by.username}.")
+        locked_by_str = getattr(document.locked_by, "username", "another user")
+        messages.error(request, f"Document '{document.number}' is already checked out by {locked_by_str}.")
         return redirect("documents:document_detail", pk=document.pk)
-
-    # Base version: latest version or create initial baseline
-    base_version = document.versions.order_by("-created_at").first()
-    if not base_version:
-        base_version = DocumentVersion.objects.create(
-            tenant=request.tenant,
-            document=document,
-            version_label=document.current_version_label or "1.0",
-            major_number=document.current_version_no or 1,
-            minor_number=0,
-            patch_number=0,
-            version_type="major",
-            file_name=f"{document.slug or 'doc'}_v1.0.txt",
-            extracted_text=document.description or document.title,
-            change_summary="Initial document baseline version",
-            is_official=True,
-            status="approved",
-            author=document.owner or request.user,
-        )
 
     if request.method == "POST":
         form = CheckoutForm(request.POST)
@@ -120,6 +102,30 @@ def document_checkout(request, doc_pk):
             expires_at = timezone.now() + timedelta(hours=hours)
 
             with transaction.atomic():
+                document = Document.objects.select_for_update().get(pk=doc_pk, tenant=request.tenant)
+                if document.is_locked:
+                    locked_by_str = getattr(document.locked_by, "username", "another user")
+                    messages.error(request, f"Document '{document.number}' is already checked out by {locked_by_str}.")
+                    return redirect("documents:document_detail", pk=document.pk)
+
+                base_version = document.versions.order_by("-created_at").first()
+                if not base_version:
+                    base_version = DocumentVersion.objects.create(
+                        tenant=request.tenant,
+                        document=document,
+                        version_label=document.current_version_label or "1.0",
+                        major_number=document.current_version_no or 1,
+                        minor_number=0,
+                        patch_number=0,
+                        version_type="major",
+                        file_name=f"{document.slug or 'doc'}_v1.0.txt",
+                        extracted_text=document.description or document.title,
+                        change_summary="Initial document baseline version",
+                        is_official=True,
+                        status="approved",
+                        author=document.owner or request.user,
+                    )
+
                 lock = DocumentLock.objects.create(
                     tenant=request.tenant,
                     document=document,
@@ -141,6 +147,7 @@ def document_checkout(request, doc_pk):
     else:
         form = CheckoutForm()
 
+    base_version = document.versions.order_by("-created_at").first()
     context = {
         "form": form,
         "document": document,
@@ -159,7 +166,8 @@ def document_checkin(request, doc_pk):
         return redirect("documents:document_detail", pk=document.pk)
 
     if lock.locked_by != request.user and not request.user.is_superuser:
-        messages.error(request, f"You do not hold the active lock on this document (locked by {lock.locked_by.username}).")
+        locked_by_str = getattr(lock.locked_by, "username", "another user")
+        messages.error(request, f"You do not hold the active lock on this document (locked by {locked_by_str}).")
         return redirect("documents:document_detail", pk=document.pk)
 
     base = lock.base_version
