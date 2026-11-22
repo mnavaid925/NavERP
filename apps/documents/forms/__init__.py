@@ -1,5 +1,6 @@
 from apps.documents.forms.DocumentAuthoring.DocumentDrafts import DocumentDraftForm
 from apps.documents.forms.DocumentAuthoring.DocumentTemplates import DocumentTemplateForm
+from apps.documents.forms.DocumentAuthoring.DraftCollaborations import DraftCollaborationForm
 from apps.documents.forms.DocumentAuthoring.TemplateSections import TemplateSectionForm
 from apps.documents.forms.VersionControl.DocumentBranches import (
     BranchMergeForm,
@@ -12,7 +13,6 @@ from apps.documents.forms.VersionControl.DocumentLocks import (
     ForceUnlockForm,
 )
 from apps.documents.forms.VersionControl.Documents import (
-    DocumentFilterForm,
     DocumentForm,
 )
 from apps.documents.forms.VersionControl.DocumentVersions import (
@@ -22,7 +22,6 @@ from apps.documents.forms.VersionControl.DocumentVersions import (
 
 __all__ = [
     "DocumentForm",
-    "DocumentFilterForm",
     "DocumentVersionForm",
     "VersionCompareForm",
     "DocumentLockForm",
@@ -34,4 +33,5 @@ __all__ = [
     "DocumentTemplateForm",
     "TemplateSectionForm",
     "DocumentDraftForm",
+    "DraftCollaborationForm",
 ]
