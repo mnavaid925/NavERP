@@ -62,6 +62,19 @@
   - `M9`: Absence of composite ordering indexes on `(tenant, -created_at)` / `(tenant, -review_date)`.
   - `M10`: Composite `["tenant", "status"]` index consideration for high-volume multi-tenant status filtering.
 
+### Pass 5: `qa-smoke-tester`
+- **Critical**: None (123 automated assertions passed; 16/16 IDOR attack vectors blocked with 404).
+- **Important**:
+  - Corroborates `I5`: Active filter query parameters dropped during pagination.
+  - Corroborates `I6`: Missing inverted date range validation in `AuditTrailReviewForm`.
+  - Corroborates `I1`–`I4`: Missing filter dropdowns in list templates.
+- **Minor**:
+  - Corroborates `M2`: Lack of minimum value validation (`retention_period_years >= 1`).
+  - Corroborates `M4`: Plaintext references instead of hyperlinks for CSV computer system and SOP.
+  - Corroborates `M6`: Undefined CSS utility `text-green` in audit trail review templates.
+  - `M11`: `data_integrity_dashboard.html:42` uses `stat-icon red`; standardize to `stat-icon orange` per L33 standard.
+
+
 
 
 
