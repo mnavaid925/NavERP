@@ -28,15 +28,15 @@
     <div class="card-body p-4">
         <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-                <label class="form-label text-xs">Search</label>
+                <label for="filter-section-q" class="form-label text-xs">Search</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ search_query }}" placeholder="Search title, keywords..." class="form-input text-sm pl-9">
+                    <input type="text" id="filter-section-q" name="q" value="{{ search_query }}" placeholder="Search title, keywords..." class="form-input text-sm pl-9">
                     <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
                 </div>
             </div>
             <div>
-                <label class="form-label text-xs">Section Type</label>
-                <select name="section_type" class="form-select text-sm">
+                <label for="filter-section-type" class="form-label text-xs">Section Type</label>
+                <select id="filter-section-type" name="section_type" class="form-select text-sm">
                     <option value="">All Section Types</option>
                     {% for code, label in section_type_choices %}
                     <option value="{{ code }}" {% if request.GET.section_type == code %}selected{% endif %}>{{ label }}</option>
@@ -44,8 +44,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Parent Template</label>
-                <select name="template" class="form-select text-sm">
+                <label for="filter-section-template" class="form-label text-xs">Parent Template</label>
+                <select id="filter-section-template" name="template" class="form-select text-sm">
                     <option value="">All Templates (Including Global)</option>
                     {% for tmpl in template_choices %}
                     <option value="{{ tmpl.pk }}" {% if request.GET.template == tmpl.pk|stringformat:"d" %}selected{% endif %}>{{ tmpl.name }}</option>
