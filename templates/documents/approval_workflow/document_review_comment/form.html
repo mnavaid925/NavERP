@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ comment.number }}{% else %}New Review Annotation{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:review_comment_list' %}">Review Comments</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ comment.number }}{% else %}New Annotation{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Annotation: {{ comment.number }}{% else %}Add Document Review Annotation{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:review_comment_detail' comment.pk %}{% else %}{% url 'documents:review_comment_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Annotation Information</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger mb-4">
+                {% for err in form.non_field_errors %}{{ err }}<br>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Document -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.document.id_for_label }}">Target Document *</label>
+                    {{ form.document }}
+                    {% if form.document.errors %}<div class="form-error">{{ form.document.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Version -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">Document Version</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}<div class="form-error">{{ form.version.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Workflow -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.workflow.id_for_label }}">Approval Workflow (Optional)</label>
+                    {{ form.workflow }}
+                    {% if form.workflow.errors %}<div class="form-error">{{ form.workflow.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Annotation Type -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.annotation_type.id_for_label }}">Annotation Type *</label>
+                    {{ form.annotation_type }}
+                    {% if form.annotation_type.errors %}<div class="form-error">{{ form.annotation_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Page Number -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.page_number.id_for_label }}">Page Number *</label>
+                    {{ form.page_number }}
+                    {% if form.page_number.errors %}<div class="form-error">{{ form.page_number.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Coordinate Reference -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.coordinate_ref.id_for_label }}">Coordinate Reference / Anchor (Optional)</label>
+                    {{ form.coordinate_ref }}
+                    <span class="text-xs text-slate-500">e.g. x,y,width,height coordinates on page or DOM text anchor id</span>
+                    {% if form.coordinate_ref.errors %}<div class="form-error">{{ form.coordinate_ref.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Selected Text -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.selected_text.id_for_label }}">Quoted Text / Highlight Passage (Optional)</label>
+                    {{ form.selected_text }}
+                    {% if form.selected_text.errors %}<div class="form-error">{{ form.selected_text.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Content -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.content.id_for_label }}">Review Content / Required Changes *</label>
+                    {{ form.content }}
+                    {% if form.content.errors %}<div class="form-error">{{ form.content.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Blocking Flag -->
+                <div class="form-group col-span-full bg-slate-50 p-4 rounded border border-slate-200">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_blocking }}
+                        <span class="text-sm font-semibold text-slate-900">Mark as Blocking Review Comment</span>
+                    </label>
+                    <p class="text-xs text-slate-500 ml-6 mt-1">
+                        If checked, parent approval workflows cannot achieve final sign-off until this comment is marked resolved.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 border-t border-slate-200 pt-4">
+                <a href="{% if is_edit %}{% url 'documents:review_comment_detail' comment.pk %}{% else %}{% url 'documents:review_comment_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Save Annotation{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
