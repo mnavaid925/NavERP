@@ -60,7 +60,7 @@
                         <dt>Computerized System</dt>
                         <dd>
                             {% if assessment.system %}
-                            <span class="font-medium">{{ assessment.system.system_name }} ({{ assessment.system.number }})</span>
+                            <a href="{% url 'quality:computer_system_validation_detail' assessment.system.pk %}" class="font-medium text-brand hover:underline">{{ assessment.system.system_name }} ({{ assessment.system.number }})</a>
                             {% else %}
                             <span class="text-muted">—</span>
                             {% endif %}
