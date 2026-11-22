@@ -15,7 +15,7 @@
   - `templates/documents/version_control/{document,document_version,document_lock,document_branch}/{list,detail,form}.html` + `templates/documents/version_control/document_version/compare.html`
 - **AuditLog `action` Max Length (`<= 10` chars, L66)**:
   - Allowed `action` verbs passed to `write_audit_log(request.user, obj, verb, tenant=request.tenant)`:
-    `"create"`, `"update"`, `"delete"`, `"checkout"`, `"checkin"`, `"discard"`, `"unlock"`, `"fork"`, `"merge"`, `"rollback"` (all `<= 10` chars).
+    `"create"`, `"update"`, `"delete"`, `"checkout"`, `"checkin"`, `"discard"`, `"unlock"`, `"fork"`, `"merge"`, `"rollback"`, `"abandon"` (all `<= 10` chars).
 - **Theme CSS Classes (`static/css/theme.css`, L33)**:
   - Allowed badge classes ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
   - Detail views use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
