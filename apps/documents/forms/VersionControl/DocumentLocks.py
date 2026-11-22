@@ -1,7 +1,7 @@
 from django import forms
 
 from apps.accounts.models import User
-from apps.documents.forms._common import TenantUniqueMixin, reject_foreign
+from apps.documents.forms._common import TenantUniqueMixin, reject_foreign, validate_safe_doc_upload
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
 from apps.documents.models.VersionControl.DocumentVersions import DocumentVersion
@@ -51,6 +51,10 @@ class DocumentLockForm(TenantUniqueMixin, forms.ModelForm):
         self.fields["expires_at"].required = False
         self.fields["checkout_note"].required = False
         self.fields["working_copy_file"].required = False
+
+    def clean_working_copy_file(self):
+        f = self.cleaned_data.get("working_copy_file")
+        return validate_safe_doc_upload(f)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -115,6 +119,10 @@ class CheckinForm(forms.Form):
         widget=forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         label="Promote to Official Public Baseline",
     )
+
+    def clean_file(self):
+        f = self.cleaned_data.get("file")
+        return validate_safe_doc_upload(f)
 
 
 class ForceUnlockForm(forms.Form):
