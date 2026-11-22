@@ -56,8 +56,8 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Add `--flush` handling and stdout notice for tenant user credentials. — fixed: `feat(documents): add --flush option and tenant credential notice to seed_documents`
 - [x] **M4**: `apps/documents/views/VersionControl/Documents.py:68` — Pass `"department_choices": departments` in `document_list` context for full contract symmetry.
   - *Fix*: Add `"department_choices": departments` to context dict. — fixed: `feat(documents): pass department_choices in document_list context for contract symmetry`
-- [ ] **M5**: `templates/documents/version_control/document/list.html:74` & `document_version/list.html:31` — Filter dropdowns and pagination persistence for `is_locked` and `is_official`.
-  - *Fix*: Add filter dropdowns and preserve in pagination query strings.
+- [x] **M5**: `templates/documents/version_control/document/list.html:74` & `document_version/list.html:31` — Filter dropdowns and pagination persistence for `is_locked` and `is_official`.
+  - *Fix*: Add filter dropdowns and preserve in pagination query strings. — fixed: `feat(documents): add is_locked filter dropdown and pagination persistence in document list` & `feat(documents): add is_official filter dropdown and pagination persistence in version list`
 - [ ] **M6**: `templates/documents/version_control/document/detail.html:21` — `Locked by {{ document.locked_by.username }}` inside header badge when `locked_by` is null.
   - *Fix*: Guard with `{% if document.locked_by %}{{ document.locked_by.get_full_name|default:document.locked_by.username }}{% else %}Unknown{% endif %}`.
 - [ ] **M7**: Icon-only action buttons across list tables lack `aria-label` attribute matching `title`.
