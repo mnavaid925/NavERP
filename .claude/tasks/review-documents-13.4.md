@@ -75,10 +75,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Causes N+1 query loop when rendering batch import author in `storage_volume/detail.html:201`.
   - **Fix**: Add `.select_related("created_by")` to `volume.batch_imports.filter(...)`. [x] fixed — dd3acd1b: select_related created_by on batch_imports in storage_volume_detail
 
-- [ ] **I5**: Prefetch Cache Bypass via `root.children.exists` in `tree.html`.
+- [x] **I5**: Prefetch Cache Bypass via `root.children.exists` in `tree.html`.
   - **Location**: `templates/documents/storage_repository/document_folder/tree.html:77`
   - **Problem**: `.exists()` executes an explicit SQL query for every root folder, bypassing prefetched data.
-  - **Fix**: Change `{% if root.children.exists %}` to `{% if root.children.all %}`.
+  - **Fix**: Change `{% if root.children.exists %}` to `{% if root.children.all %}`. [x] fixed — ea027d1e: use root.children.all to preserve prefetch cache in tree template
 
 - [ ] **I6**: Dead Database Query in `repository_dashboard`.
   - **Location**: `apps/documents/views/StorageRepository/RepositoryDashboard.py:36-39`
