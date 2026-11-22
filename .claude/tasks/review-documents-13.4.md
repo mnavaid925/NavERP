@@ -70,10 +70,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Volume default flipping, batch updates, and deletions lack explicit transaction blocks.
   - **Fix**: Wrap mutations and deletions in `with transaction.atomic():`. [x] fixed — ef9108f2, 760167d6, 37e5fc90: wrap mutations, batch updates, and deletions in transaction.atomic blocks
 
-- [ ] **I4**: Missing `select_related("created_by")` on `batch_imports` in `storage_volume_detail`.
+- [x] **I4**: Missing `select_related("created_by")` on `batch_imports` in `storage_volume_detail`.
   - **Location**: `apps/documents/views/StorageRepository/StorageVolumes.py:98`
   - **Problem**: Causes N+1 query loop when rendering batch import author in `storage_volume/detail.html:201`.
-  - **Fix**: Add `.select_related("created_by")` to `volume.batch_imports.filter(...)`.
+  - **Fix**: Add `.select_related("created_by")` to `volume.batch_imports.filter(...)`. [x] fixed — dd3acd1b: select_related created_by on batch_imports in storage_volume_detail
 
 - [ ] **I5**: Prefetch Cache Bypass via `root.children.exists` in `tree.html`.
   - **Location**: `templates/documents/storage_repository/document_folder/tree.html:77`
