@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ batch_import.batch_name }} — Batch Ingestion — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <a href="{% url 'documents:batch_import_list' %}">Batch Imports</a>
+            <span>/</span>
+            <span>{{ batch_import.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-blue-50 text-primary flex items-center justify-center">
+                <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="page-title mb-0">{{ batch_import.batch_name }}</h1>
+                <div class="font-mono text-xs text-muted">{{ batch_import.number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if batch_import.status != 'completed' and batch_import.status != 'processing' %}
+        <form method="post" action="{% url 'documents:batch_import_process' batch_import.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="play"></i>
+                <span>Execute Ingestion</span>
+            </button>
+        </form>
+        <a href="{% url 'documents:batch_import_edit' batch_import.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Parameters</span>
+        </a>
+        {% endif %}
+        <form method="post" action="{% url 'documents:batch_import_delete' batch_import.pk %}" onsubmit="return confirm('Delete this batch import job?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" {% if batch_import.status == 'processing' %}disabled{% endif %}>
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Parameters Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="card-title">Ingestion Job Configuration</h3>
+            <div class="flex gap-2">
+                <span class="badge {{ batch_import.status_badge_class }}">{{ batch_import.get_status_display }}</span>
+                <span class="badge {{ batch_import.source_type_badge_class }}">{{ batch_import.get_source_type_display }}</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Job Number</dt>
+                    <dd class="font-mono text-xs">{{ batch_import.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Package Format</dt>
+                    <dd>{{ batch_import.get_source_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Target Repository Folder</dt>
+                    <dd>
+                        {% if target_folder %}
+                        <a href="{% url 'documents:folder_detail' target_folder.pk %}" class="text-primary hover:underline flex items-center gap-1 font-medium">
+                            <i data-lucide="folder" class="w-3.5 h-3.5"></i>
+                            <span>{{ target_folder.name }}</span>
+                        </a>
+                        {% else %}
+                        <span class="text-muted italic">Root Level Repository</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Target Storage Volume</dt>
+                    <dd>
+                        {% if storage_volume %}
+                        <a href="{% url 'documents:storage_volume_detail' storage_volume.pk %}" class="text-primary hover:underline flex items-center gap-1 font-medium">
+                            <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>
+                            <span>{{ storage_volume.name }} ({{ storage_volume.code }})</span>
+                        </a>
+                        {% else %}
+                        <span class="text-muted italic">Default Storage Volume</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Initiated By</dt>
+                    <dd>{{ batch_import.created_by.get_full_name|default:batch_import.created_by.username }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Payload Archive File</dt>
+                    <dd class="font-mono text-xs">
+                        {% if batch_import.archive_file %}
+                        <a href="{{ batch_import.archive_file.url }}" class="text-primary hover:underline flex items-center gap-1" download>
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                            <span>{{ batch_import.archive_file.name }}</span>
+                        </a>
+                        {% else %}
+                        <span class="text-muted italic">Simulated / Direct Staging Payload</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Started At</dt>
+                    <dd>{{ batch_import.started_at|date:"M d, Y H:i:s"|default:"Not yet started" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Completed At</dt>
+                    <dd>{{ batch_import.completed_at|date:"M d, Y H:i:s"|default:"Incomplete / Pending" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Metrics Cockpit -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Execution Counters</h3>
+        </div>
+        <div class="card-body">
+            <div class="mb-4">
+                <div class="flex items-center justify-between text-sm mb-2">
+                    <span class="font-medium text-slate-700">Completion</span>
+                    <span class="font-bold text-slate-700">{{ batch_import.progress_percentage }}%</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                    <div class="h-3 rounded-full {% if batch_import.status == 'failed' %}bg-red-500{% elif batch_import.status == 'completed' %}bg-green-500{% else %}bg-blue-600{% endif %}" style="width: {{ batch_import.progress_percentage }}%;"></div>
+                </div>
+            </div>
+
+            <div class="space-y-3 pt-3 border-t border-slate-100">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Detected Files</span>
+                    <span class="font-semibold text-slate-800">{{ batch_import.total_files_detected }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Processed Files</span>
+                    <span class="font-semibold text-slate-800">{{ batch_import.processed_files_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Successfully Ingested</span>
+                    <span class="font-semibold text-green-600">{{ batch_import.success_files_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Failed / Corrupted</span>
+                    <span class="font-semibold {% if batch_import.failed_files_count %}text-red-600{% else %}text-slate-600{% endif %}">
+                        {{ batch_import.failed_files_count }}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Total Data Extracted</span>
+                    <span class="font-semibold text-slate-800">{{ batch_import.total_mb_processed }} MB</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Extraction Log & Terminal -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h3 class="card-title flex items-center gap-2">
+            <i data-lucide="terminal" class="w-4 h-4 text-slate-500"></i>
+            <span>Ingestion Audit Log & Extraction Manifest</span>
+        </h3>
+        <span class="text-xs text-muted font-mono">{{ log_lines|length }} entries</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="bg-slate-900 text-slate-100 font-mono text-xs p-4 rounded-b-lg overflow-x-auto max-h-96 space-y-1">
+            {% for line in log_lines %}
+            <div class="flex items-start gap-2">
+                <span class="text-slate-500 select-none">&gt;</span>
+                <span class="{% if 'Error' in line or 'Failed' in line %}text-red-400{% elif 'Successfully' in line or 'Ingested' in line %}text-emerald-400{% else %}text-slate-300{% endif %}">
+                    {{ line }}
+                </span>
+            </div>
+            {% empty %}
+            <div class="text-slate-500 italic">No execution logs generated yet. Click 'Execute Ingestion' to process batch.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% if error_lines %}
+<div class="card mt-6 border-red-200">
+    <div class="card-header bg-red-50 text-red-800">
+        <h3 class="card-title flex items-center gap-2">
+            <i data-lucide="alert-circle" class="w-4 h-4 text-red-600"></i>
+            <span>Diagnostic Failure Manifest</span>
+        </h3>
+    </div>
+    <div class="card-body">
+        <ul class="list-disc pl-5 text-xs text-red-700 space-y-1">
+            {% for err in error_lines %}
+            <li>{{ err }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
