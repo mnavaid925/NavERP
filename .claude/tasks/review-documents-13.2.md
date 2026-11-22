@@ -15,8 +15,8 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
 
 ## Important Findings
 
-- [ ] **I1**: `apps/documents/views/VersionControl/DocumentLocks.py:93-137` — Concurrency race condition and lack of row-level locking (`select_for_update`) in `document_checkout`, plus non-idempotent GET baseline version creation.
-  - *Fix*: Move baseline version creation into the POST handling block, wrap in `transaction.atomic()`, acquire `select_for_update()` on Document, and re-verify `doc.is_locked`.
+- [x] **I1**: `apps/documents/views/VersionControl/DocumentLocks.py:93-137` — Concurrency race condition and lack of row-level locking (`select_for_update`) in `document_checkout`, plus non-idempotent GET baseline version creation.
+  - *Fix*: Move baseline version creation into the POST handling block, wrap in `transaction.atomic()`, acquire `select_for_update()` on Document, and re-verify `doc.is_locked`. — fixed: `fix(documents): add row-level locking with select_for_update and null check in document_checkout`
 - [ ] **I2**: `apps/documents/views/VersionControl/DocumentVersions.py:270-285` — Missing transaction, active lock guard, and owner/admin authorization in `document_version_rollback`.
   - *Fix*: Wrap in `with transaction.atomic():`, check `if document.is_locked: messages.error(...); return redirect(...)`, and require `document.owner == request.user or request.user.is_superuser or is_tenant_admin(request.user)`.
 - [ ] **I3**: `apps/documents/views/VersionControl/DocumentBranches.py:158-255` — Missing active status check, lock guard, and creator/admin authorization in `document_branch_abandon` and `document_branch_merge`.
@@ -41,8 +41,8 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Add POST-only delete forms with CSRF and confirm prompt targeting `documents:document_version_delete` and `documents:document_branch_delete`.
 - [ ] **I13**: `templates/documents/version_control/document_version/detail.html:29` & `document_branch/detail.html:26` — Missing "Back to List" navigation action in detail headers.
   - *Fix*: Add Back button navigating to `documents:document_version_list` and `documents:document_branch_list`.
-- [ ] **I14**: `apps/documents/views/VersionControl/DocumentLocks.py:94` — `document.locked_by.username` raises `AttributeError` if `document.locked_by` is null.
-  - *Fix*: Use `getattr(document.locked_by, 'username', 'another user')`.
+- [x] **I14**: `apps/documents/views/VersionControl/DocumentLocks.py:94` — `document.locked_by.username` raises `AttributeError` if `document.locked_by` is null.
+  - *Fix*: Use `getattr(document.locked_by, 'username', 'another user')`. — fixed: `fix(documents): add row-level locking with select_for_update and null check in document_checkout`
 
 ---
 
