@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
@@ -106,7 +107,10 @@ def audit_trail_review_create(request):
             with transaction.atomic():
                 review = form.save(commit=False)
                 review.tenant = request.tenant
+                if review.status in ["completed", "closed"] and not review.completed_at:
+                    review.completed_at = timezone.now()
                 review.save()
+                form.save_m2m()
                 write_audit_log(request.user, review, "create", tenant=request.tenant)
             messages.success(request, f"Audit Trail Review {review.number} created successfully.")
             return redirect("quality:audit_trail_review_detail", pk=review.pk)
@@ -127,7 +131,11 @@ def audit_trail_review_edit(request, pk):
         form = AuditTrailReviewForm(request.POST, instance=review, tenant=request.tenant)
         if form.is_valid():
             with transaction.atomic():
-                review = form.save()
+                review = form.save(commit=False)
+                if review.status in ["completed", "closed"] and not review.completed_at:
+                    review.completed_at = timezone.now()
+                review.save()
+                form.save_m2m()
                 write_audit_log(request.user, review, "update", tenant=request.tenant)
             messages.success(request, f"Audit Trail Review {review.number} updated successfully.")
             return redirect("quality:audit_trail_review_detail", pk=review.pk)
