@@ -17,11 +17,11 @@ def test_document_authoring_unauthenticated_access_redirects_login(document_temp
 
     res = anon_client.get(reverse("documents:template_list"))
     assert res.status_code == 302
-    assert "/accounts/login/" in res.url
+    assert "/login/" in res.url
 
     res = anon_client.get(reverse("documents:draft_canvas", args=[document_draft.pk]))
     assert res.status_code == 302
-    assert "/accounts/login/" in res.url
+    assert "/login/" in res.url
 
 
 @pytest.mark.django_db
