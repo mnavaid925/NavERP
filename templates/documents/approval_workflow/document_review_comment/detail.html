@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ comment.number }} — Review Comment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:review_comment_list' %}">Review Comments</a>
+            <span>/</span>
+            <span>{{ comment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ comment.number }}: Page {{ comment.page_number }} Annotation</h1>
+            <span class="badge {{ status_css }}">{{ comment.get_status_display }}</span>
+            <span class="badge {{ annotation_type_css }}">{{ comment.get_annotation_type_display }}</span>
+            {% if comment.is_blocking %}
+            <span class="badge badge-red">Blocking</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:review_comment_list' %}" class="btn btn-outline">
+            <span>Back to List</span>
+        </a>
+        {% if comment.workflow %}
+        <a href="{% url 'documents:workflow_detail' comment.workflow.pk %}" class="btn btn-outline">
+            <i data-lucide="git-pull-request"></i>
+            <span>Workflow Detail</span>
+        </a>
+        {% endif %}
+        <a href="{% url 'documents:review_comment_edit' comment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2">
+        <!-- Annotation Metadata Card -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Annotation Details</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Comment Identifier</dt>
+                        <dd class="font-mono font-semibold">{{ comment.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' comment.document.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ comment.document.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Document Version</dt>
+                        <dd>{{ comment.version.version_label|default:"Head Baseline" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Page</dt>
+                        <dd class="font-semibold">Page {{ comment.page_number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Author</dt>
+                        <dd>
+                            {% if comment.author %}
+                                <span class="font-medium text-slate-900">{{ comment.author.get_full_name|default:comment.author.username }}</span>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created Timestamp</dt>
+                        <dd>{{ comment.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Workflow Gating</dt>
+                        <dd>
+                            {% if comment.is_blocking %}
+                            <span class="badge badge-red">Blocking Workflow Approval</span>
+                            {% else %}
+                            <span class="badge badge-slate">Non-Blocking Feedback</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Coordinates Anchor</dt>
+                        <dd class="font-mono text-xs">{{ comment.coordinate_ref|default:"Full Page Anchor" }}</dd>
+                    </div>
+
+                    {% if comment.selected_text %}
+                    <div class="detail-item col-span-full">
+                        <dt>Highlighted / Quoted Passage</dt>
+                        <dd class="bg-amber-50 p-3 rounded border border-amber-200 text-amber-900 italic font-serif text-sm">
+                            "{{ comment.selected_text }}"
+                        </dd>
+                    </div>
+                    {% endif %}
+
+                    <div class="detail-item col-span-full">
+                        <dt>Critique / Review Comment</dt>
+                        <dd class="bg-slate-50 p-4 rounded border border-slate-200 text-slate-900 text-sm whitespace-pre-wrap">
+                            {{ comment.content }}
+                        </dd>
+                    </div>
+
+                    {% if comment.status == "resolved" or comment.status == "addressed" or comment.status == "dismissed" %}
+                    <div class="detail-item col-span-full bg-green-50 p-3 rounded border border-green-200 text-green-900">
+                        <dt class="text-green-800">Resolution Information</dt>
+                        <dd>
+                            Marked as <strong>{{ comment.get_status_display }}</strong> by {{ comment.resolved_by.get_full_name|default:comment.resolved_by.username }} on {{ comment.resolved_at|date:"Y-m-d H:i" }}<br>
+                            {% if comment.resolution_notes %}
+                            <strong>Notes:</strong> {{ comment.resolution_notes }}
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+
+        <!-- Threaded Discussion -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-base font-semibold text-slate-800">Discussion Thread ({{ replies|length }})</h3>
+            </div>
+            <div class="card-body divide-y divide-slate-100">
+                {% for rep in replies %}
+                <div class="py-3">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-semibold text-sm text-slate-900">{{ rep.author.get_full_name|default:rep.author.username }}</span>
+                        <span class="text-xs text-slate-400">{{ rep.created_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                    <p class="text-sm text-slate-700 whitespace-pre-wrap">{{ rep.content }}</p>
+                </div>
+                {% empty %}
+                <div class="text-center text-slate-400 text-sm py-4">No replies in this thread yet.</div>
+                {% endfor %}
+
+                <!-- Reply Form -->
+                <div class="pt-4 mt-2">
+                    <form method="post" action="{% url 'documents:review_comment_reply' comment.pk %}">
+                        {% csrf_token %}
+                        <div class="form-group mb-3">
+                            <label class="form-label" for="{{ reply_form.content.id_for_label }}">Reply to Annotation</label>
+                            {{ reply_form.content }}
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i data-lucide="message-square"></i>
+                            <span>Post Reply</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action / Resolution Sidebar -->
+    <div>
+        {% if comment.status == "open" %}
+        <div class="card border-2 border-green-500">
+            <div class="card-header bg-green-50">
+                <h3 class="text-base font-semibold text-green-900 flex items-center gap-2">
+                    <i data-lucide="check-circle" class="text-green-600"></i>
+                    <span>Resolve / Close Comment</span>
+                </h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'documents:review_comment_resolve' comment.pk %}">
+                    {% csrf_token %}
+                    <div class="form-group mb-3">
+                        <label class="form-label" for="{{ resolve_form.status.id_for_label }}">Resolution Status *</label>
+                        {{ resolve_form.status }}
+                    </div>
+                    <div class="form-group mb-4">
+                        <label class="form-label" for="{{ resolve_form.resolution_notes.id_for_label }}">Resolution Justification / Notes *</label>
+                        {{ resolve_form.resolution_notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="check"></i>
+                        <span>Confirm Resolution</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="card bg-slate-50 border border-slate-200 p-4 text-center">
+            <div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-2">
+                <i data-lucide="check-check"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-800">Annotation Resolved</div>
+            <div class="text-xs text-slate-500">This comment thread has been addressed and closed.</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
