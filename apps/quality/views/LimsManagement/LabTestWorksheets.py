@@ -143,10 +143,10 @@ def lab_test_worksheet_edit(request, pk):
 @tenant_admin_required
 def lab_test_worksheet_delete(request, pk):
     obj = quality_object(request, LabTestWorksheet, pk)
-    if obj.status == "approved":
+    if obj.status == "approved" or obj.oos_investigations.exists():
         messages.error(
             request,
-            f"Lab Test Worksheet {obj.number} is approved and cannot be deleted under GxP laboratory records compliance.",
+            f"Lab Test Worksheet {obj.number} has linked OOS investigations or is approved and cannot be deleted under GxP laboratory records compliance.",
         )
         return redirect("quality:lab_test_worksheet_detail", pk=obj.pk)
     number = obj.number
