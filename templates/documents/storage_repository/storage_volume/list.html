@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Storage Volumes & Tiering — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <span>Storage Volumes</span>
+        </div>
+        <h1 class="page-title">Storage Volumes & Tiering</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:storage_volume_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Storage Volume</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="hard-drive"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Active Storage Targets</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="database"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_capacity_gb }} <span class="text-sm font-normal text-muted">GB</span></div>
+            <div class="stat-label">Aggregate Repository Capacity</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="pie-chart"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_utilized_gb }} <span class="text-sm font-normal text-muted">GB</span></div>
+            <div class="stat-label">Current Data Utilized</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" class="form-input" placeholder="Volume name, code, path...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="backend_type">Backend Provider</label>
+                <select name="backend_type" id="backend_type" class="form-select">
+                    <option value="">All Backends</option>
+                    {% for val, label in backend_choices %}
+                    <option value="{{ val }}" {% if backend_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="tier">Storage Tier</label>
+                <select name="tier" id="tier" class="form-select">
+                    <option value="">All Tiers</option>
+                    {% for val, label in tier_choices %}
+                    <option value="{{ val }}" {% if tier == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="sm:col-span-2 md:col-span-3 flex justify-end gap-2">
+                <a href="{% url 'documents:storage_volume_list' %}" class="btn btn-outline">Clear Filters</a>
+                <button type="submit" class="btn btn-primary">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Volume Code & Name</th>
+                    <th>Storage Backend</th>
+                    <th>Tier</th>
+                    <th>Capacity & Quota</th>
+                    <th>Utilization</th>
+                    <th>Flags</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for volume in volumes %}
+                <tr>
+                    <td>
+                        <div class="font-medium">
+                            <a href="{% url 'documents:storage_volume_detail' volume.pk %}" class="text-primary hover:underline">
+                                {{ volume.name }}
+                            </a>
+                        </div>
+                        <div class="font-mono text-xs text-muted flex items-center gap-2">
+                            <span>{{ volume.code }}</span>
+                            <span>•</span>
+                            <span>{{ volume.number }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ volume.backend_badge_class }}">
+                            {{ volume.get_backend_type_display }}
+                        </span>
+                        <div class="font-mono text-xs text-slate-500 mt-1 truncate max-w-xs">{{ volume.base_path }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ volume.tier_badge_class }}">
+                            {{ volume.get_tier_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-sm font-semibold text-slate-800">{{ volume.max_capacity_gb }} GB</div>
+                        <div class="text-xs text-muted">Warn threshold: {{ volume.warning_threshold_pct }}%</div>
+                    </td>
+                    <td style="min-width: 140px;">
+                        <div class="flex items-center justify-between text-xs mb-1">
+                            <span>{{ volume.utilized_gb }} GB</span>
+                            <span class="font-semibold {% if volume.is_over_warning %}text-amber-600{% elif volume.is_full %}text-red-600{% else %}text-slate-600{% endif %}">
+                                {{ volume.utilized_percentage }}%
+                            </span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                            <div class="h-2 rounded-full {% if volume.is_full %}bg-red-500{% elif volume.is_over_warning %}bg-amber-500{% else %}bg-blue-600{% endif %}" style="width: {{ volume.utilized_percentage }}%;"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="flex flex-wrap gap-1">
+                            {% if volume.is_default %}
+                            <span class="badge badge-green text-xs">Default</span>
+                            {% endif %}
+                            {% if volume.deduplication_enabled %}
+                            <span class="badge badge-slate text-xs">Dedupe</span>
+                            {% endif %}
+                            {% if volume.is_full %}
+                            <span class="badge badge-red text-xs">Full</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'documents:storage_volume_detail' volume.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'documents:storage_volume_edit' volume.pk %}" class="btn btn-icon" title="Edit Volume">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'documents:storage_volume_delete' volume.pk %}" onsubmit="return confirm('Are you sure you want to delete storage volume \'{{ volume.name }}\'?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Volume" {% if volume.is_default %}disabled{% endif %}>
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state text-center py-12">
+                            <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4 text-slate-400">
+                                <i data-lucide="hard-drive" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="text-base font-semibold text-slate-800 mb-1">No storage volumes configured</h3>
+                            <p class="text-sm text-muted mb-4">Set up local filesystem, NAS, or cloud S3/Azure storage volume targets.</p>
+                            <a href="{% url 'documents:storage_volume_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Storage Volume</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} volumes
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if backend_type %}&backend_type={{ backend_type }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="btn btn-outline btn-sm active font-bold">{{ page_obj.number }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if backend_type %}&backend_type={{ backend_type }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
