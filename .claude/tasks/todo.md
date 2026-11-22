@@ -39103,3 +39103,245 @@ apps/quality/
 
 ## Review notes
 (to be filled in at Phase 7 close-out)
+
+
+---
+# Sub-module 13.4: Document Storage & Repository (Module 13: Document Management System, `documents`) — plan from `research-documents-13.4.md` (2026-11-22)
+
+> **This plan EXTENDS an existing app.** `apps/documents/` is live with Sub-modules 13.1, 13.2, and 13.3.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0005_documentapprovalworkflow_documentapprovalrequest_and_more.py` (claims next available incremental migration `0006_...`).
+> Free prefixes verified (0 collisions repo-wide): **`DFLD`** (`DocumentFolder`), **`DSTG`** (`StorageVolume`), **`DREL`** (`DocumentRelationship`), **`DBLK`** (`DocumentBatchImport`).
+> Plan written from `.claude/tasks/research-documents-13.4.md` (Phase 1) and `NavERP.md` (`### 13.4 Document Storage & Repository`).
+> Package folder name: `apps/documents/{models,forms,views,urls}/StorageRepository/<Entity>.py` (`DocumentFolders.py`, `StorageVolumes.py`, `DocumentRelationships.py`, `DocumentBatchImports.py`, plus dedicated `RepositoryDashboard.py` in `views/` & `urls/`)
+> Template folder name: `templates/documents/storage_repository/{document_folder,storage_volume,document_relationship,document_batch_import}/{list,detail,form}.html` + `tree.html`, `graph.html`, `process.html`, `repository_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DFLD`** (`DocumentFolder`), **`DSTG`** (`StorageVolume`), **`DREL`** (`DocumentRelationship`), **`DBLK`** (`DocumentBatchImport`), all 4 model classes, and all URL stems (`folder_*`, `storage_volume_*`, `relationship_*`, `batch_import_*`, `repository_dashboard`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - Sibling DMS models (13.1, 13.2, 13.3): `documents.Document` (`apps/documents/models/VersionControl/Documents.py`, `DOC`), `documents.DocumentVersion` (`apps/documents/models/VersionControl/DocumentVersions.py`, `DVER`), `documents.DocumentApprovalWorkflow` (`apps/documents/models/ApprovalWorkflow/DocumentApprovalWorkflows.py`, `DWF`).
+  - Internal 13.4 relationships: `DocumentFolder.parent` -> `self`, `DocumentFolder.department` -> `core.OrgUnit`, `DocumentFolder.owner` -> `accounts.User`; `DocumentRelationship.source_document` -> `Document`, `DocumentRelationship.target_document` -> `Document`, `DocumentRelationship.created_by` -> `accounts.User`; `DocumentBatchImport.target_folder` -> `DocumentFolder`, `DocumentBatchImport.storage_volume` -> `StorageVolume`, `DocumentBatchImport.created_by` -> `accounts.User`.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `core.OrgUnit`, `Document`, `DocumentFolder`, `StorageVolume`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Enterprise Commercial Standards Alignment (Alfresco, OpenText Extended ECM, Microsoft SharePoint & Azure Blob, Laserfiche, Box, M-Files, OnBase, NetApp StorageGRID)**:
+  - **Hierarchical Folder Taxonomy & Smart Folders**: Self-referential tree nesting, automatic path generation, Lucide icons and colors, inheritance of classification and document type defaults, and smart dynamic virtual folder views.
+  - **Heterogeneous Storage Volume & Tiering Abstraction**: Multi-backend configuration (`local_filesystem`, `network_nas`, `s3_compatible`, `azure_blob`, `google_cloud_storage`, `air_gapped`), 4 tiers (`hot`, `warm`, `cold`, `glacier_archive`), capacity quota monitoring (`max_capacity_bytes`, `utilized_bytes`, `utilized_percentage`), warning thresholds, volume rollover, deduplication, and compression flags.
+  - **Bidirectional Semantic Cross-Linking**: 7 semantic relationship types (`parent_child`, `supersedes`, `references`, `derived_from`, `contract_exhibit`, `supporting_evidence`, `amendment`), dependency level tracking (`informational`, `contractual`, `strict_blocking`), cycle prevention, and bidirectional visual relationship cards on document detail.
+  - **High-Volume Bulk Ingestion & ZIP Import**: Batch import jobs tracking ZIP archives, multi-file uploads, and legacy migration manifests with progress counters (`total_files_detected`, `processed_files_count`, `success_files_count`, `failed_files_count`, `total_bytes_processed`), automated archive extraction into target folders and storage volumes, with failure manifests and audit logs.
+  - **Centralized Repository Command Center Dashboard**: Visual dashboard tracking total folders, documents filed, storage volume capacity gauge, tier distribution, relationship network metrics, and active bulk import pipelines.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `started_at`, `completed_at`), auto-numbers (`number`), and computed metrics (`utilized_percentage`, `is_full`) MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`utilized_gb`, `free_bytes`, `success_rate_pct`, `is_over_quota`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+## Models (from research — 4 representative tenant-scoped models)
+
+### 1. `DocumentFolder` [PREFIX: `DFLD-`]
+- **Purpose**: Hierarchical folder taxonomy and smart virtual folder views.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DFLD"`)
+  - `name`: `CharField(max_length=150)`
+  - `slug`: `SlugField(max_length=160, blank=True)`
+  - `parent`: `ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", db_index=True)`
+  - `path`: `CharField(max_length=500, blank=True, help_text="Full materialized path e.g. /Corporate/Legal/Contracts/")`
+  - `description`: `TextField(blank=True)`
+  - `color_code`: `CharField(max_length=20, default="#3B82F6")`
+  - `icon_name`: `CharField(max_length=50, default="folder")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="document_folders")`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_document_folders")`
+  - `default_classification`: `CharField(max_length=25, choices=CLASSIFICATION_CHOICES, default="internal", db_index=True)` (`public`, `internal`, `confidential`, `restricted`)
+  - `default_document_type`: `CharField(max_length=40, choices=DOCUMENT_TYPE_CHOICES, default="general", blank=True)`
+  - `is_virtual`: `BooleanField(default=False, db_index=True, help_text="Dynamic Smart Folder driven by query criteria")`
+  - `virtual_criteria_json`: `TextField(blank=True, help_text="JSON criteria for dynamic virtual folder filtering")`
+  - `is_system`: `BooleanField(default=False, help_text="Protected system folder (e.g. Root, Archive)")`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dfld_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "parent", "slug"], name="doc_dfld_tnt_par_slug_uniq")` (26 chars)
+  - `models.Index(fields=["tenant", "parent", "is_active"], name="doc_dfld_tnt_par_act_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "path"], name="doc_dfld_tnt_path_idx")` (21 chars)
+- **Form exclusions**: `tenant`, `number`, `path`, `is_system`, `created_at`, `updated_at`.
+
+### 2. `StorageVolume` [PREFIX: `DSTG-`]
+- **Purpose**: Physical and cloud storage repository targets, tiering policies, and quota monitoring.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DSTG"`)
+  - `name`: `CharField(max_length=150)`
+  - `code`: `CharField(max_length=50, db_index=True)`
+  - `backend_type`: `CharField(max_length=30, choices=BACKEND_TYPE_CHOICES, default="local_filesystem", db_index=True)` (`local_filesystem`, `network_nas`, `s3_compatible`, `azure_blob`, `google_cloud_storage`, `air_gapped`)
+  - `tier`: `CharField(max_length=25, choices=TIER_CHOICES, default="hot", db_index=True)` (`hot`, `warm`, `cold`, `glacier_archive`)
+  - `base_path`: `CharField(max_length=255, help_text="Local/mount path or bucket/container name")`
+  - `region`: `CharField(max_length=50, blank=True)`
+  - `endpoint_url`: `CharField(max_length=255, blank=True)`
+  - `max_capacity_bytes`: `BigIntegerField(default=107374182400, help_text="Total storage capacity in bytes (default 100 GB)")`
+  - `utilized_bytes`: `BigIntegerField(default=0)`
+  - `utilized_percentage`: `DecimalField(max_digits=5, decimal_places=2, default=0.0)`
+  - `warning_threshold_pct`: `PositiveIntegerField(default=85, help_text="Warning threshold % for rollover/alerts")`
+  - `is_default`: `BooleanField(default=False, db_index=True)`
+  - `is_full`: `BooleanField(default=False, db_index=True)`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `compression_type`: `CharField(max_length=20, choices=COMPRESSION_CHOICES, default="none")` (`none`, `gzip`, `zstandard`)
+  - `deduplication_enabled`: `BooleanField(default=True)`
+  - `encryption_type`: `CharField(max_length=20, choices=ENCRYPTION_CHOICES, default="aes_256")` (`none`, `aes_256`, `kms_managed`)
+  - `rollover_volume`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="overflow_sources")`
+  - `description`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dstg_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "code"], name="doc_dstg_tnt_code_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "backend_type", "tier"], name="doc_dstg_tnt_bknd_tier_idx")` (26 chars)
+  - `models.Index(fields=["tenant", "is_default", "is_active"], name="doc_dstg_tnt_def_act_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `utilized_bytes`, `utilized_percentage`, `is_full`, `created_at`, `updated_at`.
+
+### 3. `DocumentRelationship` [PREFIX: `DREL-`]
+- **Purpose**: Semantic cross-document relationships and bidirectional linkage.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DREL"`)
+  - `source_document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="outgoing_relationships", db_index=True)`
+  - `target_document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="incoming_relationships", db_index=True)`
+  - `relationship_type`: `CharField(max_length=30, choices=RELATIONSHIP_TYPE_CHOICES, default="references", db_index=True)` (`parent_child`, `supersedes`, `references`, `derived_from`, `contract_exhibit`, `supporting_evidence`, `amendment`)
+  - `is_bidirectional`: `BooleanField(default=True, help_text="Displays symmetrically in both documents")`
+  - `dependency_level`: `CharField(max_length=25, choices=DEPENDENCY_CHOICES, default="informational")` (`informational`, `contractual`, `strict_blocking`)
+  - `description`: `CharField(max_length=255, blank=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_document_relationships")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_drel_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "source_document", "target_document", "relationship_type"], name="doc_drel_tnt_rel_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "source_document", "relationship_type"], name="doc_drel_tnt_src_rel_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "target_document", "relationship_type"], name="doc_drel_tnt_tgt_rel_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `created_by`, `created_at`, `updated_at`.
+
+### 4. `DocumentBatchImport` [PREFIX: `DBLK-`]
+- **Purpose**: High-volume bulk ingestion, ZIP archive unpacking, and legacy migration session manager.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DBLK"`)
+  - `batch_name`: `CharField(max_length=150)`
+  - `source_type`: `CharField(max_length=25, choices=SOURCE_TYPE_CHOICES, default="zip_archive", db_index=True)` (`zip_archive`, `file_manifest`, `multi_file`, `legacy_migration`)
+  - `target_folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.SET_NULL, null=True, blank=True, related_name="batch_imports")`
+  - `storage_volume`: `ForeignKey("documents.StorageVolume", on_delete=models.SET_NULL, null=True, blank=True, related_name="batch_imports")`
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="draft", db_index=True)` (`draft`, `queued`, `extracting`, `validating`, `processing`, `completed`, `partially_completed`, `failed`)
+  - `archive_file`: `FileField(upload_to="documents/bulk_imports/%Y/%m/", null=True, blank=True)`
+  - `total_files_detected`: `PositiveIntegerField(default=0)`
+  - `processed_files_count`: `PositiveIntegerField(default=0)`
+  - `success_files_count`: `PositiveIntegerField(default=0)`
+  - `failed_files_count`: `PositiveIntegerField(default=0)`
+  - `total_bytes_processed`: `BigIntegerField(default=0)`
+  - `log_summary`: `TextField(blank=True, help_text="Extraction log and summary details")`
+  - `error_details`: `TextField(blank=True, help_text="Diagnostic error details for skipped/corrupted files")`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_document_batch_imports")`
+  - `started_at`: `DateTimeField(null=True, blank=True)`
+  - `completed_at`: `DateTimeField(null=True, blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dblk_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "status", "created_at"], name="doc_dblk_tnt_stat_date_idx")` (26 chars)
+  - `models.Index(fields=["tenant", "target_folder", "status"], name="doc_dblk_tnt_fld_stat_idx")` (25 chars)
+- **Form exclusions**: `tenant`, `number`, `status`, `total_files_detected`, `processed_files_count`, `success_files_count`, `failed_files_count`, `total_bytes_processed`, `log_summary`, `error_details`, `created_by`, `started_at`, `completed_at`, `created_at`, `updated_at`. Dedicated view/action for running the import process.
+
+---
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-documents-13.4.md` with every field, choice, URL name, and view context key.
+
+### Phase 3.2: Entity by Entity Implementation
+- [ ] **Entity 1: DocumentFolder** (`DFLD-`)
+  - [ ] `apps/documents/models/StorageRepository/DocumentFolders.py`
+  - [ ] `apps/documents/forms/StorageRepository/DocumentFolders.py`
+  - [ ] `apps/documents/views/StorageRepository/DocumentFolders.py`
+  - [ ] `apps/documents/urls/StorageRepository/DocumentFolders.py`
+  - [ ] `templates/documents/storage_repository/document_folder/list.html`
+  - [ ] `templates/documents/storage_repository/document_folder/detail.html`
+  - [ ] `templates/documents/storage_repository/document_folder/form.html`
+  - [ ] `templates/documents/storage_repository/document_folder/tree.html`
+- [ ] **Entity 2: StorageVolume** (`DSTG-`)
+  - [ ] `apps/documents/models/StorageRepository/StorageVolumes.py`
+  - [ ] `apps/documents/forms/StorageRepository/StorageVolumes.py`
+  - [ ] `apps/documents/views/StorageRepository/StorageVolumes.py`
+  - [ ] `apps/documents/urls/StorageRepository/StorageVolumes.py`
+  - [ ] `templates/documents/storage_repository/storage_volume/list.html`
+  - [ ] `templates/documents/storage_repository/storage_volume/detail.html`
+  - [ ] `templates/documents/storage_repository/storage_volume/form.html`
+- [ ] **Entity 3: DocumentRelationship** (`DREL-`)
+  - [ ] `apps/documents/models/StorageRepository/DocumentRelationships.py`
+  - [ ] `apps/documents/forms/StorageRepository/DocumentRelationships.py`
+  - [ ] `apps/documents/views/StorageRepository/DocumentRelationships.py`
+  - [ ] `apps/documents/urls/StorageRepository/DocumentRelationships.py`
+  - [ ] `templates/documents/storage_repository/document_relationship/list.html`
+  - [ ] `templates/documents/storage_repository/document_relationship/detail.html`
+  - [ ] `templates/documents/storage_repository/document_relationship/form.html`
+  - [ ] `templates/documents/storage_repository/document_relationship/graph.html`
+- [ ] **Entity 4: DocumentBatchImport** (`DBLK-`)
+  - [ ] `apps/documents/models/StorageRepository/DocumentBatchImports.py`
+  - [ ] `apps/documents/forms/StorageRepository/DocumentBatchImports.py`
+  - [ ] `apps/documents/views/StorageRepository/DocumentBatchImports.py`
+  - [ ] `apps/documents/urls/StorageRepository/DocumentBatchImports.py`
+  - [ ] `templates/documents/storage_repository/document_batch_import/list.html`
+  - [ ] `templates/documents/storage_repository/document_batch_import/detail.html`
+  - [ ] `templates/documents/storage_repository/document_batch_import/form.html`
+  - [ ] `templates/documents/storage_repository/document_batch_import/process.html`
+- [ ] **Dedicated Repository Command Center Dashboard**
+  - [ ] `apps/documents/views/StorageRepository/RepositoryDashboard.py`
+  - [ ] `apps/documents/urls/StorageRepository/RepositoryDashboard.py`
+  - [ ] `templates/documents/storage_repository/repository_dashboard.html`
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/__init__.py`
+- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
+- [ ] Register all 4 models in `apps/documents/admin.py`
+- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.4 seed data
+- [ ] Wire `LIVE_LINKS["13.4"]` in `apps/core/navigation.py`
+- [ ] Run `makemigrations documents`
+- [ ] Run `migrate`
+- [ ] Run `seed_documents` twice (idempotency check)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.4.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.4.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.4.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.4.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.4.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.4.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.4.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite (Unfiltered)
+- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [ ] Implement `apps/documents/tests/test_storage_repository_models.py`
+- [ ] Implement `apps/documents/tests/test_storage_repository_forms.py`
+- [ ] Implement `apps/documents/tests/test_storage_repository_views.py`
+- [ ] Implement `apps/documents/tests/test_storage_repository_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.4 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.4 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.4.md` and `.claude/tasks/gaps-documents-13.4.md`
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+
+## Later passes / deferred (from research-documents-13.4.md)
+- **Custom Metadata Schemas & Automated OCR Indexing** → Sub-module 13.5 (Metadata & Indexing).
+- **Faceted Full-Text Search & Saved Search Alerts** → Sub-module 13.6 (Search & Discovery).
+- **Dynamic Watermarking & DRM Copy/Paste Protection** → Sub-module 13.7 (Document Security & Access Control).
+- **External Guest Link Sharing & Expiration Dates** → Sub-module 13.8 (Collaboration & Sharing).
+- **System-Wide DMS Event Audit Log & Compliance Certification** → Sub-module 13.10 (Audit Trail & Reporting).
+- **Cloud Provider SDK Streaming Uploads (AWS S3 boto3, Azure Blob REST API)** → Deferred to future cloud connector pass; underlying storage volume model fully abstracts endpoint & credential configuration.
+- **Distributed Celery/Redis Background Task Queue for Multi-GB ZIP Archive Processing** → Deferred to future async infrastructure upgrade; initial implementation handles ZIP extraction synchronously with atomic database transactions and per-file error logs.
+
+## Review notes
+(to be filled in at Phase 7 close-out)
