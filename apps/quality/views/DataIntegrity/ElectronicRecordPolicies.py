@@ -148,6 +148,12 @@ def electronic_record_policy_edit(request, pk):
 @tenant_admin_required
 def electronic_record_policy_delete(request, pk):
     policy = quality_object(request, ElectronicRecordPolicy, pk)
+    if policy.legal_hold:
+        messages.error(
+            request,
+            f"Cannot delete Electronic Record Policy {policy.number}: Policy is under active Legal Hold freeze.",
+        )
+        return redirect("quality:electronic_record_policy_detail", pk=policy.pk)
     num = policy.number
     with transaction.atomic():
         write_audit_log(request.user, policy, "delete", tenant=request.tenant)
