@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ batch_import.number }}{% else %}New Batch Import{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <a href="{% url 'documents:batch_import_list' %}">Batch Imports</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Batch{% else %}New Batch{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:batch_import_detail' batch_import.pk %}{% else %}{% url 'documents:batch_import_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Batch Ingestion Parameters & Package Payload</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 text-sm text-red-700 bg-red-50 rounded border border-red-200">
+                {% for err in form.non_field_errors %}{{ err }}<br>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.batch_name.id_for_label }}">Batch Ingestion Job Title *</label>
+                    {{ form.batch_name }}
+                    {% if form.batch_name.errors %}<div class="form-error">{{ form.batch_name.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.source_type.id_for_label }}">Source Package Format *</label>
+                    {{ form.source_type }}
+                    {% if form.source_type.errors %}<div class="form-error">{{ form.source_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_folder.id_for_label }}">Target Repository Folder</label>
+                    {{ form.target_folder }}
+                    <span class="text-xs text-muted">Destination taxonomy folder (optional)</span>
+                    {% if form.target_folder.errors %}<div class="form-error">{{ form.target_folder.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.storage_volume.id_for_label }}">Target Storage Volume</label>
+                    {{ form.storage_volume }}
+                    <span class="text-xs text-muted">Target storage tier/backend (optional)</span>
+                    {% if form.storage_volume.errors %}<div class="form-error">{{ form.storage_volume.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.archive_file.id_for_label }}">Payload Package File (.zip, .tar, .csv)</label>
+                    {{ form.archive_file }}
+                    <span class="text-xs text-muted">Upload compressed archive or manifest package</span>
+                    {% if form.archive_file.errors %}<div class="form-error">{{ form.archive_file.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:batch_import_detail' batch_import.pk %}{% else %}{% url 'documents:batch_import_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Batch Import Job{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
