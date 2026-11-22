@@ -166,6 +166,7 @@ def oos_investigation_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def oos_investigation_close(request, pk):
     obj = quality_object(request, OosInvestigation, pk)
