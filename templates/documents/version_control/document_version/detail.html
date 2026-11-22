@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}v{{ version.version_label }} — {{ document.title }} — NavERP DMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_detail' document.pk %}">{{ document.number }}</a>
+            <span>/</span>
+            <span>v{{ version.version_label }}</span>
+        </nav>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Version v{{ version.version_label }}</h1>
+            <span class="badge {{ version.status_badge_class }}">{{ version.get_status_display }}</span>
+            <span class="badge {{ version.version_type_badge_class }}">{{ version.get_version_type_display }}</span>
+            {% if version.is_official %}
+            <span class="badge badge-green text-xs font-semibold">Official Release</span>
+            {% endif %}
+        </div>
+        <p class="text-xs text-slate-500 mt-1 font-mono">
+            {{ document.title }} &bull; Record: {{ version.number }} &bull; Author: {{ version.author.username|default:"System" }} &bull; {{ version.created_at|date:"M d, Y H:i" }}
+        </p>
+    </div>
+    <div class="page-actions flex gap-2">
+        {% if version.file %}
+        <a href="{{ version.file.url }}" class="btn btn-primary" download>
+            <i data-lucide="download"></i> Download Payload
+        </a>
+        {% endif %}
+        <a href="{% url 'documents:document_version_compare' %}?document={{ document.pk }}&version_b={{ version.pk }}{% if predecessor %}&version_a={{ predecessor.pk }}{% endif %}" class="btn btn-outline">
+            <i data-lucide="git-compare"></i> Compare Diff
+        </a>
+        <form method="post" action="{% url 'documents:document_version_rollback' version.pk %}" class="inline" onsubmit="return confirm('Restore document {{ document.number }} to version v{{ version.version_label }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600 hover:text-amber-800">
+                <i data-lucide="history"></i> Rollback to This Version
+            </button>
+        </form>
+        <a href="{% url 'documents:document_version_edit' version.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit Metadata
+        </a>
+    </div>
+</div>
+
+<!-- Metadata Card -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Revision Snapshot Properties</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Document</dt>
+                <dd>
+                    <a href="{% url 'documents:document_detail' document.pk %}" class="font-medium text-blue-600 hover:underline">
+                        {{ document.number }} — {{ document.title }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Version Label</dt>
+                <dd class="font-mono font-bold text-slate-900">v{{ version.version_label }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>SemVer Breakdown</dt>
+                <dd class="font-mono text-xs">Major: {{ version.major_number }} | Minor: {{ version.minor_number }} | Patch: {{ version.patch_number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Version Classification Type</dt>
+                <dd><span class="badge {{ version.version_type_badge_class }}">{{ version.get_version_type_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Revision Status</dt>
+                <dd><span class="badge {{ version.status_badge_class }}">{{ version.get_status_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Official Publication</dt>
+                <dd>{% if version.is_official %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-slate">No (Draft / Working)</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Author / Committer</dt>
+                <dd>
+                    {% if version.author %}
+                    {{ version.author.get_full_name|default:version.author.username }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Branch Lineage</dt>
+                <dd>
+                    {% if version.branch %}
+                    <a href="{% url 'documents:document_branch_detail' version.branch.pk %}" class="text-blue-600 hover:underline">
+                        {{ version.branch.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">Mainline</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Restored From Baseline</dt>
+                <dd>
+                    {% if version.restored_from_version %}
+                    <a href="{% url 'documents:document_version_detail' version.restored_from_version.pk %}" class="font-mono text-amber-600 hover:underline">
+                        v{{ version.restored_from_version.version_label }} ({{ version.restored_from_version.number }})
+                    </a>
+                    {% else %}
+                    —
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>File Payload Name</dt>
+                <dd class="font-mono text-xs">{{ version.file_name|default:"No file attached" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Payload Size</dt>
+                <dd class="text-xs">{{ version.file_size }} bytes</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Cryptographic Digest (SHA-256)</dt>
+                <dd class="font-mono text-[11px] text-slate-600 truncate" title="{{ version.file_hash }}">
+                    {{ version.file_hash|default:"—" }}
+                </dd>
+            </div>
+            <div class="detail-item col-span-2">
+                <dt>Revision Change Summary</dt>
+                <dd class="text-sm text-slate-800">{{ version.change_summary|default:"No change description recorded." }}</dd>
+            </div>
+        </dl>
+    </div>
+</div>
+
+<!-- Extracted Text Content Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Extracted Text Layer / Document Content</h2>
+        <span class="text-xs text-slate-500">Used for full-text redlining & comparison</span>
+    </div>
+    <div class="card-body">
+        {% if version.extracted_text %}
+        <div class="p-4 rounded-lg bg-slate-50 border border-slate-200 font-mono text-xs text-slate-800 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
+{{ version.extracted_text }}
+        </div>
+        {% else %}
+        <div class="text-center py-6 text-xs text-slate-400">
+            No extracted text layer recorded for this version snapshot.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
