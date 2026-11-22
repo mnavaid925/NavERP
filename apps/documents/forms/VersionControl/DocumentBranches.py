@@ -51,6 +51,10 @@ class DocumentBranchForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["document", "base_version", "created_by"])
+        document = cleaned_data.get("document")
+        base_version = cleaned_data.get("base_version")
+        if document and base_version and base_version.document_id != document.id:
+            self.add_error("base_version", "The selected base version does not belong to the selected document.")
         return cleaned_data
 
 
