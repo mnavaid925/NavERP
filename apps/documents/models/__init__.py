@@ -1,3 +1,13 @@
+from apps.documents.models.ApprovalWorkflow.DocumentApprovalRequests import (
+    DocumentApprovalRequest,
+)
+from apps.documents.models.ApprovalWorkflow.DocumentApprovalWorkflows import (
+    DocumentApprovalWorkflow,
+)
+from apps.documents.models.ApprovalWorkflow.DocumentReviewComments import (
+    DocumentReviewComment,
+)
+from apps.documents.models.ApprovalWorkflow.DocumentSignatures import DocumentSignature
 from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
@@ -16,4 +26,8 @@ __all__ = [
     "TemplateSection",
     "DocumentDraft",
     "DraftCollaboration",
+    "DocumentApprovalWorkflow",
+    "DocumentApprovalRequest",
+    "DocumentSignature",
+    "DocumentReviewComment",
 ]
