@@ -225,7 +225,7 @@
                 <td class="py-2.5 px-3"><span class="badge {{ w.get_status_badge }}">{{ w.get_status_display }}</span></td>
                 <td class="py-2.5 px-3"><span class="badge {{ w.get_disposition_badge }}">{{ w.get_disposition_display }}</span></td>
                 <td class="py-2.5 px-3 text-right table-actions">
-                  <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="btn btn-icon">
+                  <a href="{% url 'quality:lab_test_worksheet_detail' w.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                   </a>
                 </td>
