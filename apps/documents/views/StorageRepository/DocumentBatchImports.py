@@ -17,6 +17,9 @@ from apps.documents.models.StorageRepository.StorageVolumes import StorageVolume
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.views._common import documents_object, documents_scope
 
+MAX_BATCH_FILES = 500
+MAX_BATCH_BYTES = 100 * 1024 * 1024  # 100 MB uncompressed limit
+
 
 @login_required
 def batch_import_list(request):
@@ -191,6 +194,18 @@ def batch_import_process(request, pk):
                     with zipfile.ZipFile(archive_stream, "r") as z:
                         file_list = [f for f in z.infolist() if not f.is_dir()]
                         extracted_count = len(file_list)
+                        if extracted_count > MAX_BATCH_FILES:
+                            raise ValueError(
+                                f"Archive contains {extracted_count} files, exceeding limit of {MAX_BATCH_FILES} files."
+                            )
+
+                        uncompressed_bytes = sum(f.file_size for f in file_list)
+                        if uncompressed_bytes > MAX_BATCH_BYTES:
+                            raise ValueError(
+                                f"Archive uncompressed size ({round(uncompressed_bytes / (1024**2), 1)} MB) "
+                                f"exceeds limit of {round(MAX_BATCH_BYTES / (1024**2))} MB."
+                            )
+
                         logs.append(f"Archive inspected: {extracted_count} candidate file(s) found in ZIP container.")
 
                         target_classification = "internal"
