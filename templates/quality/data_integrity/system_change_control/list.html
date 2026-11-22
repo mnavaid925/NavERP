@@ -62,10 +62,10 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div class="form-group md:col-span-2">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div class="form-group">
                 <label class="form-label" for="q">Search</label>
-                <input type="text" name="q" id="q" value="{{ q }}" placeholder="Change title, description, justification, number..." class="form-input">
+                <input type="text" name="q" id="q" value="{{ q }}" placeholder="Title, description, justification, #..." class="form-input">
             </div>
             <div class="form-group">
                 <label class="form-label" for="change_type">Type</label>
@@ -82,6 +82,24 @@
                     <option value="">All Priorities</option>
                     {% for val, label in priority_choices %}
                     <option value="{{ val }}" {% if priority_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="gxp_impact">GxP Impact</label>
+                <select name="gxp_impact" id="gxp_impact" class="form-select">
+                    <option value="">All GxP Impacts</option>
+                    {% for val, label in gxp_choices %}
+                    <option value="{{ val }}" {% if gxp_selected == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_selected == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
