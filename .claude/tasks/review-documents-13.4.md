@@ -54,13 +54,13 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Submodule package folders lack `__init__.py` files required by NavERP package structure standards.
   - **Fix**: Create package `__init__.py` files with docstrings in each of the four directories. [x] fixed — 5ad4157f, 2f6a5d1b, 69455aeb, d68b264e: create package __init__.py files in StorageRepository subpackages
 
-- [ ] **I2**: Disallowed and Undefined Theme CSS Badge Class `badge-purple` (Violates L33).
+- [x] **I2**: Disallowed and Undefined Theme CSS Badge Class `badge-purple` (Violates L33).
   - **Locations**:
     - `templates/documents/storage_repository/document_folder/list.html:162`
     - `templates/documents/storage_repository/document_folder/detail.html:57`
     - `templates/documents/storage_repository/document_folder/tree.html:63, 92`
   - **Problem**: `badge-purple` is not defined in `static/css/theme.css` (only `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate` exist), causing smart virtual folder badges to render unstyled.
-  - **Fix**: Replace `badge-purple` with `badge-info`.
+  - **Fix**: Replace `badge-purple` with `badge-info`. [x] fixed — 51234013, c7d57000, d30ebb53: replace badge-purple with badge-info in folder templates
 
 - [ ] **I3**: Non-Atomic Operations during Volume Save, Ingestion Execution, and Record Deletions.
   - **Locations**:
