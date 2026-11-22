@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{{ section.title }} — Section Details{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'documents:template_section_list' %}">Sections</a>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">{{ section.number }}</span>
+        </nav>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ section.title }}</h1>
+            <span class="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{{ section.number }}</span>
+            <span class="badge badge-info text-xs">{{ section.get_section_type_display }}</span>
+            {% if section.is_locked %}
+            <span class="badge badge-amber text-xs"><i data-lucide="lock" class="w-3 h-3 mr-1 inline"></i> Locked</span>
+            {% endif %}
+            {% if section.is_mandatory %}
+            <span class="badge badge-red text-xs">Mandatory</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'documents:template_section_edit' section.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit
+        </a>
+        <form method="POST" action="{% url 'documents:template_section_delete' section.pk %}" onsubmit="return confirm('Delete this section?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1.5"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Clause / Section Content</h2>
+            </div>
+            <div class="card-body p-5">
+                {% if section.content %}
+                <div class="bg-slate-50 p-4 rounded border border-slate-200 font-mono text-sm whitespace-pre-wrap leading-relaxed text-slate-800">
+                    {{ section.content }}
+                </div>
+                {% else %}
+                <div class="p-6 text-center text-slate-400 text-sm">
+                    No content defined for this section clause.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Section Properties</h2>
+            </div>
+            <div class="card-body p-4 text-xs space-y-3">
+                <div>
+                    <span class="text-slate-400 block">Section Type</span>
+                    <span class="font-medium text-slate-800">{{ section.get_section_type_display }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Parent Document Template</span>
+                    {% if section.template %}
+                    <a href="{% url 'documents:template_detail' section.template.pk %}" class="font-medium text-blue-600 hover:underline">
+                        {{ section.template.name }}
+                    </a>
+                    {% else %}
+                    <span class="badge badge-slate text-xs">Global Modular Block</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Sort Order</span>
+                    <span class="font-medium font-mono text-slate-800">{{ section.order }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Last Modified</span>
+                    <span class="font-medium text-slate-800">{{ section.updated_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
