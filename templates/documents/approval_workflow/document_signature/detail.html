@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ signature.number }} — Electronic Signature — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:signature_list' %}">Signatures</a>
+            <span>/</span>
+            <span>{{ signature.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ signature.number }}: {{ signature.signer_name }}</h1>
+            <span class="badge {{ signature_type_css }}">{{ signature.get_signature_type_display }}</span>
+            <span class="badge {{ signature_meaning_css }}">{{ signature.get_signature_meaning_display }}</span>
+            {% if signature.is_valid %}
+            <span class="badge badge-green">Cryptographically Valid</span>
+            {% else %}
+            <span class="badge badge-red">Invalid / Revoked</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:signature_manifest' signature.pk %}" class="btn btn-primary">
+            <i data-lucide="award"></i>
+            <span>View Certificate Manifest</span>
+        </a>
+        <a href="{% url 'documents:signature_verify_token' signature.signature_token %}" class="btn btn-outline">
+            <i data-lucide="shield-check"></i>
+            <span>Verify Token</span>
+        </a>
+        <a href="{% url 'documents:signature_list' %}" class="btn btn-outline">
+            <span>Back to List</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2">
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Signature Execution & Audit Metadata</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Signature Record #</dt>
+                        <dd class="font-mono font-semibold">{{ signature.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' signature.document.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ signature.document.number }} — {{ signature.document.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Document Version</dt>
+                        <dd>{{ signature.version.version_label|default:"Head Baseline" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Signer Legal Identity</dt>
+                        <dd class="font-medium text-slate-900">{{ signature.signer_name }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Signer Title & Email</dt>
+                        <dd>{{ signature.signer_title|default:"—" }} &lt;{{ signature.signer_email|default:signature.signer.email }}&gt;</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Signing User Account</dt>
+                        <dd>
+                            {% if signature.signer %}
+                                {{ signature.signer.get_full_name|default:signature.signer.username }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Execution Timestamp</dt>
+                        <dd>{{ signature.signed_at|date:"Y-m-d H:i:s" }} UTC</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>IP Address & Environment</dt>
+                        <dd class="font-mono text-xs">{{ signature.ip_address|default:"127.0.0.1" }}</dd>
+                    </div>
+                    <div class="detail-item col-span-full">
+                        <dt>User Agent / Client Software</dt>
+                        <dd class="text-xs text-slate-600 font-mono">{{ signature.user_agent|default:"Standard Web Browser" }}</dd>
+                    </div>
+                    <div class="detail-item col-span-full">
+                        <dt>Document Checksum (SHA-256)</dt>
+                        <dd class="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 break-all select-all">
+                            {{ signature.document_checksum }}
+                        </dd>
+                    </div>
+                    <div class="detail-item col-span-full">
+                        <dt>Cryptographic Verification Token (UUID)</dt>
+                        <dd class="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 break-all select-all">
+                            {{ signature.signature_token }}
+                        </dd>
+                    </div>
+                    {% if signature.certificate_serial %}
+                    <div class="detail-item col-span-full">
+                        <dt>X.509 Certificate Serial</dt>
+                        <dd class="font-mono text-xs text-slate-700">{{ signature.certificate_serial }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Glyph / Seal Card -->
+    <div>
+        <div class="card mb-6">
+            <div class="card-header">
+                <h3 class="text-base font-semibold text-slate-800">Signature Seal & Glyph</h3>
+            </div>
+            <div class="card-body flex flex-col items-center justify-center p-6 bg-slate-50 min-h-[220px]">
+                {% if signature.signature_glyph %}
+                <div class="w-full bg-white p-4 rounded border border-slate-200 text-center font-mono text-xs overflow-hidden">
+                    {{ signature.signature_glyph|safe }}
+                </div>
+                {% else %}
+                <div class="w-full bg-white p-6 rounded-lg border-2 border-dashed border-slate-300 text-center">
+                    <div class="font-serif italic text-2xl text-slate-800 mb-1">{{ signature.signer_name }}</div>
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-mono">Electronically Signed via NavERP</div>
+                    <div class="text-[10px] text-slate-400 font-mono mt-1">{{ signature.signed_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                {% endif %}
+                <div class="text-xs text-slate-500 mt-4 text-center">
+                    Compliant with 21 CFR Part 11 and ESIGN Electronic Signature Act.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
