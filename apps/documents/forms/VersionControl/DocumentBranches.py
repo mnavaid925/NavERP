@@ -1,7 +1,7 @@
 from django import forms
 
 from apps.accounts.models import User
-from apps.documents.forms._common import TenantUniqueMixin, reject_foreign
+from apps.documents.forms._common import TenantUniqueMixin, reject_foreign, validate_safe_doc_upload
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
 from apps.documents.models.VersionControl.DocumentVersions import DocumentVersion
@@ -85,3 +85,7 @@ class BranchMergeForm(forms.Form):
         widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 4, "placeholder": "Merged text content layer"}),
         label="Merged Extracted Text",
     )
+
+    def clean_file(self):
+        f = self.cleaned_data.get("file")
+        return validate_safe_doc_upload(f)
