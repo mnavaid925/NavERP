@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Approval Requests — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_list' %}">Approval Workflows</a>
+            <span>/</span>
+            <span>Approval Requests</span>
+        </div>
+        <h1 class="page-title">Approval Requests & Tasks</h1>
+    </div>
+    <div class="page-actions">
+        <a href="?mine=1{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn {% if request.GET.mine == '1' %}btn-primary{% else %}btn-outline{% endif %}">
+            <i data-lucide="inbox"></i>
+            <span>My Pending Requests ({{ my_pending_count }})</span>
+        </a>
+        <a href="{% url 'documents:approval_request_create' %}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>New Request</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" class="form-input" placeholder="Request #, workflow, approver...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="stage_type">Stage Rule</label>
+                <select name="stage_type" id="stage_type" class="form-select">
+                    <option value="">All Rules</option>
+                    {% for val, label in stage_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.stage_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-span-full sm:col-span-1 flex items-end gap-2">
+                <a href="{% url 'documents:approval_request_list' %}" class="btn btn-outline">Clear</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Approval Queue ({{ total_count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Request #</th>
+                    <th>Workflow & Document</th>
+                    <th>Stage</th>
+                    <th>Approver / Assigned</th>
+                    <th>Rule</th>
+                    <th>Status</th>
+                    <th>Due Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in requests %}
+                <tr>
+                    <td class="font-mono text-sm">
+                        <a href="{% url 'documents:approval_request_detail' r.pk %}" class="text-blue-600 hover:underline font-semibold">
+                            {{ r.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'documents:workflow_detail' r.workflow.pk %}" class="hover:underline">
+                                {{ r.workflow.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500">
+                            Doc: {{ r.workflow.document.title }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-semibold text-slate-700">Stage {{ r.stage_number }}</div>
+                        <div class="text-[11px] text-slate-400">{{ r.stage_name }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium text-slate-900">
+                            {% if r.approver %}
+                                {{ r.approver.get_full_name|default:r.approver.username }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                        {% if r.delegated_to %}
+                        <div class="text-xs text-blue-600">→ Delegated: {{ r.delegated_to.username }}</div>
+                        {% endif %}
+                        {% if r.is_escalated %}
+                        <div class="text-xs text-amber-600 font-semibold">⚡ Escalated</div>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ r.stage_type_css_class }}">{{ r.get_stage_type_display }}</span></td>
+                    <td><span class="badge {{ r.status_css_class }}">{{ r.get_status_display }}</span></td>
+                    <td class="text-sm">{{ r.due_date|date:"Y-m-d H:i"|default:"—" }}</td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'documents:approval_request_detail' r.pk %}" class="btn btn-icon" title="View / Review">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if r.status == "pending" %}
+                            <a href="{% url 'documents:approval_request_edit' r.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% endif %}
+                            <form method="post" action="{% url 'documents:approval_request_delete' r.pk %}" class="inline" onsubmit="return confirm('Delete approval request {{ r.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="check-square"></i>
+                            </div>
+                            <div class="empty-state-title">No Approval Requests</div>
+                            <div class="empty-state-text">No approval requests match your search criteria.</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if requests.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-sm text-slate-500">
+            Page {{ requests.number }} of {{ requests.paginator.num_pages }} ({{ total_count }} records)
+        </div>
+        <div class="flex gap-1">
+            {% if requests.has_previous %}
+            <a href="?page={{ requests.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.stage_type %}&stage_type={{ request.GET.stage_type }}{% endif %}{% if request.GET.mine %}&mine={{ request.GET.mine }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
+            {% endif %}
+
+            {% if requests.has_next %}
+            <a href="?page={{ requests.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.stage_type %}&stage_type={{ request.GET.stage_type }}{% endif %}{% if request.GET.mine %}&mine={{ request.GET.mine }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
