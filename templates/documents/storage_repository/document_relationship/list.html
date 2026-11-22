@@ -164,10 +164,10 @@
                 <tr>
                     <td colspan="7">
                         <div class="empty-state text-center py-12">
-                            <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4 text-slate-400">
+                            <div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4 text-slate-400">
                                 <i data-lucide="link" class="w-8 h-8"></i>
                             </div>
-                            <h3 class="text-base font-semibold text-slate-800 mb-1">No document relationships defined</h3>
+                            <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100 mb-1">No document relationships defined</h3>
                             <p class="text-sm text-muted mb-4">Connect documents using semantic parent-child, citation, contract exhibit, or supersession links.</p>
                             <a href="{% url 'documents:relationship_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus"></i>
@@ -195,7 +195,7 @@
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
             {% endif %}
 
-            <span class="btn btn-outline btn-sm active font-bold">{{ page_obj.number }}</span>
+            <span class="btn btn-outline btn-sm active font-bold" aria-current="page">{{ page_obj.number }}</span>
 
             {% if page_obj.has_next %}
             <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if relationship_type %}&relationship_type={{ relationship_type }}{% endif %}" class="btn btn-outline btn-sm">
