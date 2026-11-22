@@ -192,22 +192,24 @@ def document_version_compare(request):
     if doc_id and doc_id.isdigit():
         document = documents_scope(Document.objects.all(), request).filter(pk=int(doc_id)).first()
         if document:
-            versions = document.versions.select_related("author").order_by("-created_at")
+            versions = document.versions.select_related("author").defer("extracted_text").order_by("-created_at")
+            versions_list = list(versions)
+            if versions_list:
+                if va_id and va_id.isdigit():
+                    target_va = int(va_id)
+                    version_a = next((v for v in versions_list if v.pk == target_va), None)
+                if vb_id and vb_id.isdigit():
+                    target_vb = int(vb_id)
+                    version_b = next((v for v in versions_list if v.pk == target_vb), None)
 
-    if document and versions.exists():
-        if va_id and va_id.isdigit():
-            version_a = versions.filter(pk=int(va_id)).first()
-        if vb_id and vb_id.isdigit():
-            version_b = versions.filter(pk=int(vb_id)).first()
+                # Defaults if not explicitly selected
+                if not version_a and len(versions_list) >= 2:
+                    version_a = versions_list[1]  # older
+                elif not version_a and len(versions_list) >= 1:
+                    version_a = versions_list[0]
 
-        # Defaults if not explicitly selected
-        if not version_a and versions.count() >= 2:
-            version_a = versions[1]  # older
-        elif not version_a and versions.count() >= 1:
-            version_a = versions[0]
-
-        if not version_b and versions.count() >= 1:
-            version_b = versions[0]  # newer
+                if not version_b and len(versions_list) >= 1:
+                    version_b = versions_list[0]  # newer
 
     if version_a and version_b:
         text_a = (version_a.extracted_text or f"(No text content recorded for version {version_a.version_label})").splitlines()
