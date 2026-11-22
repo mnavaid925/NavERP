@@ -66,7 +66,7 @@ def draft_detail(request, pk):
         select_related=("template", "author", "department", "related_party", "promoted_document"),
         prefetch_related=("collaborations", "collaborations__author"),
     )
-    collaborations = draft.collaborations.all().order_by("-created_at")
+    collaborations = draft.collaborations.all()
 
     return render(
         request,
