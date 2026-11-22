@@ -22,7 +22,7 @@ def test_document_authoring_template_model(tenant_a, admin_user):
         owner=admin_user,
     )
     assert tmpl.number.startswith("DTMPL-")
-    assert str(tmpl) == f"{tmpl.number} - Security Policy Template"
+    assert str(tmpl) == f"{tmpl.number} - Security Policy Template (v{tmpl.version})"
     assert tmpl.is_active is True
     assert tmpl.is_locked is False
 
@@ -105,7 +105,7 @@ def test_document_authoring_draft_cross_tenant_rejection(tenant_a, tenant_b, adm
         template_type="sop",
         owner=admin_b,
     )
-    other_org = OrgUnit.objects.create(tenant=tenant_b, name="Foreign Dept", code="FD")
+    other_org = OrgUnit.objects.create(tenant=tenant_b, name="Foreign Dept", kind="department")
     other_party = Party.objects.create(tenant=tenant_b, name="Foreign Supplier")
 
     draft1 = DocumentDraft(tenant=tenant_a, title="Draft 1", template=other_tmpl)
@@ -135,7 +135,7 @@ def test_document_authoring_collaboration_model(tenant_a, member_user, document_
         comment_text="Consider rewording safety risk paragraph.",
     )
     assert collab.number.startswith("DCMT-")
-    assert str(collab) == f"{collab.number} - critique by {member_user.username} on {document_draft.number}"
+    assert str(collab) == f"{collab.number} - critique on {document_draft.number}"
     assert collab.status == "open"
 
 
