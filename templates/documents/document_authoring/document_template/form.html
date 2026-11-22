@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ template.name }}{% else %}New Document Template{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'documents:template_list' %}">Templates</a>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+        </nav>
+        <h1 class="page-title mt-1">{% if is_edit %}Edit Document Template{% else %}Create Document Template{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:template_detail' template.pk %}{% else %}{% url 'documents:template_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header py-3 px-5">
+        <h2 class="text-sm font-semibold text-slate-800">
+            {% if is_edit %}Edit Master Template: {{ template.number }}{% else %}New Master Template Specifications{% endif %}
+        </h2>
+    </div>
+    <div class="card-body p-6">
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Template Name <span class="text-red-500">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.template_type.id_for_label }}">Template Type</label>
+                    {{ form.template_type }}
+                    {% if form.template_type.errors %}<div class="form-error">{{ form.template_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.category.id_for_label }}">Category</label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_org_unit.id_for_label }}">Department / Org Unit</label>
+                    {{ form.target_org_unit }}
+                    <span class="text-xs text-slate-400">Leave blank for enterprise-wide availability</span>
+                    {% if form.target_org_unit.errors %}<div class="form-error">{{ form.target_org_unit.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Template Owner</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">Template Version</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}<div class="form-error">{{ form.version.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group flex items-center gap-6 pt-5">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm text-slate-700">Active</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_locked }}
+                        <span class="text-sm text-slate-700 font-medium text-amber-700">
+                            <i data-lucide="lock" class="w-3.5 h-3.5 inline"></i> Lock Formatting
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description & Scope</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.content.id_for_label }}">Template Body Content & Markup</label>
+                {{ form.content }}
+                <span class="text-xs text-slate-400">Insert token placeholders e.g. <code class="text-blue-600 font-mono">{{ "{{company_name}}" }}</code> or <code class="text-blue-600 font-mono">{{ "{{author_name}}" }}</code>.</span>
+                {% if form.content.errors %}<div class="form-error">{{ form.content.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.available_tokens_json.id_for_label }}">{{ form.available_tokens_json.label }}</label>
+                    {{ form.available_tokens_json }}
+                    <span class="text-xs text-slate-400">{{ form.available_tokens_json.help_text }}</span>
+                    {% if form.available_tokens_json.errors %}<div class="form-error">{{ form.available_tokens_json.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.styling_rules.id_for_label }}">Locked Styling Rules / CSS Constraints</label>
+                    {{ form.styling_rules }}
+                    {% if form.styling_rules.errors %}<div class="form-error">{{ form.styling_rules.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:template_detail' template.pk %}{% else %}{% url 'documents:template_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 mr-1.5"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Template{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
