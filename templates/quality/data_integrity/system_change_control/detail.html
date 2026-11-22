@@ -60,7 +60,7 @@
                         <dt>Computerized System</dt>
                         <dd>
                             {% if change.system %}
-                            <span class="font-medium">{{ change.system.system_name }} ({{ change.system.number }})</span>
+                            <a href="{% url 'quality:computer_system_validation_detail' change.system.pk %}" class="font-medium text-brand hover:underline">{{ change.system.system_name }} ({{ change.system.number }})</a>
                             {% else %}
                             <span class="text-muted">—</span>
                             {% endif %}
