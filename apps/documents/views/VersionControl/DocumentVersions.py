@@ -18,7 +18,7 @@ from apps.documents.views._common import documents_object, documents_scope
 @login_required
 def document_version_list(request):
     qs = documents_scope(
-        DocumentVersion.objects.select_related("document", "author", "branch"),
+        DocumentVersion.objects.select_related("document", "author", "branch").defer("extracted_text"),
         request,
     )
 
