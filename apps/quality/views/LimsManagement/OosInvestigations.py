@@ -170,6 +170,9 @@ def oos_investigation_delete(request, pk):
 @require_POST
 def oos_investigation_close(request, pk):
     obj = quality_object(request, OosInvestigation, pk)
+    if obj.status == "closed":
+        messages.error(request, f"OOS Investigation {obj.number} is already closed.")
+        return redirect("quality:oos_investigation_detail", pk=obj.pk)
     obj.status = "closed"
     obj.investigation_phase = "closed"
     obj.closed_at = timezone.now()
