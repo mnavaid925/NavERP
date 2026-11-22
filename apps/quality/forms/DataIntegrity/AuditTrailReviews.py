@@ -80,4 +80,8 @@ class AuditTrailReviewForm(TenantModelForm):
             cleaned_data,
             ["system", "reviewer", "qa_approver", "linked_ncr", "linked_capa"],
         )
+        period_start = cleaned_data.get("period_start")
+        period_end = cleaned_data.get("period_end")
+        if period_start and period_end and period_start > period_end:
+            self.add_error("period_end", "Period end date cannot precede period start date.")
         return cleaned_data
