@@ -50,84 +50,105 @@
 - [x] Freeze `.claude/tasks/contract-quality-12.19.md` with every field, choice, URL name, and view context key.
 
 ### Phase 3.2: Entity by Entity Implementation
-- [ ] **Entity 1: LabSample** (`QSMP-`)
-  - [ ] `apps/quality/models/LimsManagement/LabSamples.py`
-  - [ ] `apps/quality/forms/LimsManagement/LabSamples.py`
-  - [ ] `apps/quality/views/LimsManagement/LabSamples.py`
-  - [ ] `apps/quality/urls/LimsManagement/LabSamples.py`
-  - [ ] `templates/quality/lims_management/lab_sample/list.html`
-  - [ ] `templates/quality/lims_management/lab_sample/detail.html`
-  - [ ] `templates/quality/lims_management/lab_sample/form.html`
-- [ ] **Entity 2: LabSpecification** (`QSPC-`)
-  - [ ] `apps/quality/models/LimsManagement/LabSpecifications.py`
-  - [ ] `apps/quality/forms/LimsManagement/LabSpecifications.py`
-  - [ ] `apps/quality/views/LimsManagement/LabSpecifications.py`
-  - [ ] `apps/quality/urls/LimsManagement/LabSpecifications.py`
-  - [ ] `templates/quality/lims_management/lab_specification/list.html`
-  - [ ] `templates/quality/lims_management/lab_specification/detail.html`
-  - [ ] `templates/quality/lims_management/lab_specification/form.html`
-- [ ] **Entity 3: LabTestWorksheet** (`QWKS-`)
-  - [ ] `apps/quality/models/LimsManagement/LabTestWorksheets.py`
-  - [ ] `apps/quality/forms/LimsManagement/LabTestWorksheets.py`
-  - [ ] `apps/quality/views/LimsManagement/LabTestWorksheets.py`
-  - [ ] `apps/quality/urls/LimsManagement/LabTestWorksheets.py`
-  - [ ] `templates/quality/lims_management/lab_test_worksheet/list.html`
-  - [ ] `templates/quality/lims_management/lab_test_worksheet/detail.html`
-  - [ ] `templates/quality/lims_management/lab_test_worksheet/form.html`
-- [ ] **Entity 4: OosInvestigation** (`QOOS-`)
-  - [ ] `apps/quality/models/LimsManagement/OosInvestigations.py`
-  - [ ] `apps/quality/forms/LimsManagement/OosInvestigations.py`
-  - [ ] `apps/quality/views/LimsManagement/OosInvestigations.py`
-  - [ ] `apps/quality/urls/LimsManagement/OosInvestigations.py`
-  - [ ] `templates/quality/lims_management/oos_investigation/list.html`
-  - [ ] `templates/quality/lims_management/oos_investigation/detail.html`
-  - [ ] `templates/quality/lims_management/oos_investigation/form.html`
-- [ ] **Dedicated LIMS Command Center Dashboard**
-  - [ ] `apps/quality/views/LimsManagement/LimsDashboard.py`
-  - [ ] `apps/quality/urls/LimsManagement/LimsDashboard.py`
-  - [ ] `templates/quality/lims_management/lims_dashboard.html`
+- [x] **Entity 1: LabSample** (`QSMP-`)
+  - [x] `apps/quality/models/LimsManagement/LabSamples.py`
+  - [x] `apps/quality/forms/LimsManagement/LabSamples.py`
+  - [x] `apps/quality/views/LimsManagement/LabSamples.py`
+  - [x] `apps/quality/urls/LimsManagement/LabSamples.py`
+  - [x] `templates/quality/lims_management/lab_sample/list.html`
+  - [x] `templates/quality/lims_management/lab_sample/detail.html`
+  - [x] `templates/quality/lims_management/lab_sample/form.html`
+- [x] **Entity 2: LabSpecification** (`QSPC-`)
+  - [x] `apps/quality/models/LimsManagement/LabSpecifications.py`
+  - [x] `apps/quality/forms/LimsManagement/LabSpecifications.py`
+  - [x] `apps/quality/views/LimsManagement/LabSpecifications.py`
+  - [x] `apps/quality/urls/LimsManagement/LabSpecifications.py`
+  - [x] `templates/quality/lims_management/lab_specification/list.html`
+  - [x] `templates/quality/lims_management/lab_specification/detail.html`
+  - [x] `templates/quality/lims_management/lab_specification/form.html`
+- [x] **Entity 3: LabTestWorksheet** (`QWKS-`)
+  - [x] `apps/quality/models/LimsManagement/LabTestWorksheets.py`
+  - [x] `apps/quality/forms/LimsManagement/LabTestWorksheets.py`
+  - [x] `apps/quality/views/LimsManagement/LabTestWorksheets.py`
+  - [x] `apps/quality/urls/LimsManagement/LabTestWorksheets.py`
+  - [x] `templates/quality/lims_management/lab_test_worksheet/list.html`
+  - [x] `templates/quality/lims_management/lab_test_worksheet/detail.html`
+  - [x] `templates/quality/lims_management/lab_test_worksheet/form.html`
+- [x] **Entity 4: OosInvestigation** (`QOOS-`)
+  - [x] `apps/quality/models/LimsManagement/OosInvestigations.py`
+  - [x] `apps/quality/forms/LimsManagement/OosInvestigations.py`
+  - [x] `apps/quality/views/LimsManagement/OosInvestigations.py`
+  - [x] `apps/quality/urls/LimsManagement/OosInvestigations.py`
+  - [x] `templates/quality/lims_management/oos_investigation/list.html`
+  - [x] `templates/quality/lims_management/oos_investigation/detail.html`
+  - [x] `templates/quality/lims_management/oos_investigation/form.html`
+- [x] **Dedicated LIMS Command Center Dashboard**
+  - [x] `apps/quality/views/LimsManagement/LimsDashboard.py`
+  - [x] `apps/quality/urls/LimsManagement/LimsDashboard.py`
+  - [x] `templates/quality/lims_management/lims_dashboard.html`
 
 ### Phase 3.3: Integration & Migration
-- [ ] Re-export all models in `apps/quality/models/__init__.py`
-- [ ] Re-export all forms in `apps/quality/forms/__init__.py`
-- [ ] Re-export all views in `apps/quality/views/__init__.py`
-- [ ] Wire URL routes in `apps/quality/urls/__init__.py`
-- [ ] Register all 4 models in `apps/quality/admin.py`
-- [ ] Extend `apps/quality/management/commands/seed_quality.py` with 12.19 seed data
-- [ ] Wire `LIVE_LINKS["12.19"]` in `apps/core/navigation.py`
-- [ ] Run `makemigrations quality`
-- [ ] Run `migrate`
-- [ ] Run `seed_quality` twice (idempotency check)
-- [ ] Run `manage.py check`
+- [x] Re-export all models in `apps/quality/models/__init__.py`
+- [x] Re-export all forms in `apps/quality/forms/__init__.py`
+- [x] Re-export all views in `apps/quality/views/__init__.py`
+- [x] Wire URL routes in `apps/quality/urls/__init__.py`
+- [x] Register all 4 models in `apps/quality/admin.py`
+- [x] Extend `apps/quality/management/commands/seed_quality.py` with 12.19 seed data
+- [x] Wire `LIVE_LINKS["12.19"]` in `apps/core/navigation.py`
+- [x] Run `makemigrations quality`
+- [x] Run `migrate`
+- [x] Run `seed_quality` twice (idempotency check)
+- [x] Run `manage.py check`
 
 ### Phase 3.4: Smoke Verification
-- [ ] Execute smoke test verifying all URLs return 200/302, content checks pass, and cross-tenant IDOR returns 404.
+- [x] Execute smoke test verifying all URLs return 200/302, content checks pass, and cross-tenant IDOR returns 404.
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] `code-reviewer` review
-- [ ] `explorer` review
-- [ ] `frontend-reviewer` review
-- [ ] `performance-reviewer` review
-- [ ] `qa-smoke-tester` review
-- [ ] `security-reviewer` review
-- [ ] Compile and deduplicate findings into `.claude/tasks/review-quality-12.19.md`
+- [x] `code-reviewer` review
+- [x] `explorer` review
+- [x] `frontend-reviewer` review
+- [x] `performance-reviewer` review
+- [x] `qa-smoke-tester` review
+- [x] `security-reviewer` review
+- [x] Compile and deduplicate findings into `.claude/tasks/review-quality-12.19.md`
 
 ### Phase 5: Code Fixer
-- [ ] Hand findings to code fixer, resolve Critical, Important, and Minor items one by one.
+- [x] Hand findings to code fixer, resolve Critical, Important, and Minor items one by one.
 
 ### Phase 6: Automated Test Suite
-- [ ] Update `tests/conftest.py` with 12.19 fixtures
-- [ ] `tests/test_lims_models.py`
-- [ ] `tests/test_lims_forms.py`
-- [ ] `tests/test_lims_views.py`
-- [ ] `tests/test_lims_security.py`
-- [ ] Run full pytest suite unfiltered.
+- [x] Update `tests/conftest.py` with 12.19 fixtures
+- [x] `tests/test_lims_models.py`
+- [x] `tests/test_lims_forms.py`
+- [x] `tests/test_lims_views.py`
+- [x] `tests/test_lims_security.py`
+- [x] Run full pytest suite unfiltered.
 
 ### Phase 7: Skill & Documentation Closeout
-- [ ] Update `.claude/skills/quality/SKILL.md` with 12.19 details
-- [ ] Update `README.md` marking 12.19 complete
-- [ ] Document gap register in `.agents/tasks/gaps-quality-12.19.md`
-- [ ] Complete close-out section in `.claude/tasks/todo.md`
+- [x] Update `.claude/skills/quality/SKILL.md` with 12.19 details
+- [x] Update `README.md` marking 12.19 complete
+- [x] Document gap register in `.agents/tasks/gaps-quality-12.19.md`
+- [x] Complete close-out section in `.claude/tasks/todo.md`
+
+---
+
+## Review notes — Sub-module 12.19 Close-out (2026-11-22)
+- **Delivery Unit**: Sub-module 12.19: Laboratory Information Management (LIMS) in `apps/quality/` (Module 12: Quality Management System).
+- **Models**: 4 tenant-scoped models subclassing `TenantNumbered`:
+  - `LabSample` [`QSMP-`] (Analytical and physical sample registration, storage conditions, chain of custody JSON logs, disposition)
+  - `LabSpecification` [`QSPC-`] (Analytical test methods, quantitative limits LSL/USL/nominal, qualitative criteria, linked ControlledDocument SOPs)
+  - `LabTestWorksheet` [`QWKS-`] (Test execution records, replicate readings JSON, auto-calculated mean and % RSD, instrument/reagent traceability, OOS triggers)
+  - `OosInvestigation` [`QOOS-`] (Two-phase Out-of-Specification investigations: Phase I Lab Root Cause, Phase II Manufacturing Investigation, retest plans, CAPA/NCR cross-spawning)
+- **Forms**: 10 ModelForms across `apps/quality/forms/LimsManagement/` (`LabSampleForm`, `LabSampleReceiptForm`, `LabSampleDispositionForm`, `LabSpecificationForm`, `LabTestWorksheetForm`, `LabTestWorksheetVerifyForm`, `OosInvestigationForm`, `OosPhaseIForm`, `OosPhaseIIForm`, `OosClosureForm`) with tenant-scoped FK validation and quantitative/qualitative bounds checks.
+- **Views & Routes**: 25 FBV endpoints across 4 entities + executive Command Center (`lims_dashboard`). Includes pagination, multi-param search/filters, streaming chunked CSV exports (`.iterator(chunk_size=1000)`), formula injection defense, and `@tenant_admin_required` gated closures and deletions.
+- **Templates**: 13 responsive Tailwind templates under `templates/quality/lims_management/` (`list.html`, `detail.html`, `form.html` per entity + `lims_dashboard.html`).
+- **Wire-up**: `LIVE_LINKS["12.19"]` (all 5 menu links) in `apps/core/navigation.py`, admin registered in `apps/quality/admin.py`, package re-exports across `__init__.py`.
+- **Migrations**: `0039_lims_management_models.py`, `0040_labtestworksheet_idx_qwks_ten_stat_date_and_more.py`, `0041_labsample_idx_qsmp_ten_stat_type_and_more.py`.
+- **Seeder**: `manage.py seed_quality` creates realistic GxP demo records for Acme and Globex; verified 100% idempotent.
+- **Phase 4 Review**: 6 sequential reviewer passes completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`). Consolidated 18 findings (2 Critical, 8 Important, 8 Minor) in `.claude/tasks/review-quality-12.19.md`.
+- **Phase 5 Fixes**: `code-fixer` subagent burned down all 18 findings in ID order (C1–C2, I1–I8, M1–M8) across single-file commits; `manage.py check` verified 0 issues.
+- **Phase 6 Tests**: 4 test files (`test_lims_models.py` [8 tests], `test_lims_forms.py` [6 tests], `test_lims_views.py` [7 tests], `test_lims_security.py` [4 tests]) totaling **25 dedicated tests** (100% pass). Full unfiltered quality test suite passes with **2,430 green tests** (0 failures).
+- **Gaps Register**: `.agents/tasks/gaps-quality-12.19.md` committed. `**Gaps**: None` (zero open or deferred items for 12.19).
+- **Documentation**: `.claude/skills/quality/SKILL.md` and `README.md` updated and committed.
 
 ---
 
