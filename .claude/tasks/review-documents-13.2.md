@@ -80,3 +80,34 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Use `{% if document.locked_by %}{{ document.locked_by.get_full_name|default:document.locked_by.username }}{% else %}Unknown{% endif %}`.
 - **FE-M2**: Icon-only action buttons across list tables lack `aria-label` attribute matching `title`.
   - *Fix*: Add `aria-label` matching `title` on all icon-only action buttons.
+
+
+---
+
+## 4. Performance Reviewer Findings
+
+### Critical
+- **PR-C1**: `apps/documents/views/VersionControl/DocumentVersions.py:20` — Large `extracted_text` TextField loaded on version list view without `.defer()`.
+  - *Fix*: Add `.defer("extracted_text")` to `DocumentVersion.objects.select_related(...)` in `document_version_list`.
+
+### Important
+- **PR-I1**: `apps/documents/views/VersionControl/Documents.py:86` & `templates/documents/version_control/document/detail.html:214` — N+1 queries on `restored_from_version` in document detail revision history.
+  - *Fix*: Add `"restored_from_version"` to `select_related` on the `versions` queryset in `document_detail`.
+- **PR-I2**: `apps/documents/views/VersionControl/Documents.py:82` & `apps/documents/views/VersionControl/DocumentBranches.py:73` — Redundant and discarded `prefetch_related` queries in detail views.
+  - *Fix*: Remove `prefetch_related` calls that are immediately superseded by custom filtered/ordered queries.
+- **PR-I3**: `apps/documents/views/VersionControl/DocumentLocks.py:28` & `apps/documents/views/VersionControl/DocumentBranches.py:25` — `select_related("base_version")` pulls unneeded `extracted_text` on lock and branch lists.
+  - *Fix*: Add `.defer("base_version__extracted_text")` in both list views.
+- **PR-I4**: `apps/documents/views/VersionControl/DocumentVersions.py:193` — Multiple redundant queries and full text loading in `document_version_compare`.
+  - *Fix*: Defer `extracted_text` on dropdown versions queryset and evaluate list in memory once for default selection.
+- **PR-I5**: `apps/documents/models/VersionControl/DocumentVersions.py:80` — Missing database index on `DocumentVersion.status` for tenant-scoped filtering.
+  - *Fix*: Add `db_index=True` to `status` and add `models.Index(fields=["tenant", "status"], name="idx_dver_ten_stat")` to `DocumentVersion.Meta.indexes`.
+
+### Minor
+- **PR-M1**: `templates/documents/version_control/document/detail.html:168` — Template `.count` executes redundant `COUNT(*)` queries right before iteration.
+  - *Fix*: Use `{{ versions|length }}` and `{{ branches|length }}`.
+- **PR-M2**: `apps/documents/views/VersionControl/Documents.py:59` — Uncombined stat card count queries in `document_list`.
+  - *Fix*: Combine into single aggregated query via `.aggregate()`.
+- **PR-M3**: `apps/documents/views/VersionControl/DocumentVersions.py:57` — Filter dropdown queries fetch unneeded columns on `Document`.
+  - *Fix*: Restrict dropdown queries with `.only("id", "title", "number")`.
+- **PR-M4**: `apps/documents/models/VersionControl/DocumentVersions.py:118` — Chained N+1 vulnerability through `DocumentVersion.__str__`.
+  - *Fix*: Ensure `base_version__document` is included where string representation is rendered.
