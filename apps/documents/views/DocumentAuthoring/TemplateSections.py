@@ -19,7 +19,7 @@ def template_section_list(request):
 
     q = request.GET.get("q", "").strip()
     if q:
-        qs = qs.filter(Q(title__icontains(q)) | Q(number__icontains(q)) | Q(content__icontains(q)))
+        qs = qs.filter(Q(title__icontains=q) | Q(number__icontains=q) | Q(content__icontains=q))
 
     section_type = request.GET.get("section_type", "").strip()
     if section_type:
