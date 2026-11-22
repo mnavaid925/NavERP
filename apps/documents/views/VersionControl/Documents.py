@@ -66,6 +66,7 @@ def document_list(request):
         "classification_choices": Document.CLASSIFICATION_CHOICES,
         "status_choices": Document.STATUS_CHOICES,
         "departments": departments,
+        "department_choices": departments,
         "total_documents_count": total_documents_count,
         "active_locks_count": active_locks_count,
     }
