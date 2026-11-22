@@ -107,6 +107,10 @@ def collaboration_create(request, draft_pk):
 @login_required
 def collaboration_edit(request, pk):
     collaboration = documents_object(request, DraftCollaboration, pk, select_related=("draft",))
+    if collaboration.author_id != request.user.id and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request, "is_tenant_admin", False)):
+        messages.error(request, "You do not have permission to modify this collaboration feedback.")
+        return redirect("documents:draft_detail", pk=collaboration.draft_id)
+
     if request.method == "POST":
         form = DraftCollaborationForm(request.POST, instance=collaboration, tenant=request.tenant)
         if form.is_valid():
