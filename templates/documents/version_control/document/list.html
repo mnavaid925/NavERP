@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Documents — Document Management System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <span class="text-slate-500">Document Management</span>
+            <span>/</span>
+            <span>Documents</span>
+        </nav>
+        <h1 class="page-title">Document Repository</h1>
+        <p class="text-sm text-slate-500">Central controlled document register with versioning, revision management, and check-out control.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_version_compare' %}" class="btn btn-outline">
+            <i data-lucide="git-compare"></i> Compare Versions
+        </a>
+        <a href="{% url 'documents:document_lock_list' %}" class="btn btn-outline">
+            <i data-lucide="lock"></i> Active Locks
+        </a>
+        <a href="{% url 'documents:document_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Document
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="files"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-value">{{ total_documents_count }}</div>
+            <div class="stat-label">Total Documents</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="lock"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-value">{{ active_locks_count }}</div>
+            <div class="stat-label">Locked / Checked Out</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="git-branch"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-value">13.2</div>
+            <div class="stat-label">Version Control Active</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-value">DMS</div>
+            <div class="stat-label">Audit & Multi-Tenant</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+            <div class="form-group md:col-span-2">
+                <label for="filter-q" class="form-label text-xs">Search Title / Number</label>
+                <input type="text" id="filter-q" name="q" class="form-input" placeholder="Search title, number, tags..." value="{{ request.GET.q }}">
+            </div>
+            <div class="form-group">
+                <label for="filter-type" class="form-label text-xs">Document Type</label>
+                <select id="filter-type" name="document_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in document_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.document_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filter-classification" class="form-label text-xs">Classification</label>
+                <select id="filter-classification" name="classification" class="form-select">
+                    <option value="">All Classifications</option>
+                    {% for val, label in classification_choices %}
+                    <option value="{{ val }}" {% if request.GET.classification == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filter-status" class="form-label text-xs">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filter-dept" class="form-label text-xs">Department</label>
+                <select id="filter-dept" name="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk }}" {% if request.GET.department == dept.pk|stringformat:"d" %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-6 flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary text-xs">
+                    <i data-lucide="filter"></i> Apply Filters
+                </button>
+                <a href="{% url 'documents:document_list' %}" class="btn btn-outline text-xs">
+                    <i data-lucide="rotate-ccw"></i> Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Controlled Documents ({{ page_obj.paginator.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Doc #</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Classification</th>
+                    <th>Current Version</th>
+                    <th>Lock Status</th>
+                    <th>Owner</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:document_detail' doc.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ doc.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ doc.title }}</div>
+                        {% if doc.department %}
+                        <div class="text-xs text-slate-400">{{ doc.department.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs font-medium text-slate-700">{{ doc.get_document_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ doc.classification_badge_class }}">{{ doc.get_classification_display }}</span>
+                    </td>
+                    <td>
+                        <span class="inline-flex items-center gap-1 font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">
+                            v{{ doc.current_version_label }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if doc.is_locked %}
+                        <span class="badge badge-red inline-flex items-center gap-1">
+                            <i data-lucide="lock" class="w-3 h-3"></i> Locked
+                        </span>
+                        {% else %}
+                        <span class="badge badge-slate inline-flex items-center gap-1">
+                            <i data-lucide="unlock" class="w-3 h-3"></i> Available
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if doc.owner %}
+                        {{ doc.owner.get_full_name|default:doc.owner.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ doc.status_badge_class }}">{{ doc.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:document_detail' doc.pk %}" class="btn btn-icon" title="View Document">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:document_edit' doc.pk %}" class="btn btn-icon" title="Edit Document Metadata">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:document_delete' doc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete document {{ doc.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Document">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state text-center py-8">
+                            <i data-lucide="file-text" class="mx-auto h-12 w-12 text-slate-300 mb-3"></i>
+                            <h3 class="text-sm font-semibold text-slate-700">No documents found</h3>
+                            <p class="text-xs text-slate-500 mt-1">Get started by creating your first controlled document or clear search filters.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'documents:document_create' %}" class="btn btn-primary text-xs">
+                                    <i data-lucide="plus"></i> Create Document
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <span class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </span>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&document_type={{ request.GET.document_type }}&classification={{ request.GET.classification }}&status={{ request.GET.status }}&department={{ request.GET.department }}" class="btn btn-outline text-xs">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&document_type={{ request.GET.document_type }}&classification={{ request.GET.classification }}&status={{ request.GET.status }}&department={{ request.GET.department }}" class="btn btn-outline text-xs">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
