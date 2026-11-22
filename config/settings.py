@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.bi",
     "apps.assets",
     "apps.quality",
+    "apps.documents",
 ]
 
 MIDDLEWARE = [
