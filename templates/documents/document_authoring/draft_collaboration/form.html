@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Note {{ collaboration.number }}{% else %}New Feedback — {{ draft.title }}{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'documents:draft_list' %}">Drafts</a>
+            <span>/</span>
+            <a href="{% url 'documents:draft_detail' draft.pk %}">{{ draft.number }}</a>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">{% if is_edit %}Edit Note{% else %}Add Feedback{% endif %}</span>
+        </nav>
+        <h1 class="page-title mt-1">{% if is_edit %}Edit Collaboration Note{% else %}Add Feedback or Suggestion{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:draft_detail' draft.pk %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header py-3 px-5">
+        <h2 class="text-sm font-semibold text-slate-800">
+            Target Working Draft: {{ draft.title }} ({{ draft.number }})
+        </h2>
+    </div>
+    <div class="card-body p-6">
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.entry_type.id_for_label }}">Contribution Type</label>
+                    {{ form.entry_type }}
+                    {% if form.entry_type.errors %}<div class="form-error">{{ form.entry_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.section_anchor.id_for_label }}">Section Anchor / Heading</label>
+                    {{ form.section_anchor }}
+                    {% if form.section_anchor.errors %}<div class="form-error">{{ form.section_anchor.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.selected_text.id_for_label }}">Referenced / Quoted Text</label>
+                {{ form.selected_text }}
+                <span class="text-xs text-slate-400">Exact snippet from the draft body text being reviewed or targeted for revision</span>
+                {% if form.selected_text.errors %}<div class="form-error">{{ form.selected_text.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.replacement_text.id_for_label }}">Proposed Replacement Wording (Suggestions & Track Changes)</label>
+                {{ form.replacement_text }}
+                <span class="text-xs text-slate-400">If accepted by the author, this replacement will overwrite the quoted text above</span>
+                {% if form.replacement_text.errors %}<div class="form-error">{{ form.replacement_text.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.comment_text.id_for_label }}">Review Note / Discussion Comment <span class="text-red-500">*</span></label>
+                {{ form.comment_text }}
+                {% if form.comment_text.errors %}<div class="form-error">{{ form.comment_text.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% url 'documents:draft_detail' draft.pk %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 mr-1.5"></i>
+                    {% if is_edit %}Save Changes{% else %}Post Feedback{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
