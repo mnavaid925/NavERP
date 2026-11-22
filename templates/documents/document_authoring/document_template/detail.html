@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}{{ template.name }} — Document Template Details{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'documents:template_list' %}">Templates</a>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">{{ template.number }}</span>
+        </nav>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ template.name }}</h1>
+            <span class="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{{ template.number }}</span>
+            {% if template.is_locked %}
+            <span class="badge badge-amber text-xs"><i data-lucide="lock" class="w-3 h-3 mr-1 inline"></i> Locked Format</span>
+            {% endif %}
+            {% if template.is_active %}
+            <span class="badge badge-green text-xs">Active</span>
+            {% else %}
+            <span class="badge badge-muted text-xs">Inactive</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <form method="POST" action="{% url 'documents:template_instantiate' template.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="file-plus" class="w-4 h-4 mr-1.5"></i>
+                Create Draft From Template
+            </button>
+        </form>
+        <a href="{% url 'documents:template_edit' template.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit
+        </a>
+        <form method="POST" action="{% url 'documents:template_delete' template.pk %}" onsubmit="return confirm('Are you sure you want to delete this template?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1.5"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Template Content -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Template Content Body</h2>
+                <span class="text-xs text-slate-500 font-mono">v{{ template.version }}</span>
+            </div>
+            <div class="card-body p-5">
+                {% if template.content %}
+                <div class="bg-slate-50 p-4 rounded border border-slate-200 font-mono text-sm whitespace-pre-wrap leading-relaxed text-slate-800">
+                    {{ template.content }}
+                </div>
+                {% else %}
+                <div class="empty-state py-6 text-center text-slate-400">
+                    <p class="text-sm">No body content defined for this template.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Bound Sections / Modular Blocks -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Modular Sections & Clauses ({{ sections.count }})</h2>
+                <a href="{% url 'documents:template_section_create' %}?template={{ template.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Add Section
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if sections %}
+                <ul class="divide-y divide-slate-100">
+                    {% for sec in sections %}
+                    <li class="p-4 flex items-center justify-between hover:bg-slate-50 transition">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-slate-800 text-sm">{{ sec.title }}</span>
+                                <span class="badge badge-info text-xs">{{ sec.get_section_type_display }}</span>
+                                {% if sec.is_locked %}
+                                <span class="badge badge-amber text-xs">Locked</span>
+                                {% endif %}
+                                {% if sec.is_mandatory %}
+                                <span class="badge badge-red text-xs">Mandatory</span>
+                                {% endif %}
+                            </div>
+                            {% if sec.content %}
+                            <div class="text-xs text-slate-500 mt-1 line-clamp-1 font-mono">{{ sec.content }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-400 font-mono">Order: {{ sec.order }}</span>
+                            <a href="{% url 'documents:template_section_detail' sec.pk %}" class="btn btn-icon btn-outline">
+                                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                            </a>
+                            <a href="{% url 'documents:template_section_edit' sec.pk %}" class="btn btn-icon btn-outline">
+                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                            </a>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-6 text-center text-slate-400 text-sm">
+                    No modular sections attached to this template yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Metadata & Tokens Sidebar -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Template Specifications</h2>
+            </div>
+            <div class="card-body p-4 text-xs space-y-3">
+                <div>
+                    <span class="text-slate-400 block">Template Type</span>
+                    <span class="font-medium text-slate-800">{{ template.get_template_type_display }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Category</span>
+                    <span class="font-medium text-slate-800">{{ template.get_category_display }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Department / Org Unit</span>
+                    <span class="font-medium text-slate-800">{{ template.target_org_unit.name|default:"Global / All Departments" }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Template Owner</span>
+                    <span class="font-medium text-slate-800">{{ template.owner.get_full_name|default:template.owner.username|default:"Unassigned" }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Version Number</span>
+                    <span class="font-medium font-mono text-slate-800">{{ template.version }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Derived Working Drafts</span>
+                    <span class="font-medium text-slate-800">{{ drafts_count }} drafts created</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Last Updated</span>
+                    <span class="font-medium text-slate-800">{{ template.updated_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+        </div>
+
+        {% if template.available_tokens %}
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Dynamic Replacement Tokens</h2>
+            </div>
+            <div class="card-body p-4 text-xs space-y-2">
+                {% for key, desc in template.available_tokens.items %}
+                <div class="flex items-start justify-between gap-2 p-1.5 bg-slate-50 rounded">
+                    <code class="text-blue-600 font-mono font-semibold">{{ "{{ " }}{{ key }}{{ " }}" }}</code>
+                    <span class="text-slate-600 text-right">{{ desc }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if template.styling_rules %}
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Locked Styling Rules</h2>
+            </div>
+            <div class="card-body p-4">
+                <pre class="text-xs font-mono bg-slate-50 p-2.5 rounded text-slate-700 overflow-x-auto">{{ template.styling_rules }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
