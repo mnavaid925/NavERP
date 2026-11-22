@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -76,10 +77,11 @@ def storage_volume_create(request):
     if request.method == "POST":
         form = StorageVolumeForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            volume = form.save(commit=False)
-            volume.tenant = request.tenant
-            volume.save()
-            write_audit_log(request.user, volume, "create", tenant=request.tenant)
+            with transaction.atomic():
+                volume = form.save(commit=False)
+                volume.tenant = request.tenant
+                volume.save()
+                write_audit_log(request.user, volume, "create", tenant=request.tenant)
             messages.success(request, f"Storage volume '{volume.name}' created successfully.")
             return redirect("documents:storage_volume_detail", pk=volume.pk)
     else:
@@ -118,8 +120,9 @@ def storage_volume_edit(request, pk):
     if request.method == "POST":
         form = StorageVolumeForm(request.POST, instance=volume, tenant=request.tenant)
         if form.is_valid():
-            volume = form.save()
-            write_audit_log(request.user, volume, "update", tenant=request.tenant)
+            with transaction.atomic():
+                volume = form.save()
+                write_audit_log(request.user, volume, "update", tenant=request.tenant)
             messages.success(request, f"Storage volume '{volume.name}' updated successfully.")
             return redirect("documents:storage_volume_detail", pk=volume.pk)
     else:
@@ -144,7 +147,8 @@ def storage_volume_delete(request, pk):
         return redirect("documents:storage_volume_detail", pk=volume.pk)
 
     name = volume.name
-    write_audit_log(request.user, volume, "delete", tenant=request.tenant)
-    volume.delete()
+    with transaction.atomic():
+        write_audit_log(request.user, volume, "delete", tenant=request.tenant)
+        volume.delete()
     messages.success(request, f"Storage volume '{name}' deleted successfully.")
     return redirect("documents:storage_volume_list")
