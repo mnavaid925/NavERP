@@ -3522,6 +3522,14 @@ LIVE_LINKS = {
         "Data Integrity (ALCOA+)": "quality:data_integrity_assessment_list",
         "System Validation & Change Control (CSV)": "quality:system_change_control_list",
     },
+    # 13.1 Document Creation & Authoring
+    "13.1": {
+        "Template Library & Standardization": "documents:template_list",
+        "Rich Text & Collaborative Editing": "documents:draft_list",
+        "Version Zero & Draft Management": "documents:draft_list",
+        "Embedded Media & Objects": "documents:template_section_list",
+        "Offline Authoring & Sync": "documents:draft_list",
+    },
 
 
 
