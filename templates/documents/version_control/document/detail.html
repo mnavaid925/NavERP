@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.number }} — {{ document.title }} — NavERP DMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>{{ document.number }}</span>
+        </nav>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ document.title }}</h1>
+            <span class="badge {{ document.status_badge_class }}">{{ document.get_status_display }}</span>
+            <span class="badge {{ document.classification_badge_class }}">{{ document.get_classification_display }}</span>
+            {% if document.is_locked %}
+            <span class="badge badge-red inline-flex items-center gap-1">
+                <i data-lucide="lock" class="w-3 h-3"></i> Locked by {{ document.locked_by.username }}
+            </span>
+            {% else %}
+            <span class="badge badge-slate inline-flex items-center gap-1">
+                <i data-lucide="unlock" class="w-3 h-3"></i> Available
+            </span>
+            {% endif %}
+        </div>
+        <p class="text-xs text-slate-500 mt-1 font-mono">{{ document.number }} &bull; Current: v{{ document.current_version_label }} &bull; Scheme: {{ document.get_versioning_scheme_display }}</p>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if document.is_locked %}
+            {% if document.locked_by == request.user or request.user.is_superuser %}
+            <a href="{% url 'documents:document_checkin' document.pk %}" class="btn btn-primary">
+                <i data-lucide="upload"></i> Check-in Version
+            </a>
+            <form method="post" action="{% url 'documents:document_discard_checkout' document.pk %}" class="inline" onsubmit="return confirm('Discard check-out? Any staged working copy will be discarded.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline text-amber-600">
+                    <i data-lucide="x-circle"></i> Discard Lock
+                </button>
+            </form>
+            {% else %}
+                {% if active_lock %}
+                <a href="{% url 'documents:document_force_unlock' active_lock.pk %}" class="btn btn-outline text-red-600">
+                    <i data-lucide="unlock"></i> Force Unlock (Admin)
+                </a>
+                {% endif %}
+            {% endif %}
+        {% else %}
+        <a href="{% url 'documents:document_checkout' document.pk %}" class="btn btn-primary">
+            <i data-lucide="lock"></i> Check-out Document
+        </a>
+        {% endif %}
+        <a href="{% url 'documents:document_version_compare' %}?document={{ document.pk }}" class="btn btn-outline">
+            <i data-lucide="git-compare"></i> Compare Versions
+        </a>
+        <a href="{% url 'documents:document_branch_create' %}?document={{ document.pk }}" class="btn btn-outline">
+            <i data-lucide="git-branch"></i> Fork Branch
+        </a>
+        <a href="{% url 'documents:document_edit' document.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+    </div>
+</div>
+
+<!-- Lock Banner if locked -->
+{% if active_lock %}
+<div class="p-4 mb-6 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-3 text-amber-900">
+    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"></i>
+    <div class="flex-1">
+        <h4 class="font-semibold text-sm">Document is Currently Checked Out</h4>
+        <p class="text-xs text-amber-800 mt-0.5">
+            Locked by <strong>{{ active_lock.locked_by.get_full_name|default:active_lock.locked_by.username }}</strong> on {{ active_lock.checked_out_at|date:"M d, Y H:i" }}.
+            {% if active_lock.checkout_note %} Note: &ldquo;{{ active_lock.checkout_note }}&rdquo;{% endif %}
+            {% if active_lock.expires_at %} (Lock expires {{ active_lock.expires_at|date:"M d, Y H:i" }}){% endif %}
+        </p>
+    </div>
+    {% if active_lock.working_copy_file %}
+    <a href="{{ active_lock.working_copy_file.url }}" class="btn btn-outline text-xs bg-white" download>
+        <i data-lucide="download"></i> Download Staged Copy
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Document Metadata Card -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Document Specification & Metadata</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Document Number</dt>
+                <dd class="font-mono text-sm font-semibold text-slate-800">{{ document.number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Title</dt>
+                <dd class="font-medium text-slate-900">{{ document.title }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Document Type</dt>
+                <dd>{{ document.get_document_type_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Classification</dt>
+                <dd><span class="badge {{ document.classification_badge_class }}">{{ document.get_classification_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Status</dt>
+                <dd><span class="badge {{ document.status_badge_class }}">{{ document.get_status_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Versioning Scheme</dt>
+                <dd>{{ document.get_versioning_scheme_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Current Active Version</dt>
+                <dd class="font-mono font-bold text-blue-600">v{{ document.current_version_label }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Document Owner</dt>
+                <dd>
+                    {% if document.owner %}
+                    {{ document.owner.get_full_name|default:document.owner.username }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Department / Org Unit</dt>
+                <dd>{{ document.department.name|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Max Versions Retained</dt>
+                <dd>{{ document.max_versions_retained|default:"Unlimited" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Created Date</dt>
+                <dd>{{ document.created_at|date:"M d, Y H:i" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Last Updated</dt>
+                <dd>{{ document.updated_at|date:"M d, Y H:i" }}</dd>
+            </div>
+            <div class="detail-item col-span-2">
+                <dt>Description</dt>
+                <dd class="text-sm text-slate-700 leading-relaxed">{{ document.description|default:"No description provided." }}</dd>
+            </div>
+            {% if document.tags %}
+            <div class="detail-item col-span-2">
+                <dt>Tags</dt>
+                <dd class="flex flex-wrap gap-1 mt-1">
+                    <span class="badge badge-slate">{{ document.tags }}</span>
+                </dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+<!-- Revision History Card -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Version History & Revisions ({{ versions.count }})</h2>
+            <p class="text-xs text-slate-500">Immutable chronological log of document revisions, milestone snapshots, and rollback points.</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{% url 'documents:document_version_compare' %}?document={{ document.pk }}" class="btn btn-outline text-xs">
+                <i data-lucide="git-compare"></i> Diff View
+            </a>
+            <a href="{% url 'documents:document_version_create' %}?document={{ document.pk }}" class="btn btn-outline text-xs">
+                <i data-lucide="plus"></i> Add Version Manually
+            </a>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Version</th>
+                    <th>Type</th>
+                    <th>Change Summary</th>
+                    <th>File / Size</th>
+                    <th>Author</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ver in versions %}
+                <tr {% if ver.version_label == document.current_version_label %}class="bg-blue-50/50"{% endif %}>
+                    <td>
+                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="font-mono font-bold text-blue-600 hover:underline">
+                            v{{ ver.version_label }}
+                        </a>
+                        {% if ver.is_official %}
+                        <span class="badge badge-green text-[10px] ml-1">Official</span>
+                        {% endif %}
+                        {% if ver.branch %}
+                        <div class="text-[10px] text-amber-700 font-sans">branch: {{ ver.branch.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ ver.version_type_badge_class }}">{{ ver.get_version_type_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-xs text-slate-800 max-w-xs truncate">{{ ver.change_summary|default:"Initial version release" }}</div>
+                        {% if ver.restored_from_version %}
+                        <div class="text-[10px] text-amber-600">Restored from v{{ ver.restored_from_version.version_label }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ver.file %}
+                        <a href="{{ ver.file.url }}" class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline" download>
+                            <i data-lucide="download" class="w-3 h-3"></i> {{ ver.file_name|default:"Download" }}
+                        </a>
+                        <span class="text-[10px] text-slate-400 block">{{ ver.file_size }} bytes</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">Text-only record</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ver.author %}
+                        {{ ver.author.get_full_name|default:ver.author.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-500 whitespace-nowrap">
+                        {{ ver.created_at|date:"M d, Y H:i" }}
+                    </td>
+                    <td>
+                        <span class="badge {{ ver.status_badge_class }}">{{ ver.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right whitespace-nowrap">
+                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="btn btn-icon" title="View Version Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:document_version_rollback' ver.pk %}" class="inline" onsubmit="return confirm('Rollback document to version {{ ver.version_label }}? A new restored revision will be generated.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-amber-600 hover:text-amber-800" title="Rollback to this version">
+                                <i data-lucide="history"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-xs text-slate-400">
+                        No versions recorded yet. Check-in or add a version above.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Parallel Revision Branches Card -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Parallel Revision Streams & Branches ({{ branches.count }})</h2>
+            <p class="text-xs text-slate-500">What-if scenarios and alternative drafting tracks that can be merged back into mainline.</p>
+        </div>
+        <a href="{% url 'documents:document_branch_create' %}?document={{ document.pk }}" class="btn btn-outline text-xs">
+            <i data-lucide="git-branch"></i> New Branch
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Branch Name</th>
+                    <th>Type</th>
+                    <th>Base Version</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                    <th>Created Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for branch in branches %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:document_branch_detail' branch.pk %}" class="font-semibold text-slate-900 hover:underline">
+                            {{ branch.name }}
+                        </a>
+                        {% if branch.description %}
+                        <div class="text-xs text-slate-400 truncate max-w-xs">{{ branch.description }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ branch.branch_type_badge_class }}">{{ branch.get_branch_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs text-slate-700">v{{ branch.base_version.version_label }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ branch.status_badge_class }}">{{ branch.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {% if branch.created_by %}
+                        {{ branch.created_by.get_full_name|default:branch.created_by.username }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-500">{{ branch.created_at|date:"M d, Y" }}</td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:document_branch_detail' branch.pk %}" class="btn btn-icon" title="View Branch">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if branch.status == 'active' %}
+                        <a href="{% url 'documents:document_branch_merge' branch.pk %}" class="btn btn-icon text-green-600" title="Merge into Mainline">
+                            <i data-lucide="git-merge"></i>
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-4 text-xs text-slate-400">
+                        No parallel branches or what-if scenarios exist for this document.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Lock History Audit Card -->
+{% if lock_history %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Check-in / Check-out Lock Audit Trail</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table text-xs">
+            <thead>
+                <tr>
+                    <th>Lock #</th>
+                    <th>User</th>
+                    <th>Type</th>
+                    <th>Checked Out</th>
+                    <th>Status</th>
+                    <th>Unlocked</th>
+                    <th>Note / Override Justification</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lock in lock_history %}
+                <tr>
+                    <td class="font-mono">{{ lock.number }}</td>
+                    <td>{{ lock.locked_by.get_full_name|default:lock.locked_by.username }}</td>
+                    <td>{{ lock.get_lock_type_display }}</td>
+                    <td>{{ lock.checked_out_at|date:"M d, H:i" }}</td>
+                    <td><span class="badge {{ lock.status_badge_class }}">{{ lock.get_status_display }}</span></td>
+                    <td>{{ lock.unlocked_at|date:"M d, H:i"|default:"Active" }}</td>
+                    <td>
+                        {{ lock.checkout_note|default:"—" }}
+                        {% if lock.override_reason %}
+                        <div class="text-red-600 font-semibold mt-0.5">Override: {{ lock.override_reason }}</div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
