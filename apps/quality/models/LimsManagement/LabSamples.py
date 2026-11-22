@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.quality.models._base import TenantNumbered
@@ -117,6 +118,7 @@ class LabSample(TenantNumbered):
         max_digits=12,
         decimal_places=4,
         default=Decimal("1.0000"),
+        validators=[MinValueValidator(Decimal("0"))],
     )
     unit_of_measure = models.CharField(max_length=25, default="g")
     retest_date = models.DateField(null=True, blank=True)
