@@ -283,7 +283,7 @@
                 <td class="py-2.5 px-3"><span class="badge {{ oos.get_severity_badge }}">{{ oos.get_severity_display }}</span></td>
                 <td class="py-2.5 px-3"><span class="badge {{ oos.get_status_badge }}">{{ oos.get_status_display }}</span></td>
                 <td class="py-2.5 px-3 text-right table-actions">
-                  <a href="{% url 'quality:oos_investigation_detail' oos.pk %}" class="btn btn-icon">
+                  <a href="{% url 'quality:oos_investigation_detail' oos.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                   </a>
                 </td>
