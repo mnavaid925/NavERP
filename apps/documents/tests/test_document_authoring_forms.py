@@ -13,7 +13,7 @@ from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTe
 @pytest.mark.django_db
 def test_document_authoring_template_form_valid(tenant_a, admin_user):
     """Test valid submission of DocumentTemplateForm with tenant scoping."""
-    dept = OrgUnit.objects.create(tenant=tenant_a, name="Quality Dept", code="QD")
+    dept = OrgUnit.objects.create(tenant=tenant_a, name="Quality Dept", kind="department")
     data = {
         "name": "Manufacturing SOP Template",
         "template_type": "sop",
@@ -40,7 +40,7 @@ def test_document_authoring_template_form_cross_tenant_owner_rejected(tenant_a, 
     data = {
         "name": "Hacked Owner Template",
         "template_type": "sop",
-        "category": "general",
+        "category": "operations",
         "content": "<p>Content</p>",
         "owner": admin_b.pk,
     }
@@ -55,7 +55,7 @@ def test_document_authoring_template_section_form_valid(tenant_a, document_templ
     data = {
         "template": document_template.pk,
         "title": "Safety & Compliance Clause",
-        "section_type": "boilerplate_clause",
+        "section_type": "boilerplate",
         "content": "Safety helmets mandatory in warehouse.",
         "order": 15,
         "is_locked": False,
@@ -82,7 +82,7 @@ def test_document_authoring_template_section_form_cross_tenant_template_rejected
     data = {
         "template": other_tmpl.pk,
         "title": "Injected Section",
-        "section_type": "boilerplate_clause",
+        "section_type": "boilerplate",
         "order": 10,
     }
     form = TemplateSectionForm(data=data, tenant=tenant_a)
@@ -93,7 +93,7 @@ def test_document_authoring_template_section_form_cross_tenant_template_rejected
 @pytest.mark.django_db
 def test_document_authoring_draft_form_valid(tenant_a, admin_user, document_template):
     """Test valid submission of DocumentDraftForm."""
-    dept = OrgUnit.objects.create(tenant=tenant_a, name="Ops Dept", code="OD")
+    dept = OrgUnit.objects.create(tenant=tenant_a, name="Ops Dept", kind="department")
     party = Party.objects.create(tenant=tenant_a, name="Acme Supplier Ltd")
     data = {
         "title": "Quarterly Maintenance Guide",
