@@ -25,7 +25,7 @@
         </div>
         <div class="card-body">
             <form method="get" action="{% url 'documents:signature_verify' %}" class="flex gap-2">
-                <input type="text" name="token" value="{{ token }}" class="form-input font-mono text-sm flex-1" placeholder="Enter 32-character token or UUID...">
+                <input type="text" name="token" value="{{ token }}" class="form-input font-mono text-sm flex-1" placeholder="Enter 32-character token or UUID..." aria-label="Electronic signature verification token">
                 <button type="submit" class="btn btn-primary">
                     <i data-lucide="shield-check"></i>
                     <span>Verify</span>
