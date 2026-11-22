@@ -31,8 +31,8 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Add `"restored_from_version"` to `select_related` and defer `extracted_text` on the versions queryset in `document_detail`. — fixed: `perf(documents): select_related restored_from_version and defer extracted_text in document_detail`
 - [x] **I8**: `apps/documents/views/VersionControl/Documents.py:82` & `apps/documents/views/VersionControl/DocumentBranches.py:73` — Redundant and discarded `prefetch_related` queries in detail views.
   - *Fix*: Remove discarded `prefetch_related=("versions", "locks", "branches")` from `document_detail` and `prefetch_related=("versions",)` from `document_branch_detail`. — fixed: `perf(documents): remove unused prefetch_related from document_detail` & `perf(documents): remove unused prefetch_related from document_branch_detail`
-- [ ] **I9**: `apps/documents/views/VersionControl/DocumentLocks.py:28` & `apps/documents/views/VersionControl/DocumentBranches.py:25` — `select_related("base_version")` pulls unneeded large `extracted_text` on lock and branch lists.
-  - *Fix*: Add `.defer("base_version__extracted_text")` to both list querysets.
+- [x] **I9**: `apps/documents/views/VersionControl/DocumentLocks.py:28` & `apps/documents/views/VersionControl/DocumentBranches.py:25` — `select_related("base_version")` pulls unneeded large `extracted_text` on lock and branch lists.
+  - *Fix*: Add `.defer("base_version__extracted_text")` to both list querysets. — fixed: `perf(documents): defer base_version__extracted_text in document_lock_list` & `perf(documents): defer base_version__extracted_text in document_branch_list`
 - [ ] **I10**: `apps/documents/views/VersionControl/DocumentVersions.py:193-209` — Multiple redundant queries and full text loading in `document_version_compare`.
   - *Fix*: Defer `extracted_text` on dropdown versions queryset and evaluate `versions_list = list(versions)` once to resolve default selections in memory without repeated DB queries.
 - [ ] **I11**: `apps/documents/models/VersionControl/DocumentVersions.py:80` — Missing database index on `DocumentVersion.status`.
