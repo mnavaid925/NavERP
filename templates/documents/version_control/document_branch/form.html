@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ branch.name }}{% else %}Fork Revision Branch{% endif %} — NavERP DMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Branch{% else %}Fork Revision Branch{% endif %}</span>
+        </nav>
+        <h1 class="page-title">{% if is_edit %}Edit Branch Properties{% else %}Fork Parallel Revision Branch{% endif %}</h1>
+        <p class="text-sm text-slate-500">Create an independent exploratory drafting scenario or localized document variant.</p>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Branch Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="{{ form.document.id_for_label }}" class="form-label">Target Document <span class="text-red-500">*</span></label>
+                {{ form.document }}
+                {% if form.document.errors %}<div class="form-error">{{ form.document.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.name.id_for_label }}" class="form-label">Branch Name <span class="text-red-500">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    <span class="text-[11px] text-slate-400">e.g. eu-variant, proposal-draft-b</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.branch_type.id_for_label }}" class="form-label">Branch Type <span class="text-red-500">*</span></label>
+                    {{ form.branch_type }}
+                    {% if form.branch_type.errors %}<div class="form-error">{{ form.branch_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.base_version.id_for_label }}" class="form-label">Base Version Forked From <span class="text-red-500">*</span></label>
+                    {{ form.base_version }}
+                    {% if form.base_version.errors %}<div class="form-error">{{ form.base_version.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.created_by.id_for_label }}" class="form-label">Author / Owner <span class="text-red-500">*</span></label>
+                    {{ form.created_by }}
+                    {% if form.created_by.errors %}<div class="form-error">{{ form.created_by.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.description.id_for_label }}" class="form-label">Description / Objective</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:document_branch_detail' branch.pk %}{% else %}{% url 'documents:document_branch_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="git-branch"></i> {% if is_edit %}Update Branch{% else %}Fork Branch{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
