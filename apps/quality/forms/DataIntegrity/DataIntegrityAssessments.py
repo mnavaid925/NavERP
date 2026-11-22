@@ -96,4 +96,27 @@ class DataIntegrityAssessmentForm(TenantModelForm):
             cleaned_data,
             ["system", "org_unit", "lead_assessor", "qa_reviewer", "linked_capa", "linked_ncr"],
         )
+        status = cleaned_data.get("status")
+        if status == "approved":
+            alcoa_dimensions = [
+                "attributable_rating",
+                "legible_rating",
+                "contemporaneous_rating",
+                "original_rating",
+                "accurate_rating",
+                "complete_rating",
+                "consistent_rating",
+                "enduring_rating",
+                "available_rating",
+            ]
+            has_non_compliant = any(
+                cleaned_data.get(dim) == "non_compliant" for dim in alcoa_dimensions
+            )
+            remediation_plan = (cleaned_data.get("remediation_plan") or "").strip()
+            linked_capa = cleaned_data.get("linked_capa")
+            if has_non_compliant and not (remediation_plan or linked_capa):
+                self.add_error(
+                    "remediation_plan",
+                    "Remediation plan or linked CAPA is required for approval when any ALCOA+ rating is non-compliant.",
+                )
         return cleaned_data
