@@ -279,7 +279,7 @@ def document_discard_checkout(request, doc_pk):
     return redirect("documents:document_detail", pk=document.pk)
 
 
-@login_required
+@tenant_admin_required
 def document_force_unlock(request, pk):
     lock = documents_object(request, DocumentLock, pk)
     document = lock.document
