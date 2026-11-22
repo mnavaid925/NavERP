@@ -189,6 +189,6 @@ def test_approval_dashboard_cockpit_view(client, member_user, approval_workflow,
     res = client.get(reverse("documents:approval_dashboard"))
     assert res.status_code == 200
     content = res.content.decode()
-    assert "Document Approval & Review Cockpit" in content
+    assert "Approval Command Center" in content
     assert "Active Workflows" in content
     assert "Turnaround Cycle Time" in content
