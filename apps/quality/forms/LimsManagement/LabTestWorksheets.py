@@ -96,8 +96,9 @@ class LabTestWorksheetForm(TenantUniqueMixin, TenantModelForm):
                 within = False
             if spec.upper_limit is not None and numeric > spec.upper_limit:
                 within = False
-            cleaned_data["is_within_specification"] = within
-            if not within and cleaned_data.get("disposition") == "conforms":
-                cleaned_data["disposition"] = "oos_flagged"
+            if not within:
+                cleaned_data["is_within_specification"] = False
+                if cleaned_data.get("disposition") == "conforms":
+                    cleaned_data["disposition"] = "oos_flagged"
 
         return cleaned_data
