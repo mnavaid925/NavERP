@@ -68,5 +68,5 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Combine via `.aggregate()`. — fixed: `perf(documents): combine document_list total and locked count queries via aggregate`
 - [x] **M10**: `apps/documents/views/VersionControl/DocumentVersions.py:57` & `DocumentLocks.py:60` — Filter dropdown queries fetch unneeded large text columns on `Document`.
   - *Fix*: Restrict with `.only("id", "title", "number")`. — fixed: `perf(documents): use only id, title, number on Document filter queries in DocumentVersions and DocumentLocks`
-- [ ] **M11**: `apps/documents/views/VersionControl/DocumentBranches.py:253` — AuditLog action verb `"abandon"` documentation standardization.
-  - *Fix*: Document `"abandon"` in contract documentation.
+- [x] **M11**: `apps/documents/views/VersionControl/DocumentBranches.py:253` — AuditLog action verb `"abandon"` documentation standardization.
+  - *Fix*: Document `"abandon"` in contract documentation. — fixed: `docs(documents): document abandon action verb in 13.2 contract`
