@@ -118,10 +118,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
 
 ### Minor
 
-- [ ] **M1**: Duplicate Route Mapping in `LIVE_LINKS["13.4"]`.
+- [x] **M1**: Duplicate Route Mapping in `LIVE_LINKS["13.4"]`.
   - **Location**: `apps/core/navigation.py:3553-3554`
   - **Problem**: Both "Cloud & On-Premises Deployment" and "Storage Tiering & Optimization" point identically to `documents:storage_volume_list`.
-  - **Fix**: Differentiate "Storage Tiering & Optimization" to `documents:storage_volume_list?tier=hot`.
+  - **Fix**: Differentiate "Storage Tiering & Optimization" to `documents:storage_volume_list?tier=hot`. [x] fixed — 087fe531: differentiate storage tiering leaf with tier=hot param in 13.4
 
 - [ ] **M2**: Implicit FK Evaluation in `DocumentFolder.is_root`.
   - **Location**: `apps/documents/models/StorageRepository/DocumentFolders.py:130`
