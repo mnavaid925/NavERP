@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -73,7 +75,12 @@ def workflow_detail(request, pk):
         DocumentApprovalWorkflow,
         pk,
         select_related=("document", "version", "initiator", "department", "bypassed_by"),
-        prefetch_related=("approval_requests__approver", "review_comments__author"),
+        prefetch_related=(
+            "approval_requests__approver",
+            "approval_requests__approver_role",
+            "approval_requests__delegated_to",
+            "review_comments__author",
+        ),
     )
 
     approval_requests = workflow.approval_requests.all().order_by("stage_number", "order", "-created_at")
@@ -156,6 +163,14 @@ def workflow_edit(request, pk):
 @require_POST
 def workflow_delete(request, pk):
     workflow = documents_object(request, DocumentApprovalWorkflow, pk)
+    # C4: Reject deletion if not draft
+    if workflow.status != "draft":
+        messages.error(
+            request,
+            f"Workflows in '{workflow.status}' status cannot be deleted. Only draft workflows can be removed.",
+        )
+        return redirect("documents:workflow_detail", pk=workflow.pk)
+
     number = workflow.number
     write_audit_log(request.user, workflow, "delete", tenant=request.tenant)
     workflow.delete()
@@ -165,9 +180,22 @@ def workflow_delete(request, pk):
 
 @login_required
 def workflow_designer(request, pk):
-    workflow = documents_object(request, DocumentApprovalWorkflow, pk)
+    # M7: select_related document
+    workflow = documents_object(
+        request,
+        DocumentApprovalWorkflow,
+        pk,
+        select_related=("document", "version", "initiator"),
+    )
     if request.method == "POST":
-        definition_json = request.POST.get("definition_json", "{}")
+        definition_json = request.POST.get("definition_json", "{}").strip()
+        # M4: validate JSON
+        try:
+            json.loads(definition_json)
+        except (ValueError, TypeError):
+            messages.error(request, "Invalid JSON definition layout provided.")
+            return redirect("documents:workflow_designer", pk=workflow.pk)
+
         workflow.definition_json = definition_json
         workflow.save(update_fields=["definition_json", "updated_at"])
         write_audit_log(request.user, workflow, "update", tenant=request.tenant)
@@ -211,7 +239,17 @@ def workflow_submit(request, pk):
 @require_POST
 def workflow_bypass(request, pk):
     workflow = documents_object(request, DocumentApprovalWorkflow, pk)
-    if not workflow.allow_emergency_bypass and not request.user.is_superuser:
+    # C3: Check authorization: admin, tenant admin, or workflow initiator
+    is_authorized = (
+        request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+        or request.user == workflow.initiator
+    )
+    if not is_authorized:
+        messages.error(request, "You are not authorized to execute an emergency bypass on this workflow.")
+        return redirect("documents:workflow_detail", pk=workflow.pk)
+
+    if not workflow.allow_emergency_bypass and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)):
         messages.error(request, "Emergency bypass is not permitted on this workflow.")
         return redirect("documents:workflow_detail", pk=workflow.pk)
 
