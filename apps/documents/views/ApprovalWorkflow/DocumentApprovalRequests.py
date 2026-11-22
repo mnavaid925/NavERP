@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -161,6 +162,11 @@ def approval_request_edit(request, pk):
 @require_POST
 def approval_request_delete(request, pk):
     req_obj = documents_object(request, DocumentApprovalRequest, pk)
+    # C5: Reject deletion if workflow is not draft or request is not pending
+    if req_obj.workflow.status != "draft" or req_obj.status != "pending":
+        messages.error(request, "Only pending requests in a draft workflow can be deleted.")
+        return redirect("documents:approval_request_detail", pk=req_obj.pk)
+
     wf_pk = req_obj.workflow.pk
     number = req_obj.number
     write_audit_log(request.user, req_obj, "delete", tenant=request.tenant)
@@ -173,8 +179,30 @@ def approval_request_delete(request, pk):
 @require_POST
 def approval_request_decide(request, pk):
     req_obj = documents_object(request, DocumentApprovalRequest, pk)
-    if req_obj.status != "pending":
+    if req_obj.status not in ["pending", "delegated", "escalated"]:
         messages.warning(request, "This request has already been processed.")
+        return redirect("documents:approval_request_detail", pk=req_obj.pk)
+
+    # C2: Authorization check
+    is_authorized = (
+        request.user == req_obj.approver
+        or (req_obj.delegated_to and request.user == req_obj.delegated_to)
+        or (req_obj.escalated_to and request.user == req_obj.escalated_to)
+        or request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+    )
+    if not is_authorized:
+        messages.error(request, "You are not authorized to decide this approval request.")
+        return redirect("documents:approval_request_detail", pk=req_obj.pk)
+
+    wf = req_obj.workflow
+    # I2: Parent workflow status and stage sequence check
+    if wf.status != "pending":
+        messages.error(request, f"Workflow is currently '{wf.status}', not pending. Decisions can only be made on active workflows.")
+        return redirect("documents:approval_request_detail", pk=req_obj.pk)
+
+    if req_obj.stage_type == "sequential" and req_obj.stage_number != wf.current_stage:
+        messages.error(request, f"This request is for Stage {req_obj.stage_number}, but the workflow is currently at Stage {wf.current_stage}.")
         return redirect("documents:approval_request_detail", pk=req_obj.pk)
 
     form = ApprovalDecisionForm(request.POST)
@@ -186,7 +214,6 @@ def approval_request_decide(request, pk):
     comments = form.cleaned_data["decision_comments"]
 
     # Check comment resolution gate
-    wf = req_obj.workflow
     if decision == "approved" and wf.requires_all_comments_resolved:
         blocking_comments = wf.review_comments.filter(is_blocking=True, status="open").count()
         if blocking_comments > 0:
@@ -196,43 +223,50 @@ def approval_request_decide(request, pk):
             )
             return redirect("documents:approval_request_detail", pk=req_obj.pk)
 
-    req_obj.status = decision
-    req_obj.decision_comments = comments
-    req_obj.decided_at = timezone.now()
-    req_obj.save(update_fields=["status", "decision_comments", "decided_at", "updated_at"])
+    # I3: Multi-model updates wrapped in transaction.atomic()
+    with transaction.atomic():
+        req_obj.status = decision
+        req_obj.decision_comments = comments
+        req_obj.decided_at = timezone.now()
+        req_obj.save(update_fields=["status", "decision_comments", "decided_at", "updated_at"])
 
-    audit_verb = "approve" if decision == "approved" else "reject"
-    write_audit_log(request.user, req_obj, audit_verb, tenant=request.tenant)
+        audit_verb = "approve" if decision == "approved" else "reject"
+        write_audit_log(request.user, req_obj, audit_verb, tenant=request.tenant)
 
-    if decision == "rejected":
-        wf.status = "rejected"
-        wf.completed_at = timezone.now()
-        wf.save(update_fields=["status", "completed_at", "updated_at"])
-        write_audit_log(request.user, wf, "reject", tenant=request.tenant)
-        messages.error(request, f"Approval request {req_obj.number} was rejected. Workflow marked rejected.")
-    else:
-        # Check if all requests in workflow or stage are approved
-        stage_requests = wf.approval_requests.filter(stage_number=wf.current_stage)
-        stage_done = False
-        if req_obj.stage_type == "parallel_first":
-            stage_done = True
-        elif not stage_requests.filter(status="pending").exists():
-            stage_done = True
+        if decision == "rejected":
+            wf.status = "rejected"
+            wf.completed_at = timezone.now()
+            wf.save(update_fields=["status", "completed_at", "updated_at"])
+            write_audit_log(request.user, wf, "reject", tenant=request.tenant)
+            messages.error(request, f"Approval request {req_obj.number} was rejected. Workflow marked rejected.")
+        else:
+            stage_requests = wf.approval_requests.filter(stage_number=wf.current_stage)
+            stage_done = False
+            if req_obj.stage_type == "parallel_first":
+                stage_done = True
+                # M5: mark remaining pending/delegated sibling requests in this stage bypassed
+                stage_requests.exclude(pk=req_obj.pk).filter(
+                    status__in=["pending", "delegated", "escalated"]
+                ).update(status="bypassed", updated_at=timezone.now())
+            elif not stage_requests.filter(status__in=["pending", "delegated", "escalated"]).exists():
+                # I1: Ensure stage has approved requests
+                if stage_requests.filter(status="approved").exists():
+                    stage_done = True
 
-        if stage_done:
-            next_stage = wf.current_stage + 1
-            if next_stage <= wf.total_stages and wf.approval_requests.filter(stage_number=next_stage).exists():
-                wf.current_stage = next_stage
-                wf.save(update_fields=["current_stage", "updated_at"])
-                messages.info(request, f"Stage {wf.current_stage - 1} completed. Advanced to Stage {next_stage}.")
-            else:
-                wf.status = "approved"
-                wf.completed_at = timezone.now()
-                wf.save(update_fields=["status", "completed_at", "updated_at"])
-                write_audit_log(request.user, wf, "approve", tenant=request.tenant)
-                messages.success(request, f"Workflow {wf.number} is now fully approved!")
+            if stage_done:
+                next_stage = wf.current_stage + 1
+                if next_stage <= wf.total_stages and wf.approval_requests.filter(stage_number=next_stage).exists():
+                    wf.current_stage = next_stage
+                    wf.save(update_fields=["current_stage", "updated_at"])
+                    messages.info(request, f"Stage {wf.current_stage - 1} completed. Advanced to Stage {next_stage}.")
+                else:
+                    wf.status = "approved"
+                    wf.completed_at = timezone.now()
+                    wf.save(update_fields=["status", "completed_at", "updated_at"])
+                    write_audit_log(request.user, wf, "approve", tenant=request.tenant)
+                    messages.success(request, f"Workflow {wf.number} is now fully approved!")
 
-        messages.success(request, f"Approval request {req_obj.number} recorded as approved.")
+            messages.success(request, f"Approval request {req_obj.number} recorded as approved.")
 
     return redirect("documents:approval_request_detail", pk=req_obj.pk)
 
@@ -241,6 +275,17 @@ def approval_request_decide(request, pk):
 @require_POST
 def approval_request_delegate(request, pk):
     req_obj = documents_object(request, DocumentApprovalRequest, pk)
+    # Authorization check
+    is_authorized = (
+        request.user == req_obj.approver
+        or (req_obj.delegated_to and request.user == req_obj.delegated_to)
+        or request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+    )
+    if not is_authorized:
+        messages.error(request, "You are not authorized to delegate this approval request.")
+        return redirect("documents:approval_request_detail", pk=req_obj.pk)
+
     form = ApprovalDelegationForm(request.POST, tenant=request.tenant)
     if form.is_valid():
         delegated_to = form.cleaned_data["delegated_to"]
@@ -261,6 +306,17 @@ def approval_request_delegate(request, pk):
 @require_POST
 def approval_request_escalate(request, pk):
     req_obj = documents_object(request, DocumentApprovalRequest, pk)
+    # Authorization check
+    is_authorized = (
+        request.user == req_obj.approver
+        or request.user == req_obj.workflow.initiator
+        or request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+    )
+    if not is_authorized:
+        messages.error(request, "You are not authorized to escalate this approval request.")
+        return redirect("documents:approval_request_detail", pk=req_obj.pk)
+
     form = ApprovalEscalationForm(request.POST, tenant=request.tenant)
     if form.is_valid():
         escalated_to = form.cleaned_data["escalated_to"]
