@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ request_obj.number }} — Approval Request — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_list' %}">Approval Workflows</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_detail' request_obj.workflow.pk %}">{{ request_obj.workflow.number }}</a>
+            <span>/</span>
+            <span>{{ request_obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ request_obj.stage_name }}: {{ request_obj.number }}</h1>
+            <span class="badge {{ status_css }}">{{ request_obj.get_status_display }}</span>
+            <span class="badge {{ stage_type_css }}">{{ request_obj.get_stage_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:workflow_detail' request_obj.workflow.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Workflow Detail</span>
+        </a>
+        {% if request_obj.status == "pending" %}
+        <a href="{% url 'documents:approval_request_edit' request_obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <button type="button" class="btn btn-outline text-blue-600" onclick="document.getElementById('delegate-modal').classList.remove('hidden')">
+            <i data-lucide="user-check"></i>
+            <span>Delegate</span>
+        </button>
+        <button type="button" class="btn btn-outline text-amber-600" onclick="document.getElementById('escalate-modal').classList.remove('hidden')">
+            <i data-lucide="arrow-up-right"></i>
+            <span>Escalate</span>
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Main Details -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2">
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Approval Request Specifications</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Request Number</dt>
+                        <dd class="font-mono font-semibold">{{ request_obj.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Parent Workflow</dt>
+                        <dd>
+                            <a href="{% url 'documents:workflow_detail' request_obj.workflow.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ request_obj.workflow.number }} — {{ request_obj.workflow.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' request_obj.workflow.document.pk %}" class="text-blue-600 hover:underline">
+                                {{ request_obj.workflow.document.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Stage Assignment</dt>
+                        <dd class="font-semibold">Stage {{ request_obj.stage_number }} (Order #{{ request_obj.order }})</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Designated Approver</dt>
+                        <dd>
+                            {% if request_obj.approver %}
+                                <span class="font-medium text-slate-900">{{ request_obj.approver.get_full_name|default:request_obj.approver.username }}</span>
+                            {% else %}
+                                —
+                            {% endif %}
+                            {% if request_obj.approver_role %}
+                            <span class="text-xs text-slate-500">({{ request_obj.approver_role.name }})</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Due Date</dt>
+                        <dd>{{ request_obj.due_date|date:"Y-m-d H:i"|default:"Not specified" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Status & Decision Time</dt>
+                        <dd>
+                            <span class="badge {{ status_css }}">{{ request_obj.get_status_display }}</span>
+                            {% if request_obj.decided_at %}
+                            <span class="text-xs text-slate-500 ml-2">Decided {{ request_obj.decided_at|date:"Y-m-d H:i" }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Stage Routing Rule</dt>
+                        <dd><span class="badge {{ stage_type_css }}">{{ request_obj.get_stage_type_display }}</span></dd>
+                    </div>
+
+                    {% if request_obj.delegated_to %}
+                    <div class="detail-item col-span-full bg-blue-50 p-3 rounded text-blue-900">
+                        <dt class="text-blue-700">Delegated Assignment</dt>
+                        <dd>
+                            Delegated to <strong>{{ request_obj.delegated_to.get_full_name|default:request_obj.delegated_to.username }}</strong> on {{ request_obj.delegated_at|date:"Y-m-d H:i" }}<br>
+                            <strong>Reason:</strong> {{ request_obj.delegation_reason }}
+                        </dd>
+                    </div>
+                    {% endif %}
+
+                    {% if request_obj.is_escalated %}
+                    <div class="detail-item col-span-full bg-amber-50 p-3 rounded text-amber-900">
+                        <dt class="text-amber-700">Timeout Escalation</dt>
+                        <dd>
+                            Escalated to <strong>{{ request_obj.escalated_to.get_full_name|default:request_obj.escalated_to.username }}</strong> on {{ request_obj.escalated_at|date:"Y-m-d H:i" }}<br>
+                            <strong>Reason:</strong> {{ request_obj.escalation_reason }}
+                        </dd>
+                    </div>
+                    {% endif %}
+
+                    <div class="detail-item col-span-full">
+                        <dt>Decision Comments & Audit Notes</dt>
+                        <dd class="bg-slate-50 p-3 rounded border border-slate-200 text-sm">
+                            {{ request_obj.decision_comments|default:"No decision comments recorded yet." }}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action / Decision Sidebar -->
+    <div>
+        {% if request_obj.status == "pending" %}
+        <div class="card mb-6 border-2 border-blue-500">
+            <div class="card-header bg-blue-50">
+                <h3 class="text-base font-semibold text-blue-900 flex items-center gap-2">
+                    <i data-lucide="check-circle" class="text-blue-600"></i>
+                    <span>Record Approval Decision</span>
+                </h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'documents:approval_request_decide' request_obj.pk %}">
+                    {% csrf_token %}
+                    <div class="form-group mb-4">
+                        <label class="form-label">Decision *</label>
+                        <div class="space-y-2">
+                            {% for radio in decision_form.decision %}
+                            <label class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-slate-50 border border-slate-200">
+                                {{ radio.tag }}
+                                <span class="text-sm font-medium">{{ radio.choice_label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="form-group mb-4">
+                        <label class="form-label" for="{{ decision_form.decision_comments.id_for_label }}">Decision Remarks / Reason *</label>
+                        {{ decision_form.decision_comments }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="send"></i>
+                        <span>Submit Official Decision</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if signature %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-base font-semibold text-slate-800">Associated e-Signature</h3>
+            </div>
+            <div class="card-body text-sm space-y-2">
+                <div class="font-mono text-xs text-blue-600">{{ signature.number }}</div>
+                <div><strong>Signer:</strong> {{ signature.signer_name }}</div>
+                <div><strong>Meaning:</strong> <span class="badge {{ signature.signature_meaning_css_class }}">{{ signature.get_signature_meaning_display }}</span></div>
+                <div><strong>Signed:</strong> {{ signature.signed_at|date:"Y-m-d H:i" }}</div>
+                <div class="pt-2">
+                    <a href="{% url 'documents:signature_detail' signature.pk %}" class="btn btn-outline btn-sm w-full">
+                        View Signature Manifest
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Delegation Modal -->
+<div id="delegate-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
+            <i data-lucide="user-check" class="text-blue-600"></i>
+            <span>Delegate Approval Request</span>
+        </h3>
+        <p class="text-sm text-slate-600 mb-4">
+            Reassign this approval task to another user. Delegation is logged in the permanent audit trail.
+        </p>
+        <form method="post" action="{% url 'documents:approval_request_delegate' request_obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group mb-3">
+                <label class="form-label" for="{{ delegation_form.delegated_to.id_for_label }}">Delegate To *</label>
+                {{ delegation_form.delegated_to }}
+            </div>
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ delegation_form.delegation_reason.id_for_label }}">Delegation Reason *</label>
+                {{ delegation_form.delegation_reason }}
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('delegate-modal').classList.add('hidden')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Confirm Delegation</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Escalation Modal -->
+<div id="escalate-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
+            <i data-lucide="arrow-up-right" class="text-amber-600"></i>
+            <span>Escalate Approval Request</span>
+        </h3>
+        <p class="text-sm text-slate-600 mb-4">
+            Escalate this delayed or blocked approval task to a manager or higher authority.
+        </p>
+        <form method="post" action="{% url 'documents:approval_request_escalate' request_obj.pk %}">
+            {% csrf_token %}
+            <div class="form-group mb-3">
+                <label class="form-label" for="{{ escalation_form.escalated_to.id_for_label }}">Escalate To *</label>
+                {{ escalation_form.escalated_to }}
+            </div>
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ escalation_form.escalation_reason.id_for_label }}">Escalation Reason *</label>
+                {{ escalation_form.escalation_reason }}
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('escalate-modal').classList.add('hidden')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Confirm Escalation</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
