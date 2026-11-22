@@ -106,13 +106,13 @@
       <div class="detail-item">
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Investigation Lead</dt>
         <dd class="text-sm font-medium text-slate-900 mt-1">
-          {{ investigation.investigation_lead.get_full_name|default:investigation.investigation_lead.username|default:"Unassigned" }}
+          {% if investigation.investigation_lead %}{{ investigation.investigation_lead.get_full_name|default:investigation.investigation_lead.username }}{% else %}Unassigned{% endif %}
         </dd>
       </div>
       <div class="detail-item">
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">QA Approver</dt>
         <dd class="text-sm text-slate-700 mt-1">
-          {{ investigation.qa_approver.get_full_name|default:investigation.qa_approver.username|default:"Pending QA Closure" }}
+          {% if investigation.qa_approver %}{{ investigation.qa_approver.get_full_name|default:investigation.qa_approver.username }}{% else %}Pending QA Closure{% endif %}
         </dd>
       </div>
     </dl>
