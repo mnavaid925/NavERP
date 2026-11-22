@@ -56,7 +56,7 @@ def document_version_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    documents = Document.objects.filter(tenant=request.tenant).order_by("title")
+    documents = Document.objects.filter(tenant=request.tenant).only("id", "title", "number").order_by("title")
 
     context = {
         "page_obj": page_obj,
@@ -187,7 +187,7 @@ def document_version_compare(request):
     metadata_diff = {}
     diff_stats = {"lines_added": 0, "lines_removed": 0, "metadata_changes": 0}
 
-    documents = Document.objects.filter(tenant=request.tenant).order_by("title")
+    documents = Document.objects.filter(tenant=request.tenant).only("id", "title", "number").order_by("title")
 
     if doc_id and doc_id.isdigit():
         document = documents_scope(Document.objects.all(), request).filter(pk=int(doc_id)).first()
