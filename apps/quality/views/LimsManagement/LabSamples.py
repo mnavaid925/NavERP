@@ -77,7 +77,11 @@ def lab_sample_detail(request, pk):
             "facility",
         ],
     )
-    test_worksheets = sample.test_worksheets.all() if hasattr(sample, "test_worksheets") else []
+    test_worksheets = (
+        sample.test_worksheets.select_related("specification", "assigned_analyst").all()
+        if hasattr(sample, "test_worksheets")
+        else []
+    )
     oos_investigations = sample.oos_investigations.all() if hasattr(sample, "oos_investigations") else []
 
     context = {
