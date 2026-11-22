@@ -31,6 +31,7 @@
     </div>
     <div class="page-actions flex items-center gap-2">
       {% if investigation.status != "closed" %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'quality:oos_investigation_close' investigation.pk %}" class="inline">
           {% csrf_token %}
           <button type="submit" class="btn btn-primary flex items-center gap-1.5 text-sm">
@@ -38,6 +39,7 @@
             <span>Close & Approve OOS</span>
           </button>
         </form>
+        {% endif %}
       {% endif %}
       <a href="{% url 'quality:oos_investigation_edit' investigation.pk %}" class="btn btn-outline flex items-center gap-1.5 text-sm">
         <i data-lucide="pencil" class="w-4 h-4"></i>
