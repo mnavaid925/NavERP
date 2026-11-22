@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ signature.number }}{% else %}Execute Electronic Signature{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:signature_list' %}">Signatures</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ signature.number }}{% else %}New Signature{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Signature: {{ signature.number }}{% else %}Electronic Signature Execution{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:signature_detail' signature.pk %}{% else %}{% url 'documents:signature_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Signature Manifest & Identity Parameters</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger mb-4">
+                {% for err in form.non_field_errors %}{{ err }}<br>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Document -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.document.id_for_label }}">Document to Execute *</label>
+                    {{ form.document }}
+                    {% if form.document.errors %}<div class="form-error">{{ form.document.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Version -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">Document Version (Optional)</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}<div class="form-error">{{ form.version.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Approval Request -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.approval_request.id_for_label }}">Approval Request Task (Optional)</label>
+                    {{ form.approval_request }}
+                    {% if form.approval_request.errors %}<div class="form-error">{{ form.approval_request.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Signer Name -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signer_name.id_for_label }}">Signer Full Legal Name *</label>
+                    {{ form.signer_name }}
+                    {% if form.signer_name.errors %}<div class="form-error">{{ form.signer_name.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Signer Title -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signer_title.id_for_label }}">Signer Professional Title</label>
+                    {{ form.signer_title }}
+                    {% if form.signer_title.errors %}<div class="form-error">{{ form.signer_title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Signer Email -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.signer_email.id_for_label }}">Signer Notification Email</label>
+                    {{ form.signer_email }}
+                    {% if form.signer_email.errors %}<div class="form-error">{{ form.signer_email.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Signature Type -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signature_type.id_for_label }}">Signature Technology Type *</label>
+                    {{ form.signature_type }}
+                    {% if form.signature_type.errors %}<div class="form-error">{{ form.signature_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Signature Meaning -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.signature_meaning.id_for_label }}">Signature Meaning (21 CFR Part 11) *</label>
+                    {{ form.signature_meaning }}
+                    {% if form.signature_meaning.errors %}<div class="form-error">{{ form.signature_meaning.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Certificate Serial -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.certificate_serial.id_for_label }}">Digital Certificate Serial (Optional)</label>
+                    {{ form.certificate_serial }}
+                    {% if form.certificate_serial.errors %}<div class="form-error">{{ form.certificate_serial.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Signature Glyph -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.signature_glyph.id_for_label }}">SVG Glyph / Drawn Path (Optional)</label>
+                    {{ form.signature_glyph }}
+                    <span class="text-xs text-slate-500">Leave blank to use stylized typographic electronic legal seal.</span>
+                    {% if form.signature_glyph.errors %}<div class="form-error">{{ form.signature_glyph.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-full bg-slate-50 p-4 rounded border border-slate-200">
+                    <div class="text-xs text-slate-600">
+                        <strong>Legal Notice:</strong> By executing this signature, you agree that your electronic signature is the legal equivalent of your manual signature on this document under the United States Electronic Signatures in Global and National Commerce Act (ESIGN) and European Union eIDAS regulation.
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 border-t border-slate-200 pt-4">
+                <a href="{% if is_edit %}{% url 'documents:signature_detail' signature.pk %}{% else %}{% url 'documents:signature_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Sign Document{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
