@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Draft Collaborations & Suggestions — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <span>Documents</span>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">Collaborations</span>
+        </nav>
+        <h1 class="page-title mt-1">Collaboration Notes & Suggestions</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Peer reviews, tracked edit suggestions, inline comments, and resolution status across all working drafts.</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body p-4">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ search_query }}" placeholder="Search notes, quotes..." class="form-input text-sm pl-9">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div>
+                <label class="form-label text-xs">Entry Type</label>
+                <select name="entry_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for code, label in entry_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.entry_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 mr-1.5"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.entry_type or request.GET.status %}
+                <a href="{% url 'documents:collaboration_list' %}" class="btn btn-outline text-slate-600" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header flex justify-between items-center py-3 px-4">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Collaborative Entries ({{ total_count }})
+        </span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Referenced Draft</th>
+                    <th>Type</th>
+                    <th>Author</th>
+                    <th>Feedback / Suggestion</th>
+                    <th>Status</th>
+                    <th>Resolved By</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in collaborations %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'documents:collaboration_detail' c.pk %}" class="text-blue-600 hover:underline">
+                            {{ c.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:draft_detail' c.draft.pk %}" class="text-sm font-medium text-slate-900 hover:underline">
+                            {{ c.draft.title }}
+                        </a>
+                        <span class="text-xs text-slate-400 block font-mono">{{ c.draft.number }}</span>
+                    </td>
+                    <td>
+                        {% if c.entry_type == 'comment' %}
+                        <span class="badge badge-info text-xs">Comment</span>
+                        {% elif c.entry_type == 'suggestion' %}
+                        <span class="badge badge-amber text-xs">Suggestion</span>
+                        {% else %}
+                        <span class="badge badge-slate text-xs">Track Change</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-700">{{ c.author.get_full_name|default:c.author.username }}</span>
+                    </td>
+                    <td class="max-w-xs">
+                        <p class="text-xs text-slate-700 line-clamp-2">{{ c.comment_text }}</p>
+                        {% if c.replacement_text %}
+                        <div class="text-[11px] font-mono text-green-700 bg-green-50 p-1 rounded mt-1 line-clamp-1 border border-green-200">
+                            {{ c.replacement_text }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.status == 'open' %}
+                        <span class="badge badge-amber text-xs">Open</span>
+                        {% elif c.status == 'accepted' %}
+                        <span class="badge badge-green text-xs">Accepted</span>
+                        {% elif c.status == 'rejected' %}
+                        <span class="badge badge-red text-xs">Rejected</span>
+                        {% else %}
+                        <span class="badge badge-muted text-xs">Resolved</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.resolved_by %}
+                        <span class="text-xs text-slate-600">{{ c.resolved_by.username }}</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="flex items-center justify-end gap-1.5">
+                            <a href="{% url 'documents:collaboration_detail' c.pk %}" class="btn btn-icon btn-outline" title="View Details">
+                                <i data-lucide="eye" class="w-4 h-4"></i>
+                            </a>
+                            <a href="{% url 'documents:collaboration_edit' c.pk %}" class="btn btn-icon btn-outline" title="Edit Note">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </a>
+                            <form method="POST" action="{% url 'documents:collaboration_delete' c.pk %}" onsubmit="return confirm('Delete this collaboration comment?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Comment">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-8 text-center">
+                            <i data-lucide="message-square" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                            <p class="text-slate-600 font-medium">No collaboration comments found</p>
+                            <p class="text-xs text-slate-400 mt-1">Review feedback and suggestions created in draft workbenches will appear here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer flex justify-between items-center py-3 px-4 border-t border-slate-100">
+        <span class="text-xs text-slate-500">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+        <div class="pagination flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.entry_type %}&entry_type={{ request.GET.entry_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.entry_type %}&entry_type={{ request.GET.entry_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
