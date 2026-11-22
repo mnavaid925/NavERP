@@ -31,10 +31,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: `batch.archive_file.path` raises `NotImplementedError` on S3/Azure/GCS object storage backends.
   - **Fix**: Open the file stream directly using `batch.archive_file.open("rb")` and pass stream to `zipfile.ZipFile(archive_stream)`. [x] fixed — 3f58c3f3: use stream access instead of path for remote storage compatibility
 
-- [ ] **C3**: Unbounded batch ingestion allows zip bombs and database denial of service.
+- [x] **C3**: Unbounded batch ingestion allows zip bombs and database denial of service.
   - **Location**: `apps/documents/views/StorageRepository/DocumentBatchImports.py:190`
   - **Problem**: Unchecked archive extraction can consume all memory and lock worker transactions.
-  - **Fix**: Enforce `MAX_BATCH_FILES = 500` and `MAX_BATCH_BYTES = 100 * 1024 * 1024` (100 MB total uncompressed size limit) before processing files.
+  - **Fix**: Enforce `MAX_BATCH_FILES = 500` and `MAX_BATCH_BYTES = 100 * 1024 * 1024` (100 MB total uncompressed size limit) before processing files. [x] fixed — 67d77caf: enforce file count and byte size limits against zip bombs in batch ingestion
 
 - [ ] **C4**: Recursive N+1 Query Cascade in `folder_tree`.
   - **Location**: `apps/documents/views/StorageRepository/DocumentFolders.py:78-92`
