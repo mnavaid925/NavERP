@@ -62,8 +62,8 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Guard with `{% if document.locked_by %}{{ document.locked_by.get_full_name|default:document.locked_by.username }}{% else %}Unknown{% endif %}`. — fixed: `fix(documents): guard locked_by display in document detail header badge`
 - [x] **M7**: Icon-only action buttons across list tables lack `aria-label` attribute matching `title`.
   - *Fix*: Add `aria-label` matching `title` on all icon-only action buttons. — fixed: `fix(documents): add aria-label to table action buttons in document, version, branch, and lock lists and details`
-- [ ] **M8**: `templates/documents/version_control/document/detail.html:168, 268` & `document_branch/detail.html:151` — Template `.count` triggers redundant SQL `COUNT(*)` right before iteration.
-  - *Fix*: Use `{{ versions|length }}` and `{{ branches|length }}`.
+- [x] **M8**: `templates/documents/version_control/document/detail.html:168, 268` & `document_branch/detail.html:151` — Template `.count` triggers redundant SQL `COUNT(*)` right before iteration.
+  - *Fix*: Use `{{ versions|length }}` and `{{ branches|length }}`. — fixed: `perf(documents): replace count with length in document detail and document_branch detail headers`
 - [ ] **M9**: `apps/documents/views/VersionControl/Documents.py:59` — Uncombined stat card count queries in `document_list`.
   - *Fix*: Combine via `.aggregate()`.
 - [ ] **M10**: `apps/documents/views/VersionControl/DocumentVersions.py:57` & `DocumentLocks.py:60` — Filter dropdown queries fetch unneeded large text columns on `Document`.
