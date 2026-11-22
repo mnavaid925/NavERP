@@ -12,7 +12,7 @@ from apps.quality.forms.DataIntegrity.AuditTrailReviews import AuditTrailReviewF
 from apps.quality.models.DataIntegrity.AuditTrailReviews import AuditTrailReview
 from apps.quality.views._common import quality_object, quality_scope
 
-PAGE_SIZE = 15
+PAGE_SIZE = 20
 
 
 @login_required
