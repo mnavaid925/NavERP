@@ -88,7 +88,7 @@
 
         <div class="card">
             <div class="card-header flex justify-between items-center py-3 px-4">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600">Open Suggestions ({{ collaborations.count }})</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600">Open Suggestions ({{ collaborations|length }})</h3>
                 <a href="{% url 'documents:collaboration_create' draft.pk %}" class="text-xs text-blue-600 hover:underline">
                     Add Note
                 </a>
