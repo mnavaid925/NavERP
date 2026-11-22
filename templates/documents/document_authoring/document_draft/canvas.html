@@ -77,7 +77,7 @@
             </div>
             <div class="card-body p-3 text-xs space-y-2">
                 {% for key, desc in available_tokens.items %}
-                <button type="button" onclick="insertToken('{{ key }}')" class="w-full text-left p-1.5 rounded hover:bg-blue-50 transition border border-transparent hover:border-blue-200 group">
+                <button type="button" onclick="insertToken('{{ key|escapejs }}')" class="w-full text-left p-1.5 rounded hover:bg-blue-50 transition border border-transparent hover:border-blue-200 group">
                     <code class="text-blue-700 font-mono font-semibold block group-hover:text-blue-800">&#123;&#123; {{ key }} &#125;&#125;</code>
                     <span class="text-slate-500 text-[11px] block mt-0.5">{{ desc }}</span>
                 </button>
@@ -124,12 +124,42 @@ let typingTimer;
 const doneTypingInterval = 2000;
 const editor = document.getElementById('draft-editor');
 
+function updateLiveWordCount() {
+    const text = editor.value.trim();
+    const count = text ? text.split(/\s+/).length : 0;
+    const countDisplay = document.getElementById('word-count-display');
+    if (countDisplay) {
+        countDisplay.innerText = count;
+    }
+}
+
 editor.addEventListener('input', () => {
+    updateLiveWordCount();
     document.getElementById('save-status-text').innerText = 'Unsaved changes...';
     document.getElementById('save-status-badge').className = 'badge badge-amber text-xs';
     clearTimeout(typingTimer);
     typingTimer = setTimeout(triggerAutoSave, doneTypingInterval);
 });
+
+function formatDoc(command) {
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const selected = editor.value.substring(start, end);
+    let replacement = "";
+    if (command === 'bold') {
+        replacement = "**" + selected + "**";
+    } else if (command === 'italic') {
+        replacement = "*" + selected + "*";
+    } else if (command === 'insertUnorderedList') {
+        replacement = selected.split('\n').map(l => "- " + l).join('\n');
+    }
+    editor.value = editor.value.substring(0, start) + replacement + editor.value.substring(end);
+    editor.focus();
+    editor.selectionStart = start;
+    editor.selectionEnd = start + replacement.length;
+    updateLiveWordCount();
+    triggerAutoSave();
+}
 
 function insertToken(tokenName) {
     const placeholder = "{{" + tokenName + "}}";
@@ -138,6 +168,7 @@ function insertToken(tokenName) {
     editor.value = editor.value.substring(0, start) + placeholder + editor.value.substring(end);
     editor.focus();
     editor.selectionStart = editor.selectionEnd = start + placeholder.length;
+    updateLiveWordCount();
     triggerAutoSave();
 }
 
