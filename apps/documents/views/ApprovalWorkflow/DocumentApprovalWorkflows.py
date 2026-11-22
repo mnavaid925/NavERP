@@ -11,7 +11,7 @@ from apps.documents.forms.ApprovalWorkflow.DocumentApprovalWorkflows import (
     DocumentApprovalWorkflowForm,
     WorkflowBypassForm,
 )
-from apps.documents.models import DocumentApprovalWorkflow
+from apps.documents.models import DocumentApprovalWorkflow, DocumentSignature
 from apps.documents.views._common import documents_object, documents_scope
 
 
@@ -73,11 +73,15 @@ def workflow_detail(request, pk):
         DocumentApprovalWorkflow,
         pk,
         select_related=("document", "version", "initiator", "department", "bypassed_by"),
-        prefetch_related=("approval_requests__approver", "signatures__signer", "review_comments__author"),
+        prefetch_related=("approval_requests__approver", "review_comments__author"),
     )
 
     approval_requests = workflow.approval_requests.all().order_by("stage_number", "order", "-created_at")
-    signatures = workflow.signatures.all().order_by("-signed_at") if hasattr(workflow, "signatures") else workflow.document.signatures.filter(version=workflow.version).order_by("-signed_at")
+    if workflow.version:
+        sig_qs = DocumentSignature.objects.filter(document=workflow.document, version=workflow.version)
+    else:
+        sig_qs = DocumentSignature.objects.filter(document=workflow.document)
+    signatures = documents_scope(sig_qs.select_related("signer"), request).order_by("-signed_at")
     review_comments = workflow.review_comments.all().order_by("page_number", "-created_at")
     blocking_comments_count = review_comments.filter(is_blocking=True, status="open").count()
 
