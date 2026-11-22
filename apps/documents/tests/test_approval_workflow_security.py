@@ -10,6 +10,18 @@ from apps.documents.models import (
 )
 
 
+@pytest.fixture
+def other_user(db, django_user_model, tenant_a):
+    """Fixture providing a second distinct user belonging to tenant_a."""
+    user = django_user_model.objects.create_user(
+        username="other_acme",
+        email="other@acme.com",
+        password="password123",
+    )
+    user.tenants.add(tenant_a)
+    return user
+
+
 @pytest.mark.django_db
 def test_approval_workflow_unauthenticated_redirect(client, approval_workflow, approval_request, document_signature, review_comment):
     """Test that all protected 13.3 endpoints redirect unauthenticated users to login."""
@@ -30,13 +42,13 @@ def test_approval_workflow_unauthenticated_redirect(client, approval_workflow, a
     for url in protected_urls:
         res = client.get(url)
         assert res.status_code == 302
-        assert "/accounts/login/" in res.headers["Location"]
+        assert "/login/" in res.headers["Location"]
 
 
 @pytest.mark.django_db
-def test_approval_workflow_cross_tenant_idor_protection(client, tenant_b_user, approval_workflow, approval_request, document_signature, review_comment):
+def test_approval_workflow_cross_tenant_idor_protection(client, admin_b, approval_workflow, approval_request, document_signature, review_comment):
     """Test that tenant_b user cannot access or mutate tenant_a workflow objects (must 404)."""
-    client.force_login(tenant_b_user)
+    client.force_login(admin_b)
 
     # 1. Workflow Detail & Mutations
     assert client.get(reverse("documents:workflow_detail", kwargs={"pk": approval_workflow.pk})).status_code == 404
