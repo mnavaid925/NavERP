@@ -117,6 +117,7 @@ class DocumentApprovalRequest(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="doc_dapr_tnt_stat_idx"),
             models.Index(fields=["tenant", "approver", "status"], name="doc_dapr_tnt_appr_stat_idx"),
+            models.Index(fields=["tenant", "delegated_to", "status"], name="doc_dapr_tnt_dlg_stat_idx"),
             models.Index(fields=["tenant", "workflow", "stage_number"], name="doc_dapr_tnt_wf_stg_idx"),
         ]
 
