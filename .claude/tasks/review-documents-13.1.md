@@ -47,3 +47,16 @@
 - [ ] `apps/documents/views/DocumentAuthoring/DocumentTemplates.py:10` — Unused import `from apps.core.decorators import tenant_admin_required`.
 - [ ] `apps/documents/views/DocumentAuthoring/DocumentTemplates.py:151` — `template_instantiate` initializes `content=template.content` but leaves `draft.word_count` at 0 until an edit or autosave occurs.
 - [ ] `apps/documents/views/DocumentAuthoring/TemplateSections.py:124` — `template_section_delete` permits deletion of sections flagged as `is_locked=True` without validation or warning.
+
+## 3. Frontend Reviewer Findings
+
+### Critical
+- [ ] `templates/documents/document_authoring/document_template/detail.html:139` — Lesson L10 `VariableDoesNotExist` 500 crash on nullable user FK filter argument `{{ template.owner.get_full_name|default:template.owner.username|default:"Unassigned" }}`. Fix with `{% if template.owner %}{{ template.owner.get_full_name|default:template.owner.username }}{% else %}Unassigned{% endif %}`. Apply defensive check across sibling user lookups.
+
+### Important
+- [ ] `templates/documents/document_authoring/document_draft/canvas.html:43-51` — Undefined `formatDoc()` function in Canvas toolbar causes `ReferenceError`. Implement selection-range text replacement in canvas JS.
+- [ ] `templates/documents/document_authoring/draft_collaboration/detail.html:29-53` — Missing POST Delete action and Back-to-List button on Collaboration detail page.
+- [ ] `templates/documents/document_authoring/document_draft/canvas.html:80, 127` — Missing `|escapejs` on `insertToken('{{ key|escapejs }}')`, and word count is only updated after server autosave roundtrip instead of live on input.
+
+### Minor
+- [ ] `templates/documents/document_authoring/*/list.html` — Missing `for` / `id` attribute coupling on filter form labels and inputs.
