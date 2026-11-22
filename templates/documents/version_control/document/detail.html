@@ -41,7 +41,7 @@
                 </button>
             </form>
             {% else %}
-                {% if active_lock %}
+                {% if active_lock and request.user.is_superuser or active_lock and request.user.is_tenant_admin or active_lock and request.user.role == 'admin' %}
                 <a href="{% url 'documents:document_force_unlock' active_lock.pk %}" class="btn btn-outline text-red-600">
                     <i data-lucide="unlock"></i> Force Unlock (Admin)
                 </a>
