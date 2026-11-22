@@ -58,3 +58,25 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Add "Official Release" filter dropdown and preserve `is_official` in pagination links.
 - **EX-M4**: `apps/documents/views/VersionControl/DocumentBranches.py:253` — AuditLog action verb `"abandon"` in `document_branch_abandon` was not in the initial contract list (though valid under schema `<= 10` chars).
   - *Fix*: Keep or standardize to `"abandon"` in contract documentation.
+
+
+---
+
+## 3. Frontend Reviewer Findings
+
+### Critical
+*None.*
+
+### Important
+- **FE-I1**: `templates/documents/version_control/document_version/list.html:142` and `detail.html:29` — Missing CRUD Delete Action in version list actions column and detail header.
+  - *Fix*: Add POST-only delete form with CSRF and confirm prompt targeting `documents:document_version_delete`.
+- **FE-I2**: `templates/documents/version_control/document_branch/list.html:123` and `detail.html:26` — Missing CRUD Delete Action in branch list actions column and detail header.
+  - *Fix*: Add POST-only delete form with CSRF and confirm prompt targeting `documents:document_branch_delete`.
+- **FE-I3**: `templates/documents/version_control/document_version/detail.html:29` and `document_branch/detail.html:26` — Missing "Back to List" navigation action in detail headers.
+  - *Fix*: Add `<a href="{% url 'documents:document_version_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Version Register</a>` and `<a href="{% url 'documents:document_branch_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Branch Register</a>`.
+
+### Minor
+- **FE-M1**: `templates/documents/version_control/document/detail.html:21` — `Locked by {{ document.locked_by.username }}` inside header badge if `locked_by` is null.
+  - *Fix*: Use `{% if document.locked_by %}{{ document.locked_by.get_full_name|default:document.locked_by.username }}{% else %}Unknown{% endif %}`.
+- **FE-M2**: Icon-only action buttons across list tables lack `aria-label` attribute matching `title`.
+  - *Fix*: Add `aria-label` matching `title` on all icon-only action buttons.
