@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
@@ -212,12 +213,14 @@ def document_version_compare(request):
         text_a = (version_a.extracted_text or f"(No text content recorded for version {version_a.version_label})").splitlines()
         text_b = (version_b.extracted_text or f"(No text content recorded for version {version_b.version_label})").splitlines()
 
+        label_a = escape(version_a.version_label)
+        label_b = escape(version_b.version_label)
         html_diff = difflib.HtmlDiff(wrapcolumn=80)
         diff_html = html_diff.make_table(
             text_a,
             text_b,
-            fromdesc=f"Base: v{version_a.version_label} ({version_a.created_at.strftime('%Y-%m-%d %H:%M')})",
-            todesc=f"Comparison: v{version_b.version_label} ({version_b.created_at.strftime('%Y-%m-%d %H:%M')})",
+            fromdesc=f"Base: v{label_a} ({version_a.created_at.strftime('%Y-%m-%d %H:%M')})",
+            todesc=f"Comparison: v{label_b} ({version_b.created_at.strftime('%Y-%m-%d %H:%M')})",
             context=True,
             numlines=3,
         )
