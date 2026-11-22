@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Review Comments & Annotations — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_list' %}">Approval Workflows</a>
+            <span>/</span>
+            <span>Review Comments</span>
+        </div>
+        <h1 class="page-title">Document Review Comments & Annotations</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:review_comment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Annotation</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="message-square"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Annotations & Comments</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ open_blocking_count }}</div>
+            <div class="stat-label">Open Blocking Comments</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" class="form-input" placeholder="Text, passage, author...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="annotation_type">Annotation Type</label>
+                <select name="annotation_type" id="annotation_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in annotation_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.annotation_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-span-full sm:col-span-1 flex items-end gap-2">
+                <a href="{% url 'documents:review_comment_list' %}" class="btn btn-outline">Clear</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Annotations Register ({{ total_count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Comment #</th>
+                    <th>Document & Page</th>
+                    <th>Annotation Type</th>
+                    <th>Comment Snippet</th>
+                    <th>Author</th>
+                    <th>Blocking</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in comments %}
+                <tr>
+                    <td class="font-mono text-sm">
+                        <a href="{% url 'documents:review_comment_detail' c.pk %}" class="text-blue-600 hover:underline font-semibold">
+                            {{ c.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'documents:document_detail' c.document.pk %}" class="hover:underline">
+                                {{ c.document.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500">Page {{ c.page_number }}</div>
+                    </td>
+                    <td><span class="badge {{ c.annotation_type_css_class }}">{{ c.get_annotation_type_display }}</span></td>
+                    <td class="max-w-sm truncate text-sm">
+                        {% if c.selected_text %}
+                        <div class="text-xs text-slate-400 italic truncate mb-0.5">"{{ c.selected_text }}"</div>
+                        {% endif %}
+                        <div class="text-slate-800">{{ c.content }}</div>
+                    </td>
+                    <td class="text-sm">
+                        {% if c.author %}
+                            {{ c.author.get_full_name|default:c.author.username }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.is_blocking %}
+                        <span class="badge badge-red">Blocking</span>
+                        {% else %}
+                        <span class="badge badge-slate">Non-Blocking</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ c.status_css_class }}">{{ c.get_status_display }}</span></td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'documents:review_comment_detail' c.pk %}" class="btn btn-icon" title="View Thread / Resolve">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'documents:review_comment_edit' c.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'documents:review_comment_delete' c.pk %}" class="inline" onsubmit="return confirm('Delete review comment {{ c.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="message-square"></i>
+                            </div>
+                            <div class="empty-state-title">No Review Annotations</div>
+                            <div class="empty-state-text">No comments or markup annotations match your filter.</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if comments.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-sm text-slate-500">
+            Page {{ comments.number }} of {{ comments.paginator.num_pages }} ({{ total_count }} records)
+        </div>
+        <div class="flex gap-1">
+            {% if comments.has_previous %}
+            <a href="?page={{ comments.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.annotation_type %}&annotation_type={{ request.GET.annotation_type }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
+            {% endif %}
+
+            {% if comments.has_next %}
+            <a href="?page={{ comments.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.annotation_type %}&annotation_type={{ request.GET.annotation_type }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
