@@ -160,6 +160,9 @@ def lab_test_worksheet_delete(request, pk):
 @require_POST
 def lab_test_worksheet_complete(request, pk):
     obj = quality_object(request, LabTestWorksheet, pk)
+    if obj.status not in ["assigned", "in_progress"]:
+        messages.error(request, f"Worksheet {obj.number} cannot be completed from its current status.")
+        return redirect("quality:lab_test_worksheet_detail", pk=obj.pk)
     obj.status = "review_pending"
     obj.completion_timestamp = timezone.now()
     if not obj.execution_date:
