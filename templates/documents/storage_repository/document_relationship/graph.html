@@ -45,11 +45,11 @@
         </div>
     </div>
     <div class="card-body">
-        <div class="p-6 bg-slate-50 border border-slate-200 rounded-lg min-h-[300px] flex flex-col justify-center items-center">
+        <div class="p-6 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg min-h-[300px] flex flex-col justify-center items-center">
             {% if relationships %}
             <div class="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {% for rel in relationships %}
-                <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                     <div>
                         <div class="flex items-center justify-between mb-2">
                             <span class="badge {{ rel.type_badge_class }}">{{ rel.get_relationship_type_display }}</span>
@@ -62,7 +62,7 @@
                         <div class="space-y-2 my-3">
                             <div class="flex items-center gap-2">
                                 <div class="w-2 h-2 rounded-full bg-blue-500"></div>
-                                <a href="{% url 'documents:document_detail' rel.source_document.pk %}" class="text-sm font-semibold text-slate-800 hover:text-primary truncate">
+                                <a href="{% url 'documents:document_detail' rel.source_document.pk %}" class="text-sm font-semibold text-slate-800 dark:text-slate-100 hover:text-primary truncate">
                                     {{ rel.source_document.title }}
                                 </a>
                             </div>
@@ -71,13 +71,13 @@
                             </div>
                             <div class="flex items-center gap-2">
                                 <div class="w-2 h-2 rounded-full bg-purple-500"></div>
-                                <a href="{% url 'documents:document_detail' rel.target_document.pk %}" class="text-sm font-semibold text-slate-800 hover:text-primary truncate">
+                                <a href="{% url 'documents:document_detail' rel.target_document.pk %}" class="text-sm font-semibold text-slate-800 dark:text-slate-100 hover:text-primary truncate">
                                     {{ rel.target_document.title }}
                                 </a>
                             </div>
                         </div>
                     </div>
-                    <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-muted">
+                    <div class="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-muted">
                         <span>{{ rel.get_dependency_level_display }}</span>
                         <a href="{% url 'documents:relationship_detail' rel.pk %}" class="text-primary hover:underline">View Link</a>
                     </div>
