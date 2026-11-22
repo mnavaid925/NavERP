@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ draft.title }}{% else %}New Document Draft{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'documents:draft_list' %}">Drafts</a>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+        </nav>
+        <h1 class="page-title mt-1">{% if is_edit %}Edit Document Draft{% else %}Create Document Draft{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:draft_detail' draft.pk %}{% else %}{% url 'documents:draft_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header py-3 px-5">
+        <h2 class="text-sm font-semibold text-slate-800">
+            {% if is_edit %}Edit Draft: {{ draft.number }}{% else %}New Working Draft Specifications{% endif %}
+        </h2>
+    </div>
+    <div class="card-body p-6">
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Draft Document Title <span class="text-red-500">*</span></label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.document_type.id_for_label }}">Document Type</label>
+                    {{ form.document_type }}
+                    {% if form.document_type.errors %}<div class="form-error">{{ form.document_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.template.id_for_label }}">Originating Master Template</label>
+                    {{ form.template }}
+                    <span class="text-xs text-slate-400">Optional master template</span>
+                    {% if form.template.errors %}<div class="form-error">{{ form.template.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.draft_version.id_for_label }}">Draft Version Zero Designation</label>
+                    {{ form.draft_version }}
+                    <span class="text-xs text-slate-400">Pre-release version e.g. 0.1, 0.2</span>
+                    {% if form.draft_version.errors %}<div class="form-error">{{ form.draft_version.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.content_format.id_for_label }}">Content Format</label>
+                    {{ form.content_format }}
+                    {% if form.content_format.errors %}<div class="form-error">{{ form.content_format.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.department.id_for_label }}">Department / Org Unit</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="form-error">{{ form.department.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.related_party.id_for_label }}">Related Counterparty / Partner</label>
+                    {{ form.related_party }}
+                    {% if form.related_party.errors %}<div class="form-error">{{ form.related_party.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group flex items-center pt-5">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_collaboration_locked }}
+                        <span class="text-sm text-slate-700 font-medium text-amber-700">
+                            <i data-lucide="lock" class="w-3.5 h-3.5 inline"></i> Lock Concurrent Editing
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.content.id_for_label }}">Draft Content Body</label>
+                {{ form.content }}
+                <span class="text-xs text-slate-400">You can also use the rich-text Authoring Canvas after saving metadata.</span>
+                {% if form.content.errors %}<div class="form-error">{{ form.content.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:draft_detail' draft.pk %}{% else %}{% url 'documents:draft_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 mr-1.5"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Draft{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
