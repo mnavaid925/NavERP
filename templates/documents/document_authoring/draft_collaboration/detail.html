@@ -43,12 +43,22 @@
             </button>
         </form>
         {% endif %}
+        <a href="{% url 'documents:collaboration_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to List
+        </a>
         <a href="{% url 'documents:draft_detail' collaboration.draft.pk %}" class="btn btn-outline">
             View Parent Draft
         </a>
         <a href="{% url 'documents:collaboration_edit' collaboration.pk %}" class="btn btn-outline">
             <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit
         </a>
+        <form method="POST" action="{% url 'documents:collaboration_delete' collaboration.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to remove this feedback note?');">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="list">
+            <button type="submit" class="btn btn-danger btn-outline">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1.5"></i> Delete
+            </button>
+        </form>
     </div>
 </div>
 
