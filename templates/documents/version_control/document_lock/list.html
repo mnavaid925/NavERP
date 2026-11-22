@@ -130,16 +130,16 @@
                         <span class="badge {{ lock.status_badge_class }}">{{ lock.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right whitespace-nowrap">
-                        <a href="{% url 'documents:document_lock_detail' lock.pk %}" class="btn btn-icon" title="View Lock Detail">
+                        <a href="{% url 'documents:document_lock_detail' lock.pk %}" class="btn btn-icon" title="View Lock Detail" aria-label="View Lock Detail">
                             <i data-lucide="eye"></i>
                         </a>
                         {% if lock.status == 'active' %}
                             {% if lock.locked_by == request.user or request.user.is_superuser %}
-                            <a href="{% url 'documents:document_checkin' lock.document.pk %}" class="btn btn-icon text-green-600" title="Check-in New Version">
+                            <a href="{% url 'documents:document_checkin' lock.document.pk %}" class="btn btn-icon text-green-600" title="Check-in New Version" aria-label="Check-in New Version">
                                 <i data-lucide="upload"></i>
                             </a>
                             {% endif %}
-                            <a href="{% url 'documents:document_force_unlock' lock.pk %}" class="btn btn-icon text-amber-600" title="Administrative Force Unlock">
+                            <a href="{% url 'documents:document_force_unlock' lock.pk %}" class="btn btn-icon text-amber-600" title="Administrative Force Unlock" aria-label="Administrative Force Unlock">
                                 <i data-lucide="unlock"></i>
                             </a>
                         {% endif %}
