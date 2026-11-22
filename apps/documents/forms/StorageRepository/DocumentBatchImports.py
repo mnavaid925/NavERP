@@ -13,6 +13,7 @@ MAX_BATCH_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 class DocumentBatchImportForm(TenantUniqueMixin, TenantModelForm):
     MAX_BATCH_UPLOAD_BYTES = MAX_BATCH_UPLOAD_BYTES
+    ALLOWED_EXTENSIONS = (".zip", ".tar", ".gz", ".tgz", ".csv", ".json")
     class Meta:
         model = DocumentBatchImport
         fields = [
@@ -53,9 +54,11 @@ class DocumentBatchImportForm(TenantUniqueMixin, TenantModelForm):
                 )
 
             ext = os.path.splitext(archive.name)[1].lower()
-            allowed = [".zip", ".tar", ".gz", ".tgz", ".csv", ".json"]
-            if ext not in allowed:
-                self.add_error("archive_file", f"Unsupported batch import package format '{ext}'. Allowed formats: {', '.join(allowed)}")
+            if ext not in self.ALLOWED_EXTENSIONS:
+                self.add_error(
+                    "archive_file",
+                    f"Unsupported batch import package format '{ext}'. Allowed formats: {', '.join(self.ALLOWED_EXTENSIONS)}",
+                )
 
         if source_type == "zip_archive" and not archive and not self.instance.archive_file:
             self.add_error("archive_file", "ZIP Archive Package requires an archive file payload.")
