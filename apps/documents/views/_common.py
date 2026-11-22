@@ -23,7 +23,8 @@ def documents_scope(queryset, request, owner_field=None):
 
 
 def documents_object(request, model, pk, queryset=None, select_related=(), prefetch_related=()):
-    base = queryset if queryset is not None else model.objects.filter(tenant=request.tenant)
+    base = queryset if queryset is not None else model.objects.all()
+    base = base.filter(tenant=request.tenant)
     if select_related:
         base = base.select_related(*select_related)
     if prefetch_related:
