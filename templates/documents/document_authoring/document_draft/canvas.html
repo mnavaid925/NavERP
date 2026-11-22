@@ -132,7 +132,7 @@ editor.addEventListener('input', () => {
 });
 
 function insertToken(tokenName) {
-    const placeholder = `{{${tokenName}}}`;
+    const placeholder = "{{" + tokenName + "}}";
     const start = editor.selectionStart;
     const end = editor.selectionEnd;
     editor.value = editor.value.substring(0, start) + placeholder + editor.value.substring(end);
