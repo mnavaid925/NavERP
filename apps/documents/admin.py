@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
+from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
 from apps.documents.models.DocumentAuthoring.TemplateSections import TemplateSection
 from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
 from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
@@ -60,3 +61,11 @@ class DocumentDraftAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "template", "status", "author", "tenant")
     list_filter = ("status", "tenant")
     search_fields = ("number", "title")
+
+
+@admin.register(DraftCollaboration)
+class DraftCollaborationAdmin(admin.ModelAdmin):
+    list_display = ("number", "draft", "entry_type", "status", "author", "tenant")
+    list_filter = ("entry_type", "status", "tenant")
+    search_fields = ("number", "comment_text", "draft__title", "draft__number")
+    readonly_fields = ("number", "created_at", "updated_at")
