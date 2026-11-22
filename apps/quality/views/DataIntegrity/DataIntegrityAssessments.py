@@ -13,7 +13,7 @@ from apps.quality.models.DataIntegrity.DataIntegrityAssessments import DataInteg
 from apps.quality.models.ProcessValidation.ComputerSystemValidations import ComputerSystemValidation
 from apps.quality.views._common import quality_object, quality_scope
 
-PAGE_SIZE = 15
+PAGE_SIZE = 20
 
 
 @login_required
