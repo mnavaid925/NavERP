@@ -38734,110 +38734,117 @@ apps/quality/
 ## Detailed Checkable Work Items
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze `.claude/tasks/contract-documents-13.2.md` with every model field, choices tuple, form `Meta.fields` + exclusions, URL names, and view context keys.
+- [x] Freeze `.claude/tasks/contract-documents-13.2.md` with every model field, choices tuple, form `Meta.fields` + exclusions, URL names, and view context keys.
 
 ### Phase 3.2: Scaffold New App (`apps/documents`)
-- [ ] `apps/documents/apps.py` (`name = "apps.documents"`, `verbose_name = "Document Management System"`)
-- [ ] `apps/documents/__init__.py`
-- [ ] `apps/documents/migrations/__init__.py`
-- [ ] `apps/documents/models/_base.py` (`TenantOwned`, `TenantNumbered` abstract models)
-- [ ] `apps/documents/models/__init__.py`
-- [ ] `apps/documents/forms/_common.py`
-- [ ] `apps/documents/forms/__init__.py`
-- [ ] `apps/documents/views/_common.py`
-- [ ] `apps/documents/views/__init__.py`
-- [ ] `apps/documents/urls/__init__.py`
-- [ ] `apps/documents/admin.py`
-- [ ] `apps/documents/management/__init__.py`
-- [ ] `apps/documents/management/commands/__init__.py`
-- [ ] `apps/documents/management/commands/seed_documents.py`
+- [x] `apps/documents/apps.py` (`name = "apps.documents"`, `verbose_name = "Document Management System"`)
+- [x] `apps/documents/__init__.py`
+- [x] `apps/documents/migrations/__init__.py`
+- [x] `apps/documents/models/_base.py` (`TenantOwned`, `TenantNumbered` abstract models)
+- [x] `apps/documents/models/__init__.py`
+- [x] `apps/documents/forms/_common.py`
+- [x] `apps/documents/forms/__init__.py`
+- [x] `apps/documents/views/_common.py`
+- [x] `apps/documents/views/__init__.py`
+- [x] `apps/documents/urls/__init__.py`
+- [x] `apps/documents/admin.py`
+- [x] `apps/documents/management/__init__.py`
+- [x] `apps/documents/management/commands/__init__.py`
+- [x] `apps/documents/management/commands/seed_documents.py`
 
 ### Phase 3.3: Entity by Entity Implementation
-- [ ] **Entity 1: Document** (`DOC-`)
-  - [ ] `apps/documents/models/VersionControl/Documents.py`
-  - [ ] `apps/documents/forms/VersionControl/Documents.py` (`DocumentForm`, `DocumentFilterForm`)
-  - [ ] `apps/documents/views/VersionControl/Documents.py` (`document_list`, `document_create`, `document_detail`, `document_edit`, `document_delete`)
-  - [ ] `apps/documents/urls/VersionControl/Documents.py` (`document_list`, `document_create`, `document_detail`, `document_edit`, `document_delete`)
-  - [ ] `templates/documents/version_control/document/list.html`
-  - [ ] `templates/documents/version_control/document/detail.html`
-  - [ ] `templates/documents/version_control/document/form.html`
-- [ ] **Entity 2: DocumentVersion** (`DVER-`)
-  - [ ] `apps/documents/models/VersionControl/DocumentVersions.py`
-  - [ ] `apps/documents/forms/VersionControl/DocumentVersions.py` (`DocumentVersionForm`, `VersionCompareForm`)
-  - [ ] `apps/documents/views/VersionControl/DocumentVersions.py` (`document_version_list`, `document_version_create`, `document_version_detail`, `document_version_edit`, `document_version_delete`, `document_version_compare`, `document_version_rollback`)
-  - [ ] `apps/documents/urls/VersionControl/DocumentVersions.py` (`document_version_list`, `document_version_create`, `document_version_detail`, `document_version_edit`, `document_version_delete`, `document_version_compare`, `document_version_rollback`)
-  - [ ] `templates/documents/version_control/document_version/list.html`
-  - [ ] `templates/documents/version_control/document_version/detail.html`
-  - [ ] `templates/documents/version_control/document_version/form.html`
-  - [ ] `templates/documents/version_control/document_version/compare.html` (Side-by-side text and metadata redline diff)
-- [ ] **Entity 3: DocumentLock** (`DLOCK-`)
-  - [ ] `apps/documents/models/VersionControl/DocumentLocks.py`
-  - [ ] `apps/documents/forms/VersionControl/DocumentLocks.py` (`DocumentLockForm`, `CheckoutForm`, `CheckinForm`, `ForceUnlockForm`)
-  - [ ] `apps/documents/views/VersionControl/DocumentLocks.py` (`document_lock_list`, `document_lock_detail`, `document_checkout`, `document_checkin`, `document_discard_checkout`, `document_force_unlock`)
-  - [ ] `apps/documents/urls/VersionControl/DocumentLocks.py` (`document_lock_list`, `document_lock_detail`, `document_checkout`, `document_checkin`, `document_discard_checkout`, `document_force_unlock`)
-  - [ ] `templates/documents/version_control/document_lock/list.html`
-  - [ ] `templates/documents/version_control/document_lock/detail.html`
-  - [ ] `templates/documents/version_control/document_lock/checkout_modal.html`
-  - [ ] `templates/documents/version_control/document_lock/checkin_modal.html`
-- [ ] **Entity 4: DocumentBranch** (`DBRN-`)
-  - [ ] `apps/documents/models/VersionControl/DocumentBranches.py`
-  - [ ] `apps/documents/forms/VersionControl/DocumentBranches.py` (`DocumentBranchForm`, `BranchMergeForm`)
-  - [ ] `apps/documents/views/VersionControl/DocumentBranches.py` (`document_branch_list`, `document_branch_create`, `document_branch_detail`, `document_branch_edit`, `document_branch_delete`, `document_branch_merge`, `document_branch_abandon`)
-  - [ ] `apps/documents/urls/VersionControl/DocumentBranches.py` (`document_branch_list`, `document_branch_create`, `document_branch_detail`, `document_branch_edit`, `document_branch_delete`, `document_branch_merge`, `document_branch_abandon`)
-  - [ ] `templates/documents/version_control/document_branch/list.html`
-  - [ ] `templates/documents/version_control/document_branch/detail.html`
-  - [ ] `templates/documents/version_control/document_branch/form.html`
-  - [ ] `templates/documents/version_control/document_branch/merge_modal.html`
+- [x] **Entity 1: Document** (`DOC-`)
+  - [x] `apps/documents/models/VersionControl/Documents.py`
+  - [x] `apps/documents/forms/VersionControl/Documents.py` (`DocumentForm`, `DocumentFilterForm`)
+  - [x] `apps/documents/views/VersionControl/Documents.py` (`document_list`, `document_create`, `document_detail`, `document_edit`, `document_delete`)
+  - [x] `apps/documents/urls/VersionControl/Documents.py` (`document_list`, `document_create`, `document_detail`, `document_edit`, `document_delete`)
+  - [x] `templates/documents/version_control/document/list.html`
+  - [x] `templates/documents/version_control/document/detail.html`
+  - [x] `templates/documents/version_control/document/form.html`
+- [x] **Entity 2: DocumentVersion** (`DVER-`)
+  - [x] `apps/documents/models/VersionControl/DocumentVersions.py`
+  - [x] `apps/documents/forms/VersionControl/DocumentVersions.py` (`DocumentVersionForm`, `VersionCompareForm`)
+  - [x] `apps/documents/views/VersionControl/DocumentVersions.py` (`document_version_list`, `document_version_create`, `document_version_detail`, `document_version_edit`, `document_version_delete`, `document_version_compare`, `document_version_rollback`)
+  - [x] `apps/documents/urls/VersionControl/DocumentVersions.py` (`document_version_list`, `document_version_create`, `document_version_detail`, `document_version_edit`, `document_version_delete`, `document_version_compare`, `document_version_rollback`)
+  - [x] `templates/documents/version_control/document_version/list.html`
+  - [x] `templates/documents/version_control/document_version/detail.html`
+  - [x] `templates/documents/version_control/document_version/form.html`
+  - [x] `templates/documents/version_control/document_version/compare.html` (Side-by-side text and metadata redline diff)
+- [x] **Entity 3: DocumentLock** (`DLOCK-`)
+  - [x] `apps/documents/models/VersionControl/DocumentLocks.py`
+  - [x] `apps/documents/forms/VersionControl/DocumentLocks.py` (`DocumentLockForm`, `CheckoutForm`, `CheckinForm`, `ForceUnlockForm`)
+  - [x] `apps/documents/views/VersionControl/DocumentLocks.py` (`document_lock_list`, `document_lock_detail`, `document_checkout`, `document_checkin`, `document_discard_checkout`, `document_force_unlock`)
+  - [x] `apps/documents/urls/VersionControl/DocumentLocks.py` (`document_lock_list`, `document_lock_detail`, `document_checkout`, `document_checkin`, `document_discard_checkout`, `document_force_unlock`)
+  - [x] `templates/documents/version_control/document_lock/list.html`
+  - [x] `templates/documents/version_control/document_lock/detail.html`
+  - [x] `templates/documents/version_control/document_lock/checkout_modal.html`
+  - [x] `templates/documents/version_control/document_lock/checkin_modal.html`
+- [x] **Entity 4: DocumentBranch** (`DBRN-`)
+  - [x] `apps/documents/models/VersionControl/DocumentBranches.py`
+  - [x] `apps/documents/forms/VersionControl/DocumentBranches.py` (`DocumentBranchForm`, `BranchMergeForm`)
+  - [x] `apps/documents/views/VersionControl/DocumentBranches.py` (`document_branch_list`, `document_branch_create`, `document_branch_detail`, `document_branch_edit`, `document_branch_delete`, `document_branch_merge`, `document_branch_abandon`)
+  - [x] `apps/documents/urls/VersionControl/DocumentBranches.py` (`document_branch_list`, `document_branch_create`, `document_branch_detail`, `document_branch_edit`, `document_branch_delete`, `document_branch_merge`, `document_branch_abandon`)
+  - [x] `templates/documents/version_control/document_branch/list.html`
+  - [x] `templates/documents/version_control/document_branch/detail.html`
+  - [x] `templates/documents/version_control/document_branch/form.html`
+  - [x] `templates/documents/version_control/document_branch/merge_modal.html`
 
 ### Phase 3.4: Integration & Wire-up
-- [ ] Re-export all models in `apps/documents/models/__init__.py`
-- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
-- [ ] Re-export all views in `apps/documents/views/__init__.py`
-- [ ] Wire all URL modules into `apps/documents/urls/__init__.py`
-- [ ] Register all 4 models in `apps/documents/admin.py`
-- [ ] Wire `'apps.documents'` into `INSTALLED_APPS` in `config/settings.py`
-- [ ] Wire `path("documents/", include("apps.documents.urls"))` into `config/urls.py`
-- [ ] Wire `LIVE_LINKS["13.2"]` in `apps/core/navigation.py` mapping all 5 NavERP.md bullets:
+- [x] Re-export all models in `apps/documents/models/__init__.py`
+- [x] Re-export all forms in `apps/documents/forms/__init__.py`
+- [x] Re-export all views in `apps/documents/views/__init__.py`
+- [x] Wire all URL modules into `apps/documents/urls/__init__.py`
+- [x] Register all 4 models in `apps/documents/admin.py`
+- [x] Wire `'apps.documents'` into `INSTALLED_APPS` in `config/settings.py`
+- [x] Wire `path("documents/", include("apps.documents.urls"))` into `config/urls.py`
+- [x] Wire `LIVE_LINKS["13.2"]` in `apps/core/navigation.py` mapping all 5 NavERP.md bullets:
   - `"Automatic Version Numbering": "documents:document_version_list"`
   - `"Check-in / Check-out Mechanism": "documents:document_lock_list"`
   - `"Version Comparison & Diff View": "documents:document_version_compare"`
   - `"Branching & Parallel Versions": "documents:document_branch_list"`
   - `"Version History & Rollback": "documents:document_version_list"`
-- [ ] Implement demo data seeder in `apps/documents/management/commands/seed_documents.py` (idempotent, supports `--flush`, realistic documents, versions, locks, and branches)
-- [ ] Generate initial migration: `python manage.py makemigrations documents` (`0001_initial.py`)
-- [ ] Apply migration: `python manage.py migrate`
-- [ ] Seed database twice: `python manage.py seed_documents` (verify idempotence)
-- [ ] Run Django system checks: `python manage.py check`
+- [x] Implement demo data seeder in `apps/documents/management/commands/seed_documents.py` (idempotent, supports `--flush`, realistic documents, versions, locks, and branches)
+- [x] Generate initial migration: `python manage.py makemigrations documents` (`0001_initial.py`, `0002_...`, `0004_...`)
+- [x] Apply migration: `python manage.py migrate`
+- [x] Seed database twice: `python manage.py seed_documents` (verify idempotence)
+- [x] Run Django system checks: `python manage.py check`
 
 ### Phase 3.5: Smoke Testing Gate
-- [ ] Run test client smoke sweep script in `temp/` as `admin_acme` / `password`
-- [ ] Assert HTTP 200/302 for all 13.2 routes (list, create, detail, edit, compare, checkout, checkin, merge)
-- [ ] Assert content presence (table headers, seeded records, form inputs, no raw template tags `{#` / `{% comment`)
-- [ ] Assert cross-tenant IDOR isolation (Acme accessing Globex record returns HTTP 404)
-- [ ] Verify sidebar navigation displays `13.2` Live
+- [x] Run test client smoke sweep script in `temp/` as `admin_acme` / `password`
+- [x] Assert HTTP 200/302 for all 13.2 routes (list, create, detail, edit, compare, checkout, checkin, merge)
+- [x] Assert content presence (table headers, seeded records, form inputs, no raw template tags `{#` / `{% comment`)
+- [x] Assert cross-tenant IDOR isolation (Acme accessing Globex record returns HTTP 404)
+- [x] Verify sidebar navigation displays `13.2` Live
 
 ### Phase 4: Six Specialist Reviewers (One after another)
-- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
-- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
-- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
-- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
-- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.2.md`
-- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
-- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.2.md`
+- [x] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [x] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [x] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [x] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [x] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [x] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [x] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.2.md`
 
 ### Phase 5: Code Fixer Burn-down
-- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+- [x] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
 
 ### Phase 6: Automated Test Suite (Unfiltered)
-- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
-- [ ] Implement `apps/documents/tests/test_versioncontrol_models.py`
-- [ ] Implement `apps/documents/tests/test_versioncontrol_forms.py`
-- [ ] Implement `apps/documents/tests/test_versioncontrol_views.py`
-- [ ] Implement `apps/documents/tests/test_versioncontrol_security.py`
-- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+- [x] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [x] Implement `apps/documents/tests/test_version_control_models.py`
+- [x] Implement `apps/documents/tests/test_version_control_forms.py`
+- [x] Implement `apps/documents/tests/test_version_control_views.py`
+- [x] Implement `apps/documents/tests/test_version_control_security.py`
+- [x] Run full unfiltered app test suite: `pytest apps/documents/tests/` (49 passed)
 
 ### Phase 7: Skill, README & Close-out
-- [ ] Author `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.2 models, routes, templates, and seed details
-- [ ] Update `README.md` marking 13.2 complete and recording test statistics
-- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.2.md` (or declare None)
-- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+- [x] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.2 models, routes, templates, and seed details
+- [x] Update `README.md` marking 13.2 complete and recording test statistics
+- [x] Record any gaps in `.agents/tasks/gaps-documents-13.2.md` and `.claude/tasks/gaps-documents-13.2.md` (zero gaps)
+- [x] Document final review notes and close out in `.claude/tasks/todo.md`
+
+## Review notes
+- **Completed**: 2026-11-22
+- **Sub-module**: 13.2 Version Control & Revision Management (`apps/documents/`)
+- **Review findings**: 27 total (2 Critical, 14 Important, 11 Minor) — all 27 resolved in `.claude/tasks/review-documents-13.2.md`.
+- **Test Suite**: 49 passed (100% green unfiltered suite in `apps/documents/tests/`).
+- **Gaps**: None. Declared in `.agents/tasks/gaps-documents-13.2.md` and `.claude/tasks/gaps-documents-13.2.md`.
