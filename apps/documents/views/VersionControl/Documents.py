@@ -83,8 +83,10 @@ def document_detail(request, pk):
     )
 
     active_lock = document.locks.filter(status="active").first()
-    versions = document.versions.select_related("author", "branch").order_by(
-        "-created_at", "-major_number", "-minor_number", "-patch_number"
+    versions = (
+        document.versions.select_related("author", "branch", "restored_from_version")
+        .defer("extracted_text")
+        .order_by("-created_at", "-major_number", "-minor_number", "-patch_number")
     )
     branches = document.branches.select_related("created_by", "base_version").order_by("-created_at")
     lock_history = document.locks.select_related("locked_by", "unlocked_by").order_by("-checked_out_at")[:10]
