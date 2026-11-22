@@ -138,10 +138,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: When a parent folder's slug/name changes, child folders retain old materialized path prefixes.
   - **Fix**: Recursively update children paths when folder path changes. [x] fixed — ac37687e: cascade materialized path updates to child folders on folder rename or move
 
-- [ ] **M5**: Hardcoded Extension List in `DocumentBatchImportForm`.
+- [x] **M5**: Hardcoded Extension List in `DocumentBatchImportForm`.
   - **Location**: `apps/documents/forms/StorageRepository/DocumentBatchImports.py:45`
   - **Problem**: Extension list declared locally.
-  - **Fix**: Declare `ALLOWED_EXTENSIONS` as class constant.
+  - **Fix**: Declare `ALLOWED_EXTENSIONS` as class constant. [x] fixed — 28974417: declare ALLOWED_EXTENSIONS as class constant on DocumentBatchImportForm
 
 - [ ] **M6**: Unbounded Queryset in `relationship_graph`.
   - **Location**: `apps/documents/views/StorageRepository/DocumentRelationships.py:65`
