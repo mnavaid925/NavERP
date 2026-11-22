@@ -31,8 +31,8 @@ def collaboration_list(request):
     if status:
         qs = qs.filter(status=status)
 
-    total_count = qs.count()
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
+    total_count = paginator.count
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
@@ -137,12 +137,19 @@ def collaboration_edit(request, pk):
 @login_required
 @require_POST
 def collaboration_delete(request, pk):
-    collaboration = documents_object(request, DraftCollaboration, pk)
+    collaboration = documents_object(request, DraftCollaboration, pk, select_related=("draft",))
+    if collaboration.author_id != request.user.id and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request, "is_tenant_admin", False)):
+        messages.error(request, "You do not have permission to delete this collaboration feedback.")
+        return redirect("documents:draft_detail", pk=collaboration.draft_id)
+
     draft_pk = collaboration.draft_id
     with transaction.atomic():
         write_audit_log(request.user, collaboration, "delete", tenant=request.tenant)
         collaboration.delete()
     messages.success(request, "Collaboration comment removed.")
+
+    if request.POST.get("next") == "list" or request.GET.get("next") == "list":
+        return redirect("documents:collaboration_list")
     return redirect("documents:draft_detail", pk=draft_pk)
 
 
