@@ -173,6 +173,10 @@ class DataIntegrityAssessment(TenantNumbered):
         return self.overall_risk_level in ["high", "critical"]
 
     @property
+    def is_acceptable(self):
+        return self.non_compliant_count == 0 and not self.is_high_risk
+
+    @property
     def is_overdue(self):
         return bool(
             self.next_review_due
