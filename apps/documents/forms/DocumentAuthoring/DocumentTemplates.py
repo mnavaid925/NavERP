@@ -1,9 +1,10 @@
 import json
 
 from django import forms
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
-from apps.core.models import OrgUnit, User
+from apps.core.models import OrgUnit
 from apps.documents.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 
@@ -62,6 +63,7 @@ class DocumentTemplateForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
+            User = get_user_model()
             self.fields["target_org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["owner"].queryset = User.objects.filter(tenant=self.tenant).order_by("username")
         if self.instance and self.instance.pk and self.instance.available_tokens:
