@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; 12.14 Management Review & Quality Planning; 12.15 Process Validation & Verification; 12.16 Environmental, Health & Safety (EHS); 12.17 Regulatory Compliance & Post-Market Surveillance (Product Registrations [QREG-], Regulatory Submissions [QSUB-], Regulatory Commitments [QCOM-], PMS Reports [QPMS-], and Regulatory Command Center); and 12.18 Traceability & Serialization (Electronic Batch Records [QBMR-], Unique Device Identification [QUDI-], Serialized Items & GS1 Aggregation [QSER-], Product Recalls [QRCL-], and Traceability Command Center Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.18), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; 12.14 Management Review & Quality Planning; 12.15 Process Validation & Verification; 12.16 Environmental, Health & Safety (EHS); 12.17 Regulatory Compliance & Post-Market Surveillance (Product Registrations [QREG-], Regulatory Submissions [QSUB-], Regulatory Commitments [QCOM-], PMS Reports [QPMS-], and Regulatory Command Center); 12.18 Traceability & Serialization (Electronic Batch Records [QBMR-], Unique Device Identification [QUDI-], Serialized Items & GS1 Aggregation [QSER-], Product Recalls [QRCL-], and Traceability Command Center Dashboard); and 12.19 Laboratory Information Management (LIMS) (Lab Samples [QSMP-], Lab Specifications [QSPC-], Lab Test Worksheets [QWKS-], OOS Investigations [QOOS-], and LIMS Command Center Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.19), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -146,6 +146,13 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Product Recall Execution & Consignee Reconciliation** [`QRCL-`]: Crisis market action response satisfying FDA 21 CFR Part 7, EU Rapid Alert System (RAPEX), and ISO 13485:2016 §8.5.2. Tracks recall classes (`class_i_critical`, `class_ii_moderate`, `class_iii_minor`), initiating root cause linkages (`CustomerComplaint`, `CapaInvestigation`, `NonConformanceReport`), affected lot and serial scopes, total units distributed, units quarantined in warehouse, consignee notifications dispatched, customer notification response rates, units recovered/destroyed, reconciliation recovery percentage calculation ($Units Recovered / Units Distributed \times 100$), regulatory notification reference numbers, termination justification protocols, and tenant-admin gated deletion protections.
   - **Track & Trace Command Center & Traceability Workbench**: Operational dashboard (`traceability_dashboard`) visualizing active batch production volumes, UDI compliance coverage, serialization throughput, packaging aggregation hierarchy graphs, real-time recall recovery rate progress gauges, streaming EPCIS CSV export (`traceability_export_csv`), and end-to-end forward/reverse trace lookups.
 
+- **12.19 Laboratory Information Management (LIMS)**:
+  - **Sample Management & Chain of Custody** [`QSMP-`]: Analytical and physical sample tracking satisfying ISO/IEC 17025:2017 §7.4 and FDA 21 CFR § 211.160. Tracks barcode identifiers, sample types (`raw_material`, `in_process`, `finished_product`, `stability_study`, `environmental_monitoring`, `water_testing`, `cleaning_validation`, `reference_standard`), storage conditions (`ambient_room_temp`, `controlled_room_temp_20_25`, `refrigerated_2_8`, `freezer_minus_20`, `ultra_low_freezer_minus_80`, `desiccator_dry`), storage locations, sample quantities, sampling points, collection timestamps, retain sample tracking, retention expiration dates, chain of custody logs (`custody_transfers`), and state machine (`registered` -> `received` -> `in_testing` -> `testing_completed` -> `approved` / `rejected` -> `disposed` / `consumed`).
+  - **Test Method & Specification Management** [`QSPC-`]: Analytical testing protocols and acceptance limit repository compliant with ISO/IEC 17025 §7.2 and pharmacopeial standards (USP/EP/JP). Governs test categories (`assay_potency`, `dissolution`, `impurities_related_substances`, `residual_solvents`, `microbiological_bioburden`, `sterility`, `endotoxin_lal`, `heavy_metals`, `ph_conductivity`, `loss_on_drying`, `particle_size`, `physical_appearance`), numeric parameter limits (nominal target, Lower/Upper Specification Limits LSL/USL), qualitative criteria, test methods, validation report references, linked SOPs (`ControlledDocument`), and active/revision states.
+  - **Test Execution & Result Capture** [`QWKS-`]: Structured lab testing worksheets satisfying 21 CFR § 211.194. Tracks sample linkages (`LabSample`), specification linkages (`LabSpecification`), calibrated test instruments (`CalibrationGage`), secondary reference standards, standards expiration alerts, reagent lots, reagent expiry alerts, test execution dates, analysts (`accounts.User`), replicate results capture (`replicate_values_json`), auto-calculated mean, standard deviation, and relative standard deviation (% RSD), quantitative and qualitative result evaluations, within-specification determinations (`is_within_specification`), supervisor verification sign-offs, and automated OOS investigation spawning.
+  - **Out-of-Specification (OOS) Investigation** [`QOOS-`]: Structured two-phase investigative workflows conforming to FDA Guidance for Industry (Investigating Out-of-Specification Test Results for Pharmaceutical Production, Oct 2022). Governs Phase I Laboratory Root Cause Investigation (analyst interviews, instrument calibration checks, standards/reagents suitability, calculation verifications, assignable lab error determination), Phase II Full Manufacturing Investigation (production history, environmental conditions, raw material genealogy, process anomaly evaluation, hypothesis testing), formal retest authorization plans, supervisor and Quality Unit conclusions, and direct cross-spawning of CAPA (`QCAP-`) and NCR (`QNCR-`).
+  - **LIMS Command Center & Analytics Dashboard**: Real-time laboratory command center (`lims_dashboard`) visualizing active sample inventories, samples pending receipt or in-testing, testing completion rates, open OOS investigations by phase, calibration-due equipment, reagent/standard expiration alerts, and streaming LIMS summary CSV export (`lims_export_csv`).
+
 ---
 
 ## App Layout & Architecture
@@ -246,6 +253,11 @@ apps/quality/
       DeviceIdentifiers.py                    <- DeviceIdentifier [QUDI-]
       SerializedItems.py                      <- SerializedItem [QSER-]
       ProductRecalls.py                       <- ProductRecall [QRCL-]
+    LimsManagement/                           <- Sub-module 12.19 models
+      LabSamples.py                           <- LabSample [QSMP-]
+      LabSpecifications.py                    <- LabSpecification [QSPC-]
+      LabTestWorksheets.py                    <- LabTestWorksheet [QWKS-]
+      OosInvestigations.py                    <- OosInvestigation [QOOS-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base QualityModelForm with tenant injection & clean helpers
@@ -339,6 +351,11 @@ apps/quality/
       DeviceIdentifiers.py                    <- DeviceIdentifierForm
       SerializedItems.py                      <- SerializedItemForm
       ProductRecalls.py                       <- ProductRecallForm
+    LimsManagement/                           <- Sub-module 12.19 forms
+      LabSamples.py                           <- LabSampleForm, LabSampleReceiptForm, LabSampleDispositionForm
+      LabSpecifications.py                    <- LabSpecificationForm
+      LabTestWorksheets.py                    <- LabTestWorksheetForm, LabTestWorksheetVerifyForm
+      OosInvestigations.py                    <- OosInvestigationForm, OosPhaseIForm, OosPhaseIIForm, OosClosureForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Base view helpers (quality_object, quality_scope, tenant_admin_required, write_audit_log)
@@ -449,6 +466,12 @@ apps/quality/
       SerializedItems.py                      <- List, Detail, Create, Edit, Delete, Export
       ProductRecalls.py                       <- List, Detail, Create, Edit, Delete, Close, Export
       TraceabilityDashboard.py                <- Track & Trace Command Center, EPCIS CSV Export
+    LimsManagement/                           <- Sub-module 12.19 views
+      LabSamples.py                           <- List, Detail, Create, Edit, Delete, Receive, Dispose, Custody Transfer, Export
+      LabSpecifications.py                    <- List, Detail, Create, Edit, Delete, Export
+      LabTestWorksheets.py                    <- List, Detail, Create, Edit, Delete, Verify, Export
+      OosInvestigations.py                    <- List, Detail, Create, Edit, Delete, Phase I, Phase II, Close, Create CAPA/NCR, Export
+      LimsDashboard.py                        <- LIMS Command Center Dashboard & CSV Export
     __init__.py                               <- Re-exports all views
   urls/
     DocumentControl/                          <- Sub-module 12.1 URLs
@@ -558,12 +581,22 @@ apps/quality/
       SerializedItems.py
       ProductRecalls.py
       TraceabilityDashboard.py
+    LimsManagement/                           <- Sub-module 12.19 URLs
+      LabSamples.py
+      LabSpecifications.py
+      LabTestWorksheets.py
+      OosInvestigations.py
+      LimsDashboard.py
     __init__.py                               <- Re-exports all URL patterns
   admin.py                                    <- Django admin registrations for all models
   management/commands/
-    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.18)
-  tests/                                      <- Pytest test suite (100% green, 2,405 passing tests)
-    conftest.py                               <- Shared 12.1 through 12.18 fixtures
+    seed_quality.py                           <- Idempotent QMS seeder (12.1 through 12.19)
+  tests/                                      <- Pytest test suite (100% green, 2,430 passing tests)
+    conftest.py                               <- Shared 12.1 through 12.19 fixtures
+    test_lims_models.py                       <- Sub-module 12.19 model tests (8 tests)
+    test_lims_forms.py                        <- Sub-module 12.19 form tests (6 tests)
+    test_lims_views.py                        <- Sub-module 12.19 view tests (7 tests)
+    test_lims_security.py                     <- Sub-module 12.19 security tests (4 tests)
     test_traceabilityserialization_models.py  <- Sub-module 12.18 model tests (7 tests)
     test_traceabilityserialization_forms.py   <- Sub-module 12.18 form tests (6 tests)
     test_traceabilityserialization_views.py   <- Sub-module 12.18 view tests (6 tests)
@@ -1525,6 +1558,12 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
   - 4 Serialized Items per tenant (`SER-2026-00001` to `SER-2026-00004`) demonstrating multi-tier GS1 packaging aggregation hierarchies (primary each -> tertiary shipper carton) across commissioned, packed, shipped, and recalled EPCIS states.
   - 2 Product Recalls per tenant (`RCL-2026-00001` [Class I Urgent Medical Device Recall, In Progress with 65% consignee recovery], `RCL-2026-00002` [Class II Labeling Market Withdrawal, Completed with 100% recovery]).
 
+- **12.19 Data**:
+  - 4 Lab Samples per tenant (`SMP-2026-00001` to `SMP-2026-00004`: Raw Material Active Pharmaceutical Ingredient, In-Process Bio-Reaction Broth, Finished Formulation Sterile Injection, and Environmental Swab) with chain of custody events and stability storage conditions.
+  - 3 Lab Specifications per tenant (`SPC-2026-00001` to `SPC-2026-00003`: HPLC Assay Potency, Dissolution Rate USP, and Endotoxin LAL Limits) with quantitative numerical limits and qualitative criteria.
+  - 4 Lab Test Worksheets per tenant (`WKS-2026-00001` to `WKS-2026-00004`) with replicate measurement values, calculated mean and % RSD, instrument and reagent lot linkage, and verification sign-offs.
+  - 2 Out-of-Specification (OOS) Investigations per tenant (`OOS-2026-00001` [Phase I Lab Error, Invalidated], `OOS-2026-00002` [Phase II Manufacturing Root Cause, Confirmed OOS with CAPA/NCR linkages]).
+
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
 ---
@@ -1631,6 +1670,12 @@ Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing r
     - **GS1 Multi-Tier Aggregation Trees**: `SerializedItem` models tree parent-child container hierarchies (`parent_container`, `child_items`). Packaging levels (`primary_each`, `secondary_bundle`, `tertiary_case`, `pallet_sscc`) and EPCIS event states (`commissioned`, `packed`, `shipped`, `recalled`) are strictly indexed via composite index `idx_qser_ten_epcis` on `(tenant, epcis_state)`.
     - **Recall Reconciliation & Scope Containment**: Product recall records calculate real-time reconciliation recovery rates ($Units Recovered / Units Distributed \times 100$). Closing a recall requires tenant-admin authority and documented regulatory closure justification. Released batch records linked to an active recall automatically display containment warning badges.
     - **Streaming EPCIS Export & CSV Injection Defense**: Traceability and serialization export (`traceability_export_csv`) utilizes Django `.iterator(chunk_size=1000)` streaming to prevent memory bloat on large serial catalogs, while enforcing `_csv_safe` formula sanitization and `X-Content-Type-Options: nosniff`.
+23. **Laboratory Information Management (LIMS) Invariants (ISO/IEC 17025:2017 / 21 CFR Part 211 / FDA OOS Guidance):**
+    - **Chain of Custody Integrity**: `LabSample.custody_transfers` maintains an append-only JSON audit trail capturing transfer timestamp, releasing party, receiving custodian, storage condition, and handling notes upon each custodial handover.
+    - **Two-Phase OOS Investigation Protocol**: Following FDA OOS Guidance, Phase I immediately evaluates lab error (analyst interview, pipettes, instruments, reagent lots, calculations) before Phase II manufacturing investigations or sample retesting can proceed.
+    - **GxP Tampering & Retention Guards**: Completed test worksheets (`status='verified'`) and approved samples are protected against unauthorized modification or deletion. Closing an OOS investigation requires tenant-admin permissions.
+    - **Reagent & Instrument Traceability**: Lab test worksheets validate calibrated gage linkage (`CalibrationGage`) and alert on expired reagents (`reagent_expiry_date`) or standards (`standards_expiry_date`).
+    - **Single Aggregate Dashboard Query**: `lims_dashboard` computes all sample, worksheet, OOS, and equipment KPI tallies in a single high-performance SQL query via conditional aggregation (`Count('id', filter=Q(...))`), preventing N+1 queries.
 
 ---
 
@@ -1766,6 +1811,13 @@ LIVE_LINKS = {
         "Serialization & Aggregation": "quality:serialized_item_list",
         "Track & Trace / Supply Chain Integrity": "quality:traceability_dashboard",
         "Recall & Withdrawal Execution": "quality:product_recall_list",
+    },
+    "12.19": {
+        "Sample Management & Chain of Custody": "quality:lab_sample_list",
+        "Test Method & Specification Management": "quality:lab_specification_list",
+        "Test Execution & Result Capture": "quality:lab_test_worksheet_list",
+        "Out-of-Specification (OOS) Investigation": "quality:oos_investigation_list",
+        "Laboratory Equipment & Reagent Management": "quality:lims_dashboard",
     },
 }
 ```
