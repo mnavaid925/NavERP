@@ -217,7 +217,7 @@
         {% if is_paginated %}
         <div class="pagination">
             <span class="pagination-info">
-                Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ total_count }}
+                Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }}
             </span>
             <div class="pagination-links">
                 {% if page_obj.has_previous %}
