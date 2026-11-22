@@ -237,7 +237,7 @@
             </span>
             <div class="pagination-links">
                 {% if page_obj.has_previous %}
-                <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if q %}&q={{ q }}{% endif %}{% if type_selected %}&change_type={{ type_selected }}{% endif %}{% if priority_selected %}&priority={{ priority_selected }}{% endif %}{% if gxp_selected %}&gxp_impact={{ gxp_selected }}{% endif %}{% if status_selected %}&status={{ status_selected }}{% endif %}" class="btn btn-outline btn-sm">
+                <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if type_selected %}&change_type={{ type_selected }}{% endif %}{% if priority_selected %}&priority={{ priority_selected }}{% endif %}{% if gxp_selected %}&gxp_impact={{ gxp_selected }}{% endif %}{% if status_selected %}&status={{ status_selected }}{% endif %}" class="btn btn-outline btn-sm">
                     Previous
                 </a>
                 {% endif %}
