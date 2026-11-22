@@ -40,11 +40,19 @@ def test_approval_workflow_form_valid_and_version_consistency(tenant_a, document
     assert form.is_valid(), form.errors
 
     # Version belonging to another document must raise validation error
+    other_doc = Document.objects.create(
+        tenant=tenant_a,
+        title="Secondary Operating Procedure",
+        document_type="sop",
+        status="published",
+        owner=document.owner,
+    )
     other_version = DocumentVersion.objects.create(
         tenant=tenant_a,
-        document_id=999999,  # Mismatched document ID
+        document=other_doc,
         version_label="0.9.0",
         version_type="minor",
+        author=document.owner,
     )
     mismatched_data = dict(form_data, version=other_version.pk)
     mismatched_form = DocumentApprovalWorkflowForm(data=mismatched_data, tenant=tenant_a)
@@ -124,7 +132,7 @@ def test_document_review_comment_form_and_action_forms(tenant_a, document, docum
             "document": document.pk,
             "version": document_version.pk,
             "workflow": approval_workflow.pk,
-            "annotation_type": "critique",
+            "annotation_type": "inline_comment",
             "page_number": 3,
             "content": "Consider clarifying paragraph 2 step b.",
             "is_blocking": False,
