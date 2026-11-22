@@ -109,6 +109,12 @@ class DocumentFolder(TenantNumbered):
         return f"{self.path or self.name} ({self.number})"
 
     def save(self, *args, **kwargs):
+        old_path = None
+        if self.pk:
+            old_path = (
+                DocumentFolder.objects.filter(pk=self.pk).values_list("path", flat=True).first()
+            )
+
         if not self.slug and self.name:
             self.slug = slugify(self.name)[:160]
         if self.parent:
@@ -117,6 +123,16 @@ class DocumentFolder(TenantNumbered):
         else:
             self.path = f"/{self.slug}/"
         super().save(*args, **kwargs)
+
+        if old_path and old_path != self.path:
+            self._update_children_paths()
+
+    def _update_children_paths(self):
+        parent_path = self.path.rstrip("/")
+        for child in self.children.all():
+            child.path = f"{parent_path}/{child.slug}/"
+            DocumentFolder.objects.filter(pk=child.pk).update(path=child.path)
+            child._update_children_paths()
 
     @property
     def classification_badge_class(self):
