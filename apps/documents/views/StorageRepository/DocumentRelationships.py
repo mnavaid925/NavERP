@@ -60,7 +60,7 @@ def relationship_graph(request):
     relationships = documents_scope(
         DocumentRelationship.objects.select_related("source_document", "target_document"),
         request,
-    )
+    ).order_by("-created_at")[:200]
 
     # Build node and link collections for visual D3 / network graph
     node_set = set()
