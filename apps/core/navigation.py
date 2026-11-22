@@ -3551,7 +3551,7 @@ LIVE_LINKS = {
     "13.4": {
         "Folder Hierarchy & Taxonomy": "documents:folder_list",
         "Cloud & On-Premises Deployment": "documents:storage_volume_list",
-        "Storage Tiering & Optimization": "documents:storage_volume_list",
+        "Storage Tiering & Optimization": "documents:storage_volume_list?tier=hot",
         "Document Linking & Relationships": "documents:relationship_list",
         "Bulk Upload & Import": "documents:batch_import_list",
     },
