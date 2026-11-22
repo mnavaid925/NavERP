@@ -1,0 +1,35 @@
+# Consolidated Review Findings: Sub-module 13.3 Document Approval & Review Workflow
+
+## Critical (C)
+- [ ] C1: `templates/documents/approval_workflow/document_signature/detail.html:128` — Stored XSS vulnerability due to unescaped rendering `{{ signature.signature_glyph|safe }}`. Fix: Remove `|safe` or sanitize SVG.
+- [ ] C2: `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py:174` — Authorization bypass in `approval_request_decide`. Any tenant user can decide requests assigned to others. Fix: Enforce `request.user == req_obj.approver or request.user == req_obj.delegated_to or request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)`.
+- [ ] C3: `apps/documents/views/ApprovalWorkflow/DocumentApprovalWorkflows.py:213` — Authorization bypass in `workflow_bypass`. Any tenant user can emergency-bypass active workflows. Fix: Require `request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or request.user == workflow.initiator`.
+- [ ] C4: `apps/documents/views/ApprovalWorkflow/DocumentApprovalWorkflows.py:157` — Missing view-level status guard in `workflow_delete` permits deleting active/completed workflows. Fix: Reject deletion when `workflow.status != "draft"`.
+- [ ] C5: `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py:162` — Missing view-level status guard in `approval_request_delete` permits deleting decided/active requests. Fix: Require `req_obj.status == "pending" and req_obj.workflow.status == "draft"`.
+
+## Important (I)
+- [ ] I1: `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py:219` — Stage completion logic treats requests with status `"delegated"` or `"escalated"` as complete, prematurely advancing stages. Fix: Check `if not stage_requests.filter(status__in=["pending", "delegated", "escalated"]).exists():` and ensure all non-bypassed requests in stage are `"approved"`.
+- [ ] I2: `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py:174` — `approval_request_decide` allows deciding requests when parent workflow is still in draft or deciding future stages out of sequence. Fix: Validate parent workflow is pending and sequential stage matches current_stage.
+- [ ] I3: `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py:202` — Multi-model updates to `req_obj` and `wf` during approval decisions lack transaction management. Fix: Wrap in `with transaction.atomic():`.
+- [ ] I4: `templates/documents/approval_workflow/document_approval_request/detail.html:124` — Lesson L10 crash: Unhandled None in template filter argument `default:request_obj.escalated_to.username` raises `VariableDoesNotExist` when `escalated_to` is null. Fix: Guard with `{% if request_obj.escalated_to %}`.
+- [ ] I5: `templates/documents/approval_workflow/document_approval_workflow/detail.html:152` — Lesson L10 crash: Unhandled None in template filter argument `default:workflow.bypassed_by.username` raises 500 when null. Fix: Guard with `{% if workflow.bypassed_by %}`.
+- [ ] I6: `templates/documents/approval_workflow/document_review_comment/detail.html:120` — Lesson L10 crash: Unhandled None in `default:comment.resolved_by.username`. Fix: Guard with `{% if comment.resolved_by %}`.
+- [ ] I7: `apps/documents/views/ApprovalWorkflow/DocumentReviewComments.py:157` — `review_comment_delete` and `review_comment_edit` allow arbitrary users to modify or delete others' comments. Fix: Enforce author or tenant admin checks.
+- [ ] I8: `apps/documents/forms/ApprovalWorkflow/DocumentSignatures.py:13` — `DocumentSignatureForm` exposes mutable `document`, `version`, `signer_name` on edit. Fix: Disable on edit.
+- [ ] I9: `apps/documents/urls/ApprovalWorkflow/DocumentSignatures.py:8-9` — Route name drift: contract specified name `signature_verify` for `/documents/signatures/verify/<str:token>/`, but implementation assigned `signature_verify_token`. Fix: Align URL route name with contract `signature_verify`.
+- [ ] I10: Detail view toolbars lack POST delete action forms for draft workflows, pending requests, comments, and signatures. Fix: Add standard POST delete forms with CSRF and confirm.
+- [ ] I11: Missing filter preservation in pagination controls across list templates (`document_review_comment/list.html` drops `&is_blocking=`, `document_signature/list.html` drops `&is_valid=`, `document_approval_request/list.html` drops `&workflow=`). Fix: Append filter GET parameters to pagination links.
+- [ ] I12: `apps/documents/forms/ApprovalWorkflow/DocumentSignatures.py:45` & `DocumentReviewComments.py:45` — Chained N+1 queries through `__str__` in form dropdown choices. Fix: Add `.select_related("document")` to version querysets and `.select_related("workflow", "approver")` to approval_request querysets.
+- [ ] I13: `apps/documents/views/ApprovalWorkflow/ApprovalDashboard.py:28` — In-memory Python loop over model instances for average cycle time. Fix: Use database-level `ExpressionWrapper(F("completed_at") - F("created_at"), output_field=models.DurationField())` and `Avg`.
+- [ ] I14: `apps/documents/views/ApprovalWorkflow/ApprovalDashboard.py:22` — Redundant individual `.count()` queries across `DocumentApprovalRequest`. Fix: Consolidate into single `req_qs.aggregate(...)` with conditional `Count`.
+- [ ] I15: `apps/documents/models/ApprovalWorkflow/DocumentReviewComments.py` & `DocumentApprovalRequests.py` — Missing composite indexes for hot filtering queries: `(tenant, is_blocking, status)` and `(tenant, delegated_to, status)`. Fix: Add indexes and generate migration.
+
+## Minor (M)
+- [ ] M1: Defensive null guards on User FKs: `req.approver` in `designer.html:91` and `detail.html:197`, `c.author` in `workflow/detail.html:291`, `rep.author` in `review_comment/detail.html:140`, `signature.signer` in `signature/detail.html`, `signature/manifest.html`, `signature/list.html`. Fix: Wrap with `{% if user_fk %}`.
+- [ ] M2: Form label `for` attribute in `workflow/detail.html:325` has hardcoded `for="bypass_reason"`. Fix: Use `{{ bypass_form.bypass_reason.id_for_label }}`.
+- [ ] M3: Search input in `signature/verify.html` lacks accessible label. Fix: Add `aria-label="Electronic signature verification token"`.
+- [ ] M4: `apps/documents/views/ApprovalWorkflow/DocumentApprovalWorkflows.py:170` — `workflow_designer` accepts arbitrary non-JSON string for `definition_json`. Fix: Validate JSON decode.
+- [ ] M5: `apps/documents/views/ApprovalWorkflow/DocumentApprovalRequests.py:218` — In `parallel_first` stage completion, remaining sibling requests in the stage remain pending. Fix: Mark bypassed.
+- [ ] M6: `apps/documents/{models,forms,views,urls}/ApprovalWorkflow/` package directories lack explicit `__init__.py`. Fix: Add standard `__init__.py` files.
+- [ ] M7: `apps/documents/views/ApprovalWorkflow/DocumentApprovalWorkflows.py:168` — Missing `select_related("document")` in `workflow_designer`. Fix: Add select_related.
+- [ ] M8: Helper route `review_comment_reply` was added to backend but omitted from initial contract table. Fix: Note in close-out documentation.
