@@ -191,4 +191,4 @@ def test_approval_dashboard_cockpit_view(client, member_user, approval_workflow,
     content = res.content.decode()
     assert "Approval Command Center" in content
     assert "Active Approval Pipelines" in content
-    assert "Turnaround Cycle Time" in content
+    assert "Average Approval Cycle Time" in content
