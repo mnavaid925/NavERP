@@ -3530,6 +3530,15 @@ LIVE_LINKS = {
         "Embedded Media & Objects": "documents:template_section_list",
         "Offline Authoring & Sync": "documents:draft_list",
     },
+    # 13.2 Version Control & Revision Management
+    "13.2": {
+        "Automatic Version Numbering": "documents:document_version_list",
+        "Check-in / Check-out Mechanism": "documents:document_lock_list",
+        "Version Comparison & Diff View": "documents:document_version_compare",
+        "Branching & Parallel Versions": "documents:document_branch_list",
+        "Version History & Rollback": "documents:document_version_list",
+        "Documents": "documents:document_list",
+    },
 
 
 
