@@ -14,6 +14,10 @@ from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
 from apps.documents.models.DocumentAuthoring.TemplateSections import TemplateSection
+from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
+from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
+from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
+from apps.documents.models.StorageRepository.StorageVolumes import StorageVolume
 from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
 from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
 from apps.documents.models.VersionControl.Documents import Document
@@ -111,4 +115,37 @@ class DocumentReviewCommentAdmin(admin.ModelAdmin):
     list_filter = ("annotation_type", "status", "is_blocking", "tenant")
     search_fields = ("number", "content", "selected_text", "document__title", "author__username")
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentFolder)
+class DocumentFolderAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "path", "parent", "department", "default_classification", "is_virtual", "is_active", "tenant")
+    list_filter = ("default_classification", "is_virtual", "is_active", "tenant")
+    search_fields = ("number", "name", "path", "slug")
+    readonly_fields = ("number", "path", "created_at", "updated_at")
+
+
+@admin.register(StorageVolume)
+class StorageVolumeAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "backend_type", "tier", "utilized_percentage", "is_default", "is_active", "tenant")
+    list_filter = ("backend_type", "tier", "is_default", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "base_path")
+    readonly_fields = ("number", "utilized_percentage", "created_at", "updated_at")
+
+
+@admin.register(DocumentRelationship)
+class DocumentRelationshipAdmin(admin.ModelAdmin):
+    list_display = ("number", "source_document", "relationship_type", "target_document", "dependency_level", "is_bidirectional", "tenant")
+    list_filter = ("relationship_type", "dependency_level", "is_bidirectional", "tenant")
+    search_fields = ("number", "source_document__title", "target_document__title", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentBatchImport)
+class DocumentBatchImportAdmin(admin.ModelAdmin):
+    list_display = ("number", "batch_name", "source_type", "target_folder", "storage_volume", "status", "processed_files_count", "tenant")
+    list_filter = ("source_type", "status", "tenant")
+    search_fields = ("number", "batch_name", "log_summary")
+    readonly_fields = ("number", "total_files_detected", "processed_files_count", "success_files_count", "failed_files_count", "started_at", "completed_at", "created_at", "updated_at")
+
 
