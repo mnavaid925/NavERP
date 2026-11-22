@@ -21,7 +21,7 @@ def collaboration_list(request):
 
     q = request.GET.get("q", "").strip()
     if q:
-        qs = qs.filter(Q(comment_text__icontains(q)) | Q(selected_text__icontains(q)) | Q(number__icontains(q)))
+        qs = qs.filter(Q(comment_text__icontains=q) | Q(selected_text__icontains=q) | Q(number__icontains=q))
 
     entry_type = request.GET.get("entry_type", "").strip()
     if entry_type:
