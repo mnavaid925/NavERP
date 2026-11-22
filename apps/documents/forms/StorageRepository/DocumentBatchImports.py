@@ -8,7 +8,11 @@ from apps.documents.models.StorageRepository.DocumentFolders import DocumentFold
 from apps.documents.models.StorageRepository.StorageVolumes import StorageVolume
 
 
+MAX_BATCH_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
 class DocumentBatchImportForm(TenantUniqueMixin, TenantModelForm):
+    MAX_BATCH_UPLOAD_BYTES = MAX_BATCH_UPLOAD_BYTES
     class Meta:
         model = DocumentBatchImport
         fields = [
@@ -41,6 +45,13 @@ class DocumentBatchImportForm(TenantUniqueMixin, TenantModelForm):
         source_type = cleaned.get("source_type")
 
         if archive and hasattr(archive, "name"):
+            if hasattr(archive, "size") and archive.size > self.MAX_BATCH_UPLOAD_BYTES:
+                limit_mb = self.MAX_BATCH_UPLOAD_BYTES // (1024 * 1024)
+                self.add_error(
+                    "archive_file",
+                    f"Archive file size exceeds the maximum limit of {limit_mb} MB.",
+                )
+
             ext = os.path.splitext(archive.name)[1].lower()
             allowed = [".zip", ".tar", ".gz", ".tgz", ".csv", ".json"]
             if ext not in allowed:
