@@ -27,6 +27,9 @@
         </p>
     </div>
     <div class="page-actions flex gap-2">
+        <a href="{% url 'documents:document_version_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i> Back to List
+        </a>
         {% if version.file %}
         <a href="{{ version.file.url }}" class="btn btn-primary" download>
             <i data-lucide="download"></i> Download Payload
