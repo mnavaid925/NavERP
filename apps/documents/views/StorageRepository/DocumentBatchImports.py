@@ -158,6 +158,17 @@ def batch_import_delete(request, pk):
         messages.error(request, "Cannot delete an active processing batch import job.")
         return redirect("documents:batch_import_detail", pk=batch_import.pk)
 
+    if batch_import.created_by_id and batch_import.created_by_id != request.user.id and not (
+        request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+        or getattr(request, "is_tenant_admin", False)
+    ):
+        messages.error(
+            request,
+            "You do not have permission to delete this batch import job. Only the job creator or tenant administrator can delete it.",
+        )
+        return redirect("documents:batch_import_detail", pk=batch_import.pk)
+
     name = batch_import.batch_name
     with transaction.atomic():
         write_audit_log(request.user, batch_import, "delete", tenant=request.tenant)
