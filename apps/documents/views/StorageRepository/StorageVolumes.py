@@ -102,7 +102,11 @@ def storage_volume_detail(request, pk):
         pk,
         select_related=("rollover_volume",),
     )
-    batch_imports = volume.batch_imports.filter(tenant=request.tenant).order_by("-created_at")[:10]
+    batch_imports = (
+        volume.batch_imports.filter(tenant=request.tenant)
+        .select_related("created_by")
+        .order_by("-created_at")[:10]
+    )
     rollover_sources = volume.overflow_sources.filter(tenant=request.tenant)
 
     context = {
