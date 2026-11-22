@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Document Folders & Taxonomy — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <span>Folders</span>
+        </div>
+        <h1 class="page-title">Document Folders & Taxonomy</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:folder_tree' %}" class="btn btn-outline">
+            <i data-lucide="network"></i>
+            <span>Tree Hierarchy</span>
+        </a>
+        <a href="{% url 'documents:folder_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Folder</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="folder"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Repository Folders</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="folder-search"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ folders|length }}</div>
+            <div class="stat-label">Folders Displayed</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="sparkles"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-green font-normal">Active & Synced</span></div>
+            <div class="stat-label">Hierarchy Integrity</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" class="form-input" placeholder="Name, code, path...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="is_virtual">Folder Type</label>
+                <select name="is_virtual" id="is_virtual" class="form-select">
+                    <option value="">All Folder Types</option>
+                    <option value="0" {% if is_virtual == "0" %}selected{% endif %}>Standard Storage Folders</option>
+                    <option value="1" {% if is_virtual == "1" %}selected{% endif %}>Smart Virtual Folders</option>
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="department">Department</label>
+                <select name="department" id="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk }}" {% if department == dept.pk|stringformat:"d" %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Archived / Inactive</option>
+                </select>
+            </div>
+            <div class="sm:col-span-2 md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'documents:folder_list' %}" class="btn btn-outline">Clear Filters</a>
+                <button type="submit" class="btn btn-primary">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width: 44px;"></th>
+                    <th>Folder Name & Code</th>
+                    <th>Materialized Path</th>
+                    <th>Parent Folder</th>
+                    <th>Department</th>
+                    <th>Default Class</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for folder in folders %}
+                <tr>
+                    <td>
+                        <div class="w-8 h-8 rounded flex items-center justify-center text-white font-bold" style="background-color: {{ folder.color_code|default:'#3B82F6' }};">
+                            <i data-lucide="{{ folder.icon_name|default:'folder' }}" class="w-4 h-4"></i>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="font-medium">
+                            <a href="{% url 'documents:folder_detail' folder.pk %}" class="text-primary hover:underline">
+                                {{ folder.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ folder.number }}</div>
+                    </td>
+                    <td class="font-mono text-xs text-slate-600">
+                        {{ folder.path }}
+                    </td>
+                    <td>
+                        {% if folder.parent %}
+                        <a href="{% url 'documents:folder_detail' folder.parent.pk %}" class="text-xs text-primary hover:underline flex items-center gap-1">
+                            <i data-lucide="corner-down-right" class="w-3 h-3"></i>
+                            <span>{{ folder.parent.name }}</span>
+                        </a>
+                        {% else %}
+                        <span class="text-xs text-muted italic">Root Level</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if folder.department %}
+                        <span class="text-sm">{{ folder.department.name }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ folder.classification_badge_class }}">
+                            {{ folder.get_default_classification_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if folder.is_virtual %}
+                        <span class="badge badge-purple flex items-center gap-1 w-fit">
+                            <i data-lucide="sparkles" class="w-3 h-3"></i>
+                            <span>Smart Virtual</span>
+                        </span>
+                        {% else %}
+                        <span class="badge badge-slate">Standard</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ folder.status_badge_class }}">
+                            {% if folder.is_active %}Active{% else %}Archived{% endif %}
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'documents:folder_detail' folder.pk %}" class="btn btn-icon" title="Open Folder">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'documents:folder_edit' folder.pk %}" class="btn btn-icon" title="Edit Folder">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'documents:folder_delete' folder.pk %}" onsubmit="return confirm('Are you sure you want to delete folder \'{{ folder.name }}\'?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Folder">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state text-center py-12">
+                            <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4 text-slate-400">
+                                <i data-lucide="folder" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="text-base font-semibold text-slate-800 mb-1">No repository folders found</h3>
+                            <p class="text-sm text-muted mb-4">Organize your document repository into a nested taxonomy with inherited metadata.</p>
+                            <a href="{% url 'documents:folder_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Folder</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} folders
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if is_virtual %}&is_virtual={{ is_virtual }}{% endif %}{% if department %}&department={{ department }}{% endif %}{% if status %}&status={{ status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="btn btn-outline btn-sm active font-bold">{{ page_obj.number }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if is_virtual %}&is_virtual={{ is_virtual }}{% endif %}{% if department %}&department={{ department }}{% endif %}{% if status %}&status={{ status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
