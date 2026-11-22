@@ -83,6 +83,10 @@ from apps.quality.models import (
     LabSpecification,
     LabTestWorksheet,
     OosInvestigation,
+    ElectronicRecordPolicy,
+    DataIntegrityAssessment,
+    AuditTrailReview,
+    SystemChangeControl,
 )
 
 
@@ -3764,6 +3768,236 @@ def oos_investigation_b(db, tenant_b, lab_test_worksheet_b, lab_sample_b, admin_
         severity="major",
         investigation_lead=admin_b,
         target_completion_date=today + timedelta(days=5),
+    )
+
+
+# =============================================================================
+# 12.20 Data Integrity & Electronic Records Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def electronic_record_policy_a(db, tenant_a, admin_user, computer_system_validation_a, doc_a):
+    return ElectronicRecordPolicy.objects.create(
+        tenant=tenant_a,
+        title="Electronic Batch Production Record 21 CFR Part 11 Policy",
+        record_type_name="Electronic Batch Record (eBR)",
+        record_category="production_batch",
+        target_model_name="BatchRecord",
+        system=computer_system_validation_a,
+        governing_sop=doc_a,
+        is_part_11_regulated=True,
+        is_annex_11_regulated=True,
+        signature_requirement="dual_peer_review",
+        reauthentication_required=True,
+        dual_signature_required=True,
+        audit_trail_mandatory=True,
+        retention_period_years=10,
+        storage_format="database_relational",
+        backup_frequency="daily_snapshot",
+        legal_hold=False,
+        status="active",
+        system_owner=admin_user,
+        qa_approver=admin_user,
+        description="Governs closed-system electronic batch production records.",
+    )
+
+
+@pytest.fixture
+def electronic_record_policy_b(db, tenant_b, admin_b, computer_system_validation_b, doc_b):
+    return ElectronicRecordPolicy.objects.create(
+        tenant=tenant_b,
+        title="Globex Laboratory Testing Electronic Data Integrity Policy",
+        record_type_name="Analytical Test Results Stream",
+        record_category="lab_analytical",
+        target_model_name="CertificateOfAnalysis",
+        system=computer_system_validation_b,
+        governing_sop=doc_b,
+        is_part_11_regulated=True,
+        is_annex_11_regulated=True,
+        signature_requirement="triple_qa_approval",
+        reauthentication_required=True,
+        dual_signature_required=True,
+        audit_trail_mandatory=True,
+        retention_period_years=15,
+        storage_format="hybrid_blob",
+        backup_frequency="continuous_wal",
+        legal_hold=False,
+        status="active",
+        system_owner=admin_b,
+        qa_approver=admin_b,
+        description="Globex analytical testing electronic records policy.",
+    )
+
+
+@pytest.fixture
+def data_integrity_assessment_a(db, tenant_a, admin_user, computer_system_validation_a, quality_department, ncr_a, capa_investigation_a):
+    today = timezone.now().date()
+    return DataIntegrityAssessment.objects.create(
+        tenant=tenant_a,
+        title="LIMS & Chromatography Data System ALCOA+ Assessment",
+        assessment_scope="QC Analytical Laboratories",
+        system=computer_system_validation_a,
+        org_unit=quality_department,
+        lead_assessor=admin_user,
+        qa_reviewer=admin_user,
+        assessment_date=today,
+        next_review_due=today + timedelta(days=365),
+        attributable_rating="fully_compliant",
+        legible_rating="fully_compliant",
+        contemporaneous_rating="fully_compliant",
+        original_rating="fully_compliant",
+        accurate_rating="fully_compliant",
+        complete_rating="fully_compliant",
+        consistent_rating="fully_compliant",
+        enduring_rating="fully_compliant",
+        available_rating="fully_compliant",
+        overall_risk_level="low",
+        vulnerabilities_summary="Zero critical vulnerabilities detected.",
+        remediation_plan="Routine annual audit trail verification schedule.",
+        linked_ncr=ncr_a,
+        linked_capa=capa_investigation_a,
+        status="approved",
+        comments="ALCOA+ assessment clean.",
+    )
+
+
+@pytest.fixture
+def data_integrity_assessment_b(db, tenant_b, admin_b, computer_system_validation_b, quality_department_b):
+    today = timezone.now().date()
+    return DataIntegrityAssessment.objects.create(
+        tenant=tenant_b,
+        title="Globex Shop Floor MES ALCOA+ Audit",
+        assessment_scope="Packaging & Vision Systems",
+        system=computer_system_validation_b,
+        org_unit=quality_department_b,
+        lead_assessor=admin_b,
+        qa_reviewer=admin_b,
+        assessment_date=today,
+        next_review_due=today + timedelta(days=180),
+        attributable_rating="fully_compliant",
+        legible_rating="fully_compliant",
+        contemporaneous_rating="partially_compliant",
+        original_rating="fully_compliant",
+        accurate_rating="fully_compliant",
+        complete_rating="partially_compliant",
+        consistent_rating="fully_compliant",
+        enduring_rating="fully_compliant",
+        available_rating="fully_compliant",
+        overall_risk_level="medium",
+        vulnerabilities_summary="Intermittent network buffering during packaging peak throughput.",
+        remediation_plan="Implement edge buffer gateway.",
+        status="remediation_pending",
+        comments="Globex medium risk assessment.",
+    )
+
+
+@pytest.fixture
+def audit_trail_review_a(db, tenant_a, admin_user, computer_system_validation_a, ncr_a, capa_investigation_a):
+    today = timezone.now().date()
+    return AuditTrailReview.objects.create(
+        tenant=tenant_a,
+        title="Q3 2026 Core Quality Database Audit Trail Review",
+        system=computer_system_validation_a,
+        review_type="periodic_system",
+        audit_source="database_audit_log",
+        period_start=today - timedelta(days=90),
+        period_end=today,
+        reviewer=admin_user,
+        qa_approver=admin_user,
+        review_date=today,
+        records_sampled_count=1500,
+        anomalies_detected_count=0,
+        anomaly_severity="none",
+        findings_summary="1,500 transactions sampled. Zero deleted logs, 100% attributable.",
+        disposition="approved_clean",
+        status="completed",
+        linked_ncr=ncr_a,
+        linked_capa=capa_investigation_a,
+        qa_comments="Audit trail clean and Part 11 compliant.",
+    )
+
+
+@pytest.fixture
+def audit_trail_review_b(db, tenant_b, admin_b, computer_system_validation_b):
+    today = timezone.now().date()
+    return AuditTrailReview.objects.create(
+        tenant=tenant_b,
+        title="Globex Chromatography Reprocessing Event Investigation",
+        system=computer_system_validation_b,
+        review_type="event_investigation",
+        audit_source="instrument_raw_log",
+        period_start=today - timedelta(days=30),
+        period_end=today,
+        reviewer=admin_b,
+        qa_approver=admin_b,
+        review_date=today,
+        records_sampled_count=250,
+        anomalies_detected_count=2,
+        anomaly_severity="minor",
+        findings_summary="Two manual chromatogram peak integration reprocessing events detected.",
+        disposition="approved_remediated",
+        status="completed",
+        qa_comments="Globex event investigation completed.",
+    )
+
+
+@pytest.fixture
+def system_change_control_a(db, tenant_a, admin_user, computer_system_validation_a, quality_department):
+    today = timezone.now().date()
+    return SystemChangeControl.objects.create(
+        tenant=tenant_a,
+        title="LIMS v8.8 Security Vulnerability Roll-up Patch & TLS 1.3 Upgrade",
+        system=computer_system_validation_a,
+        change_type="software_patch",
+        change_priority="urgent",
+        gxp_impact="direct_gxp",
+        requestor=admin_user,
+        system_owner=admin_user,
+        qa_lead=admin_user,
+        org_unit=quality_department,
+        description="Apply security patch resolving OpenSSL CVE-2026-1184 and enforce TLS 1.3.",
+        business_justification="Mitigate critical cyber-security vulnerability in GxP environment.",
+        data_integrity_risk="Low risk. Zero schema modifications; strengthens encrypted transit.",
+        validation_deliverables="Installation Qualification (IQ) and 15 automated regression scripts.",
+        rollback_plan="Restore pre-patch VM snapshot within 45 minutes.",
+        target_date=today + timedelta(days=15),
+        actual_implementation_date=today,
+        post_review_due_date=today + timedelta(days=90),
+        status="implemented_closed",
+        testing_successful=True,
+        data_backup_verified=True,
+        ccb_approved=True,
+        closure_summary="Deployment executed with zero downtime. All 15 regression scripts passed.",
+    )
+
+
+@pytest.fixture
+def system_change_control_b(db, tenant_b, admin_b, computer_system_validation_b, quality_department_b):
+    today = timezone.now().date()
+    return SystemChangeControl.objects.create(
+        tenant=tenant_b,
+        title="Globex Cleanroom HMI Firmware Emergency Patch",
+        system=computer_system_validation_b,
+        change_type="infrastructure_network",
+        change_priority="emergency",
+        gxp_impact="direct_gxp",
+        requestor=admin_b,
+        system_owner=admin_b,
+        qa_lead=admin_b,
+        org_unit=quality_department_b,
+        description="Emergency firmware patch addressing touchscreen freeze.",
+        business_justification="Ensure continuous visual alarm display.",
+        data_integrity_risk="Sensor logging continues uninterrupted in PLC background.",
+        validation_deliverables="Post-installation alarm challenge test.",
+        rollback_plan="Swap pre-configured spare HMI panel.",
+        target_date=today + timedelta(days=2),
+        post_review_due_date=today + timedelta(days=30),
+        status="draft",
+        testing_successful=False,
+        data_backup_verified=False,
+        ccb_approved=False,
+        closure_summary="",
     )
 
 
