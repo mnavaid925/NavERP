@@ -18,14 +18,6 @@ from apps.documents.views.DocumentAuthoring.DocumentTemplates import (
     template_instantiate,
     template_list,
 )
-from apps.documents.views.DocumentAuthoring.DraftCollaborations import (
-    collaboration_create,
-    collaboration_delete,
-    collaboration_detail,
-    collaboration_edit,
-    collaboration_list,
-    collaboration_resolve,
-)
 from apps.documents.views.DocumentAuthoring.TemplateSections import (
     template_section_create,
     template_section_delete,
@@ -33,8 +25,71 @@ from apps.documents.views.DocumentAuthoring.TemplateSections import (
     template_section_edit,
     template_section_list,
 )
+from apps.documents.views.VersionControl.DocumentBranches import (
+    document_branch_abandon,
+    document_branch_create,
+    document_branch_delete,
+    document_branch_detail,
+    document_branch_edit,
+    document_branch_list,
+    document_branch_merge,
+)
+from apps.documents.views.VersionControl.DocumentLocks import (
+    document_checkin,
+    document_checkout,
+    document_discard_checkout,
+    document_force_unlock,
+    document_lock_detail,
+    document_lock_list,
+)
+from apps.documents.views.VersionControl.Documents import (
+    document_create,
+    document_delete,
+    document_detail,
+    document_edit,
+    document_list,
+)
+from apps.documents.views.VersionControl.DocumentVersions import (
+    document_version_compare,
+    document_version_create,
+    document_version_delete,
+    document_version_detail,
+    document_version_edit,
+    document_version_list,
+    document_version_rollback,
+)
 
 __all__ = [
+    # VersionControl - Documents
+    "document_list",
+    "document_create",
+    "document_detail",
+    "document_edit",
+    "document_delete",
+    # VersionControl - DocumentVersions
+    "document_version_list",
+    "document_version_create",
+    "document_version_detail",
+    "document_version_edit",
+    "document_version_delete",
+    "document_version_compare",
+    "document_version_rollback",
+    # VersionControl - DocumentLocks
+    "document_lock_list",
+    "document_lock_detail",
+    "document_checkout",
+    "document_checkin",
+    "document_discard_checkout",
+    "document_force_unlock",
+    # VersionControl - DocumentBranches
+    "document_branch_list",
+    "document_branch_create",
+    "document_branch_detail",
+    "document_branch_edit",
+    "document_branch_delete",
+    "document_branch_merge",
+    "document_branch_abandon",
+    # DocumentAuthoring
     "template_list",
     "template_detail",
     "template_create",
@@ -56,10 +111,4 @@ __all__ = [
     "draft_compare",
     "draft_resolve_conflict",
     "draft_promote",
-    "collaboration_list",
-    "collaboration_detail",
-    "collaboration_create",
-    "collaboration_edit",
-    "collaboration_delete",
-    "collaboration_resolve",
 ]
