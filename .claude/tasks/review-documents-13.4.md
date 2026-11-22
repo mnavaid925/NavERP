@@ -36,10 +36,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Unchecked archive extraction can consume all memory and lock worker transactions.
   - **Fix**: Enforce `MAX_BATCH_FILES = 500` and `MAX_BATCH_BYTES = 100 * 1024 * 1024` (100 MB total uncompressed size limit) before processing files. [x] fixed — 67d77caf: enforce file count and byte size limits against zip bombs in batch ingestion
 
-- [ ] **C4**: Recursive N+1 Query Cascade in `folder_tree`.
+- [x] **C4**: Recursive N+1 Query Cascade in `folder_tree`.
   - **Location**: `apps/documents/views/StorageRepository/DocumentFolders.py:78-92`
   - **Problem**: `build_tree` calls `folder.children.filter(...)` inside a recursive loop, issuing 1+N queries.
-  - **Fix**: Fetch all active folders for the tenant in 1 single query and assemble the tree hierarchy in memory using a dictionary/adjacency list (`defaultdict(list)`).
+  - **Fix**: Fetch all active folders for the tenant in 1 single query and assemble the tree hierarchy in memory using a dictionary/adjacency list (`defaultdict(list)`). [x] fixed — 153f0603: eliminate recursive N+1 query cascade in folder_tree
 
 ---
 
