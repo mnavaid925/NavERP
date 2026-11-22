@@ -111,3 +111,23 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Restrict dropdown queries with `.only("id", "title", "number")`.
 - **PR-M4**: `apps/documents/models/VersionControl/DocumentVersions.py:118` — Chained N+1 vulnerability through `DocumentVersion.__str__`.
   - *Fix*: Ensure `base_version__document` is included where string representation is rendered.
+
+
+---
+
+## 5. QA Smoke Tester Findings
+
+### Critical
+*None.*
+
+### Important
+*None.*
+
+### Minor
+*None.*
+
+### Verification Summary
+- **42 / 42 Tests Passed**: Clean 200/302 responses across all routes and full content assertion verification.
+- **Cross-tenant IDOR**: 100% 404 responses when testing Acme admin against Globex documents, versions, locks, and branches.
+- **Comment Leak Sweep**: 0 comment leaks found (`{#` / `{% comment`).
+- **Junk Parameter Handling**: Safe `.isdigit()` guards across all FK and page filters.
