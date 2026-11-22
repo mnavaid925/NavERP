@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Document Relationship Network Graph — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <a href="{% url 'documents:relationship_list' %}">Relationships</a>
+            <span>/</span>
+            <span>Network Graph</span>
+        </div>
+        <h1 class="page-title">Document Relationship Network Graph</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:relationship_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>List View</span>
+        </a>
+        <a href="{% url 'documents:relationship_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Link</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Visual Relationship Topology</h2>
+            <p class="text-xs text-muted">Document interconnections, citations, exhibits, and parent-child document families</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="inline-flex items-center gap-1 text-xs text-slate-600">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> Document Node
+            </span>
+            <span class="inline-flex items-center gap-1 text-xs text-slate-600">
+                <span class="w-4 h-0.5 bg-slate-400 inline-block"></span> Semantic Link
+            </span>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="p-6 bg-slate-50 border border-slate-200 rounded-lg min-h-[300px] flex flex-col justify-center items-center">
+            {% if relationships %}
+            <div class="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for rel in relationships %}
+                <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="badge {{ rel.type_badge_class }}">{{ rel.get_relationship_type_display }}</span>
+                            {% if rel.is_bidirectional %}
+                            <i data-lucide="repeat" class="w-4 h-4 text-primary" title="Bidirectional Link"></i>
+                            {% else %}
+                            <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400" title="Unidirectional Link"></i>
+                            {% endif %}
+                        </div>
+                        <div class="space-y-2 my-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                                <a href="{% url 'documents:document_detail' rel.source_document.pk %}" class="text-sm font-semibold text-slate-800 hover:text-primary truncate">
+                                    {{ rel.source_document.title }}
+                                </a>
+                            </div>
+                            <div class="text-center font-mono text-xs text-slate-400">
+                                {% if rel.is_bidirectional %}↕{% else %}↓{% endif %}
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-2 rounded-full bg-purple-500"></div>
+                                <a href="{% url 'documents:document_detail' rel.target_document.pk %}" class="text-sm font-semibold text-slate-800 hover:text-primary truncate">
+                                    {{ rel.target_document.title }}
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-muted">
+                        <span>{{ rel.get_dependency_level_display }}</span>
+                        <a href="{% url 'documents:relationship_detail' rel.pk %}" class="text-primary hover:underline">View Link</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state text-center py-12">
+                <i data-lucide="share-2" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                <h3 class="text-base font-semibold text-slate-700">No Relationship Nodes</h3>
+                <p class="text-sm text-muted mb-4">Create semantic links between documents to render the interactive relationship topology.</p>
+                <a href="{% url 'documents:relationship_create' %}" class="btn btn-primary">
+                    <i data-lucide="plus"></i>
+                    <span>Create First Link</span>
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
