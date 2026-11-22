@@ -124,7 +124,7 @@ def test_document_review_comment_form_and_action_forms(tenant_a, document, docum
             "document": document.pk,
             "version": document_version.pk,
             "workflow": approval_workflow.pk,
-            "annotation_type": "suggestion",
+            "annotation_type": "critique",
             "page_number": 3,
             "content": "Consider clarifying paragraph 2 step b.",
             "is_blocking": False,
