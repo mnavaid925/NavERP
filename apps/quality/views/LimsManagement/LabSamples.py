@@ -140,10 +140,10 @@ def lab_sample_edit(request, pk):
 @tenant_admin_required
 def lab_sample_delete(request, pk):
     obj = quality_object(request, LabSample, pk)
-    if obj.status in ["approved", "in_testing", "testing_completed"]:
+    if obj.status in ["approved", "in_testing", "testing_completed"] or obj.test_worksheets.exists() or obj.oos_investigations.exists():
         messages.error(
             request,
-            f"Lab Sample {obj.number} has testing records or is approved and cannot be deleted under GxP data integrity rules.",
+            f"Lab Sample {obj.number} has linked worksheets/investigations or is active and cannot be deleted under GxP data integrity rules.",
         )
         return redirect("quality:lab_sample_detail", pk=obj.pk)
     number = obj.number
