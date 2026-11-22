@@ -128,10 +128,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: `return self.parent is None` causes Django to evaluate the FK relation if not prefetched.
   - **Fix**: Change to `return self.parent_id is None`. [x] fixed — b4223940: use parent_id is None instead of parent is None in is_root
 
-- [ ] **M3**: Duplicate Count Query in `folder_detail`.
+- [x] **M3**: Duplicate Count Query in `folder_detail`.
   - **Location**: `apps/documents/views/StorageRepository/DocumentFolders.py:155`
   - **Problem**: Calling `docs_qs.count()` and then `Paginator(docs_qs, 15)` triggers two count queries.
-  - **Fix**: Use `total_files = page_obj.paginator.count`.
+  - **Fix**: Use `total_files = page_obj.paginator.count`. [x] fixed — 8874721d: use paginator count to avoid duplicate total files count query in folder_detail
 
 - [ ] **M4**: Materialized Path Update Cascade on Folder Rename/Move.
   - **Location**: `apps/documents/models/StorageRepository/DocumentFolders.py:111`
