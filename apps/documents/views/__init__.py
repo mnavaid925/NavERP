@@ -75,6 +75,40 @@ from apps.documents.views.DocumentAuthoring.TemplateSections import (
     template_section_edit,
     template_section_list,
 )
+from apps.documents.views.StorageRepository.DocumentBatchImports import (
+    batch_import_create,
+    batch_import_delete,
+    batch_import_detail,
+    batch_import_edit,
+    batch_import_list,
+    batch_import_process,
+)
+from apps.documents.views.StorageRepository.DocumentFolders import (
+    folder_create,
+    folder_delete,
+    folder_detail,
+    folder_edit,
+    folder_list,
+    folder_tree,
+)
+from apps.documents.views.StorageRepository.DocumentRelationships import (
+    relationship_create,
+    relationship_delete,
+    relationship_detail,
+    relationship_edit,
+    relationship_graph,
+    relationship_list,
+)
+from apps.documents.views.StorageRepository.RepositoryDashboard import (
+    repository_dashboard,
+)
+from apps.documents.views.StorageRepository.StorageVolumes import (
+    storage_volume_create,
+    storage_volume_delete,
+    storage_volume_detail,
+    storage_volume_edit,
+    storage_volume_list,
+)
 from apps.documents.views.VersionControl.DocumentBranches import (
     document_branch_abandon,
     document_branch_create,
@@ -200,4 +234,29 @@ __all__ = [
     "review_comment_resolve",
     "review_comment_reply",
     "approval_dashboard",
+    # StorageRepository
+    "folder_list",
+    "folder_tree",
+    "folder_create",
+    "folder_detail",
+    "folder_edit",
+    "folder_delete",
+    "storage_volume_list",
+    "storage_volume_create",
+    "storage_volume_detail",
+    "storage_volume_edit",
+    "storage_volume_delete",
+    "relationship_list",
+    "relationship_graph",
+    "relationship_create",
+    "relationship_detail",
+    "relationship_edit",
+    "relationship_delete",
+    "batch_import_list",
+    "batch_import_create",
+    "batch_import_detail",
+    "batch_import_edit",
+    "batch_import_delete",
+    "batch_import_process",
+    "repository_dashboard",
 ]
