@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Electronic Signatures — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_list' %}">Approval Workflows</a>
+            <span>/</span>
+            <span>Electronic Signatures</span>
+        </div>
+        <h1 class="page-title">Electronic Signatures & Execution Manifests</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:signature_verify' %}" class="btn btn-outline">
+            <i data-lucide="shield-check"></i>
+            <span>Verify Token</span>
+        </a>
+        <a href="{% url 'documents:signature_create' %}" class="btn btn-primary">
+            <i data-lucide="pen-tool"></i>
+            <span>Sign Document</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-signature"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Signatures Captured</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ valid_count }}</div>
+            <div class="stat-label">Valid Cryptographic Seals</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" class="form-input" placeholder="Signer, token, document, number...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="signature_type">Signature Type</label>
+                <select name="signature_type" id="signature_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in signature_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.signature_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="signature_meaning">Signature Meaning</label>
+                <select name="signature_meaning" id="signature_meaning" class="form-select">
+                    <option value="">All Meanings</option>
+                    {% for val, label in signature_meaning_choices %}
+                    <option value="{{ val }}" {% if request.GET.signature_meaning == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-span-full sm:col-span-1 flex items-end gap-2">
+                <a href="{% url 'documents:signature_list' %}" class="btn btn-outline">Clear</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Signature Register ({{ total_count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Signature #</th>
+                    <th>Document</th>
+                    <th>Signer Identity</th>
+                    <th>Type</th>
+                    <th>Meaning</th>
+                    <th>Timestamp</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in signatures %}
+                <tr>
+                    <td class="font-mono text-sm">
+                        <a href="{% url 'documents:signature_detail' s.pk %}" class="text-blue-600 hover:underline font-semibold">
+                            {{ s.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'documents:document_detail' s.document.pk %}" class="hover:underline">
+                                {{ s.document.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono">
+                            {{ s.version.version_label|default:"Head" }} (Hash: {{ s.document_checksum|slice:":8" }}...)
+                        </div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ s.signer_name }}</div>
+                        <div class="text-xs text-slate-500">{{ s.signer_title|default:s.signer.username }}</div>
+                    </td>
+                    <td><span class="badge {{ s.signature_type_css_class }}">{{ s.get_signature_type_display }}</span></td>
+                    <td><span class="badge {{ s.signature_meaning_css_class }}">{{ s.get_signature_meaning_display }}</span></td>
+                    <td class="text-xs">{{ s.signed_at|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {% if s.is_valid %}
+                        <span class="badge badge-green">Valid</span>
+                        {% else %}
+                        <span class="badge badge-red">Revoked / Invalid</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'documents:signature_detail' s.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'documents:signature_manifest' s.pk %}" class="btn btn-icon text-blue-600" title="Signature Manifest Certificate">
+                                <i data-lucide="award"></i>
+                            </a>
+                            <a href="{% url 'documents:signature_edit' s.pk %}" class="btn btn-icon" title="Edit Metadata">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'documents:signature_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete signature record {{ s.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="file-signature"></i>
+                            </div>
+                            <div class="empty-state-title">No Signatures Recorded</div>
+                            <div class="empty-state-text">No digital or electronic signatures have been captured yet.</div>
+                            <a href="{% url 'documents:signature_create' %}" class="btn btn-primary mt-3">Sign Document</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if signatures.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-sm text-slate-500">
+            Page {{ signatures.number }} of {{ signatures.paginator.num_pages }} ({{ total_count }} records)
+        </div>
+        <div class="flex gap-1">
+            {% if signatures.has_previous %}
+            <a href="?page={{ signatures.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.signature_type %}&signature_type={{ request.GET.signature_type }}{% endif %}{% if request.GET.signature_meaning %}&signature_meaning={{ request.GET.signature_meaning }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
+            {% endif %}
+
+            {% if signatures.has_next %}
+            <a href="?page={{ signatures.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.signature_type %}&signature_type={{ request.GET.signature_type }}{% endif %}{% if request.GET.signature_meaning %}&signature_meaning={{ request.GET.signature_meaning }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
