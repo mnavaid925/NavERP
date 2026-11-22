@@ -30,6 +30,7 @@ def test_document_authoring_template_crud_views(client_a, tenant_a, document_tem
         "template_type": "policy",
         "category": "quality",
         "content": "<p>Item 1: Verification</p>",
+        "version": "1.0",
         "is_active": True,
     }
     res = client_a.post(create_url, post_data)
@@ -124,7 +125,7 @@ def test_document_authoring_draft_compare_view(client_a, tenant_a, document_draf
     assert res.status_code == 200
     content = res.content.decode()
     assert "Redline Visual Comparison" in content
-    assert "Unified Line Diff" in content
+    assert "Template Baseline Removed" in content
 
 
 @pytest.mark.django_db
