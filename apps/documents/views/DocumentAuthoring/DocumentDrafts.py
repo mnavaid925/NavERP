@@ -109,6 +109,13 @@ def draft_create(request):
 @login_required
 def draft_edit(request, pk):
     draft = documents_object(request, DocumentDraft, pk)
+    if draft.status in ("promoted", "discarded"):
+        messages.error(request, f"Cannot edit draft '{draft.title}' because it has been {draft.get_status_display().lower()}.")
+        return redirect("documents:draft_detail", pk=draft.pk)
+    if draft.is_collaboration_locked and not (getattr(request.user, "is_tenant_admin", False) or request.user.is_staff):
+        messages.error(request, f"Document draft '{draft.title}' is locked for collaboration and cannot be modified.")
+        return redirect("documents:draft_detail", pk=draft.pk)
+
     if request.method == "POST":
         form = DocumentDraftForm(request.POST, instance=draft, tenant=request.tenant)
         if form.is_valid():
@@ -173,6 +180,11 @@ def draft_canvas(request, pk):
 @require_POST
 def draft_autosave(request, pk):
     draft = documents_object(request, DocumentDraft, pk)
+    if draft.is_collaboration_locked or draft.status in ("promoted", "discarded"):
+        return JsonResponse(
+            {"error": "Draft is locked or finalized and cannot be modified."},
+            status=423,
+        )
     content = request.POST.get("content", "")
     with transaction.atomic():
         draft.content = content
