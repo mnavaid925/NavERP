@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -56,8 +56,12 @@ def document_list(request):
     page_obj = paginator.get_page(page_number)
 
     departments = OrgUnit.objects.filter(tenant=request.tenant).order_by("name")
-    total_documents_count = Document.objects.filter(tenant=request.tenant).count()
-    active_locks_count = Document.objects.filter(tenant=request.tenant, is_locked=True).count()
+    stats = Document.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        locked=Count("id", filter=Q(is_locked=True)),
+    )
+    total_documents_count = stats["total"] or 0
+    active_locks_count = stats["locked"] or 0
 
     context = {
         "page_obj": page_obj,
