@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.shortcuts import render
 
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
@@ -11,15 +11,16 @@ from apps.documents.models.StorageRepository.StorageVolumes import StorageVolume
 @login_required
 def repository_dashboard(request):
     total_folders = DocumentFolder.objects.filter(tenant=request.tenant).count()
-    total_volumes = StorageVolume.objects.filter(tenant=request.tenant).count()
     total_relationships = DocumentRelationship.objects.filter(tenant=request.tenant).count()
     total_imports = DocumentBatchImport.objects.filter(tenant=request.tenant).count()
 
-    # Aggregate storage metrics across all volumes
+    # Aggregate volume count and capacity metrics in a single query
     vol_totals = StorageVolume.objects.filter(tenant=request.tenant).aggregate(
+        count=Count("id"),
         cap=Sum("max_capacity_bytes"),
         util=Sum("utilized_bytes"),
     )
+    total_volumes = vol_totals["count"] or 0
     total_capacity_bytes = vol_totals["cap"] or 0
     total_utilized_bytes = vol_totals["util"] or 0
 
