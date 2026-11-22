@@ -22,6 +22,7 @@ urlpatterns = [
     path("bi/", include("apps.bi.urls")),               # /bi/, data integration/ingestion/connectors/pipelines
     path("assets/", include("apps.assets.urls")),       # /assets/, asset procurement/capitalization/tags
     path("quality/", include("apps.quality.urls")),     # /quality/, document control, QMS
+    path("documents/", include("apps.documents.urls")), # /documents/, Document Management System (DMS)
 ]
 
 if settings.DEBUG:
