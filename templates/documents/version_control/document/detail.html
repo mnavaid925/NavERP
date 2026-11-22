@@ -165,7 +165,7 @@
 <div class="card mb-6">
     <div class="card-header flex justify-between items-center">
         <div>
-            <h2 class="text-base font-semibold text-slate-800">Version History & Revisions ({{ versions.count }})</h2>
+            <h2 class="text-base font-semibold text-slate-800">Version History & Revisions ({{ versions|length }})</h2>
             <p class="text-xs text-slate-500">Immutable chronological log of document revisions, milestone snapshots, and rollback points.</p>
         </div>
         <div class="flex gap-2">
@@ -265,7 +265,7 @@
 <div class="card mb-6">
     <div class="card-header flex justify-between items-center">
         <div>
-            <h2 class="text-base font-semibold text-slate-800">Parallel Revision Streams & Branches ({{ branches.count }})</h2>
+            <h2 class="text-base font-semibold text-slate-800">Parallel Revision Streams & Branches ({{ branches|length }})</h2>
             <p class="text-xs text-slate-500">What-if scenarios and alternative drafting tracks that can be merged back into mainline.</p>
         </div>
         <a href="{% url 'documents:document_branch_create' %}?document={{ document.pk }}" class="btn btn-outline text-xs">
