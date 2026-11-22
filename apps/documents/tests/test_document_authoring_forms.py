@@ -22,6 +22,7 @@ def test_document_authoring_template_form_valid(tenant_a, admin_user):
         "content": "<p>Assembly steps.</p>",
         "target_org_unit": dept.pk,
         "owner": admin_user.pk,
+        "version": "1.0",
         "is_active": True,
         "is_locked": False,
     }
