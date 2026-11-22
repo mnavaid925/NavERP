@@ -80,6 +80,7 @@ class DocumentVersion(TenantNumbered):
         max_length=20,
         choices=STATUS_CHOICES,
         default="approved",
+        db_index=True,
     )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -113,6 +114,7 @@ class DocumentVersion(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "document", "is_official"], name="idx_dver_ten_doc_off"),
+            models.Index(fields=["tenant", "status"], name="idx_dver_ten_stat"),
         ]
 
     def __str__(self):
