@@ -25,8 +25,12 @@ def lims_dashboard(request):
     today = timezone.now().date()
     in_30_days = today + timedelta(days=30)
 
-    total_samples = sample_qs.count()
-    samples_in_testing = sample_qs.filter(status="in_testing").count()
+    sample_metrics = sample_qs.aggregate(
+        total=Count("id"),
+        in_testing=Count("id", filter=Q(status="in_testing")),
+    )
+    total_samples = sample_metrics["total"]
+    samples_in_testing = sample_metrics["in_testing"]
 
     pending_worksheets = worksheet_qs.filter(status__in=["assigned", "in_progress", "review_pending"]).count()
     open_oos_count = oos_qs.filter(status__in=["open", "retest_authorized", "root_cause_found"]).count()
