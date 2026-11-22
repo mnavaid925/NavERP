@@ -37,3 +37,24 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Add `{% else %}` block explaining that the selected document has no versions recorded yet.
 - **CR-M4**: `apps/documents/management/commands/seed_documents.py:23` — `seed_documents.py` lacks a `--flush` option.
   - *Fix*: Add `--flush` handling and stdout notice for tenant user credentials.
+
+
+---
+
+## 2. Explorer Reviewer Findings
+
+### Critical
+*None.*
+
+### Important
+*None.*
+
+### Minor
+- **EX-M1**: `apps/documents/views/VersionControl/Documents.py:68` — View context key alias `department_choices` omitted in `document_list`.
+  - *Fix*: Pass `"department_choices": departments` in context alongside `"departments"`.
+- **EX-M2**: `templates/documents/version_control/document/list.html:74` — Filter dropdown for `is_locked` and pagination persistence `&is_locked={{ request.GET.is_locked }}` missing from document list.
+  - *Fix*: Add "Availability / Lock" filter dropdown and preserve `is_locked` in pagination links.
+- **EX-M3**: `templates/documents/version_control/document_version/list.html:31` — Filter dropdown for `is_official` and pagination persistence `&is_official={{ request.GET.is_official }}` missing from version list.
+  - *Fix*: Add "Official Release" filter dropdown and preserve `is_official` in pagination links.
+- **EX-M4**: `apps/documents/views/VersionControl/DocumentBranches.py:253` — AuditLog action verb `"abandon"` in `document_branch_abandon` was not in the initial contract list (though valid under schema `<= 10` chars).
+  - *Fix*: Keep or standardize to `"abandon"` in contract documentation.
