@@ -107,6 +107,10 @@ def template_create(request):
 @login_required
 def template_edit(request, pk):
     template = documents_object(request, DocumentTemplate, pk)
+    if template.is_locked and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request, "is_tenant_admin", False)):
+        messages.error(request, f"Document template '{template.name}' is locked and can only be modified by an administrator.")
+        return redirect("documents:template_detail", pk=template.pk)
+
     if request.method == "POST":
         form = DocumentTemplateForm(request.POST, instance=template, tenant=request.tenant)
         if form.is_valid():
@@ -133,6 +137,10 @@ def template_edit(request, pk):
 @require_POST
 def template_delete(request, pk):
     template = documents_object(request, DocumentTemplate, pk)
+    if template.is_locked and not (request.user.is_superuser or getattr(request.user, "is_tenant_admin", False) or getattr(request, "is_tenant_admin", False)):
+        messages.error(request, f"Document template '{template.name}' is locked and cannot be deleted.")
+        return redirect("documents:template_detail", pk=template.pk)
+
     name = template.name
     with transaction.atomic():
         write_audit_log(request.user, template, "delete", tenant=request.tenant)
