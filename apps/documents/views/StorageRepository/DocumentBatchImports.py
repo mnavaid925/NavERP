@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.forms._common import ALLOWED_DOC_EXTENSIONS
 from apps.core.utils import write_audit_log
 from apps.documents.forms.StorageRepository.DocumentBatchImports import DocumentBatchImportForm
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
@@ -219,8 +220,14 @@ def batch_import_process(request, pk):
 
                         with transaction.atomic():
                             for info in file_list:
-                                clean_filename = os.path.basename(info.filename)
+                                norm_name = info.filename.replace("\\", "/")
+                                clean_filename = os.path.basename(norm_name)
                                 if not clean_filename or clean_filename.startswith("."):
+                                    continue
+
+                                ext = os.path.splitext(clean_filename)[1].lower()
+                                if ext not in ALLOWED_DOC_EXTENSIONS:
+                                    logs.append(f"Skipped '{clean_filename}': unsupported extension '{ext}'.")
                                     continue
 
                                 total_bytes += info.file_size
