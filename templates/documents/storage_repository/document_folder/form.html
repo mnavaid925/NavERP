@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ folder.name }}{% else %}New Document Folder{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <a href="{% url 'documents:folder_list' %}">Folders</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Folder{% else %}New Folder{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:folder_detail' folder.pk %}{% else %}{% url 'documents:folder_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Folder Taxonomy & Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 text-sm text-red-700 bg-red-50 rounded border border-red-200">
+                {% for err in form.non_field_errors %}{{ err }}<br>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Folder Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.slug.id_for_label }}">Slug / URL Identifier</label>
+                    {{ form.slug }}
+                    <span class="text-xs text-muted">Leave blank to auto-generate from folder name</span>
+                    {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.parent.id_for_label }}">Parent Folder</label>
+                    {{ form.parent }}
+                    <span class="text-xs text-muted">Select an existing folder to nest, or leave blank for root</span>
+                    {% if form.parent.errors %}<div class="form-error">{{ form.parent.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.department.id_for_label }}">Department</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="form-error">{{ form.department.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Folder Custodian / Owner *</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.default_classification.id_for_label }}">Default Classification *</label>
+                    {{ form.default_classification }}
+                    {% if form.default_classification.errors %}<div class="form-error">{{ form.default_classification.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.default_document_type.id_for_label }}">Default Document Type</label>
+                    {{ form.default_document_type }}
+                    {% if form.default_document_type.errors %}<div class="form-error">{{ form.default_document_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.color_code.id_for_label }}">Folder Color Swatch</label>
+                    <div class="flex items-center gap-2">
+                        {{ form.color_code }}
+                        <span class="text-xs text-muted">Hex color code</span>
+                    </div>
+                    {% if form.color_code.errors %}<div class="form-error">{{ form.color_code.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.icon_name.id_for_label }}">Lucide Icon Name</label>
+                    {{ form.icon_name }}
+                    <span class="text-xs text-muted">e.g. folder, briefcase, shield, archive, file-text</span>
+                    {% if form.icon_name.errors %}<div class="form-error">{{ form.icon_name.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Description & Governance Notes</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Virtual Smart Folder Section -->
+                <div class="col-span-full p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                        {{ form.is_virtual }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.is_virtual.id_for_label }}">
+                            Enable as Smart Virtual Folder
+                        </label>
+                    </div>
+                    <p class="text-xs text-muted mb-3">
+                        Smart Virtual Folders dynamically aggregate documents matching specified metadata criteria across the repository.
+                    </p>
+                    <div class="form-group mb-0">
+                        <label class="form-label text-xs" for="{{ form.virtual_criteria_json.id_for_label }}">Query Filter Criteria (JSON)</label>
+                        {{ form.virtual_criteria_json }}
+                        {% if form.virtual_criteria_json.errors %}<div class="form-error">{{ form.virtual_criteria_json.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group col-span-full">
+                    <div class="flex items-center gap-2">
+                        {{ form.is_active }}
+                        <label class="form-label mb-0 cursor-pointer" for="{{ form.is_active.id_for_label }}">
+                            Folder is Active & Visible in Repository Browser
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:folder_detail' folder.pk %}{% else %}{% url 'documents:folder_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Folder{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
