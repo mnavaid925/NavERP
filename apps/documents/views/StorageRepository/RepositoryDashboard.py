@@ -33,10 +33,6 @@ def repository_dashboard(request):
     ).select_related("target_folder", "storage_volume", "created_by").order_by("-created_at")[:5]
 
     volumes = StorageVolume.objects.filter(tenant=request.tenant).order_by("name")
-    top_folders = DocumentFolder.objects.filter(
-        tenant=request.tenant,
-        parent__isnull=True,
-    ).select_related("department", "owner").order_by("name")[:6]
 
     context = {
         "total_folders": total_folders,
@@ -50,6 +46,5 @@ def repository_dashboard(request):
         "capacity_utilization_pct": capacity_utilization_pct,
         "recent_imports": recent_imports,
         "volumes": volumes,
-        "top_folders": top_folders,
     }
     return render(request, "documents/storage_repository/repository_dashboard.html", context)
