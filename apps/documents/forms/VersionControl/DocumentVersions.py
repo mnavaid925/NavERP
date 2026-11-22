@@ -1,7 +1,7 @@
 from django import forms
 
 from apps.accounts.models import User
-from apps.documents.forms._common import TenantUniqueMixin, reject_foreign
+from apps.documents.forms._common import TenantUniqueMixin, reject_foreign, validate_safe_doc_upload
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.VersionControl.DocumentVersions import DocumentVersion
 
@@ -65,6 +65,10 @@ class DocumentVersionForm(TenantUniqueMixin, forms.ModelForm):
         self.fields["branch"].required = False
         self.fields["file"].required = False
         self.fields["file_name"].required = False
+
+    def clean_file(self):
+        f = self.cleaned_data.get("file")
+        return validate_safe_doc_upload(f)
 
     def clean(self):
         cleaned_data = super().clean()
