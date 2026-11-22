@@ -46,7 +46,7 @@ class OosInvestigation(TenantNumbered):
     STATUS_CSS = {
         "open": "badge-amber",
         "retest_authorized": "badge-info",
-        "root_cause_found": "badge-purple",
+        "root_cause_found": "badge-info",
         "closed": "badge-green",
     }
 
