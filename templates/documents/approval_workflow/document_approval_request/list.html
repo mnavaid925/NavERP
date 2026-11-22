@@ -164,13 +164,13 @@
         </div>
         <div class="flex gap-1">
             {% if requests.has_previous %}
-            <a href="?page={{ requests.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.stage_type %}&stage_type={{ request.GET.stage_type }}{% endif %}{% if request.GET.mine %}&mine={{ request.GET.mine }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+            <a href="?page={{ requests.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.stage_type %}&stage_type={{ request.GET.stage_type }}{% endif %}{% if request.GET.mine %}&mine={{ request.GET.mine }}{% endif %}{% if request.GET.workflow %}&workflow={{ request.GET.workflow }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
             {% endif %}
 
             {% if requests.has_next %}
-            <a href="?page={{ requests.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.stage_type %}&stage_type={{ request.GET.stage_type }}{% endif %}{% if request.GET.mine %}&mine={{ request.GET.mine }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ requests.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.stage_type %}&stage_type={{ request.GET.stage_type }}{% endif %}{% if request.GET.mine %}&mine={{ request.GET.mine }}{% endif %}{% if request.GET.workflow %}&workflow={{ request.GET.workflow }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
             {% endif %}
