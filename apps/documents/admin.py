@@ -1,5 +1,15 @@
 from django.contrib import admin
 
+from apps.documents.models.ApprovalWorkflow.DocumentApprovalRequests import (
+    DocumentApprovalRequest,
+)
+from apps.documents.models.ApprovalWorkflow.DocumentApprovalWorkflows import (
+    DocumentApprovalWorkflow,
+)
+from apps.documents.models.ApprovalWorkflow.DocumentReviewComments import (
+    DocumentReviewComment,
+)
+from apps.documents.models.ApprovalWorkflow.DocumentSignatures import DocumentSignature
 from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
@@ -69,3 +79,36 @@ class DraftCollaborationAdmin(admin.ModelAdmin):
     list_filter = ("entry_type", "status", "tenant")
     search_fields = ("number", "comment_text", "draft__title", "draft__number")
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentApprovalWorkflow)
+class DocumentApprovalWorkflowAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "document", "workflow_type", "status", "urgency", "current_stage", "total_stages", "initiator", "tenant")
+    list_filter = ("workflow_type", "status", "urgency", "tenant")
+    search_fields = ("number", "title", "document__title", "initiator__username")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentApprovalRequest)
+class DocumentApprovalRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "workflow", "stage_number", "stage_name", "stage_type", "approver", "status", "due_date", "tenant")
+    list_filter = ("stage_type", "status", "is_escalated", "tenant")
+    search_fields = ("number", "workflow__title", "approver__username", "decision_comments")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentSignature)
+class DocumentSignatureAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "signer_name", "signature_type", "signature_meaning", "is_valid", "signed_at", "tenant")
+    list_filter = ("signature_type", "signature_meaning", "is_valid", "tenant")
+    search_fields = ("number", "signer_name", "signature_token", "document__title", "document_checksum")
+    readonly_fields = ("number", "signature_token", "signed_at", "created_at", "updated_at")
+
+
+@admin.register(DocumentReviewComment)
+class DocumentReviewCommentAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "page_number", "annotation_type", "status", "is_blocking", "author", "tenant")
+    list_filter = ("annotation_type", "status", "is_blocking", "tenant")
+    search_fields = ("number", "content", "selected_text", "document__title", "author__username")
+    readonly_fields = ("number", "created_at", "updated_at")
+
