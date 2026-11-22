@@ -148,7 +148,7 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Querying all tenant relationships could cause high memory usage on very large datasets.
   - **Fix**: Limit graph query to recent links (e.g. `[:200]`). [x] fixed — cd1bc8de: cap relationship_graph query to 200 recent records
 
-- [ ] **M7**: Dark mode contrast and accessibility enhancements.
+- [x] **M7**: Dark mode contrast and accessibility enhancements.
   - **Locations**: `templates/documents/storage_repository/`
   - **Problem**: Some hardcoded light backgrounds lack dark mode variants.
-  - **Fix**: Add dark mode utility classes and `aria-current="page"` on active pagination.
+  - **Fix**: Add dark mode utility classes and `aria-current="page"` on active pagination. [x] fixed — 6b831fbc, 4aef88ad, dc9a1ea8, 4bbc9e25, 97558b78, d028b4d7: add dark mode utility classes and aria-current page to pagination controls
