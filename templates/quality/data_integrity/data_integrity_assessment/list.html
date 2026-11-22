@@ -62,10 +62,19 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div class="form-group">
                 <label class="form-label" for="q">Search</label>
                 <input type="text" name="q" id="q" value="{{ q }}" placeholder="Assessment title, scope, vulnerabilities..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="system">System</label>
+                <select name="system" id="system" class="form-select">
+                    <option value="">All Systems</option>
+                    {% for sys in systems %}
+                    <option value="{{ sys.pk }}" {% if system_selected == sys.pk|stringformat:"d" %}selected{% endif %}>{{ sys.system_name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="form-group">
                 <label class="form-label" for="risk_level">Risk Level</label>
