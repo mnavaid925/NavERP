@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ workflow.number }}{% else %}New Approval Workflow{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_list' %}">Approval Workflows</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ workflow.number }}{% else %}New Workflow{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Approval Workflow: {{ workflow.title }}{% else %}Create Document Approval Workflow{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:workflow_detail' workflow.pk %}{% else %}{% url 'documents:workflow_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Workflow Definition Parameters</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ form.definition_json }}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger mb-4">
+                {% for err in form.non_field_errors %}{{ err }}<br>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Title -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Workflow Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Document -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.document.id_for_label }}">Target Document *</label>
+                    {{ form.document }}
+                    {% if form.document.errors %}<div class="form-error">{{ form.document.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Version -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">Document Version (Optional)</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}<div class="form-error">{{ form.version.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Workflow Type -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.workflow_type.id_for_label }}">Workflow Routing Architecture *</label>
+                    {{ form.workflow_type }}
+                    {% if form.workflow_type.errors %}<div class="form-error">{{ form.workflow_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Urgency -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.urgency.id_for_label }}">Priority / Urgency *</label>
+                    {{ form.urgency }}
+                    {% if form.urgency.errors %}<div class="form-error">{{ form.urgency.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Turnaround Target -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_turnaround_hours.id_for_label }}">Turnaround Target (Hours) *</label>
+                    {{ form.target_turnaround_hours }}
+                    <span class="text-xs text-slate-500">Allowed SLA hours for end-to-end completion.</span>
+                    {% if form.target_turnaround_hours.errors %}<div class="form-error">{{ form.target_turnaround_hours.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Department -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.department.id_for_label }}">Department / Org Unit</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="form-error">{{ form.department.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Due Date -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.due_date.id_for_label }}">Target Due Date & Time</label>
+                    {{ form.due_date }}
+                    {% if form.due_date.errors %}<div class="form-error">{{ form.due_date.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Policy Flags -->
+                <div class="form-group col-span-full bg-slate-50 p-4 rounded border border-slate-200">
+                    <div class="font-semibold text-sm text-slate-900 mb-2">Governance & Safeguards</div>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.requires_all_comments_resolved }}
+                            <span class="text-sm font-medium text-slate-800">Enforce Comment Resolution Gate</span>
+                        </label>
+                        <p class="text-xs text-slate-500 ml-6">When active, workflows cannot be fully approved while any blocking review comment remains unresolved.</p>
+
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.allow_emergency_bypass }}
+                            <span class="text-sm font-medium text-slate-800">Permit Emergency Approval Bypass</span>
+                        </label>
+                        <p class="text-xs text-slate-500 ml-6">Allows workspace administrators or authorized managers to bypass intermediate stages with documented justification.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 border-t border-slate-200 pt-4">
+                <a href="{% if is_edit %}{% url 'documents:workflow_detail' workflow.pk %}{% else %}{% url 'documents:workflow_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Workflow & Continue{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
