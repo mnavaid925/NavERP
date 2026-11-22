@@ -151,12 +151,14 @@
               <td class="py-3 px-4 text-right table-actions">
                 <div class="flex items-center justify-end gap-1">
                   {% if inv.status != "closed" %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'quality:oos_investigation_close' inv.pk %}" class="inline">
                       {% csrf_token %}
                       <button type="submit" class="btn btn-icon text-green-600 hover:bg-green-50" title="Close & Approve">
                         <i data-lucide="check-circle-2" class="w-4 h-4"></i>
                       </button>
                     </form>
+                    {% endif %}
                   {% endif %}
                   <a href="{% url 'quality:oos_investigation_detail' inv.pk %}" class="btn btn-icon" title="View Detail">
                     <i data-lucide="eye" class="w-4 h-4"></i>
