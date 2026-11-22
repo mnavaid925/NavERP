@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ workflow.number }} — {{ workflow.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_list' %}">Approval Workflows</a>
+            <span>/</span>
+            <span>{{ workflow.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ workflow.title }}</h1>
+            <span class="badge {{ status_css }}">{{ workflow.get_status_display }}</span>
+            <span class="badge {{ urgency_css }}">{{ workflow.get_urgency_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:workflow_designer' workflow.pk %}" class="btn btn-outline">
+            <i data-lucide="workflow"></i>
+            <span>Visual Designer</span>
+        </a>
+        {% if workflow.status == "draft" %}
+        <form method="post" action="{% url 'documents:workflow_submit' workflow.pk %}" class="inline" onsubmit="return confirm('Submit this workflow for approval?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="send"></i>
+                <span>Submit & Initiate</span>
+            </button>
+        </form>
+        <a href="{% url 'documents:workflow_edit' workflow.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        {% endif %}
+        {% if workflow.status == "pending" and workflow.allow_emergency_bypass %}
+        <button type="button" class="btn btn-danger" onclick="document.getElementById('bypass-modal').classList.remove('hidden')">
+            <i data-lucide="alert-triangle"></i>
+            <span>Emergency Bypass</span>
+        </button>
+        {% endif %}
+        {% if workflow.status != "cancelled" and workflow.status != "approved" and workflow.status != "bypassed" %}
+        <form method="post" action="{% url 'documents:workflow_cancel' workflow.pk %}" class="inline" onsubmit="return confirm('Cancel this workflow?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="x-circle"></i>
+                <span>Cancel</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Blocking Comments Alert -->
+{% if blocking_comments_count > 0 %}
+<div class="card mb-6 border-l-4 border-amber-500 bg-amber-50">
+    <div class="card-body flex items-start gap-3 py-3">
+        <i data-lucide="alert-circle" class="text-amber-600 mt-0.5"></i>
+        <div>
+            <div class="text-sm font-semibold text-amber-900">Blocking Comments Open ({{ blocking_comments_count }})</div>
+            <div class="text-xs text-amber-700">This workflow requires all blocking review comments to be resolved before final stage sign-off can occur.</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Metadata Card -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Workflow Specifications</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Workflow Number</dt>
+                <dd class="font-mono font-semibold">{{ workflow.number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Target Document</dt>
+                <dd>
+                    <a href="{% url 'documents:document_detail' workflow.document.pk %}" class="text-blue-600 hover:underline font-medium">
+                        {{ workflow.document.number }} — {{ workflow.document.title }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Document Version</dt>
+                <dd>{{ workflow.version.version_label|default:"Current Head / Baseline" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Workflow Type</dt>
+                <dd><span class="badge {{ workflow_type_css }}">{{ workflow.get_workflow_type_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Progress Stage</dt>
+                <dd class="font-semibold">Stage {{ workflow.current_stage }} of {{ workflow.total_stages }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Turnaround SLA</dt>
+                <dd>{{ workflow.target_turnaround_hours }} Hours SLA</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Initiator</dt>
+                <dd>
+                    {% if workflow.initiator %}
+                        {{ workflow.initiator.get_full_name|default:workflow.initiator.username }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Department</dt>
+                <dd>{{ workflow.department.name|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Due Date</dt>
+                <dd>{{ workflow.due_date|date:"Y-m-d H:i"|default:"Not specified" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Created / Completed</dt>
+                <dd>{{ workflow.created_at|date:"Y-m-d H:i" }} / {{ workflow.completed_at|date:"Y-m-d H:i"|default:"In Progress" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Comment Resolution Gate</dt>
+                <dd>
+                    {% if workflow.requires_all_comments_resolved %}
+                    <span class="badge badge-info">Mandatory Resolution</span>
+                    {% else %}
+                    <span class="badge badge-slate">Optional</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Emergency Bypass Enabled</dt>
+                <dd>
+                    {% if workflow.allow_emergency_bypass %}
+                    <span class="badge badge-green">Allowed</span>
+                    {% else %}
+                    <span class="badge badge-slate">Disallowed</span>
+                    {% endif %}
+                </dd>
+            </div>
+            {% if workflow.status == "bypassed" %}
+            <div class="detail-item col-span-full">
+                <dt>Bypass Details</dt>
+                <dd class="text-red-700 bg-red-50 p-3 rounded">
+                    <strong>Bypassed by:</strong> {{ workflow.bypassed_by.get_full_name|default:workflow.bypassed_by.username }} at {{ workflow.completed_at|date:"Y-m-d H:i" }}<br>
+                    <strong>Reason:</strong> {{ workflow.bypass_reason }}
+                </dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+<!-- Stages & Approval Requests Table -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Workflow Approval Requests ({{ approval_requests|length }})</h2>
+        {% if workflow.status == "draft" %}
+        <a href="{% url 'documents:approval_request_create' %}?workflow={{ workflow.pk }}" class="btn btn-primary btn-sm">
+            <i data-lucide="user-plus"></i>
+            <span>Add Approver Request</span>
+        </a>
+        {% endif %}
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Stage</th>
+                    <th>Request #</th>
+                    <th>Approver / Role</th>
+                    <th>Stage Rule</th>
+                    <th>Status</th>
+                    <th>Due Date</th>
+                    <th>Decision Notes</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in approval_requests %}
+                <tr>
+                    <td class="font-semibold text-slate-700">Stage {{ req.stage_number }}</td>
+                    <td class="font-mono text-xs">
+                        <a href="{% url 'documents:approval_request_detail' req.pk %}" class="text-blue-600 hover:underline">
+                            {{ req.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            {{ req.approver.get_full_name|default:req.approver.username }}
+                        </div>
+                        <div class="text-xs text-slate-500">{{ req.approver_role.name|default:"Direct Approver" }}</div>
+                        {% if req.delegated_to %}
+                        <div class="text-xs text-blue-600">Delegated to: {{ req.delegated_to.get_full_name|default:req.delegated_to.username }}</div>
+                        {% endif %}
+                        {% if req.is_escalated %}
+                        <div class="text-xs text-amber-600 font-semibold">Escalated on timeout</div>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ req.stage_type_css_class }}">{{ req.get_stage_type_display }}</span></td>
+                    <td><span class="badge {{ req.status_css_class }}">{{ req.get_status_display }}</span></td>
+                    <td class="text-xs">{{ req.due_date|date:"Y-m-d H:i"|default:"—" }}</td>
+                    <td class="text-xs max-w-xs truncate">{{ req.decision_comments|default:"—" }}</td>
+                    <td class="text-right">
+                        <a href="{% url 'documents:approval_request_detail' req.pk %}" class="btn btn-icon" title="View / Take Action">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-4">
+                            <div class="empty-state-text">No approval requests defined yet. Use the Visual Designer or Add Approver Request above.</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Signatures & Review Comments Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Signatures -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="text-base font-semibold text-slate-800">Electronic Signatures Captured</h2>
+            <a href="{% url 'documents:signature_create' %}?document={{ workflow.document.pk }}" class="btn btn-outline btn-sm">
+                <i data-lucide="pen-tool"></i>
+                <span>Sign Document</span>
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Signer</th>
+                        <th>Meaning</th>
+                        <th>Signed At</th>
+                        <th>Token</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sig in signatures %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ sig.signer_name }}</div>
+                            <div class="text-xs text-slate-400 font-mono">{{ sig.number }}</div>
+                        </td>
+                        <td><span class="badge {{ sig.signature_meaning_css_class }}">{{ sig.get_signature_meaning_display }}</span></td>
+                        <td class="text-xs">{{ sig.signed_at|date:"Y-m-d H:i" }}</td>
+                        <td class="text-xs font-mono">
+                            <a href="{% url 'documents:signature_detail' sig.pk %}" class="text-blue-600 hover:underline">
+                                {{ sig.signature_token|slice:":10" }}...
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-slate-400 text-sm py-4">No e-signatures captured yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Review Comments -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="text-base font-semibold text-slate-800">Collaborative Review Comments</h2>
+            <a href="{% url 'documents:review_comment_create' %}?workflow={{ workflow.pk }}&document={{ workflow.document.pk }}" class="btn btn-outline btn-sm">
+                <i data-lucide="message-square-plus"></i>
+                <span>Add Comment</span>
+            </a>
+        </div>
+        <div class="card-body divide-y divide-slate-100 max-h-96 overflow-y-auto">
+            {% for c in review_comments %}
+            <div class="py-3">
+                <div class="flex justify-between items-start mb-1">
+                    <div>
+                        <span class="font-semibold text-sm text-slate-900">{{ c.author.get_full_name|default:c.author.username }}</span>
+                        <span class="text-xs text-slate-400 ml-2">Page {{ c.page_number }}</span>
+                        {% if c.is_blocking %}
+                        <span class="badge badge-red ml-1">Blocking</span>
+                        {% endif %}
+                    </div>
+                    <span class="badge {{ c.status_css_class }}">{{ c.get_status_display }}</span>
+                </div>
+                <p class="text-sm text-slate-700">{{ c.content }}</p>
+                <div class="flex justify-between items-center text-xs text-slate-400 mt-2">
+                    <span>{{ c.created_at|date:"Y-m-d H:i" }}</span>
+                    <a href="{% url 'documents:review_comment_detail' c.pk %}" class="text-blue-600 hover:underline">View Thread</a>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-center text-slate-400 text-sm py-8">No review annotations recorded for this workflow.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Emergency Bypass Modal -->
+<div id="bypass-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
+            <i data-lucide="alert-triangle" class="text-red-600"></i>
+            <span>Emergency Approval Bypass</span>
+        </h3>
+        <p class="text-sm text-slate-600 mb-4">
+            Bypassing will immediately override remaining approval stages and advance this document. A documented justification is required and will be logged in the permanent audit trail.
+        </p>
+        <form method="post" action="{% url 'documents:workflow_bypass' workflow.pk %}">
+            {% csrf_token %}
+            <div class="form-group mb-4">
+                <label class="form-label" for="bypass_reason">Documented Justification *</label>
+                {{ bypass_form.bypass_reason }}
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('bypass-modal').classList.add('hidden')">Cancel</button>
+                <button type="submit" class="btn btn-danger">Confirm Emergency Bypass</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
