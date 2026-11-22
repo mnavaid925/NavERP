@@ -1,3 +1,18 @@
+from apps.documents.urls.ApprovalWorkflow.ApprovalDashboard import (
+    urlpatterns as approval_dashboard_urls,
+)
+from apps.documents.urls.ApprovalWorkflow.DocumentApprovalRequests import (
+    urlpatterns as approval_requests_urls,
+)
+from apps.documents.urls.ApprovalWorkflow.DocumentApprovalWorkflows import (
+    urlpatterns as approval_workflows_urls,
+)
+from apps.documents.urls.ApprovalWorkflow.DocumentReviewComments import (
+    urlpatterns as review_comments_urls,
+)
+from apps.documents.urls.ApprovalWorkflow.DocumentSignatures import (
+    urlpatterns as signatures_urls,
+)
 from apps.documents.urls.DocumentAuthoring.DocumentDrafts import (
     urlpatterns as document_drafts_urls,
 )
@@ -34,4 +49,9 @@ urlpatterns = (
     + template_sections_urls
     + document_drafts_urls
     + draft_collaborations_urls
+    + approval_dashboard_urls
+    + approval_workflows_urls
+    + approval_requests_urls
+    + signatures_urls
+    + review_comments_urls
 )
