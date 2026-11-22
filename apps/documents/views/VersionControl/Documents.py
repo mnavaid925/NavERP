@@ -79,7 +79,6 @@ def document_detail(request, pk):
         Document,
         pk,
         select_related=("owner", "department", "locked_by"),
-        prefetch_related=("versions", "locks", "branches"),
     )
 
     active_lock = document.locks.filter(status="active").first()
