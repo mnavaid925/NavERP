@@ -104,7 +104,13 @@
             </div>
             <div class="detail-item">
                 <dt>Merged By</dt>
-                <dd>{{ branch.merged_by.get_full_name|default:branch.merged_by.username }}</dd>
+                <dd>
+                    {% if branch.merged_by %}
+                    {{ branch.merged_by.get_full_name|default:branch.merged_by.username }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </dd>
             </div>
             <div class="detail-item">
                 <dt>Merged Into Revision</dt>
