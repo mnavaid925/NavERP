@@ -210,7 +210,7 @@
                   </a>
                 </td>
                 <td class="py-2.5 px-3 text-xs text-slate-700">
-                  {{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username|default:"Unassigned" }}
+                  {% if w.assigned_analyst %}{{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username }}{% else %}Unassigned{% endif %}
                 </td>
                 <td class="py-2.5 px-3 text-xs text-slate-600">{{ w.execution_date|default:"—" }}</td>
                 <td class="py-2.5 px-3 font-medium">
