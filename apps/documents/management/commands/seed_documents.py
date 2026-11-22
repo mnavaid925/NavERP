@@ -20,7 +20,26 @@ from apps.documents.views._helpers import count_words
 class Command(BaseCommand):
     help = "Seed demo data for the Document Management System (DMS) module"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--flush",
+            action="store_true",
+            help="Delete existing documents module data before seeding",
+        )
+
     def handle(self, *args, **options):
+        if options.get("flush"):
+            self.stdout.write("Flushing documents module data...")
+            DraftCollaboration.objects.all().delete()
+            DocumentDraft.objects.all().delete()
+            TemplateSection.objects.all().delete()
+            DocumentTemplate.objects.all().delete()
+            DocumentLock.objects.all().delete()
+            DocumentBranch.objects.all().delete()
+            DocumentVersion.objects.all().delete()
+            Document.objects.all().delete()
+            self.stdout.write(self.style.SUCCESS("Documents module data flushed successfully."))
+
         User = get_user_model()
         tenants = Tenant.objects.all()
 
@@ -555,3 +574,10 @@ class Command(BaseCommand):
                     )
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "Document Management System seeding complete.\n"
+                "Tenant credentials notice: Log in as a tenant user/admin (e.g. admin_acme / password) to access records."
+            )
+        )
