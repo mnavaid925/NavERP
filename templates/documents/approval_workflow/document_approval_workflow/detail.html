@@ -36,6 +36,13 @@
             <i data-lucide="pencil"></i>
             <span>Edit</span>
         </a>
+        <form method="post" action="{% url 'documents:workflow_delete' workflow.pk %}" class="inline" onsubmit="return confirm('Delete this draft workflow?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-outline">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
         {% endif %}
         {% if workflow.status == "pending" and workflow.allow_emergency_bypass %}
         <button type="button" class="btn btn-danger" onclick="document.getElementById('bypass-modal').classList.remove('hidden')">
@@ -52,6 +59,9 @@
             </button>
         </form>
         {% endif %}
+        <a href="{% url 'documents:workflow_list' %}" class="btn btn-outline">
+            <span>Back to List</span>
+        </a>
     </div>
 </div>
 
@@ -149,7 +159,7 @@
             <div class="detail-item col-span-full">
                 <dt>Bypass Details</dt>
                 <dd class="text-red-700 bg-red-50 p-3 rounded">
-                    <strong>Bypassed by:</strong> {{ workflow.bypassed_by.get_full_name|default:workflow.bypassed_by.username }} at {{ workflow.completed_at|date:"Y-m-d H:i" }}<br>
+                    <strong>Bypassed by:</strong> {% if workflow.bypassed_by %}{{ workflow.bypassed_by.get_full_name|default:workflow.bypassed_by.username }}{% else %}System Administrator{% endif %} at {{ workflow.completed_at|date:"Y-m-d H:i" }}<br>
                     <strong>Reason:</strong> {{ workflow.bypass_reason }}
                 </dd>
             </div>
@@ -194,7 +204,7 @@
                     </td>
                     <td>
                         <div class="font-medium text-slate-900">
-                            {{ req.approver.get_full_name|default:req.approver.username }}
+                            {% if req.approver %}{{ req.approver.get_full_name|default:req.approver.username }}{% else %}Role-based Queue{% endif %}
                         </div>
                         <div class="text-xs text-slate-500">{{ req.approver_role.name|default:"Direct Approver" }}</div>
                         {% if req.delegated_to %}
@@ -288,7 +298,7 @@
             <div class="py-3">
                 <div class="flex justify-between items-start mb-1">
                     <div>
-                        <span class="font-semibold text-sm text-slate-900">{{ c.author.get_full_name|default:c.author.username }}</span>
+                        <span class="font-semibold text-sm text-slate-900">{% if c.author %}{{ c.author.get_full_name|default:c.author.username }}{% else %}System User{% endif %}</span>
                         <span class="text-xs text-slate-400 ml-2">Page {{ c.page_number }}</span>
                         {% if c.is_blocking %}
                         <span class="badge badge-red ml-1">Blocking</span>
@@ -322,7 +332,7 @@
         <form method="post" action="{% url 'documents:workflow_bypass' workflow.pk %}">
             {% csrf_token %}
             <div class="form-group mb-4">
-                <label class="form-label" for="bypass_reason">Documented Justification *</label>
+                <label class="form-label" for="{{ bypass_form.bypass_reason.id_for_label }}">Documented Justification *</label>
                 {{ bypass_form.bypass_reason }}
             </div>
             <div class="flex justify-end gap-2">
