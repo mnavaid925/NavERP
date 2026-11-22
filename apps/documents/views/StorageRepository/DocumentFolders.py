@@ -217,6 +217,17 @@ def folder_delete(request, pk):
         messages.error(request, "Protected system folders cannot be deleted.")
         return redirect("documents:folder_detail", pk=folder.pk)
 
+    if folder.owner_id and folder.owner_id != request.user.id and not (
+        request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+        or getattr(request, "is_tenant_admin", False)
+    ):
+        messages.error(
+            request,
+            "You do not have permission to delete this folder. Only the folder owner or tenant administrator can delete it.",
+        )
+        return redirect("documents:folder_detail", pk=folder.pk)
+
     if folder.children.filter(tenant=request.tenant, is_active=True).exists():
         messages.error(request, "Cannot delete folder containing active subfolders. Move or delete subfolders first.")
         return redirect("documents:folder_detail", pk=folder.pk)
