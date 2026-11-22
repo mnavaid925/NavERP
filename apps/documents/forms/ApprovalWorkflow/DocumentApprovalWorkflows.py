@@ -40,7 +40,7 @@ class DocumentApprovalWorkflowForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["document"].queryset = Document.objects.filter(tenant=self.tenant).order_by("title")
-            self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant).order_by("-created_at")
+            self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant).select_related("document").order_by("-created_at")
             self.fields["department"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
         self.fields["version"].required = False
         self.fields["department"].required = False
