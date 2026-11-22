@@ -117,6 +117,7 @@ class DocumentReviewComment(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "document", "status"], name="doc_drev_tnt_doc_stat_idx"),
             models.Index(fields=["tenant", "workflow", "is_blocking"], name="doc_drev_tnt_wf_block_idx"),
+            models.Index(fields=["tenant", "is_blocking", "status"], name="doc_drev_tnt_blk_stat_idx"),
         ]
 
     def __str__(self):
