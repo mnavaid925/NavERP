@@ -18,6 +18,14 @@ from apps.documents.views.DocumentAuthoring.DocumentTemplates import (
     template_instantiate,
     template_list,
 )
+from apps.documents.views.DocumentAuthoring.DraftCollaborations import (
+    collaboration_create,
+    collaboration_delete,
+    collaboration_detail,
+    collaboration_edit,
+    collaboration_list,
+    collaboration_resolve,
+)
 from apps.documents.views.DocumentAuthoring.TemplateSections import (
     template_section_create,
     template_section_delete,
@@ -111,4 +119,10 @@ __all__ = [
     "draft_compare",
     "draft_resolve_conflict",
     "draft_promote",
+    "collaboration_list",
+    "collaboration_detail",
+    "collaboration_create",
+    "collaboration_edit",
+    "collaboration_delete",
+    "collaboration_resolve",
 ]
