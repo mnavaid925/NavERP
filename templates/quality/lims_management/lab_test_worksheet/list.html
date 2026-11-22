@@ -120,7 +120,7 @@
                 <div class="text-slate-500 font-sans truncate max-w-xs">{{ w.sample.sample_name }}</div>
               </td>
               <td class="py-3 px-4 text-xs text-slate-700">
-                <div class="font-medium text-slate-900">{{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username|default:"Unassigned" }}</div>
+                <div class="font-medium text-slate-900">{% if w.assigned_analyst %}{{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username }}{% else %}Unassigned{% endif %}</div>
                 <div class="text-slate-500">Sched: {{ w.scheduled_date|default:"—" }}</div>
               </td>
               <td class="py-3 px-4 text-xs text-slate-600">
