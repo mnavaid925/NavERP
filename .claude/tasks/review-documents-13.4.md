@@ -85,12 +85,12 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: `top_folders` is queried with multiple JOINs but is never rendered or used in `repository_dashboard.html`.
   - **Fix**: Remove `top_folders` query from `repository_dashboard`. [x] fixed — cb9b303e: remove unused top_folders query from repository_dashboard
 
-- [ ] **I7**: Redundant Dual Queries for Volume Count and Aggregate Bytes in `repository_dashboard` and `storage_volume_list`.
+- [x] **I7**: Redundant Dual Queries for Volume Count and Aggregate Bytes in `repository_dashboard` and `storage_volume_list`.
   - **Locations**:
     - `apps/documents/views/StorageRepository/RepositoryDashboard.py:14-24`
     - `apps/documents/views/StorageRepository/StorageVolumes.py:38-48`
   - **Problem**: `.count()` and `.aggregate(Sum(...))` run as two separate queries against the same filtered queryset.
-  - **Fix**: Consolidate into single `.aggregate(count=Count("id"), cap=Sum("max_capacity_bytes"), util=Sum("utilized_bytes"))`.
+  - **Fix**: Consolidate into single `.aggregate(count=Count("id"), cap=Sum("max_capacity_bytes"), util=Sum("utilized_bytes"))`. [x] fixed — 0c6fd339, 353f7004: consolidate count and sum aggregations in dashboard and volume list
 
 - [ ] **I8**: Archive ingestion safety (Windows backslash normalization and file extension whitelist).
   - **Location**: `apps/documents/views/StorageRepository/DocumentBatchImports.py:195`
