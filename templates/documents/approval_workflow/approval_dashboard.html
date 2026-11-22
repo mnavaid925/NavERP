@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Approval Command Center & Dashboard — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_list' %}">Approval Workflows</a>
+            <span>/</span>
+            <span>Analytics Dashboard</span>
+        </div>
+        <h1 class="page-title">Approval Command Center & Bottleneck Analytics</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:workflow_list' %}" class="btn btn-outline">
+            <i data-lucide="git-pull-request"></i>
+            <span>All Workflows</span>
+        </a>
+        <a href="{% url 'documents:approval_request_list' %}?mine=1" class="btn btn-primary">
+            <i data-lucide="inbox"></i>
+            <span>My Pending Sign-Offs</span>
+        </a>
+    </div>
+</div>
+
+<!-- KPI Metrics Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="git-pull-request"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ metrics.total_active_workflows }}</div>
+            <div class="stat-label">Active Approval Pipelines</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ metrics.pending_signoffs }}</div>
+            <div class="stat-label">Pending Participant Tasks</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="hourglass"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ metrics.avg_cycle_time_hours }}h</div>
+            <div class="stat-label">Average Approval Cycle Time</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ metrics.escalation_rate_pct }}%</div>
+            <div class="stat-label">Timeout Escalation Rate</div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Dashboard Grids -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Active Pipelines -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="text-base font-semibold text-slate-800">Active Approval Pipelines</h2>
+            <a href="{% url 'documents:workflow_list' %}?status=pending" class="text-xs text-blue-600 hover:underline">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Workflow</th>
+                        <th>Stage</th>
+                        <th>Urgency</th>
+                        <th>Due Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for w in pending_workflows %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">
+                                <a href="{% url 'documents:workflow_detail' w.pk %}" class="hover:underline">
+                                    {{ w.title }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-500">{{ w.document.title }} ({{ w.number }})</div>
+                        </td>
+                        <td>
+                            <div class="text-xs font-semibold">Stage {{ w.current_stage }} / {{ w.total_stages }}</div>
+                            <span class="badge {{ w.workflow_type_css_class }} text-[10px]">{{ w.get_workflow_type_display }}</span>
+                        </td>
+                        <td><span class="badge {{ w.urgency_css_class }}">{{ w.get_urgency_display }}</span></td>
+                        <td class="text-xs">{{ w.due_date|date:"Y-m-d H:i"|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-slate-400 py-6 text-sm">No active approval pipelines currently pending.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Bottlenecks & Urgent Approvals -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="text-base font-semibold text-slate-800">Urgent Pending Sign-Offs (Bottlenecks)</h2>
+            <a href="{% url 'documents:approval_request_list' %}?status=pending" class="text-xs text-blue-600 hover:underline">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Task / Step</th>
+                        <th>Approver</th>
+                        <th>Stage Rule</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in urgent_requests %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">
+                                <a href="{% url 'documents:approval_request_detail' req.pk %}" class="hover:underline">
+                                    {{ req.stage_name }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-400 font-mono">{{ req.workflow.title|truncatechars:24 }}</div>
+                        </td>
+                        <td>
+                            <div class="text-xs font-semibold text-slate-800">
+                                {% if req.approver %}
+                                    {{ req.approver.get_full_name|default:req.approver.username }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </div>
+                            {% if req.is_escalated %}
+                            <div class="text-[10px] text-amber-600 font-bold">Timeout Escalated</div>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge {{ req.stage_type_css_class }} text-[10px]">{{ req.get_stage_type_display }}</span></td>
+                        <td>
+                            <a href="{% url 'documents:approval_request_detail' req.pk %}" class="btn btn-outline btn-sm">Review</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-slate-400 py-6 text-sm">No critical or urgent sign-off bottlenecks detected.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Secondary Grids: Signatures & Blocking Comments -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Recent Executed Signatures -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="text-base font-semibold text-slate-800">Recent Executed Signatures</h2>
+            <a href="{% url 'documents:signature_list' %}" class="text-xs text-blue-600 hover:underline">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Signer</th>
+                        <th>Document</th>
+                        <th>Meaning</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in recent_signatures %}
+                    <tr>
+                        <td class="text-sm font-medium">
+                            <a href="{% url 'documents:signature_detail' s.pk %}" class="text-blue-600 hover:underline">
+                                {{ s.signer_name }}
+                            </a>
+                        </td>
+                        <td class="text-xs text-slate-600">{{ s.document.title|truncatechars:24 }}</td>
+                        <td><span class="badge {{ s.signature_meaning_css_class }} text-[10px]">{{ s.get_signature_meaning_display }}</span></td>
+                        <td class="text-xs text-slate-400">{{ s.signed_at|date:"Y-m-d H:i" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-slate-400 py-4 text-xs">No signatures captured recently.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Blocking Comments Requiring Resolution -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="text-base font-semibold text-slate-800">Blocking Comments Requiring Resolution</h2>
+            <a href="{% url 'documents:review_comment_list' %}?is_blocking=1&status=open" class="text-xs text-blue-600 hover:underline">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Comment</th>
+                        <th>Document</th>
+                        <th>Author</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in blocking_comments %}
+                    <tr>
+                        <td class="text-xs max-w-xs truncate font-medium text-slate-800">
+                            {{ c.content }}
+                        </td>
+                        <td class="text-xs text-slate-600">p.{{ c.page_number }} — {{ c.document.title|truncatechars:18 }}</td>
+                        <td class="text-xs">
+                            {% if c.author %}
+                                {{ c.author.get_full_name|default:c.author.username }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'documents:review_comment_detail' c.pk %}" class="btn btn-outline btn-sm">Resolve</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-slate-400 py-4 text-xs">Zero blocking comments currently gating approval.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
