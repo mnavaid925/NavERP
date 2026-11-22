@@ -42,6 +42,7 @@ class TemplateSection(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "section_type"], name="doc_sec_tnt_type_idx"),
+            models.Index(fields=["tenant", "template", "order"], name="doc_sec_tnt_tmpl_ord_idx"),
         ]
 
     def __str__(self):
