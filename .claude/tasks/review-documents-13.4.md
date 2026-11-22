@@ -80,10 +80,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: `.exists()` executes an explicit SQL query for every root folder, bypassing prefetched data.
   - **Fix**: Change `{% if root.children.exists %}` to `{% if root.children.all %}`. [x] fixed — ea027d1e: use root.children.all to preserve prefetch cache in tree template
 
-- [ ] **I6**: Dead Database Query in `repository_dashboard`.
+- [x] **I6**: Dead Database Query in `repository_dashboard`.
   - **Location**: `apps/documents/views/StorageRepository/RepositoryDashboard.py:36-39`
   - **Problem**: `top_folders` is queried with multiple JOINs but is never rendered or used in `repository_dashboard.html`.
-  - **Fix**: Remove `top_folders` query from `repository_dashboard`.
+  - **Fix**: Remove `top_folders` query from `repository_dashboard`. [x] fixed — cb9b303e: remove unused top_folders query from repository_dashboard
 
 - [ ] **I7**: Redundant Dual Queries for Volume Count and Aggregate Bytes in `repository_dashboard` and `storage_volume_list`.
   - **Locations**:
