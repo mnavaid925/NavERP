@@ -1,5 +1,6 @@
 from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
+from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
 from apps.documents.models.DocumentAuthoring.TemplateSections import TemplateSection
 from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
 from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
@@ -14,4 +15,5 @@ __all__ = [
     "DocumentTemplate",
     "TemplateSection",
     "DocumentDraft",
+    "DraftCollaboration",
 ]
