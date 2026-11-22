@@ -42,9 +42,9 @@ class DocumentReviewCommentForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["document"].queryset = Document.objects.filter(tenant=self.tenant).order_by("title")
-            self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant).order_by("-created_at")
-            self.fields["workflow"].queryset = DocumentApprovalWorkflow.objects.filter(tenant=self.tenant).order_by("-created_at")
-            self.fields["parent"].queryset = DocumentReviewComment.objects.filter(tenant=self.tenant, parent__isnull=True).order_by("-created_at")
+            self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant).select_related("document").order_by("-created_at")
+            self.fields["workflow"].queryset = DocumentApprovalWorkflow.objects.filter(tenant=self.tenant).select_related("document").order_by("-created_at")
+            self.fields["parent"].queryset = DocumentReviewComment.objects.filter(tenant=self.tenant, parent__isnull=True).select_related("document", "author").order_by("-created_at")
         self.fields["version"].required = False
         self.fields["workflow"].required = False
         self.fields["coordinate_ref"].required = False
