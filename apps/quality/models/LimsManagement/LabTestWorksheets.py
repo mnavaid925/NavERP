@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -117,6 +118,7 @@ class LabTestWorksheet(TenantNumbered):
         decimal_places=2,
         null=True,
         blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
         help_text="% RSD of analytical replicates",
     )
     notes = models.TextField(blank=True)
