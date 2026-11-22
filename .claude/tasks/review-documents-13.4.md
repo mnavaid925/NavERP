@@ -102,12 +102,12 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Unbounded file uploads could exhaust disk space.
   - **Fix**: Validate archive size <= 50 MB (`MAX_BATCH_UPLOAD_BYTES = 50 * 1024 * 1024`). [x] fixed — 1fc2c9c1: enforce 50 MB upload limit on batch import archive files
 
-- [ ] **I10**: Missing ownership or administrator check on folder and batch deletions.
+- [x] **I10**: Missing ownership or administrator check on folder and batch deletions.
   - **Locations**:
     - `apps/documents/views/StorageRepository/DocumentFolders.py:200`
     - `apps/documents/views/StorageRepository/DocumentBatchImports.py:160`
   - **Problem**: Standard tenant users could delete other users' folders and batch jobs.
-  - **Fix**: Ensure user is owner/creator, superuser, or tenant admin.
+  - **Fix**: Ensure user is owner/creator, superuser, or tenant admin. [x] fixed — 3241f9f5, e0f2f179: verify owner or administrator authority before deleting folders and batch imports
 
 - [ ] **I11**: Missing pagination controls on folder detail contained documents table.
   - **Location**: `templates/documents/storage_repository/document_folder/detail.html:270`
