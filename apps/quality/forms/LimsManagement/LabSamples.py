@@ -48,7 +48,10 @@ class LabSampleForm(TenantUniqueMixin, TenantModelForm):
             "item_name": forms.TextInput(attrs={"class": "form-input"}),
             "sampling_point": forms.TextInput(attrs={"class": "form-input"}),
             "sampled_by": forms.Select(attrs={"class": "form-select"}),
-            "sampled_at": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
+            "sampled_at": forms.DateTimeInput(
+                attrs={"class": "form-input", "type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
             "received_by": forms.Select(attrs={"class": "form-select"}),
             "current_custodian": forms.Select(attrs={"class": "form-select"}),
             "storage_location": forms.TextInput(attrs={"class": "form-input"}),
