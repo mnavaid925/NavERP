@@ -76,7 +76,7 @@ class SystemChangeControl(TenantNumbered):
         related_name="change_controls",
     )
     change_type = models.CharField(
-        max_length=30, choices=CHANGE_TYPE_CHOICES, default="software_patch"
+        max_length=30, choices=CHANGE_TYPE_CHOICES, default="software_patch", db_index=True
     )
     change_priority = models.CharField(
         max_length=20, choices=CHANGE_PRIORITY_CHOICES, default="routine", db_index=True
@@ -123,7 +123,7 @@ class SystemChangeControl(TenantNumbered):
     rollback_plan = models.TextField(
         blank=True, help_text="Contingency backout instructions if deployment fails"
     )
-    target_date = models.DateField(null=True, blank=True)
+    target_date = models.DateField(null=True, blank=True, db_index=True)
     actual_implementation_date = models.DateField(null=True, blank=True)
     post_review_due_date = models.DateField(
         null=True, blank=True, help_text="Post-implementation periodic review due date"
