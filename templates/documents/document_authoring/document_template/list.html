@@ -28,15 +28,15 @@
     <div class="card-body p-4">
         <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-                <label class="form-label text-xs">Search</label>
+                <label for="filter-template-q" class="form-label text-xs">Search</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ search_query }}" placeholder="Search by name, number, keywords..." class="form-input text-sm pl-9">
+                    <input type="text" id="filter-template-q" name="q" value="{{ search_query }}" placeholder="Search by name, number, keywords..." class="form-input text-sm pl-9">
                     <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
                 </div>
             </div>
             <div>
-                <label class="form-label text-xs">Template Type</label>
-                <select name="template_type" class="form-select text-sm">
+                <label for="filter-template-type" class="form-label text-xs">Template Type</label>
+                <select id="filter-template-type" name="template_type" class="form-select text-sm">
                     <option value="">All Types</option>
                     {% for code, label in template_type_choices %}
                     <option value="{{ code }}" {% if request.GET.template_type == code %}selected{% endif %}>{{ label }}</option>
@@ -44,8 +44,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Category</label>
-                <select name="category" class="form-select text-sm">
+                <label for="filter-template-category" class="form-label text-xs">Category</label>
+                <select id="filter-template-category" name="category" class="form-select text-sm">
                     <option value="">All Categories</option>
                     {% for code, label in category_choices %}
                     <option value="{{ code }}" {% if request.GET.category == code %}selected{% endif %}>{{ label }}</option>
