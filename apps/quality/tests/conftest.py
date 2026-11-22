@@ -3594,7 +3594,7 @@ def post_market_surveillance_report_b(db, tenant_b, product_registration_b, admi
 # =========================================================================
 
 @pytest.fixture
-def lab_specification_a(db, tenant_a, controlled_document_a, admin_user):
+def lab_specification_a(db, tenant_a, doc_a, admin_user):
     today = timezone.now().date()
     return LabSpecification.objects.create(
         tenant=tenant_a,
@@ -3606,7 +3606,7 @@ def lab_specification_a(db, tenant_a, controlled_document_a, admin_user):
         product_name="Hydrocortisone API Powder",
         analytical_method_number="AM-QC-304",
         test_category="chromatographic",
-        sop_document=controlled_document_a,
+        sop_document=doc_a,
         target_parameter_name="Assay Purity",
         parameter_unit="%",
         lower_limit=Decimal("98.5000"),
