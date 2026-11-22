@@ -103,4 +103,9 @@ class OosInvestigationForm(TenantUniqueMixin, TenantModelForm):
                 "non_conformance",
             ],
         )
+        ws = cleaned_data.get("test_worksheet")
+        smp = cleaned_data.get("sample")
+        if ws and smp and ws.sample_id != smp.id:
+            self.add_error("sample", "Selected sample must match the sample linked to the test worksheet.")
+
         return cleaned_data
