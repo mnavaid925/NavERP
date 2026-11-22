@@ -143,10 +143,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Extension list declared locally.
   - **Fix**: Declare `ALLOWED_EXTENSIONS` as class constant. [x] fixed — 28974417: declare ALLOWED_EXTENSIONS as class constant on DocumentBatchImportForm
 
-- [ ] **M6**: Unbounded Queryset in `relationship_graph`.
+- [x] **M6**: Unbounded Queryset in `relationship_graph`.
   - **Location**: `apps/documents/views/StorageRepository/DocumentRelationships.py:65`
   - **Problem**: Querying all tenant relationships could cause high memory usage on very large datasets.
-  - **Fix**: Limit graph query to recent links (e.g. `[:200]`).
+  - **Fix**: Limit graph query to recent links (e.g. `[:200]`). [x] fixed — cd1bc8de: cap relationship_graph query to 200 recent records
 
 - [ ] **M7**: Dark mode contrast and accessibility enhancements.
   - **Locations**: `templates/documents/storage_repository/`
