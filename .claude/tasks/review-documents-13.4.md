@@ -62,13 +62,13 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: `badge-purple` is not defined in `static/css/theme.css` (only `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate` exist), causing smart virtual folder badges to render unstyled.
   - **Fix**: Replace `badge-purple` with `badge-info`. [x] fixed — 51234013, c7d57000, d30ebb53: replace badge-purple with badge-info in folder templates
 
-- [ ] **I3**: Non-Atomic Operations during Volume Save, Ingestion Execution, and Record Deletions.
+- [x] **I3**: Non-Atomic Operations during Volume Save, Ingestion Execution, and Record Deletions.
   - **Locations**:
     - `apps/documents/views/StorageRepository/StorageVolumes.py`
     - `apps/documents/views/StorageRepository/DocumentBatchImports.py`
     - `apps/documents/views/StorageRepository/DocumentFolders.py`
   - **Problem**: Volume default flipping, batch updates, and deletions lack explicit transaction blocks.
-  - **Fix**: Wrap mutations and deletions in `with transaction.atomic():`.
+  - **Fix**: Wrap mutations and deletions in `with transaction.atomic():`. [x] fixed — ef9108f2, 760167d6, 37e5fc90: wrap mutations, batch updates, and deletions in transaction.atomic blocks
 
 - [ ] **I4**: Missing `select_related("created_by")` on `batch_imports` in `storage_volume_detail`.
   - **Location**: `apps/documents/views/StorageRepository/StorageVolumes.py:98`
