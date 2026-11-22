@@ -3,6 +3,7 @@ import difflib
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -273,38 +274,62 @@ def document_version_rollback(request, pk):
     target_version = documents_object(request, DocumentVersion, pk)
     document = target_version.document
 
-    # Calculate new major version number forward
-    new_major = document.current_version_no + 1
-    new_label = f"{new_major}.0"
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    if document.owner and document.owner != request.user and not is_admin:
+        messages.error(request, "Only the document owner or a tenant administrator can roll back versions.")
+        return redirect("documents:document_detail", pk=document.pk)
 
-    new_version = DocumentVersion.objects.create(
-        tenant=request.tenant,
-        document=document,
-        version_label=new_label,
-        major_number=new_major,
-        minor_number=0,
-        patch_number=0,
-        version_type="rollback",
-        file=target_version.file,
-        file_name=target_version.file_name,
-        file_size=target_version.file_size,
-        file_hash=target_version.file_hash,
-        mime_type=target_version.mime_type,
-        extracted_text=target_version.extracted_text,
-        change_summary=f"Point-in-time restoration from historical version v{target_version.version_label}",
-        is_official=True,
-        status="approved",
-        author=request.user,
-        restored_from_version=target_version,
-    )
+    if document.is_locked:
+        locked_by_str = getattr(document.locked_by, "username", "another user")
+        messages.error(
+            request,
+            f"Document '{document.number}' is currently checked out by {locked_by_str} and cannot be rolled back.",
+        )
+        return redirect("documents:document_detail", pk=document.pk)
 
-    document.current_version_label = new_label
-    document.current_version_no = new_major
-    document.save(update_fields=["current_version_label", "current_version_no", "updated_at"])
+    with transaction.atomic():
+        doc = Document.objects.select_for_update().get(pk=document.pk, tenant=request.tenant)
+        if doc.is_locked:
+            locked_by_str = getattr(doc.locked_by, "username", "another user")
+            messages.error(
+                request,
+                f"Document '{doc.number}' is currently checked out by {locked_by_str} and cannot be rolled back.",
+            )
+            return redirect("documents:document_detail", pk=doc.pk)
 
-    write_audit_log(request.user, new_version, "rollback", tenant=request.tenant)
+        # Calculate new major version number forward
+        new_major = doc.current_version_no + 1
+        new_label = f"{new_major}.0"
+
+        new_version = DocumentVersion.objects.create(
+            tenant=request.tenant,
+            document=doc,
+            version_label=new_label,
+            major_number=new_major,
+            minor_number=0,
+            patch_number=0,
+            version_type="rollback",
+            file=target_version.file,
+            file_name=target_version.file_name,
+            file_size=target_version.file_size,
+            file_hash=target_version.file_hash,
+            mime_type=target_version.mime_type,
+            extracted_text=target_version.extracted_text,
+            change_summary=f"Point-in-time restoration from historical version v{target_version.version_label}",
+            is_official=True,
+            status="approved",
+            author=request.user,
+            restored_from_version=target_version,
+        )
+
+        doc.current_version_label = new_label
+        doc.current_version_no = new_major
+        doc.save(update_fields=["current_version_label", "current_version_no", "updated_at"])
+
+        write_audit_log(request.user, new_version, "rollback", tenant=request.tenant)
+
     messages.success(
         request,
-        f"Document '{document.title}' rolled back to content of v{target_version.version_label}. Published forward as new official revision v{new_label}.",
+        f"Document '{doc.title}' rolled back to content of v{target_version.version_label}. Published forward as new official revision v{new_label}.",
     )
-    return redirect("documents:document_detail", pk=document.pk)
+    return redirect("documents:document_detail", pk=doc.pk)
