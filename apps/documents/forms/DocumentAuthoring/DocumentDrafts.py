@@ -37,9 +37,9 @@ class DocumentDraftForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["template"].queryset = DocumentTemplate.objects.filter(tenant=self.tenant).order_by("name")
-            self.fields["department"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
-            self.fields["related_party"].queryset = Party.objects.filter(tenant=self.tenant).order_by("name")
+            self.fields["template"].queryset = DocumentTemplate.objects.filter(tenant=self.tenant).only("id", "name", "number").order_by("name")
+            self.fields["department"].queryset = OrgUnit.objects.filter(tenant=self.tenant).only("id", "name").order_by("name")
+            self.fields["related_party"].queryset = Party.objects.filter(tenant=self.tenant).only("id", "name").order_by("name")
 
     def clean(self):
         cleaned_data = super().clean()
