@@ -6,8 +6,8 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
 
 ## Critical Findings
 
-- [ ] **C1**: `apps/documents/views/VersionControl/DocumentLocks.py:282` & `templates/documents/version_control/document/detail.html:45`, `document_lock/detail.html:42` — Missing Tenant Administrator Gate on `document_force_unlock` (Privilege Escalation).
-  - *Fix*: Decorate `document_force_unlock` with `@tenant_admin_required`, require admin privileges in view logic, and wrap the UI force-unlock button in `{% if request.user.is_superuser or request.user.role == 'admin' %}`.
+- [x] **C1**: `apps/documents/views/VersionControl/DocumentLocks.py:282` & `templates/documents/version_control/document/detail.html:45`, `document_lock/detail.html:42` — Missing Tenant Administrator Gate on `document_force_unlock` (Privilege Escalation).
+  - *Fix*: Decorate `document_force_unlock` with `@tenant_admin_required`, require admin privileges in view logic, and wrap the UI force-unlock button in `{% if request.user.is_superuser or request.user.role == 'admin' %}`. — fixed: `security(documents): require tenant admin for document force unlock`
 - [ ] **C2**: `apps/documents/views/VersionControl/DocumentVersions.py:20` — Large `extracted_text` TextField loaded on version list view without `.defer()`.
   - *Fix*: Add `.defer("extracted_text")` to `DocumentVersion.objects.select_related(...)` in `document_version_list`.
 
