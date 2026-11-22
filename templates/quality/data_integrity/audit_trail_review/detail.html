@@ -60,7 +60,7 @@
                         <dt>Computerized System</dt>
                         <dd>
                             {% if review.system %}
-                            <span class="font-medium">{{ review.system.system_name }} ({{ review.system.number }})</span>
+                            <a href="{% url 'quality:computer_system_validation_detail' review.system.pk %}" class="font-medium text-brand hover:underline">{{ review.system.system_name }} ({{ review.system.number }})</a>
                             {% else %}
                             <span>Core Platform General</span>
                             {% endif %}
