@@ -13,6 +13,10 @@ from apps.documents.models.ApprovalWorkflow.DocumentApprovalWorkflows import Doc
 from apps.documents.models.ApprovalWorkflow.DocumentApprovalRequests import DocumentApprovalRequest
 from apps.documents.models.ApprovalWorkflow.DocumentSignatures import DocumentSignature
 from apps.documents.models.ApprovalWorkflow.DocumentReviewComments import DocumentReviewComment
+from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
+from apps.documents.models.StorageRepository.StorageVolumes import StorageVolume
+from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
+from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
 
 
 @pytest.fixture
@@ -214,4 +218,104 @@ def review_comment(db, tenant_a, member_user, document, document_version, approv
         status="open",
         is_blocking=True,
     )
+
+
+@pytest.fixture
+def document_folder(db, tenant_a, admin_user):
+    """Fixture providing a root DocumentFolder in tenant_a."""
+    return DocumentFolder.objects.create(
+        tenant=tenant_a,
+        name="Corporate Policies",
+        slug="corporate-policies",
+        folder_type="standard",
+        classification="internal",
+        description="Official enterprise governance policies.",
+        color_code="#2563eb",
+        icon_name="folder",
+        owner=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def child_document_folder(db, tenant_a, admin_user, document_folder):
+    """Fixture providing a child DocumentFolder nested under document_folder."""
+    return DocumentFolder.objects.create(
+        tenant=tenant_a,
+        name="HR Policies",
+        slug="hr-policies",
+        parent=document_folder,
+        folder_type="standard",
+        classification="internal",
+        description="Human resource rules and operating guidelines.",
+        color_code="#059669",
+        icon_name="users",
+        owner=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def storage_volume(db, tenant_a):
+    """Fixture providing a primary StorageVolume in tenant_a."""
+    return StorageVolume.objects.create(
+        tenant=tenant_a,
+        name="Primary NVMe SSD Store",
+        backend_type="local_filesystem",
+        base_path="/var/storage/nav_docs",
+        storage_tier="hot",
+        max_capacity_bytes=100 * 1024 * 1024 * 1024,  # 100 GB
+        utilized_bytes=10 * 1024 * 1024 * 1024,      # 10 GB
+        is_default=True,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def target_document(db, tenant_a, admin_user):
+    """Fixture providing a second Document in tenant_a for relationship linking."""
+    return Document.objects.create(
+        tenant=tenant_a,
+        title="Quality Manual Baseline",
+        document_type="policy",
+        classification="internal",
+        status="published",
+        versioning_scheme="semantic",
+        current_version_label="1.0.0",
+        current_version_no=1,
+        owner=admin_user,
+        description="Quality manual companion reference.",
+    )
+
+
+@pytest.fixture
+def document_relationship(db, tenant_a, admin_user, document, target_document):
+    """Fixture providing a DocumentRelationship between document and target_document."""
+    return DocumentRelationship.objects.create(
+        tenant=tenant_a,
+        source_document=document,
+        target_document=target_document,
+        relationship_type="references",
+        description="Procedure directly references the quality manual clause.",
+        is_bidirectional=False,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def document_batch_import(db, tenant_a, admin_user, storage_volume):
+    """Fixture providing a DocumentBatchImport record in tenant_a."""
+    return DocumentBatchImport.objects.create(
+        tenant=tenant_a,
+        title="Q4 Historical Document Ingestion",
+        source_type="zip_archive",
+        storage_volume=storage_volume,
+        status="pending",
+        total_files=5,
+        processed_files=0,
+        failed_files=0,
+        total_bytes=1024 * 1024,
+        created_by=admin_user,
+    )
+
 
