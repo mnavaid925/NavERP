@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ document.title }}{% else %}New Document{% endif %} — NavERP DMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Document{% else %}New Document{% endif %}</span>
+        </nav>
+        <h1 class="page-title">{% if is_edit %}Edit {{ document.title }}{% else %}Register Controlled Document{% endif %}</h1>
+        <p class="text-sm text-slate-500">Configure core metadata, document classification, ownership, and revision scheme.</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Document Specifications</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group col-span-2">
+                    <label for="{{ form.title.id_for_label }}" class="form-label">Document Title <span class="text-red-500">*</span></label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.slug.id_for_label }}" class="form-label">Slug (Optional)</label>
+                    {{ form.slug }}
+                    {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors.0 }}</div>{% endif %}
+                    <span class="text-[11px] text-slate-400">URL-friendly slug. Auto-derived from title if left blank.</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.document_type.id_for_label }}" class="form-label">Document Type <span class="text-red-500">*</span></label>
+                    {{ form.document_type }}
+                    {% if form.document_type.errors %}<div class="form-error">{{ form.document_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.classification.id_for_label }}" class="form-label">Security Classification <span class="text-red-500">*</span></label>
+                    {{ form.classification }}
+                    {% if form.classification.errors %}<div class="form-error">{{ form.classification.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.status.id_for_label }}" class="form-label">Lifecycle Status <span class="text-red-500">*</span></label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.versioning_scheme.id_for_label }}" class="form-label">Versioning Scheme <span class="text-red-500">*</span></label>
+                    {{ form.versioning_scheme }}
+                    {% if form.versioning_scheme.errors %}<div class="form-error">{{ form.versioning_scheme.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.owner.id_for_label }}" class="form-label">Document Owner <span class="text-red-500">*</span></label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.department.id_for_label }}" class="form-label">Department / Org Unit</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="form-error">{{ form.department.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.max_versions_retained.id_for_label }}" class="form-label">Max Versions Retained</label>
+                    {{ form.max_versions_retained }}
+                    {% if form.max_versions_retained.errors %}<div class="form-error">{{ form.max_versions_retained.errors.0 }}</div>{% endif %}
+                    <span class="text-[11px] text-slate-400">Enter 0 for unlimited historical version retention.</span>
+                </div>
+
+                <div class="form-group col-span-2">
+                    <label for="{{ form.description.id_for_label }}" class="form-label">Document Description / Scope</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="form-group col-span-2">
+                    <label for="{{ form.tags.id_for_label }}" class="form-label">Tags / Keywords</label>
+                    {{ form.tags }}
+                    {% if form.tags.errors %}<div class="form-error">{{ form.tags.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'documents:document_detail' document.pk %}{% else %}{% url 'documents:document_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Document{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
