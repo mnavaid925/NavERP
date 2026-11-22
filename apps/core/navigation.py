@@ -3539,6 +3539,14 @@ LIVE_LINKS = {
         "Version History & Rollback": "documents:document_version_list",
         "Documents": "documents:document_list",
     },
+    # 13.3 Document Approval & Review Workflow
+    "13.3": {
+        "Visual Workflow Designer": "documents:workflow_list",
+        "Electronic Signature Capture": "documents:signature_list",
+        "Delegation & Escalation Rules": "documents:approval_request_list",
+        "Review Comments & Annotation": "documents:review_comment_list",
+        "Approval Dashboard & Status Tracking": "documents:approval_dashboard",
+    },
 
 
 
