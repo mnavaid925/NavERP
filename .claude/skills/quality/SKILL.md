@@ -1,6 +1,6 @@
 ---
 name: quality
-description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; 12.14 Management Review & Quality Planning; 12.15 Process Validation & Verification; 12.16 Environmental, Health & Safety (EHS); 12.17 Regulatory Compliance & Post-Market Surveillance (Product Registrations [QREG-], Regulatory Submissions [QSUB-], Regulatory Commitments [QCOM-], PMS Reports [QPMS-], and Regulatory Command Center); 12.18 Traceability & Serialization (Electronic Batch Records [QBMR-], Unique Device Identification [QUDI-], Serialized Items & GS1 Aggregation [QSER-], Product Recalls [QRCL-], and Traceability Command Center Dashboard); and 12.19 Laboratory Information Management (LIMS) (Lab Samples [QSMP-], Lab Specifications [QSPC-], Lab Test Worksheets [QWKS-], OOS Investigations [QOOS-], and LIMS Command Center Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.19), or invokes /quality.
+description: Work on the Quality Management System (QMS) module (Module 12 — document control & management, controlled SOPs & work instructions, engineering/document change orders (DCO), 21 CFR Part 11 compliant electronic signatures with HMAC non-repudiation, training/compliance acknowledgments; 12.2 Design Controls & Development; 12.3 Risk Management (ISO 14971 / FMEA); 12.4 Corrective & Preventive Action (CAPA); 12.5 Non-Conformance & Deviation Management (NCR, Quarantine & Containment, MRB Dispositions, Process Deviations); 12.6 Supplier & Vendor Quality Management; 12.7 Incoming Quality Control (IQC); 12.8 In-Process Quality Control (IPQC); 12.9 Final Quality Control & Outgoing Quality Control (FQC / OQC); 12.10 Calibration & Measurement System Analysis (MSA); 12.11 Audit Management; 12.12 Training & Competency Management; 12.13 Customer Complaint Handling; 12.14 Management Review & Quality Planning; 12.15 Process Validation & Verification; 12.16 Environmental, Health & Safety (EHS); 12.17 Regulatory Compliance & Post-Market Surveillance (Product Registrations [QREG-], Regulatory Submissions [QSUB-], Regulatory Commitments [QCOM-], PMS Reports [QPMS-], and Regulatory Command Center); 12.18 Traceability & Serialization (Electronic Batch Records [QBMR-], Unique Device Identification [QUDI-], Serialized Items & GS1 Aggregation [QSER-], Product Recalls [QRCL-], and Traceability Command Center Dashboard); 12.19 Laboratory Information Management (LIMS) (Lab Samples [QSMP-], Lab Specifications [QSPC-], Lab Test Worksheets [QWKS-], OOS Investigations [QOOS-], and LIMS Command Center Dashboard); and 12.20 Data Integrity & Electronic Records (Electronic Record Policies [QREC-], Data Integrity Assessments [QDIR-], Audit Trail Reviews [QATR-], System Change Controls [QCCR-], and Data Integrity Command Center Dashboard). Use when the user asks to add/change/debug anything under apps/quality or templates/quality, extend the quality seeder, touch quality sidebar wiring (LIVE_LINKS 12.1 through 12.20), or invokes /quality.
 ---
 
 # Quality Management System (QMS) Module (Module 12)
@@ -152,6 +152,13 @@ Enterprise Quality Management System (QMS) compliant with ISO 9001, ISO 13485:20
   - **Test Execution & Result Capture** [`QWKS-`]: Structured lab testing worksheets satisfying 21 CFR § 211.194. Tracks sample linkages (`LabSample`), specification linkages (`LabSpecification`), calibrated test instruments (`CalibrationGage`), secondary reference standards, standards expiration alerts, reagent lots, reagent expiry alerts, test execution dates, analysts (`accounts.User`), replicate results capture (`replicate_values_json`), auto-calculated mean, standard deviation, and relative standard deviation (% RSD), quantitative and qualitative result evaluations, within-specification determinations (`is_within_specification`), supervisor verification sign-offs, and automated OOS investigation spawning.
   - **Out-of-Specification (OOS) Investigation** [`QOOS-`]: Structured two-phase investigative workflows conforming to FDA Guidance for Industry (Investigating Out-of-Specification Test Results for Pharmaceutical Production, Oct 2022). Governs Phase I Laboratory Root Cause Investigation (analyst interviews, instrument calibration checks, standards/reagents suitability, calculation verifications, assignable lab error determination), Phase II Full Manufacturing Investigation (production history, environmental conditions, raw material genealogy, process anomaly evaluation, hypothesis testing), formal retest authorization plans, supervisor and Quality Unit conclusions, and direct cross-spawning of CAPA (`QCAP-`) and NCR (`QNCR-`).
   - **LIMS Command Center & Analytics Dashboard**: Real-time laboratory command center (`lims_dashboard`) visualizing active sample inventories, samples pending receipt or in-testing, testing completion rates, open OOS investigations by phase, calibration-due equipment, reagent/standard expiration alerts, and streaming LIMS summary CSV export (`lims_export_csv`).
+
+- **12.20 Data Integrity & Electronic Records**:
+  - **Electronic Records & Signatures (ER/ES) — 21 CFR Part 11 Governance** [`QREC-`]: Comprehensive electronic records governance satisfying FDA 21 CFR Part 11, EU GMP Annex 11, and MHRA GxP data integrity guidelines. Governs record categories (`production_batch`, `lab_analytical`, `equipment_calibration`, `deviation_ncr`, `capa`, `audit_inspection`, `training_competency`, `complaint_pharmacovigilance`, `electronic_signature`), computerized system linkages (`quality.ComputerSystemValidation`), governing SOP linkages (`quality.ControlledDocument`), signature workflow gates (`none`, `single_author`, `dual_peer_review`, `triple_qa_approval`, `ccb_approval`), mandatory reauthentication and dual-signature requirements, immutable audit trail enforcement, retention duration rules (`retention_period_years >= 1`), storage formats (`database_relational`, `pdf_a_immutable`, `xml_json_raw`, `hybrid_blob`), backup schedules (`continuous_wal`, `hourly_incremental`, `daily_snapshot`, `weekly_full`), active litigation/investigation legal hold protection (`legal_hold=True` guards against deletion), and lifecycle statuses (`draft` -> `active` -> `under_revision` -> `archived`).
+  - **Data Integrity Assessments (ALCOA+)** [`QDIR-`]: Quantitative and qualitative data integrity audit frameworks assessing systems against the complete 9-dimension ALCOA+ paradigm: Attributable, Legible, Contemporaneous, Original, Accurate, Complete, Consistent, Enduring, and Available. Each dimension evaluated across compliance tiers (`fully_compliant`, `partially_compliant`, `non_compliant`, `not_applicable`), determining overall system risk level (`low`, `medium`, `high`, `critical`), identifying data vulnerability surfaces, tracking mandatory remediation plans and CAPA linkages (`quality.CapaInvestigation`), and enforcing server-side audit timestamps (`qa_approved_at`) upon approval.
+  - **Audit Trail Surveillance & Review** [`QATR-`]: Periodic and event-driven audit log verification workflows satisfying 21 CFR § 11.10(e) and Annex 11 § 9. Governs review types (`periodic_system`, `batch_release`, `event_investigation`, `user_access_drift`, `configuration_change`), audit log sources (`database_audit_log`, `application_event_log`, `os_security_log`, `instrument_raw_log`, `network_firewall_log`), examination period windows (`period_start <= period_end`), records sampled counts, anomaly detection tracking, severity classifications (`none`, `minor`, `major`, `critical`), formal review dispositions (`pending_review`, `approved_clean`, `approved_remediated`, `rejected_escalated`), cross-module deviation escalations (`quality.NonConformanceReport`, `quality.CapaInvestigation`), and server-side completion timestamps (`completed_at`).
+  - **Computerized System Change Controls (CSV)** [`QCCR-`]: Regulated system change governance complying with ISPE GAMP 5 and 21 CFR § 820.70(i). Manages change categories (`software_patch`, `software_upgrade`, `hardware_replacement`, `database_schema`, `network_infrastructure`, `configuration_parameter`, `decommissioning`), change priority triage (`routine`, `urgent`, `emergency`), GxP impact determinations (`direct_gxp`, `indirect_gxp`, `non_gxp`), data integrity risk evaluations, validation deliverables (IQ/OQ/PQ protocols, regression scripts, user acceptance testing), contingency rollback plans, Change Control Board (CCB) multi-signoffs, post-implementation reviews, and automated terminal implementation timestamps (`actual_implementation_date`).
+  - **Data Integrity Command Center & KPI Dashboard**: Real-time compliance command center (`data_integrity_dashboard`) providing instantaneous visibility into Part 11 policy enforcement ratios, active ALCOA+ risk posture heatmaps, audit trail surveillance frequencies, anomaly detection counts, open GxP system changes, emergency patch queues, and streaming data integrity CSV metrics export (`data_integrity_export_csv`).
 
 ---
 
@@ -978,6 +985,46 @@ apps/quality/
 - **Properties & Methods:** `complaint_rate_pct`, `serious_incident_rate_pct`, `status_css`, `benefit_risk_css`.
 - **Compound Indexes:** `idx_qpms_ten_status` on `(tenant, status)`, `idx_qpms_ten_type` on `(tenant, report_type)`, `idx_qpms_ten_benrisk` on `(tenant, benefit_risk_conclusion)`, `idx_qpms_ten_period` on `(tenant, reporting_period_end)`.
 
+#### 53. `LabSample` (Prefix: `QSMP-`)
+- **Table:** `quality_labsample`
+- **Key Fields:** `number`, `sample_name`, `sample_type`, `barcode_uid`, `storage_condition`, `status`, `received_date`, `disposal_date`.
+
+#### 54. `LabSpecification` (Prefix: `QSPC-`)
+- **Table:** `quality_labspecification`
+- **Key Fields:** `number`, `specification_title`, `test_method_name`, `test_category`, `status`, `target_nominal_value`, `lower_spec_limit`, `upper_spec_limit`.
+
+#### 55. `LabTestWorksheet` (Prefix: `QWKS-`)
+- **Table:** `quality_labtestworksheet`
+- **Key Fields:** `number`, `worksheet_title`, `sample`, `specification`, `status`, `mean_value`, `relative_std_dev_rsd`, `is_within_specification`.
+
+#### 56. `OosInvestigation` (Prefix: `QOOS-`)
+- **Table:** `quality_oosinvestigation`
+- **Key Fields:** `number`, `title`, `test_worksheet`, `sample`, `investigation_phase`, `status`, `severity`, `lab_error_identified`.
+
+#### 57. `ElectronicRecordPolicy` (Prefix: `QREC-`)
+- **Table:** `quality_electronicrecordpolicy`
+- **Key Fields:** `number`, `title`, `record_type_name`, `record_category` (`production_batch`, `lab_analytical`, `equipment_calibration`, `deviation_ncr`, `capa`, `audit_inspection`, `training_competency`, `complaint_pharmacovigilance`, `electronic_signature`), `target_model_name`, `system` (`quality.ComputerSystemValidation`), `governing_sop` (`quality.ControlledDocument`), `is_part_11_regulated`, `is_annex_11_regulated`, `signature_requirement` (`none`, `single_author`, `dual_peer_review`, `triple_qa_approval`, `ccb_approval`), `reauthentication_required`, `dual_signature_required`, `audit_trail_mandatory`, `retention_period_years`, `storage_format` (`database_relational`, `pdf_a_immutable`, `xml_json_raw`, `hybrid_blob`), `backup_frequency` (`continuous_wal`, `hourly_incremental`, `daily_snapshot`, `weekly_full`), `legal_hold`, `status` (`draft`, `active`, `under_revision`, `archived`), `system_owner` (`accounts.User`), `qa_approver` (`accounts.User`), `approval_date`, `description`.
+- **Properties & Methods:** `is_active`, `requires_signature`, `status_css`.
+- **Compound Indexes:** `idx_qrec_ten_cat_stat` on `(tenant, record_category, status)`, `idx_qrec_ten_part11` on `(tenant, is_part_11_regulated)`.
+
+#### 58. `DataIntegrityAssessment` (Prefix: `QDIR-`)
+- **Table:** `quality_dataintegrityassessment`
+- **Key Fields:** `number`, `title`, `assessment_scope`, `system` (`quality.ComputerSystemValidation`), `org_unit` (`core.OrgUnit`), `lead_assessor` (`accounts.User`), `qa_reviewer` (`accounts.User`), `assessment_date`, `next_review_due`, ALCOA+ 9 dimension ratings (`attributable_rating`, `legible_rating`, `contemporaneous_rating`, `original_rating`, `accurate_rating`, `complete_rating`, `consistent_rating`, `enduring_rating`, `available_rating` with choices `fully_compliant`, `partially_compliant`, `non_compliant`, `not_applicable`), `overall_risk_level` (`low`, `medium`, `high`, `critical`), `vulnerabilities_summary`, `remediation_plan`, `linked_ncr` (`quality.NonConformanceReport`), `linked_capa` (`quality.CapaInvestigation`), `status` (`draft`, `in_assessment`, `remediation_pending`, `approved`, `superseded`), `qa_approved_at`, `comments`.
+- **Properties & Methods:** `non_compliant_count`, `is_high_risk`, `is_acceptable`, `is_overdue`, `status_css`, `risk_css`.
+- **Compound Indexes:** `idx_qdir_ten_rsk_stat` on `(tenant, overall_risk_level, status)`.
+
+#### 59. `AuditTrailReview` (Prefix: `QATR-`)
+- **Table:** `quality_audittrailreview`
+- **Key Fields:** `number`, `title`, `system` (`quality.ComputerSystemValidation`), `review_type` (`periodic_system`, `batch_release`, `event_investigation`, `user_access_drift`, `configuration_change`), `audit_source` (`database_audit_log`, `application_event_log`, `os_security_log`, `instrument_raw_log`, `network_firewall_log`), `period_start`, `period_end`, `reviewer` (`accounts.User`), `qa_approver` (`accounts.User`), `review_date`, `records_sampled_count`, `anomalies_detected_count`, `anomaly_severity` (`none`, `minor`, `major`, `critical`), `findings_summary`, `disposition` (`pending_review`, `approved_clean`, `approved_remediated`, `rejected_escalated`), `status` (`scheduled`, `in_progress`, `completed`, `closed`), `linked_ncr` (`quality.NonConformanceReport`), `linked_capa` (`quality.CapaInvestigation`), `qa_comments`, `completed_at`.
+- **Properties & Methods:** `is_clean`, `requires_escalation`, `status_css`, `severity_css`, `disposition_css`.
+- **Compound Indexes:** `idx_qatr_ten_typ_disp` on `(tenant, review_type, disposition)`.
+
+#### 60. `SystemChangeControl` (Prefix: `QCCR-`)
+- **Table:** `quality_systemchangecontrol`
+- **Key Fields:** `number`, `title`, `system` (`quality.ComputerSystemValidation`), `change_type` (`software_patch`, `software_upgrade`, `hardware_replacement`, `database_schema`, `network_infrastructure`, `configuration_parameter`, `decommissioning`), `change_priority` (`routine`, `urgent`, `emergency`), `gxp_impact` (`direct_gxp`, `indirect_gxp`, `non_gxp`), `requestor` (`accounts.User`), `system_owner` (`accounts.User`), `qa_lead` (`accounts.User`), `org_unit` (`core.OrgUnit`), `description`, `business_justification`, `data_integrity_risk`, `validation_deliverables`, `rollback_plan`, `target_date`, `actual_implementation_date`, `post_review_due_date`, `status` (`draft`, `ccb_review`, `approved_for_build`, `testing_verification`, `qa_release_pending`, `implemented_closed`, `rejected`, `cancelled`), `testing_successful`, `data_backup_verified`, `ccb_approved`, `closure_summary`.
+- **Properties & Methods:** `is_closed`, `is_emergency`, `is_overdue`, `status_css`, `priority_css`, `gxp_css`.
+- **Compound Indexes:** `idx_qccr_ten_stat_gxp` on `(tenant, status, gxp_impact)`.
+
 
 ---
 
@@ -1404,6 +1451,33 @@ All routes use the `quality:` namespace:
 | `/quality/pms-reports/<pk>/delete/` | `post_market_surveillance_report_delete` | POST-only delete for draft/archived PMS reports with @tenant_admin_required |
 | `/quality/pms-reports/export/` | `post_market_surveillance_report_export` | CSV export of post-market surveillance reports with formula sanitization |
 
+### Sub-module 12.20 Routes (Data Integrity & Electronic Records)
+
+| Path | Name | Description |
+|---|---|---|
+| `/quality/data-integrity/` | `data_integrity_dashboard` | Executive command center for Part 11 policies, ALCOA+ risk, audit anomalies, and CSV changes |
+| `/quality/data-integrity/export/` | `data_integrity_export_csv` | CSV export of data integrity governance KPIs and metrics |
+| `/quality/policies/` | `electronic_record_policy_list` | Electronic record governance policies register with category, status, and Part 11 filters |
+| `/quality/policies/create/` | `electronic_record_policy_create` | Define 21 CFR Part 11 electronic records policy and signature requirements |
+| `/quality/policies/<pk>/` | `electronic_record_policy_detail` | Detailed record policy dossier with signature manifestation and storage rules |
+| `/quality/policies/<pk>/edit/` | `electronic_record_policy_edit` | Edit record policy parameters, retention periods, and revision history |
+| `/quality/policies/<pk>/delete/` | `electronic_record_policy_delete` | POST-only delete guarded against active legal holds (@tenant_admin_required) |
+| `/quality/assessments/` | `data_integrity_assessment_list` | ALCOA+ data integrity assessments register with risk and status filters |
+| `/quality/assessments/create/` | `data_integrity_assessment_create` | Conduct system ALCOA+ data integrity risk assessment |
+| `/quality/assessments/<pk>/` | `data_integrity_assessment_detail` | Detailed ALCOA+ assessment dossier with 9-dimension scoring breakdown |
+| `/quality/assessments/<pk>/edit/` | `data_integrity_assessment_edit` | Update assessment ratings, remediation plan, and auto-timestamp approvals |
+| `/quality/assessments/<pk>/delete/` | `data_integrity_assessment_delete` | POST-only delete for draft assessments (@tenant_admin_required) |
+| `/quality/audit-reviews/` | `audit_trail_review_list` | Audit trail surveillance review log with review type, disposition, and status filters |
+| `/quality/audit-reviews/create/` | `audit_trail_review_create` | Schedule and conduct periodic or event-driven audit trail review |
+| `/quality/audit-reviews/<pk>/` | `audit_trail_review_detail` | Detailed audit trail review dossier with anomaly analysis and escalations |
+| `/quality/audit-reviews/<pk>/edit/` | `audit_trail_review_edit` | Edit review findings, disposition, and auto-timestamp completion |
+| `/quality/audit-reviews/<pk>/delete/` | `audit_trail_review_delete` | POST-only delete for scheduled reviews (@tenant_admin_required) |
+| `/quality/change-controls/` | `system_change_control_list` | Computerized system change controls register with type, priority, and GxP impact filters |
+| `/quality/change-controls/create/` | `system_change_control_create` | Initiate computerized system change control proposal |
+| `/quality/change-controls/<pk>/` | `system_change_control_detail` | Detailed change control dossier with CCB approval, validation, and rollback protocols |
+| `/quality/change-controls/<pk>/edit/` | `system_change_control_edit` | Update change control execution, testing results, and auto-timestamp closure |
+| `/quality/change-controls/<pk>/delete/` | `system_change_control_delete` | POST-only delete for draft/cancelled change controls (@tenant_admin_required) |
+
 ---
 
 ## Seeder (`seed_quality`)
@@ -1563,6 +1637,12 @@ Creates realistic GxP compliance data for `acme` and `globex` tenants:
   - 3 Lab Specifications per tenant (`SPC-2026-00001` to `SPC-2026-00003`: HPLC Assay Potency, Dissolution Rate USP, and Endotoxin LAL Limits) with quantitative numerical limits and qualitative criteria.
   - 4 Lab Test Worksheets per tenant (`WKS-2026-00001` to `WKS-2026-00004`) with replicate measurement values, calculated mean and % RSD, instrument and reagent lot linkage, and verification sign-offs.
   - 2 Out-of-Specification (OOS) Investigations per tenant (`OOS-2026-00001` [Phase I Lab Error, Invalidated], `OOS-2026-00002` [Phase II Manufacturing Root Cause, Confirmed OOS with CAPA/NCR linkages]).
+
+- **12.20 Data**:
+  - 4 Electronic Record Policies per tenant (`Electronic Batch Production & Control Record 21 CFR Part 11 Policy`, `Analytical Chromatography Test Data Protocol`, `NCR & Process Deviation Dossier Policy`, `Calibration Metrology Logs Policy`) covering closed-system access controls, dual-signature requirements, and immutable audit logging.
+  - 3 Data Integrity Assessments per tenant (`LIMS & Chromatography Data System ALCOA+ Audit` [Low Risk], `Packaging Line Automated Serialization Review` [Medium Risk], `QC Microbiology Colony Counter Image Storage Review` [High Risk with CAPA linkage]).
+  - 3 Audit Trail Reviews per tenant (`Q3 2026 Core Quality Database Audit Trail Review` [Clean], `HPLC Chromatography Integration Reprocessing Event` [Remediated], `MES Operator User Access Drift Review` [Escalated]).
+  - 3 System Change Controls per tenant (`LIMS Enterprise v8.8 Security Patch` [Implemented/Closed], `Cloud Data Lake Schema Expansion` [Testing/Verification], `Cleanroom Environmental HMI Firmware Emergency Patch` [Emergency Draft]).
 
 Seeder is 100% idempotent: subsequent runs check `.exists()` and skip existing records.
 
@@ -1818,6 +1898,13 @@ LIVE_LINKS = {
         "Test Execution & Result Capture": "quality:lab_test_worksheet_list",
         "Out-of-Specification (OOS) Investigation": "quality:oos_investigation_list",
         "Laboratory Equipment & Reagent Management": "quality:lims_dashboard",
+    },
+    "12.20": {
+        "Electronic Records & Signatures (ER/ES) — 21 CFR Part 11": "quality:electronic_record_policy_list",
+        "Data Integrity (ALCOA+)": "quality:data_integrity_assessment_list",
+        "System Validation & Change Control (CSV)": "quality:system_change_control_list",
+        "Audit Trail Surveillance": "quality:audit_trail_review_list",
+        "Data Integrity Command Center": "quality:data_integrity_dashboard",
     },
 }
 ```
