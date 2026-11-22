@@ -18,7 +18,7 @@
             <span class="badge {{ document.classification_badge_class }}">{{ document.get_classification_display }}</span>
             {% if document.is_locked %}
             <span class="badge badge-red inline-flex items-center gap-1">
-                <i data-lucide="lock" class="w-3 h-3"></i> Locked by {{ document.locked_by.username }}
+                <i data-lucide="lock" class="w-3 h-3"></i> Locked by {% if document.locked_by %}{{ document.locked_by.get_full_name|default:document.locked_by.username }}{% else %}Unknown{% endif %}
             </span>
             {% else %}
             <span class="badge badge-slate inline-flex items-center gap-1">
