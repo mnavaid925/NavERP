@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -69,15 +70,29 @@ def folder_list(request):
 
 @login_required
 def folder_tree(request):
-    root_folders = DocumentFolder.objects.filter(
-        tenant=request.tenant,
-        parent__isnull=True,
-        is_active=True,
-    ).prefetch_related("children").select_related("owner", "department").order_by("name")
+    all_folders = list(
+        DocumentFolder.objects.filter(
+            tenant=request.tenant,
+            is_active=True,
+        )
+        .select_related("owner", "department")
+        .order_by("name")
+    )
 
-    # Build nested tree dict for client rendering
+    children_by_parent = defaultdict(list)
+    root_folders = []
+    for folder in all_folders:
+        if folder.parent_id is None:
+            root_folders.append(folder)
+        else:
+            children_by_parent[folder.parent_id].append(folder)
+
+    for folder in all_folders:
+        folder._prefetched_objects_cache = {"children": children_by_parent.get(folder.id, [])}
+
+    # Build nested tree dict for client rendering in memory
     def build_tree(folder):
-        children = folder.children.filter(tenant=request.tenant, is_active=True).order_by("name")
+        children = children_by_parent.get(folder.id, [])
         return {
             "id": folder.id,
             "number": folder.number,
