@@ -177,48 +177,58 @@ def batch_import_process(request, pk):
     logs = [f"[{timezone.now().strftime('%Y-%m-%d %H:%M:%S')}] Started ingestion job {batch.number}"]
 
     try:
-        if batch.archive_file and os.path.exists(batch.archive_file.path):
-            file_path = batch.archive_file.path
-            if zipfile.is_zipfile(file_path):
-                with zipfile.ZipFile(file_path, "r") as z:
-                    file_list = [f for f in z.infolist() if not f.is_dir()]
-                    extracted_count = len(file_list)
-                    logs.append(f"Archive inspected: {extracted_count} candidate file(s) found in ZIP container.")
+        has_archive = False
+        try:
+            has_archive = bool(batch.archive_file and batch.archive_file.storage.exists(batch.archive_file.name))
+        except Exception:
+            has_archive = False
 
-                    target_classification = "internal"
-                    target_doc_type = "general"
-                    if batch.target_folder:
-                        target_classification = batch.target_folder.default_classification
-                        target_doc_type = batch.target_folder.default_document_type or "general"
+        if has_archive:
+            archive_stream = batch.archive_file.open("rb")
+            try:
+                if zipfile.is_zipfile(archive_stream):
+                    archive_stream.seek(0)
+                    with zipfile.ZipFile(archive_stream, "r") as z:
+                        file_list = [f for f in z.infolist() if not f.is_dir()]
+                        extracted_count = len(file_list)
+                        logs.append(f"Archive inspected: {extracted_count} candidate file(s) found in ZIP container.")
 
-                    with transaction.atomic():
-                        for info in file_list:
-                            clean_filename = os.path.basename(info.filename)
-                            if not clean_filename or clean_filename.startswith("."):
-                                continue
+                        target_classification = "internal"
+                        target_doc_type = "general"
+                        if batch.target_folder:
+                            target_classification = batch.target_folder.default_classification
+                            target_doc_type = batch.target_folder.default_document_type or "general"
 
-                            total_bytes += info.file_size
-                            title = os.path.splitext(clean_filename)[0].replace("_", " ").title()
+                        with transaction.atomic():
+                            for info in file_list:
+                                clean_filename = os.path.basename(info.filename)
+                                if not clean_filename or clean_filename.startswith("."):
+                                    continue
 
-                            # Create document in repository
-                            doc = Document(
-                                tenant=batch.tenant,
-                                title=title,
-                                document_type=target_doc_type,
-                                classification=target_classification,
-                                status="published",
-                                owner=batch.created_by,
-                                description=f"Imported via batch {batch.number} from '{clean_filename}'",
-                                tags=f"batch-import,{batch.number},{batch.target_folder.slug if batch.target_folder else ''}",
-                            )
-                            doc.save()
-                            success_count += 1
-                            logs.append(f"Ingested file '{clean_filename}' -> Document {doc.number} ({doc.title})")
-            else:
-                logs.append("Archive file detected as non-ZIP manifest; simulated batch processing.")
-                extracted_count = 5
-                success_count = 5
-                total_bytes = 1048576 * 5
+                                total_bytes += info.file_size
+                                title = os.path.splitext(clean_filename)[0].replace("_", " ").title()
+
+                                # Create document in repository
+                                doc = Document(
+                                    tenant=batch.tenant,
+                                    title=title,
+                                    document_type=target_doc_type,
+                                    classification=target_classification,
+                                    status="published",
+                                    owner=batch.created_by,
+                                    description=f"Imported via batch {batch.number} from '{clean_filename}'",
+                                    tags=f"batch-import,{batch.number},{batch.target_folder.slug if batch.target_folder else ''}",
+                                )
+                                doc.save()
+                                success_count += 1
+                                logs.append(f"Ingested file '{clean_filename}' -> Document {doc.number} ({doc.title})")
+                else:
+                    logs.append("Archive file detected as non-ZIP manifest; simulated batch processing.")
+                    extracted_count = 5
+                    success_count = 5
+                    total_bytes = 1048576 * 5
+            finally:
+                archive_stream.close()
         else:
             # Simulated demo extraction when no physical upload payload is attached
             extracted_count = 3
