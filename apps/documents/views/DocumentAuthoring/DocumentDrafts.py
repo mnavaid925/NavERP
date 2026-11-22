@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
@@ -239,8 +240,10 @@ def draft_promote(request, pk):
         # Create or link core.Document
         doc = Document.objects.create(
             tenant=request.tenant,
-            title=draft.title,
-            description=f"Official promoted document released from draft {draft.number} (v{draft.draft_version})",
+            name=draft.title,
+            file=ContentFile((draft.content or "").encode("utf-8"), name=f"{draft.number}.html"),
+            classification="internal",
+            version="1.0",
         )
         draft.status = "promoted"
         draft.promoted_at = timezone.now()
