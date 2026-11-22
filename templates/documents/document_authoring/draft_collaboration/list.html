@@ -22,15 +22,15 @@
     <div class="card-body p-4">
         <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-                <label class="form-label text-xs">Search</label>
+                <label for="filter-collab-q" class="form-label text-xs">Search</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ search_query }}" placeholder="Search notes, quotes..." class="form-input text-sm pl-9">
+                    <input type="text" id="filter-collab-q" name="q" value="{{ search_query }}" placeholder="Search notes, quotes..." class="form-input text-sm pl-9">
                     <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
                 </div>
             </div>
             <div>
-                <label class="form-label text-xs">Entry Type</label>
-                <select name="entry_type" class="form-select text-sm">
+                <label for="filter-collab-entry-type" class="form-label text-xs">Entry Type</label>
+                <select id="filter-collab-entry-type" name="entry_type" class="form-select text-sm">
                     <option value="">All Types</option>
                     {% for code, label in entry_type_choices %}
                     <option value="{{ code }}" {% if request.GET.entry_type == code %}selected{% endif %}>{{ label }}</option>
@@ -38,8 +38,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select text-sm">
+                <label for="filter-collab-status" class="form-label text-xs">Status</label>
+                <select id="filter-collab-status" name="status" class="form-select text-sm">
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
