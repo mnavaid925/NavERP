@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Repository & Storage Command Center — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Repository Command Center</span>
+        </div>
+        <h1 class="page-title">Document Storage & Repository Center</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:folder_list' %}" class="btn btn-outline">
+            <i data-lucide="folder"></i>
+            <span>Browse Folders</span>
+        </a>
+        <a href="{% url 'documents:storage_volume_list' %}" class="btn btn-outline">
+            <i data-lucide="hard-drive"></i>
+            <span>Storage Volumes</span>
+        </a>
+        <a href="{% url 'documents:batch_import_create' %}" class="btn btn-primary">
+            <i data-lucide="upload-cloud"></i>
+            <span>New Bulk Import</span>
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="folder-tree"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_folders }}</div>
+            <div class="stat-label">Taxonomy Folders</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="hard-drive"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_volumes }}</div>
+            <div class="stat-label">Active Storage Targets</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="link"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_relationships }}</div>
+            <div class="stat-label">Semantic Relationships</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="archive"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_imports }}</div>
+            <div class="stat-label">Bulk Ingestion Jobs</div>
+        </div>
+    </div>
+</div>
+
+<!-- Storage Capacity Banner -->
+<div class="card mb-6">
+    <div class="card-body">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-3">
+            <div>
+                <h3 class="text-base font-bold text-slate-800">Aggregate Repository Storage Capacity</h3>
+                <p class="text-xs text-muted">Multi-volume capacity tracking across local and cloud storage backends</p>
+            </div>
+            <div class="text-right">
+                <span class="text-2xl font-bold text-slate-800">{{ total_utilized_gb }}</span>
+                <span class="text-sm text-muted">/ {{ total_capacity_gb }} GB</span>
+                <span class="ml-2 font-semibold text-primary">({{ capacity_utilization_pct }}%)</span>
+            </div>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+            <div class="h-3 rounded-full bg-blue-600 transition-all duration-500" style="width: {{ capacity_utilization_pct }}%;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Storage Volumes Status -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="card-title">Storage Targets & Tiering</h3>
+            <a href="{% url 'documents:storage_volume_list' %}" class="btn btn-sm btn-outline">View All</a>
+        </div>
+        <div class="card-body space-y-4">
+            {% for vol in volumes %}
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="hard-drive" class="w-4 h-4 text-slate-500"></i>
+                        <a href="{% url 'documents:storage_volume_detail' vol.pk %}" class="font-semibold text-slate-800 hover:text-primary">
+                            {{ vol.name }}
+                        </a>
+                        <span class="badge {{ vol.tier_badge_class }} text-xs">{{ vol.get_tier_display }}</span>
+                    </div>
+                    <span class="text-xs font-mono font-semibold">{{ vol.utilized_percentage }}%</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden mb-1">
+                    <div class="h-2 rounded-full {% if vol.is_full %}bg-red-500{% elif vol.is_over_warning %}bg-amber-500{% else %}bg-blue-600{% endif %}" style="width: {{ vol.utilized_percentage }}%;"></div>
+                </div>
+                <div class="flex justify-between text-xs text-muted">
+                    <span>{{ vol.get_backend_type_display }}</span>
+                    <span>{{ vol.utilized_gb }} GB / {{ vol.max_capacity_gb }} GB</span>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state text-center py-6 text-sm text-muted">No storage volumes configured.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Recent Bulk Ingestions -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="card-title">Recent Ingestion Pipelines</h3>
+            <a href="{% url 'documents:batch_import_list' %}" class="btn btn-sm btn-outline">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Batch Name</th>
+                        <th>Target Folder</th>
+                        <th>Files</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for imp in recent_imports %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'documents:batch_import_detail' imp.pk %}" class="font-medium text-primary hover:underline">
+                                {{ imp.batch_name }}
+                            </a>
+                            <div class="font-mono text-xs text-muted">{{ imp.number }}</div>
+                        </td>
+                        <td>{{ imp.target_folder.name|default:"Root" }}</td>
+                        <td>{{ imp.processed_files_count }} / {{ imp.total_files_detected }}</td>
+                        <td><span class="badge {{ imp.status_badge_class }}">{{ imp.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-6 text-sm text-muted">No recent bulk import jobs.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
