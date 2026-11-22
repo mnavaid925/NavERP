@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
@@ -116,7 +117,10 @@ def system_change_control_create(request):
             with transaction.atomic():
                 change = form.save(commit=False)
                 change.tenant = request.tenant
+                if change.status == "implemented_closed" and not change.actual_implementation_date:
+                    change.actual_implementation_date = timezone.now().date()
                 change.save()
+                form.save_m2m()
                 write_audit_log(request.user, change, "create", tenant=request.tenant)
             messages.success(request, f"System Change Control {change.number} created successfully.")
             return redirect("quality:system_change_control_detail", pk=change.pk)
@@ -137,7 +141,11 @@ def system_change_control_edit(request, pk):
         form = SystemChangeControlForm(request.POST, instance=change, tenant=request.tenant)
         if form.is_valid():
             with transaction.atomic():
-                change = form.save()
+                change = form.save(commit=False)
+                if change.status == "implemented_closed" and not change.actual_implementation_date:
+                    change.actual_implementation_date = timezone.now().date()
+                change.save()
+                form.save_m2m()
                 write_audit_log(request.user, change, "update", tenant=request.tenant)
             messages.success(request, f"System Change Control {change.number} updated successfully.")
             return redirect("quality:system_change_control_detail", pk=change.pk)
