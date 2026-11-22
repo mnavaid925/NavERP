@@ -94,7 +94,7 @@ def oos_investigation_create(request):
         initial["test_worksheet"] = worksheet_id
         try:
             from apps.quality.models.LimsManagement.LabTestWorksheets import LabTestWorksheet
-            ws = LabTestWorksheet.objects.get(pk=worksheet_id, tenant=request.tenant)
+            ws = LabTestWorksheet.objects.select_related("sample").get(pk=worksheet_id, tenant=request.tenant)
             initial["sample"] = ws.sample_id
             initial["title"] = f"OOS Investigation: {ws.title} ({ws.sample.number})"
         except Exception:
