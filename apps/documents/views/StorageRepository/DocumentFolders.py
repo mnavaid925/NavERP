@@ -169,11 +169,11 @@ def folder_detail(request, pk):
         )
 
     docs_qs = docs_qs.select_related("owner", "department").order_by("-created_at")
-    total_files = docs_qs.count()
 
     paginator = Paginator(docs_qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    total_files = page_obj.paginator.count
 
     context = {
         "folder": folder,
