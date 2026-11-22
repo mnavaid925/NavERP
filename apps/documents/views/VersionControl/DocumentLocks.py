@@ -25,7 +25,9 @@ from apps.documents.views._common import documents_object, documents_scope
 @login_required
 def document_lock_list(request):
     qs = documents_scope(
-        DocumentLock.objects.select_related("document", "base_version", "locked_by", "unlocked_by"),
+        DocumentLock.objects.select_related("document", "base_version", "locked_by", "unlocked_by").defer(
+            "base_version__extracted_text"
+        ),
         request,
     )
 
