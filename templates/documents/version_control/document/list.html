@@ -71,7 +71,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
             <div class="form-group md:col-span-2">
                 <label for="filter-q" class="form-label text-xs">Search Title / Number</label>
                 <input type="text" id="filter-q" name="q" class="form-input" placeholder="Search title, number, tags..." value="{{ request.GET.q }}">
@@ -112,7 +112,15 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="md:col-span-6 flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div class="form-group">
+                <label for="filter-locked" class="form-label text-xs">Lock Status</label>
+                <select id="filter-locked" name="is_locked" class="form-select">
+                    <option value="">All</option>
+                    <option value="1" {% if request.GET.is_locked == "1" %}selected{% endif %}>Locked</option>
+                    <option value="0" {% if request.GET.is_locked == "0" %}selected{% endif %}>Unlocked</option>
+                </select>
+            </div>
+            <div class="md:col-span-7 flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button type="submit" class="btn btn-primary text-xs">
                     <i data-lucide="filter"></i> Apply Filters
                 </button>
@@ -233,13 +241,13 @@
         </span>
         <div class="flex gap-2">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&document_type={{ request.GET.document_type }}&classification={{ request.GET.classification }}&status={{ request.GET.status }}&department={{ request.GET.department }}" class="btn btn-outline text-xs">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&document_type={{ request.GET.document_type }}&classification={{ request.GET.classification }}&status={{ request.GET.status }}&department={{ request.GET.department }}&is_locked={{ request.GET.is_locked }}" class="btn btn-outline text-xs">Previous</a>
             {% else %}
             <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
             {% endif %}
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&document_type={{ request.GET.document_type }}&classification={{ request.GET.classification }}&status={{ request.GET.status }}&department={{ request.GET.department }}" class="btn btn-outline text-xs">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&document_type={{ request.GET.document_type }}&classification={{ request.GET.classification }}&status={{ request.GET.status }}&department={{ request.GET.department }}&is_locked={{ request.GET.is_locked }}" class="btn btn-outline text-xs">Next</a>
             {% else %}
             <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
             {% endif %}
