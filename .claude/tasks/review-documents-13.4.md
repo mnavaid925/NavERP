@@ -92,10 +92,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: `.count()` and `.aggregate(Sum(...))` run as two separate queries against the same filtered queryset.
   - **Fix**: Consolidate into single `.aggregate(count=Count("id"), cap=Sum("max_capacity_bytes"), util=Sum("utilized_bytes"))`. [x] fixed — 0c6fd339, 353f7004: consolidate count and sum aggregations in dashboard and volume list
 
-- [ ] **I8**: Archive ingestion safety (Windows backslash normalization and file extension whitelist).
+- [x] **I8**: Archive ingestion safety (Windows backslash normalization and file extension whitelist).
   - **Location**: `apps/documents/views/StorageRepository/DocumentBatchImports.py:195`
   - **Problem**: Windows backslashes in zip archive entries can bypass path stripping on POSIX environments, and unvetted file extensions could be ingested.
-  - **Fix**: Normalize backslashes with `replace("\\", "/")` and check extension against `ALLOWED_DOC_EXTENSIONS`.
+  - **Fix**: Normalize backslashes with `replace("\\", "/")` and check extension against `ALLOWED_DOC_EXTENSIONS`. [x] fixed — 71e59d1f: normalize backslashes and enforce ALLOWED_DOC_EXTENSIONS in batch ingestion
 
 - [ ] **I9**: Missing upload file size limit on `DocumentBatchImportForm`.
   - **Location**: `apps/documents/forms/StorageRepository/DocumentBatchImports.py:45`
