@@ -60,3 +60,20 @@
 
 ### Minor
 - [ ] `templates/documents/document_authoring/*/list.html` — Missing `for` / `id` attribute coupling on filter form labels and inputs.
+
+## 4. Performance Reviewer Findings
+
+### Critical
+- [ ] `apps/documents/views/DocumentAuthoring/DocumentDrafts.py:154-157` & `templates/documents/document_authoring/document_draft/canvas.html:97` — 1 + N N+1 Queries in Canvas View due to Prefetch Cache Invalidation. Calling `.filter(status="open")` invalidates prefetched `collaborations__author` cache. Fix: filter in Python `[c for c in draft.collaborations.all() if c.status == "open"]` or query with `select_related("author")`.
+- [ ] `apps/documents/views/DocumentAuthoring/DocumentDrafts.py:66-68` & `templates/documents/document_authoring/document_draft/detail.html:115` — 1 + N N+1 Queries in Draft Detail View due to redundant `.order_by("-created_at")` invalidating prefetched `collaborations` cache. Fix: use `draft.collaborations.all()` directly relying on model Meta ordering.
+
+### Important
+- [ ] `apps/documents/views/DocumentAuthoring/DocumentTemplates.py:65-68` — Wasted Prefetch Query and Cache Bypass in `template_detail`: `derived_drafts` prefetch is wasted (only count is rendered), and `.order_by("order", "id")` invalidates `sections` cache. Fix: remove `derived_drafts` from prefetch and use `template.sections.all()`.
+- [ ] `apps/documents/views/DocumentAuthoring/TemplateSections.py:99, 125` & `DraftCollaborations.py:136` — Chained lazy FK traversal in audit logging via `__str__` (Lesson L18): `TemplateSection.__str__` accesses `self.template.name` and `DraftCollaboration.__str__` accesses `self.draft.number`. Fix: pass `select_related` to `documents_object` in edit and delete views.
+- [ ] `apps/documents/views/DocumentAuthoring/DocumentDrafts.py:21`, `DocumentTemplates.py:19`, `DraftCollaborations.py:20` — Heavy TextFields fetched on list views. Fix: use `.defer("content", ...)` on list views.
+- [ ] `apps/documents/views/DocumentAuthoring/TemplateSections.py:37` & form choice querysets — Unconstrained full table scans for dropdown querysets loading unused text fields. Fix: use `.only("id", "name", "number")`.
+
+### Minor
+- [ ] `apps/documents/views/DocumentAuthoring/*.py` — Redundant dual `COUNT(*)` query in list pagination. Fix: construct `paginator = Paginator(qs, 15)` first, then use `total_count = paginator.count`.
+- [ ] `apps/documents/views/DocumentAuthoring/TemplateSections.py:33` & `DraftCollaborations.py:35` — Non-standard page size (20 vs NavERP standard 15). Fix: standardize `Paginator(qs, 15)`.
+- [ ] `apps/documents/models/DocumentAuthoring/DocumentDrafts.py:96-102` & `TemplateSections.py:39-45` — Missing composite index on `(tenant, -updated_at)` on DocumentDraft and `(tenant, template, order)` on TemplateSection.
