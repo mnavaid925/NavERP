@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Verify Signature Token — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:signature_list' %}">Signatures</a>
+            <span>/</span>
+            <span>Verify Token</span>
+        </div>
+        <h1 class="page-title">Cryptographic Signature Verification</h1>
+    </div>
+</div>
+
+<div class="max-w-2xl mx-auto">
+    <!-- Verification Query Card -->
+    <div class="card mb-6">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Token Lookup</h2>
+        </div>
+        <div class="card-body">
+            <form method="get" action="{% url 'documents:signature_verify' %}" class="flex gap-2">
+                <input type="text" name="token" value="{{ token }}" class="form-input font-mono text-sm flex-1" placeholder="Enter 32-character token or UUID...">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="shield-check"></i>
+                    <span>Verify</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Result Card -->
+    {% if token %}
+    <div class="card">
+        {% if is_valid and signature %}
+        <div class="card-header bg-green-50 border-b border-green-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                    <i data-lucide="check-circle" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-green-900">Valid Cryptographic Signature</h3>
+                    <p class="text-xs text-green-700">The token matches an authentic, unrevoked electronic signature record in this tenant.</p>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Signature Identifier</dt>
+                    <dd class="font-mono font-semibold">{{ signature.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Signer Identity</dt>
+                    <dd class="font-medium text-slate-900">{{ signature.signer_name }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Signature Meaning</dt>
+                    <dd><span class="badge {{ signature.signature_meaning_css_class }}">{{ signature.get_signature_meaning_display }}</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Execution Timestamp</dt>
+                    <dd>{{ signature.signed_at|date:"Y-m-d H:i:s" }} UTC</dd>
+                </div>
+                <div class="detail-item col-span-full">
+                    <dt>Target Document</dt>
+                    <dd>
+                        <a href="{% url 'documents:document_detail' signature.document.pk %}" class="text-blue-600 hover:underline font-medium">
+                            {{ signature.document.title }}
+                        </a>
+                        <span class="text-xs text-slate-400 font-mono ml-2">({{ signature.document.number }})</span>
+                    </dd>
+                </div>
+                <div class="detail-item col-span-full">
+                    <dt>SHA-256 Document Hash</dt>
+                    <dd class="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 break-all select-all">
+                        {{ signature.document_checksum }}
+                    </dd>
+                </div>
+            </dl>
+            <div class="mt-4 pt-4 border-t border-slate-200 flex justify-end gap-2">
+                <a href="{% url 'documents:signature_detail' signature.pk %}" class="btn btn-outline">Signature Details</a>
+                <a href="{% url 'documents:signature_manifest' signature.pk %}" class="btn btn-primary">View Full Certificate</a>
+            </div>
+        </div>
+        {% else %}
+        <div class="card-header bg-red-50 border-b border-red-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                    <i data-lucide="x-circle" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-red-900">Invalid or Unknown Signature Token</h3>
+                    <p class="text-xs text-red-700">No active, valid electronic signature record was found matching this token.</p>
+                </div>
+            </div>
+        </div>
+        <div class="card-body text-sm text-slate-600">
+            Please verify that the full verification token was entered without leading or trailing spaces. If this document was recently revoked, the signature is nullified.
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
