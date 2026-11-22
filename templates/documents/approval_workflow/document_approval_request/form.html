@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ request_obj.number }}{% else %}New Approval Request{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:workflow_list' %}">Approval Workflows</a>
+            <span>/</span>
+            <a href="{% url 'documents:approval_request_list' %}">Requests</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ request_obj.number }}{% else %}New Request{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Approval Request: {{ request_obj.number }}{% else %}Create Approval Request / Stage Task{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:approval_request_detail' request_obj.pk %}{% else %}{% url 'documents:approval_request_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-2xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Approval Step Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger mb-4">
+                {% for err in form.non_field_errors %}{{ err }}<br>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Workflow -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.workflow.id_for_label }}">Parent Workflow *</label>
+                    {{ form.workflow }}
+                    {% if form.workflow.errors %}<div class="form-error">{{ form.workflow.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Stage Number -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.stage_number.id_for_label }}">Stage Number *</label>
+                    {{ form.stage_number }}
+                    <span class="text-xs text-slate-500">Pipeline sequence order (1, 2, 3...)</span>
+                    {% if form.stage_number.errors %}<div class="form-error">{{ form.stage_number.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Order in Stage -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.order.id_for_label }}">Order within Stage</label>
+                    {{ form.order }}
+                    {% if form.order.errors %}<div class="form-error">{{ form.order.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Stage Name -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.stage_name.id_for_label }}">Stage Description / Label *</label>
+                    {{ form.stage_name }}
+                    {% if form.stage_name.errors %}<div class="form-error">{{ form.stage_name.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Stage Type -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.stage_type.id_for_label }}">Stage Completion Rule *</label>
+                    {{ form.stage_type }}
+                    <span class="text-xs text-slate-500">Determines whether all or first participant approves.</span>
+                    {% if form.stage_type.errors %}<div class="form-error">{{ form.stage_type.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Approver -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.approver.id_for_label }}">Designated User Approver *</label>
+                    {{ form.approver }}
+                    {% if form.approver.errors %}<div class="form-error">{{ form.approver.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Approver Role -->
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.approver_role.id_for_label }}">Approver Role (Optional)</label>
+                    {{ form.approver_role }}
+                    {% if form.approver_role.errors %}<div class="form-error">{{ form.approver_role.errors.0 }}</div>{% endif %}
+                </div>
+
+                <!-- Due Date -->
+                <div class="form-group col-span-full">
+                    <label class="form-label" for="{{ form.due_date.id_for_label }}">Step Due Date</label>
+                    {{ form.due_date }}
+                    {% if form.due_date.errors %}<div class="form-error">{{ form.due_date.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 border-t border-slate-200 pt-4">
+                <a href="{% if is_edit %}{% url 'documents:approval_request_detail' request_obj.pk %}{% else %}{% url 'documents:approval_request_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Request{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
