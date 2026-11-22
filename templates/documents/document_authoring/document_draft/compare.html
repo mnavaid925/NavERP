@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Redline Diff — {{ draft.title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'documents:draft_list' %}">Drafts</a>
+            <span>/</span>
+            <a href="{% url 'documents:draft_detail' draft.pk %}">{{ draft.number }}</a>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">Redline Diff</span>
+        </nav>
+        <h1 class="page-title mt-1">Redline Visual Comparison</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Comparing active draft against baseline master template: <strong>{{ template.name|default:"None" }}</strong></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:draft_detail' draft.pk %}" class="btn btn-outline">
+            Back to Draft
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header py-3 px-4 flex items-center justify-between">
+        <div class="flex items-center gap-4 text-xs font-mono">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-red-100 border border-red-300 inline-block"></span> (-) Template Baseline Removed</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-green-100 border border-green-300 inline-block"></span> (+) Draft Additions Added</span>
+        </div>
+        <span class="text-xs text-slate-400 font-mono">{{ diff_lines|length }} diff line entries</span>
+    </div>
+    <div class="card-body p-0">
+        {% if diff_lines %}
+        <div class="overflow-x-auto bg-slate-900 text-slate-100 p-4 font-mono text-xs leading-relaxed rounded-b">
+            {% for line in diff_lines %}
+                {% if line|slice:":1" == "+" %}
+                <div class="text-green-400 bg-green-950/40 px-2 py-0.5 rounded">{{ line }}</div>
+                {% elif line|slice:":1" == "-" %}
+                <div class="text-red-400 bg-red-950/40 px-2 py-0.5 rounded">{{ line }}</div>
+                {% elif line|slice:":2" == "@@" %}
+                <div class="text-blue-400 py-1 font-semibold">{{ line }}</div>
+                {% else %}
+                <div class="text-slate-400 px-2">{{ line }}</div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center text-slate-500">
+            <i data-lucide="check-circle" class="w-10 h-10 text-green-500 mx-auto mb-2"></i>
+            <p class="text-sm font-medium">No differences detected.</p>
+            <p class="text-xs text-slate-400 mt-1">The active draft content is identical to the originating template.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
