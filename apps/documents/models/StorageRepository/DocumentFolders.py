@@ -128,7 +128,7 @@ class DocumentFolder(TenantNumbered):
 
     @property
     def is_root(self):
-        return self.parent is None
+        return self.parent_id is None
 
     @property
     def subfolder_count(self):
