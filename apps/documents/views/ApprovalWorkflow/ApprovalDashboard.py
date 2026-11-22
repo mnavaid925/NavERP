@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count, F, Q
+from django.db.models import Avg, Count, ExpressionWrapper, F, Q, fields
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -20,20 +20,29 @@ def approval_dashboard(request):
     comm_qs = documents_scope(DocumentReviewComment.objects.all(), request)
 
     total_active_workflows = wf_qs.filter(status__in=["pending", "escalated"]).count()
-    pending_signoffs = req_qs.filter(status="pending").count()
-    escalated_count = req_qs.filter(is_escalated=True).count()
-    total_decided = req_qs.filter(status__in=["approved", "rejected"]).count()
+
+    # Consolidate request counts into single aggregate query
+    req_stats = req_qs.aggregate(
+        pending_signoffs=Count("id", filter=Q(status="pending")),
+        escalated_count=Count("id", filter=Q(is_escalated=True)),
+        total_decided=Count("id", filter=Q(status__in=["approved", "rejected"])),
+    )
+    pending_signoffs = req_stats["pending_signoffs"] or 0
+    escalated_count = req_stats["escalated_count"] or 0
+    total_decided = req_stats["total_decided"] or 0
     escalation_rate_pct = round((escalated_count / total_decided * 100), 1) if total_decided > 0 else 0.0
 
-    # Compute average turnaround hours for completed workflows
-    completed_wfs = wf_qs.filter(status="approved", completed_at__isnull=False)
-    total_hours = 0
-    count_comp = 0
-    for w in completed_wfs[:50]:
-        delta = w.completed_at - w.created_at
-        total_hours += delta.total_seconds() / 3600.0
-        count_comp += 1
-    avg_cycle_time_hours = round(total_hours / count_comp, 1) if count_comp > 0 else 24.0
+    # Compute average turnaround hours for completed workflows using DB aggregate
+    duration_expr = ExpressionWrapper(
+        F("completed_at") - F("created_at"),
+        output_field=fields.DurationField(),
+    )
+    avg_delta = (
+        wf_qs.filter(status="approved", completed_at__isnull=False)
+        .annotate(duration=duration_expr)
+        .aggregate(avg_dur=Avg("duration"))["avg_dur"]
+    )
+    avg_cycle_time_hours = round(avg_delta.total_seconds() / 3600.0, 1) if avg_delta is not None else 24.0
 
     pending_workflows = (
         wf_qs.filter(status__in=["pending", "escalated"])
