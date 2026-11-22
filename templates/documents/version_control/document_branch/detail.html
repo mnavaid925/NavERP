@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}{{ branch.name }} — Branch — NavERP DMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Dashboard</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_detail' document.pk %}">{{ document.number }}</a>
+            <span>/</span>
+            <span>Branch: {{ branch.name }}</span>
+        </nav>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ branch.name }}</h1>
+            <span class="badge {{ branch.status_badge_class }}">{{ branch.get_status_display }}</span>
+            <span class="badge {{ branch.branch_type_badge_class }}">{{ branch.get_branch_type_display }}</span>
+        </div>
+        <p class="text-xs text-slate-500 mt-1 font-mono">
+            Document: {{ document.number }} &bull; Forked from v{{ branch.base_version.version_label }} &bull; Created by {{ branch.created_by.username }}
+        </p>
+    </div>
+    <div class="page-actions flex gap-2">
+        <a href="{% url 'documents:document_detail' document.pk %}" class="btn btn-outline">
+            <i data-lucide="file-text"></i> View Document
+        </a>
+        {% if branch.status == 'active' %}
+        <a href="{% url 'documents:document_branch_merge' branch.pk %}" class="btn btn-primary">
+            <i data-lucide="git-merge"></i> Merge into Mainline
+        </a>
+        <form method="post" action="{% url 'documents:document_branch_abandon' branch.pk %}" class="inline" onsubmit="return confirm('Abandon this branch? The branch will be closed and marked inactive.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600">
+                <i data-lucide="x-circle"></i> Abandon Branch
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'documents:document_branch_edit' branch.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i> Edit
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Branch Lineage & Specifications</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Branch Identifier</dt>
+                <dd class="font-mono font-semibold">{{ branch.number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Branch Name</dt>
+                <dd class="font-medium text-slate-900">{{ branch.name }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Target Document</dt>
+                <dd>
+                    <a href="{% url 'documents:document_detail' document.pk %}" class="font-medium text-blue-600 hover:underline">
+                        {{ document.number }} — {{ document.title }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Base Version Forked From</dt>
+                <dd class="font-mono">
+                    <a href="{% url 'documents:document_version_detail' branch.base_version.pk %}" class="text-blue-600 hover:underline">
+                        v{{ branch.base_version.version_label }} ({{ branch.base_version.number }})
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Branch Type</dt>
+                <dd><span class="badge {{ branch.branch_type_badge_class }}">{{ branch.get_branch_type_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Branch Status</dt>
+                <dd><span class="badge {{ branch.status_badge_class }}">{{ branch.get_status_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Author / Creator</dt>
+                <dd>
+                    {% if branch.created_by %}
+                    {{ branch.created_by.get_full_name|default:branch.created_by.username }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Created Date</dt>
+                <dd>{{ branch.created_at|date:"M d, Y H:i" }}</dd>
+            </div>
+
+            {% if branch.status == 'merged' %}
+            <div class="detail-item">
+                <dt>Merged Date</dt>
+                <dd>{{ branch.merged_at|date:"M d, Y H:i" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Merged By</dt>
+                <dd>{{ branch.merged_by.get_full_name|default:branch.merged_by.username }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Merged Into Revision</dt>
+                <dd class="font-mono">
+                    {% if branch.merged_into_version %}
+                    <a href="{% url 'documents:document_version_detail' branch.merged_into_version.pk %}" class="font-bold text-green-600 hover:underline">
+                        v{{ branch.merged_into_version.version_label }}
+                    </a>
+                    {% else %}
+                    —
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Merge Strategy</dt>
+                <dd>{{ branch.get_merge_strategy_display }}</dd>
+            </div>
+            {% endif %}
+
+            <div class="detail-item col-span-2">
+                <dt>Branch Description / Objective</dt>
+                <dd class="text-sm text-slate-800">{{ branch.description|default:"No description recorded." }}</dd>
+            </div>
+
+            {% if branch.merge_notes %}
+            <div class="detail-item col-span-2 bg-green-50 p-3 rounded border border-green-200">
+                <dt class="text-green-800 font-semibold">Merge Notes & Justification</dt>
+                <dd class="text-xs text-green-900 mt-1">{{ branch.merge_notes }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+<!-- Revisions Under This Branch -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Versions Originating from This Branch ({{ branch_versions.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table text-xs">
+            <thead>
+                <tr>
+                    <th>Version #</th>
+                    <th>Type</th>
+                    <th>File</th>
+                    <th>Author</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ver in branch_versions %}
+                <tr>
+                    <td class="font-mono font-bold">
+                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="text-blue-600 hover:underline">
+                            v{{ ver.version_label }}
+                        </a>
+                    </td>
+                    <td><span class="badge {{ ver.version_type_badge_class }}">{{ ver.get_version_type_display }}</span></td>
+                    <td>{{ ver.file_name|default:"Text only" }}</td>
+                    <td>{{ ver.author.username|default:"—" }}</td>
+                    <td>{{ ver.created_at|date:"M d, Y" }}</td>
+                    <td><span class="badge {{ ver.status_badge_class }}">{{ ver.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-slate-400">
+                        No intermediate draft snapshots created under this branch yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
