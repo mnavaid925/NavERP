@@ -130,7 +130,7 @@
       <div class="detail-item">
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sampled By</dt>
         <dd class="text-sm font-medium text-slate-900 mt-1">
-          {{ sample.sampled_by.get_full_name|default:sample.sampled_by.username|default:"—" }}
+          {% if sample.sampled_by %}{{ sample.sampled_by.get_full_name|default:sample.sampled_by.username }}{% else %}—{% endif %}
         </dd>
       </div>
       <div class="detail-item">
@@ -140,7 +140,7 @@
       <div class="detail-item">
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Received By</dt>
         <dd class="text-sm font-medium text-slate-900 mt-1">
-          {{ sample.received_by.get_full_name|default:sample.received_by.username|default:"Pending Receipt" }}
+          {% if sample.received_by %}{{ sample.received_by.get_full_name|default:sample.received_by.username }}{% else %}Pending Receipt{% endif %}
         </dd>
       </div>
       <div class="detail-item">
@@ -150,7 +150,7 @@
       <div class="detail-item">
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Current Custodian</dt>
         <dd class="text-sm font-medium text-slate-900 mt-1">
-          {{ sample.current_custodian.get_full_name|default:sample.current_custodian.username|default:"Unassigned" }}
+          {% if sample.current_custodian %}{{ sample.current_custodian.get_full_name|default:sample.current_custodian.username }}{% else %}Unassigned{% endif %}
         </dd>
       </div>
       <div class="detail-item">
@@ -230,7 +230,7 @@
                   <div class="text-xs text-slate-400 font-mono">{{ w.specification.analytical_method_number }}</div>
                 </td>
                 <td class="py-2.5 px-3 text-xs text-slate-700">
-                  {{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username|default:"Unassigned" }}
+                  {% if w.assigned_analyst %}{{ w.assigned_analyst.get_full_name|default:w.assigned_analyst.username }}{% else %}Unassigned{% endif %}
                 </td>
                 <td class="py-2.5 px-3 text-xs text-slate-600">{{ w.scheduled_date|default:"—" }}</td>
                 <td class="py-2.5 px-3 font-medium">
