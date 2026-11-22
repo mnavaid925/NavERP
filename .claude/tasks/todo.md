@@ -38589,3 +38589,248 @@ apps/quality/
 
 ## Review notes
 (filled in at the end)
+
+---
+# Sub-module 13.2: Version Control & Revision Management (Module 13: Document Management System, `documents`) — plan from `research-documents-13.2.md` (2026-11-22)
+
+> **This plan SCAFFOLDS A BRAND-NEW APP DIRECTLY FOR 13.2.** Per user decision, `apps/documents/` is scaffolded with base DMS version control and revision management models.
+> **Scaffold step REQUIRED:** `apps/documents/apps.py`, `apps/documents/__init__.py`, `apps/documents/migrations/__init__.py`, package skeletons for `models/`, `forms/`, `views/`, `urls/` with `_base.py` / `_common.py`, `apps/documents/admin.py`, and `management/commands/seed_documents.py`.
+> **Wire-up REQUIRED:** `config/settings.py` (`'apps.documents'`), `config/urls.py` (`path('documents/', include('apps.documents.urls'))`), and `apps/core/navigation.py` (`LIVE_LINKS["13.2"]`).
+> **Migration is initial:** creates `0001_initial.py` in `apps/documents/migrations/`.
+> **Free prefixes verified (0 collisions repo-wide):** **`DOC`** (`Document`), **`DVER`** (`DocumentVersion`), **`DLOCK`** (`DocumentLock`), **`DBRN`** (`DocumentBranch`).
+> **Plan written from:** `.claude/tasks/research-documents-13.2.md` (Phase 1) and `NavERP.md` (`### 13.2 Version Control & Revision Management`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/VersionControl/<Entity>.py` (`Documents.py`, `DocumentVersions.py`, `DocumentLocks.py`, `DocumentBranches.py`, plus dedicated compare and history views in `DocumentVersions.py`)
+> **Template folder name:** `templates/documents/version_control/{document,document_version,document_lock,document_branch}/{list,detail,form}.html` + `compare.html`, `checkout_modal.html`, `checkin_modal.html`, `merge_modal.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DOC`** (`Document`), **`DVER`** (`DocumentVersion`), **`DLOCK`** (`DocumentLock`), **`DBRN`** (`DocumentBranch`), all 4 model classes, and URL stems verified unique across all modules. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.Party` (`apps/core/models/Party.py`), `core.AuditLog` (`apps/core/models/AuditLog.py`).
+  - Internal relationships: `DocumentVersion.document` -> `Document`, `DocumentLock.document` -> `Document`, `DocumentLock.base_version` -> `DocumentVersion`, `DocumentBranch.document` -> `Document`, `DocumentBranch.base_version` -> `DocumentVersion`.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`core.OrgUnit`, `accounts.User`, `Document`, `DocumentVersion`, `DocumentBranch`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Enterprise Commercial Standards Alignment (Documentum, SharePoint, Box, M-Files, NetDocuments, Laserfiche)**:
+  - Major.Minor.Patch and Semantic Versioning engine with configurable schemes (`major_minor`, `semantic`, `sequential`, `alphanumeric`).
+  - Exclusive server-side check-out locking (`DocumentLock`) with reservation alerts, working copy staging, timeout expiry, cancellation/discard, and administrative force-unlock override with mandatory justification.
+  - Side-by-side visual diff and redline generation using Python standard library `difflib.HtmlDiff` over `extracted_text` with `<ins>` and `<del>` styling plus structured metadata property deltas.
+  - Parallel revision streams and what-if scenario branching (`DocumentBranch`) with merge-back capabilities creating new mainline versions.
+  - Non-destructive point-in-time rollback publishing an older version forward as a new revision without erasing historical audit trail.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `locked_at`, `checked_out_at`, `unlocked_at`, `merged_at`), auto-numbers (`number`), workflow statuses (`is_locked`, `current_version_label`, `current_version_no`, `file_hash`, `file_size`, `status`) MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_checked_out`, `is_stale_lock`, `branch_count`, `version_count`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+## Models (from research — 4 representative tenant-scoped models)
+
+### 1. `Document` [PREFIX: `DOC-`]
+- **Purpose**: Root DMS repository document container.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DOC"`)
+  - `title`: `CharField(max_length=255)`
+  - `slug`: `SlugField(max_length=255, blank=True)`
+  - `description`: `TextField(blank=True)`
+  - `document_type`: `CharField(max_length=40, choices=DOCUMENT_TYPE_CHOICES, default="general", db_index=True)` (general, contract, policy, sop, report, specification, proposal, template, technical)
+  - `classification`: `CharField(max_length=20, choices=CLASSIFICATION_CHOICES, default="internal", db_index=True)` (public, internal, confidential, restricted)
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="draft", db_index=True)` (draft, in_review, approved, published, archived, superseded, deprecated)
+  - `versioning_scheme`: `CharField(max_length=20, choices=VERSIONING_SCHEME_CHOICES, default="major_minor")` (major_minor, semantic, sequential, alphanumeric)
+  - `current_version_label`: `CharField(max_length=32, default="1.0")`
+  - `current_version_no`: `PositiveIntegerField(default=1)`
+  - `is_locked`: `BooleanField(default=False, db_index=True)`
+  - `locked_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="locked_documents")`
+  - `locked_at`: `DateTimeField(null=True, blank=True)`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_documents")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="documents")`
+  - `max_versions_retained`: `PositiveIntegerField(default=0, help_text="0 for unlimited, or max versions kept")`
+  - `tags`: `CharField(max_length=500, blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dms_ten_num_uniq")` (21)
+  - `Index(fields=["tenant", "status"], name="idx_doc_ten_stat")` (16)
+  - `Index(fields=["tenant", "document_type"], name="idx_doc_ten_type")` (16)
+  - `Index(fields=["tenant", "is_locked"], name="idx_doc_ten_lock")` (16)
+
+### 2. `DocumentVersion` [PREFIX: `DVER-`]
+- **Purpose**: Immutable snapshot of a document at a specific revision step.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DVER"`)
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="versions")`
+  - `version_label`: `CharField(max_length=32)`
+  - `major_number`: `PositiveIntegerField(default=1)`
+  - `minor_number`: `PositiveIntegerField(default=0)`
+  - `patch_number`: `PositiveIntegerField(default=0)`
+  - `version_type`: `CharField(max_length=20, choices=VERSION_TYPE_CHOICES, default="minor")` (major, minor, patch, branch_merge, rollback)
+  - `file`: `FileField(upload_to="documents/versions/%Y/%m/")`
+  - `file_name`: `CharField(max_length=255)`
+  - `file_size`: `BigIntegerField(default=0)`
+  - `file_hash`: `CharField(max_length=64, blank=True, help_text="SHA-256 checksum")`
+  - `mime_type`: `CharField(max_length=100, blank=True)`
+  - `change_summary`: `CharField(max_length=500, blank=True)`
+  - `extracted_text`: `TextField(blank=True, help_text="Text content layer for search and redline diffing")`
+  - `is_official`: `BooleanField(default=False, db_index=True)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="approved")` (draft, pending_review, approved, superseded, archived)
+  - `author`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="authored_document_versions")`
+  - `branch`: `ForeignKey("documents.DocumentBranch", on_delete=models.SET_NULL, null=True, blank=True, related_name="versions")`
+  - `restored_from_version`: `ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="restorations")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dver_ten_num_uniq")` (22)
+  - `UniqueConstraint(fields=["tenant", "document", "version_label"], name="doc_dver_doc_vlabel_uniq")` (25)
+  - `Index(fields=["tenant", "document", "is_official"], name="idx_dver_ten_doc_off")` (20)
+
+### 3. `DocumentLock` [PREFIX: `DLOCK-`]
+- **Purpose**: Exclusive check-in/check-out lock governing reservation and editing exclusivity.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DLOCK"`)
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="locks")`
+  - `base_version`: `ForeignKey("documents.DocumentVersion", on_delete=models.PROTECT, related_name="checked_out_locks")`
+  - `locked_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="document_locks")`
+  - `checked_out_at`: `DateTimeField(auto_now_add=True)`
+  - `expires_at`: `DateTimeField(null=True, blank=True)`
+  - `lock_type`: `CharField(max_length=20, choices=LOCK_TYPE_CHOICES, default="exclusive")` (exclusive, reservation)
+  - `checkout_note`: `CharField(max_length=500, blank=True)`
+  - `working_copy_file`: `FileField(upload_to="documents/working_copies/%Y/%m/", null=True, blank=True)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="active", db_index=True)` (active, checked_in, discarded, force_unlocked)
+  - `unlocked_at`: `DateTimeField(null=True, blank=True)`
+  - `unlocked_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="unlocked_document_locks")`
+  - `override_reason`: `TextField(blank=True, help_text="Mandatory justification for administrative override")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dlock_ten_num_uniq")` (23)
+  - `Index(fields=["tenant", "document", "status"], name="idx_dlock_ten_doc_stat")` (22)
+
+### 4. `DocumentBranch` [PREFIX: `DBRN-`]
+- **Purpose**: Parallel revision stream and what-if scenario tracking with merge-back capabilities.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DBRN"`)
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="branches")`
+  - `name`: `CharField(max_length=120)`
+  - `description`: `TextField(blank=True)`
+  - `base_version`: `ForeignKey("documents.DocumentVersion", on_delete=models.PROTECT, related_name="branched_children")`
+  - `branch_type`: `CharField(max_length=20, choices=BRANCH_TYPE_CHOICES, default="what_if")` (what_if, variant, draft_revision)
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="active", db_index=True)` (active, merged, abandoned)
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_document_branches")`
+  - `merged_at`: `DateTimeField(null=True, blank=True)`
+  - `merged_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="merged_document_branches")`
+  - `merged_into_version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="originating_branch")`
+  - `merge_strategy`: `CharField(max_length=30, choices=MERGE_STRATEGY_CHOICES, default="new_major_version")` (new_major_version, new_minor_version, replace_content)
+  - `merge_notes`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dbrn_ten_num_uniq")` (22)
+  - `Index(fields=["tenant", "document", "status"], name="idx_dbrn_ten_doc_stat")` (21)
+
+---
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-documents-13.2.md` with every model field, choices tuple, form `Meta.fields` + exclusions, URL names, and view context keys.
+
+### Phase 3.2: Scaffold New App (`apps/documents`)
+- [ ] `apps/documents/apps.py` (`name = "apps.documents"`, `verbose_name = "Document Management System"`)
+- [ ] `apps/documents/__init__.py`
+- [ ] `apps/documents/migrations/__init__.py`
+- [ ] `apps/documents/models/_base.py` (`TenantOwned`, `TenantNumbered` abstract models)
+- [ ] `apps/documents/models/__init__.py`
+- [ ] `apps/documents/forms/_common.py`
+- [ ] `apps/documents/forms/__init__.py`
+- [ ] `apps/documents/views/_common.py`
+- [ ] `apps/documents/views/__init__.py`
+- [ ] `apps/documents/urls/__init__.py`
+- [ ] `apps/documents/admin.py`
+- [ ] `apps/documents/management/__init__.py`
+- [ ] `apps/documents/management/commands/__init__.py`
+- [ ] `apps/documents/management/commands/seed_documents.py`
+
+### Phase 3.3: Entity by Entity Implementation
+- [ ] **Entity 1: Document** (`DOC-`)
+  - [ ] `apps/documents/models/VersionControl/Documents.py`
+  - [ ] `apps/documents/forms/VersionControl/Documents.py` (`DocumentForm`, `DocumentFilterForm`)
+  - [ ] `apps/documents/views/VersionControl/Documents.py` (`document_list`, `document_create`, `document_detail`, `document_edit`, `document_delete`)
+  - [ ] `apps/documents/urls/VersionControl/Documents.py` (`document_list`, `document_create`, `document_detail`, `document_edit`, `document_delete`)
+  - [ ] `templates/documents/version_control/document/list.html`
+  - [ ] `templates/documents/version_control/document/detail.html`
+  - [ ] `templates/documents/version_control/document/form.html`
+- [ ] **Entity 2: DocumentVersion** (`DVER-`)
+  - [ ] `apps/documents/models/VersionControl/DocumentVersions.py`
+  - [ ] `apps/documents/forms/VersionControl/DocumentVersions.py` (`DocumentVersionForm`, `VersionCompareForm`)
+  - [ ] `apps/documents/views/VersionControl/DocumentVersions.py` (`document_version_list`, `document_version_create`, `document_version_detail`, `document_version_edit`, `document_version_delete`, `document_version_compare`, `document_version_rollback`)
+  - [ ] `apps/documents/urls/VersionControl/DocumentVersions.py` (`document_version_list`, `document_version_create`, `document_version_detail`, `document_version_edit`, `document_version_delete`, `document_version_compare`, `document_version_rollback`)
+  - [ ] `templates/documents/version_control/document_version/list.html`
+  - [ ] `templates/documents/version_control/document_version/detail.html`
+  - [ ] `templates/documents/version_control/document_version/form.html`
+  - [ ] `templates/documents/version_control/document_version/compare.html` (Side-by-side text and metadata redline diff)
+- [ ] **Entity 3: DocumentLock** (`DLOCK-`)
+  - [ ] `apps/documents/models/VersionControl/DocumentLocks.py`
+  - [ ] `apps/documents/forms/VersionControl/DocumentLocks.py` (`DocumentLockForm`, `CheckoutForm`, `CheckinForm`, `ForceUnlockForm`)
+  - [ ] `apps/documents/views/VersionControl/DocumentLocks.py` (`document_lock_list`, `document_lock_detail`, `document_checkout`, `document_checkin`, `document_discard_checkout`, `document_force_unlock`)
+  - [ ] `apps/documents/urls/VersionControl/DocumentLocks.py` (`document_lock_list`, `document_lock_detail`, `document_checkout`, `document_checkin`, `document_discard_checkout`, `document_force_unlock`)
+  - [ ] `templates/documents/version_control/document_lock/list.html`
+  - [ ] `templates/documents/version_control/document_lock/detail.html`
+  - [ ] `templates/documents/version_control/document_lock/checkout_modal.html`
+  - [ ] `templates/documents/version_control/document_lock/checkin_modal.html`
+- [ ] **Entity 4: DocumentBranch** (`DBRN-`)
+  - [ ] `apps/documents/models/VersionControl/DocumentBranches.py`
+  - [ ] `apps/documents/forms/VersionControl/DocumentBranches.py` (`DocumentBranchForm`, `BranchMergeForm`)
+  - [ ] `apps/documents/views/VersionControl/DocumentBranches.py` (`document_branch_list`, `document_branch_create`, `document_branch_detail`, `document_branch_edit`, `document_branch_delete`, `document_branch_merge`, `document_branch_abandon`)
+  - [ ] `apps/documents/urls/VersionControl/DocumentBranches.py` (`document_branch_list`, `document_branch_create`, `document_branch_detail`, `document_branch_edit`, `document_branch_delete`, `document_branch_merge`, `document_branch_abandon`)
+  - [ ] `templates/documents/version_control/document_branch/list.html`
+  - [ ] `templates/documents/version_control/document_branch/detail.html`
+  - [ ] `templates/documents/version_control/document_branch/form.html`
+  - [ ] `templates/documents/version_control/document_branch/merge_modal.html`
+
+### Phase 3.4: Integration & Wire-up
+- [ ] Re-export all models in `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/__init__.py`
+- [ ] Wire all URL modules into `apps/documents/urls/__init__.py`
+- [ ] Register all 4 models in `apps/documents/admin.py`
+- [ ] Wire `'apps.documents'` into `INSTALLED_APPS` in `config/settings.py`
+- [ ] Wire `path("documents/", include("apps.documents.urls"))` into `config/urls.py`
+- [ ] Wire `LIVE_LINKS["13.2"]` in `apps/core/navigation.py` mapping all 5 NavERP.md bullets:
+  - `"Automatic Version Numbering": "documents:document_version_list"`
+  - `"Check-in / Check-out Mechanism": "documents:document_lock_list"`
+  - `"Version Comparison & Diff View": "documents:document_version_compare"`
+  - `"Branching & Parallel Versions": "documents:document_branch_list"`
+  - `"Version History & Rollback": "documents:document_version_list"`
+- [ ] Implement demo data seeder in `apps/documents/management/commands/seed_documents.py` (idempotent, supports `--flush`, realistic documents, versions, locks, and branches)
+- [ ] Generate initial migration: `python manage.py makemigrations documents` (`0001_initial.py`)
+- [ ] Apply migration: `python manage.py migrate`
+- [ ] Seed database twice: `python manage.py seed_documents` (verify idempotence)
+- [ ] Run Django system checks: `python manage.py check`
+
+### Phase 3.5: Smoke Testing Gate
+- [ ] Run test client smoke sweep script in `temp/` as `admin_acme` / `password`
+- [ ] Assert HTTP 200/302 for all 13.2 routes (list, create, detail, edit, compare, checkout, checkin, merge)
+- [ ] Assert content presence (table headers, seeded records, form inputs, no raw template tags `{#` / `{% comment`)
+- [ ] Assert cross-tenant IDOR isolation (Acme accessing Globex record returns HTTP 404)
+- [ ] Verify sidebar navigation displays `13.2` Live
+
+### Phase 4: Six Specialist Reviewers (One after another)
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.2.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.2.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite (Unfiltered)
+- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [ ] Implement `apps/documents/tests/test_versioncontrol_models.py`
+- [ ] Implement `apps/documents/tests/test_versioncontrol_forms.py`
+- [ ] Implement `apps/documents/tests/test_versioncontrol_views.py`
+- [ ] Implement `apps/documents/tests/test_versioncontrol_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.2 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.2 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.2.md` (or declare None)
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
