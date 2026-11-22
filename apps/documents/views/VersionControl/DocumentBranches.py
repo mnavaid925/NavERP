@@ -163,6 +163,20 @@ def document_branch_merge(request, pk):
         messages.error(request, f"Branch '{branch.name}' is already {branch.get_status_display().lower()}.")
         return redirect("documents:document_branch_detail", pk=branch.pk)
 
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    is_author_or_owner = (branch.created_by == request.user) or (document.owner == request.user)
+    if not (is_admin or is_author_or_owner):
+        messages.error(request, "Only the branch creator, document owner, or a tenant administrator can merge this branch.")
+        return redirect("documents:document_branch_detail", pk=branch.pk)
+
+    if document.is_locked:
+        locked_by_str = getattr(document.locked_by, "username", "another user")
+        messages.error(
+            request,
+            f"Document '{document.number}' is currently checked out by {locked_by_str} and cannot be merged.",
+        )
+        return redirect("documents:document_branch_detail", pk=branch.pk)
+
     if request.method == "POST":
         form = BranchMergeForm(request.POST, request.FILES)
         if form.is_valid():
@@ -185,9 +199,18 @@ def document_branch_merge(request, pk):
             base = branch.base_version
 
             with transaction.atomic():
+                doc = Document.objects.select_for_update().get(pk=document.pk, tenant=request.tenant)
+                if doc.is_locked:
+                    locked_by_str = getattr(doc.locked_by, "username", "another user")
+                    messages.error(
+                        request,
+                        f"Document '{doc.number}' is currently checked out by {locked_by_str} and cannot be merged.",
+                    )
+                    return redirect("documents:document_branch_detail", pk=branch.pk)
+
                 merged_ver = DocumentVersion.objects.create(
                     tenant=request.tenant,
-                    document=document,
+                    document=doc,
                     version_label=label,
                     major_number=major,
                     minor_number=minor,
@@ -221,13 +244,13 @@ def document_branch_merge(request, pk):
                     ]
                 )
 
-                document.current_version_label = label
-                document.current_version_no = major
-                document.save(update_fields=["current_version_label", "current_version_no", "updated_at"])
+                doc.current_version_label = label
+                doc.current_version_no = major
+                doc.save(update_fields=["current_version_label", "current_version_no", "updated_at"])
 
             write_audit_log(request.user, branch, "merge", tenant=request.tenant)
             messages.success(request, f"Branch '{branch.name}' successfully merged into mainline as v{label}.")
-            return redirect("documents:document_detail", pk=document.pk)
+            return redirect("documents:document_detail", pk=doc.pk)
     else:
         form = BranchMergeForm(
             initial={
@@ -248,6 +271,26 @@ def document_branch_merge(request, pk):
 @require_POST
 def document_branch_abandon(request, pk):
     branch = documents_object(request, DocumentBranch, pk)
+    document = branch.document
+
+    if branch.status != "active":
+        messages.info(request, f"Branch '{branch.name}' is already {branch.get_status_display().lower()}.")
+        return redirect("documents:document_branch_detail", pk=branch.pk)
+
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    is_author_or_owner = (branch.created_by == request.user) or (document.owner == request.user)
+    if not (is_admin or is_author_or_owner):
+        messages.error(request, "Only the branch creator, document owner, or a tenant administrator can abandon this branch.")
+        return redirect("documents:document_branch_detail", pk=branch.pk)
+
+    if document.is_locked:
+        locked_by_str = getattr(document.locked_by, "username", "another user")
+        messages.error(
+            request,
+            f"Document '{document.number}' is currently checked out by {locked_by_str} and branch cannot be modified.",
+        )
+        return redirect("documents:document_branch_detail", pk=branch.pk)
+
     branch.status = "abandoned"
     branch.save(update_fields=["status", "updated_at"])
     write_audit_log(request.user, branch, "abandon", tenant=request.tenant)
