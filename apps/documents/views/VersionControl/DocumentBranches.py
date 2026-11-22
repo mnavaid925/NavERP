@@ -70,7 +70,6 @@ def document_branch_detail(request, pk):
         DocumentBranch,
         pk,
         select_related=("document", "base_version", "created_by", "merged_by", "merged_into_version"),
-        prefetch_related=("versions",),
     )
 
     branch_versions = branch.versions.select_related("author").order_by("-created_at")
