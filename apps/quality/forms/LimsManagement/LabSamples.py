@@ -61,7 +61,7 @@ class LabSampleForm(TenantUniqueMixin, TenantModelForm):
             "retest_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "expiry_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "barcode_identifier": forms.TextInput(attrs={"class": "form-input"}),
-            "chain_of_custody_log": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
+            "chain_of_custody_log": forms.Textarea(attrs={"class": "form-textarea bg-slate-50", "rows": 3, "readonly": "readonly"}),
             "work_order": forms.Select(attrs={"class": "form-select"}),
             "batch_record": forms.Select(attrs={"class": "form-select"}),
             "facility": forms.Select(attrs={"class": "form-select"}),
