@@ -178,13 +178,13 @@
         </div>
         <div class="flex gap-1">
             {% if comments.has_previous %}
-            <a href="?page={{ comments.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.annotation_type %}&annotation_type={{ request.GET.annotation_type }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+            <a href="?page={{ comments.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.annotation_type %}&annotation_type={{ request.GET.annotation_type }}{% endif %}{% if request.GET.is_blocking %}&is_blocking={{ request.GET.is_blocking }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
             {% endif %}
 
             {% if comments.has_next %}
-            <a href="?page={{ comments.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.annotation_type %}&annotation_type={{ request.GET.annotation_type }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ comments.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.annotation_type %}&annotation_type={{ request.GET.annotation_type }}{% endif %}{% if request.GET.is_blocking %}&is_blocking={{ request.GET.is_blocking }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% else %}
             <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
             {% endif %}
