@@ -99,6 +99,7 @@ class DocumentDraft(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status", "document_type"], name="doc_dft_tnt_stat_idx"),
+            models.Index(fields=["tenant", "-updated_at"], name="doc_dft_tnt_upd_idx"),
         ]
 
     def __str__(self):
