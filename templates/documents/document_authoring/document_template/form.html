@@ -98,7 +98,7 @@
             <div class="form-group">
                 <label class="form-label" for="{{ form.content.id_for_label }}">Template Body Content & Markup</label>
                 {{ form.content }}
-                <span class="text-xs text-slate-400">Insert token placeholders e.g. <code class="text-blue-600 font-mono">{{ "{{company_name}}" }}</code> or <code class="text-blue-600 font-mono">{{ "{{author_name}}" }}</code>.</span>
+                <span class="text-xs text-slate-400">Insert token placeholders e.g. <code class="text-blue-600 font-mono">&#123;&#123;company_name&#125;&#125;</code> or <code class="text-blue-600 font-mono">&#123;&#123;author_name&#125;&#125;</code>.</span>
                 {% if form.content.errors %}<div class="form-error">{{ form.content.errors }}</div>{% endif %}
             </div>
 
