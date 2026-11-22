@@ -27,8 +27,8 @@ def test_document_authoring_template_crud_views(client_a, tenant_a, document_tem
     create_url = reverse("documents:template_create")
     post_data = {
         "name": "Audit Checklist Template",
-        "template_type": "checklist",
-        "category": "compliance",
+        "template_type": "policy",
+        "category": "quality",
         "content": "<p>Item 1: Verification</p>",
         "is_active": True,
     }
@@ -75,7 +75,7 @@ def test_document_authoring_template_section_views(client_a, tenant_a, document_
     post_data = {
         "template": document_template.pk,
         "title": "Confidentiality Warning",
-        "section_type": "header_section",
+        "section_type": "header",
         "content": "STRICTLY CONFIDENTIAL",
         "order": 1,
     }
@@ -123,7 +123,7 @@ def test_document_authoring_draft_compare_view(client_a, tenant_a, document_draf
     res = client_a.get(reverse("documents:draft_compare", args=[document_draft.pk]))
     assert res.status_code == 200
     content = res.content.decode()
-    assert "Redline Diff Comparison" in content
+    assert "Redline Visual Comparison" in content
     assert "Unified Line Diff" in content
 
 
@@ -140,7 +140,7 @@ def test_document_authoring_draft_promote_to_core_document(client_a, tenant_a, d
 
     promoted_doc = document_draft.promoted_document
     assert promoted_doc.name == document_draft.title
-    assert promoted_doc.classification == "sop"
+    assert promoted_doc.classification == "internal"
     assert promoted_doc.file.name.endswith(".html")
 
 
