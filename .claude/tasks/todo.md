@@ -38317,3 +38317,275 @@ apps/quality/
 - **Navigation Wiring**: `LIVE_LINKS["12.20"]` verified functional for all 3 feature bullets in `apps/core/navigation.py`.
 - **Git Commits**: All edits committed individually (one file per commit, PowerShell-safe). Nothing pushed.
 
+
+
+---
+# Sub-module 13.1: Document Creation & Authoring (Module 13: Document Management System, `documents`) — plan from `research-documents-13.1.md` (2026-11-22)
+
+> **This plan SCAFFOLDS A BRAND-NEW APP.** `apps/documents/` does NOT exist yet. This is Module 13's very first sub-module.
+> **Scaffold step REQUIRED:** `apps/documents/apps.py`, `apps/documents/__init__.py`, `apps/documents/migrations/__init__.py`, package skeletons for `models/`, `forms/`, `views/`, `urls/` with `_base.py` / `_common.py`, `apps/documents/admin.py`, and `management/commands/seed_documents.py`.
+> **Wire-up REQUIRED:** `config/settings.py` (`'apps.documents'`), `config/urls.py` (`path('documents/', include('apps.documents.urls'))`), and `apps/core/navigation.py` (`LIVE_LINKS["13.1"]`).
+> **Migration is initial:** creates `0001_initial.py` in `apps/documents/migrations/`.
+> **Free prefixes verified (0 collisions repo-wide):** **`DTMPL`** (`DocumentTemplate`), **`DSEC`** (`TemplateSection`), **`DDFT`** (`DocumentDraft`), **`DCMT`** (`DraftCollaboration`).
+> **Plan written from:** `.claude/tasks/research-documents-13.1.md` (Phase 1) and `NavERP.md` (`### 13.1 Document Creation & Authoring`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/DocumentAuthoring/<Entity>.py` (`DocumentTemplates.py`, `TemplateSections.py`, `DocumentDrafts.py`, `DraftCollaborations.py`, plus authoring canvas & workbench views `DocumentEditorCanvas.py`, `DraftComparisons.py`, `ConflictResolutions.py`)
+> **Template folder name:** `templates/documents/document_authoring/{document_template,template_section,document_draft,draft_collaboration}/{list,detail,form}.html` + `canvas.html`, `compare.html`, `conflict_resolution.html`, `instantiate_modal.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DTMPL`** (`DocumentTemplate`), **`DSEC`** (`TemplateSection`), **`DDFT`** (`DocumentDraft`), **`DCMT`** (`DraftCollaboration`), all 4 model classes, and URL stems verified unique across all 12 modules and contract files. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`), `core.Party` (`apps/core/models/Party.py`), `core.Document` (`apps/core/models/Document.py` for promoted draft destination), `core.AuditLog` (`apps/core/models/AuditLog.py`).
+  - Module 13 siblings: Brand new app, no prior sibling models. Self-referencing FKs or relationships: `TemplateSection.template` -> `DocumentTemplate`, `DocumentDraft.template` -> `DocumentTemplate`, `DraftCollaboration.draft` -> `DocumentDraft`.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`core.OrgUnit`, `accounts.User`, `core.Party`, `core.Document`, `DocumentTemplate`, `DocumentDraft`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Enterprise Commercial Standards Alignment (SharePoint, Templafy, PandaDoc, Zoho Writer, Veeva Vault, OpenText Documentum)**:
+  - Centralized pre-approved master Template Library with department scoping (`core.OrgUnit`), corporate branding/typography rules, and locked formatting flags (`is_locked=True`).
+  - Modular Content Library with reusable snippets, boilerplate clauses, disclaimers, and signature blocks (`TemplateSection`) with section-level locking (`is_locked`) and mandatory enforcement (`is_mandatory`).
+  - Pre-release "Version Zero" working draft container (`0.1`, `0.2`, `0.3`) completely segregated from official released documents until formal promotion to `"1.0"`.
+  - Rich text HTML/Markdown authoring canvas with co-author assignment (`co_authors`), periodic auto-save engine, word count telemetry, and pause-collaboration lockout (`is_collaboration_locked`).
+  - Granular collaborative review with threaded comments, suggestion mode (track changes with propose/accept/reject workflow), and review status transitions.
+  - Disconnected drafting support with client cache tagging (`offline_client_id`, `offline_cached_at`), optimistic concurrency conflict detection (`sync_status="conflict_pending"`), and side-by-side conflict resolution.
+  - Promotion gate graduating approved draft to official status, timestamping `promoted_at`, sealing the record (`status="promoted"`), and linking an official `core.Document` attachment.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`auto_save_timestamp`, `offline_cached_at`, `promoted_at`, `created_at`, `updated_at`, `resolved_at`), auto-numbers (`number`), workflow-controlled statuses (`status`, `draft_version`, `promoted_version`, `promoted_document`, `sync_status`, `word_count`) MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_promoted`, `is_conflict`, `collaborator_count`, `open_suggestions_count`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View standards**:
+  - Colour-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete & workflow action forms use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+
+## Models (from research — 4 representative tenant-scoped models)
+
+### 1. `DocumentTemplate` [PREFIX: `DTMPL-`]
+- **Purpose**: Central catalog of pre-approved master document templates for corporate correspondence, contracts, SOPs, reports, and memos.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (autonumbered `DTMPL-XXXXX` via `TenantNumbered`)
+  - `name`: `CharField(max_length=255)`
+  - `template_type`: `CharField(max_length=30, choices=TEMPLATE_TYPE_CHOICES, default="memo", db_index=True)` — `"contract"`, `"report"`, `"memo"`, `"sop"`, `"letter"`, `"proposal"`, `"policy"`, `"spec"`, `"other"` (longest: 8)
+  - `category`: `CharField(max_length=100, blank=True, db_index=True, help_text="e.g. Legal, Finance, Operations, Human Resources")`
+  - `description`: `TextField(blank=True)`
+  - `content`: `TextField(help_text="Master HTML/Markdown template content with {{token}} placeholders")`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `is_locked`: `BooleanField(default=False, help_text="Lock formatting, typography, and styling to prevent author alterations")`
+  - `styling_rules`: `TextField(blank=True, help_text="JSON or CSS styling definitions for typography, margins, headers/footers")`
+  - `available_tokens`: `JSONField(default=list, blank=True, help_text="List of supported tokens e.g. ['party_name', 'author', 'date']")`
+  - `version`: `CharField(max_length=20, default="1.0")`
+  - `target_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="document_templates")`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="owned_document_templates")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dtmpl_ten_num_uniq")` (22)
+  - `Index(fields=["tenant", "template_type"], name="idx_dtmpl_ten_type")` (18)
+  - `Index(fields=["tenant", "category"], name="idx_dtmpl_ten_cat")` (17)
+  - `Index(fields=["tenant", "is_active"], name="idx_dtmpl_ten_active")` (20)
+- **Form (`DocumentTemplateForm`)**:
+  - Excluded: `tenant`, `number`, `created_at`, `updated_at`
+  - `clean()`: validate `target_org_unit`, `owner` via `reject_foreign(...)`
+
+### 2. `TemplateSection` [PREFIX: `DSEC-`]
+- **Purpose**: Modular content blocks, boilerplate clauses, standard disclaimers, and reusable layout fragments.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (autonumbered `DSEC-XXXXX` via `TenantNumbered`)
+  - `template`: `ForeignKey("documents.DocumentTemplate", on_delete=models.CASCADE, null=True, blank=True, related_name="sections", help_text="Null for global reusable content library blocks")`
+  - `title`: `CharField(max_length=255)`
+  - `section_type`: `CharField(max_length=30, choices=SECTION_TYPE_CHOICES, default="clause", db_index=True)` — `"header"`, `"footer"`, `"clause"`, `"disclaimer"`, `"signature_block"`, `"table_block"`, `"media_block"`, `"custom"` (longest: 15)
+  - `content`: `TextField(help_text="Rich text / HTML content of this section")`
+  - `order`: `PositiveIntegerField(default=0)`
+  - `is_locked`: `BooleanField(default=False, help_text="If locked, authors cannot edit this boilerplate section in derived drafts")`
+  - `is_mandatory`: `BooleanField(default=False, help_text="If mandatory, this section cannot be deleted from derived drafts")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dsec_ten_num_uniq")` (21)
+  - `Index(fields=["tenant", "template", "order"], name="idx_dsec_ten_tmpl_ord")` (21)
+  - `Index(fields=["tenant", "section_type"], name="idx_dsec_ten_sec_type")` (21)
+  - `Index(fields=["tenant", "is_locked"], name="idx_dsec_ten_locked")` (19)
+- **Form (`TemplateSectionForm`)**:
+  - Excluded: `tenant`, `number`, `created_at`, `updated_at`
+  - `clean()`: validate `template` via `reject_foreign(...)`
+
+### 3. `DocumentDraft` [PREFIX: `DDFT-`]
+- **Purpose**: Core authoring workspace and "Version Zero" working container where authors create, auto-save, co-edit, and refine documents before promotion.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (autonumbered `DDFT-XXXXX` via `TenantNumbered`)
+  - `title`: `CharField(max_length=255)`
+  - `document_type`: `CharField(max_length=30, choices=DOCUMENT_TYPE_CHOICES, default="memo", db_index=True)` — `"contract"`, `"report"`, `"memo"`, `"sop"`, `"letter"`, `"proposal"`, `"policy"`, `"spec"`, `"other"` (longest: 8)
+  - `template`: `ForeignKey("documents.DocumentTemplate", on_delete=models.SET_NULL, null=True, blank=True, related_name="derived_drafts")`
+  - `status`: `CharField(max_length=30, choices=DRAFT_STATUS_CHOICES, default="draft", db_index=True)` — `"draft"`, `"in_review"`, `"ready_for_promotion"`, `"promoted"`, `"discarded"` (longest: 19)
+  - `draft_version`: `CharField(max_length=20, default="0.1", help_text="Pre-release version string e.g. 0.1, 0.2, 0.3")`
+  - `content`: `TextField(help_text="Active rich text / HTML document body")`
+  - `content_format`: `CharField(max_length=20, choices=FORMAT_CHOICES, default="html")` — `"html"`, `"markdown"`, `"json_delta"` (longest: 10)
+  - `author`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="authored_document_drafts")`
+  - `co_authors`: `ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="coauthored_document_drafts")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="draft_documents")`
+  - `related_party`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="referenced_document_drafts")`
+  - `auto_save_timestamp`: `DateTimeField(null=True, blank=True)`
+  - `is_collaboration_locked`: `BooleanField(default=False, help_text="Lead author paused external editing")`
+  - `offline_client_id`: `CharField(max_length=64, blank=True, help_text="Client device identifier for offline reconciliation")`
+  - `offline_cached_at`: `DateTimeField(null=True, blank=True)`
+  - `sync_status`: `CharField(max_length=20, choices=SYNC_STATUS_CHOICES, default="synced", db_index=True)` — `"synced"`, `"conflict_pending"`, `"resolved"` (longest: 16)
+  - `word_count`: `PositiveIntegerField(default=0)`
+  - `promoted_at`: `DateTimeField(null=True, blank=True)`
+  - `promoted_version`: `CharField(max_length=20, blank=True, default="", help_text="Official version assigned upon promotion e.g. 1.0")`
+  - `promoted_document`: `ForeignKey("core.Document", on_delete=models.SET_NULL, null=True, blank=True, related_name="source_drafts")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_ddft_ten_num_uniq")` (21)
+  - `Index(fields=["tenant", "status"], name="idx_ddft_ten_status")` (19)
+  - `Index(fields=["tenant", "author"], name="idx_ddft_ten_author")` (19)
+  - `Index(fields=["tenant", "template"], name="idx_ddft_ten_tmpl")` (17)
+  - `Index(fields=["tenant", "sync_status"], name="idx_ddft_ten_sync")` (17)
+- **Properties & Methods**:
+  - `is_promoted`: True if `status == "promoted"` and `promoted_at is not None`
+  - `is_conflict`: True if `sync_status == "conflict_pending"`
+  - `collaborator_count`: Count of author + co_authors
+- **Form (`DocumentDraftForm`)**:
+  - Excluded: `tenant`, `number`, `draft_version`, `status`, `promoted_at`, `promoted_version`, `promoted_document`, `auto_save_timestamp`, `offline_cached_at`, `sync_status`, `word_count`, `created_at`, `updated_at`
+  - `clean()`: validate `template`, `author`, `department`, `related_party`, `co_authors` via `reject_foreign(...)`
+
+### 4. `DraftCollaboration` [PREFIX: `DCMT-`]
+- **Purpose**: Inline collaborative commentary, discussion threads, track changes, and suggestion mode entries attached to specific draft sections.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (autonumbered `DCMT-XXXXX` via `TenantNumbered`)
+  - `draft`: `ForeignKey("documents.DocumentDraft", on_delete=models.CASCADE, related_name="collaborations")`
+  - `entry_type`: `CharField(max_length=30, choices=COLLAB_ENTRY_CHOICES, default="comment", db_index=True)` — `"comment"`, `"suggestion"`, `"track_change"` (longest: 12)
+  - `status`: `CharField(max_length=30, choices=COLLAB_STATUS_CHOICES, default="open", db_index=True)` — `"open"`, `"accepted"`, `"rejected"`, `"resolved"` (longest: 8)
+  - `author`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="draft_collaborations")`
+  - `selected_text`: `TextField(blank=True, help_text="Target text in draft being commented on or proposed for change")`
+  - `replacement_text`: `TextField(blank=True, help_text="Proposed replacement text in suggestion mode")`
+  - `comment_text`: `TextField(blank=True, help_text="Discussion remarks or reviewer notes")`
+  - `section_anchor`: `CharField(max_length=100, blank=True, help_text="HTML element ID or block reference")`
+  - `resolved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="resolved_collaborations")`
+  - `resolved_at`: `DateTimeField(null=True, blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dcmt_ten_num_uniq")` (21)
+  - `Index(fields=["tenant", "draft", "entry_type"], name="idx_dcmt_ten_drf_type")` (21)
+  - `Index(fields=["tenant", "draft", "status"], name="idx_dcmt_ten_drf_stat")` (21)
+  - `Index(fields=["tenant", "author"], name="idx_dcmt_ten_author")` (19)
+- **Form (`DraftCollaborationForm`, `SuggestionReviewForm`)**:
+  - Excluded: `tenant`, `number`, `status`, `resolved_by`, `resolved_at`, `created_at`, `updated_at`
+  - `clean()`: validate `draft`, `author` via `reject_foreign(...)`
+
+---
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-documents-13.1.md` with every field, choice, URL name, and view context key.
+
+### Phase 3.2: Scaffold Brand-New App (`apps/documents/`)
+- [ ] Create `apps/documents/apps.py` (`DocumentsConfig`, `name = "apps.documents"`, `verbose_name = "Document Management System"`)
+- [ ] Create `apps/documents/__init__.py` with default app config declaration
+- [ ] Create `apps/documents/migrations/__init__.py`
+- [ ] Create `apps/documents/models/_base.py` (`TenantOwned`, `TenantNumbered` with retry sequence) and `apps/documents/models/__init__.py`
+- [ ] Create `apps/documents/forms/_common.py` (`TenantUniqueMixin`, `reject_foreign`) and `apps/documents/forms/__init__.py`
+- [ ] Create `apps/documents/views/_common.py` (`documents_scope`, `documents_object`, `safe_parse_date`, `_csv_safe`) and `apps/documents/views/__init__.py`
+- [ ] Create `apps/documents/urls/__init__.py` (`app_name = "documents"`)
+- [ ] Create `apps/documents/admin.py` skeleton
+- [ ] Create `apps/documents/management/__init__.py` and `apps/documents/management/commands/__init__.py`
+- [ ] Create `apps/documents/management/commands/seed_documents.py` skeleton with `--flush` argument
+
+### Phase 3.3: Entity by Entity Implementation (DocumentAuthoring)
+- [ ] **Entity 1: DocumentTemplate** (`DTMPL-`)
+  - [ ] `apps/documents/models/DocumentAuthoring/DocumentTemplates.py`
+  - [ ] `apps/documents/forms/DocumentAuthoring/DocumentTemplates.py` (`DocumentTemplateForm`)
+  - [ ] `apps/documents/views/DocumentAuthoring/DocumentTemplates.py` (`template_list`, `template_create`, `template_detail`, `template_edit`, `template_delete`, `template_instantiate`)
+  - [ ] `apps/documents/urls/DocumentAuthoring/DocumentTemplates.py` (`template_list`, `template_create`, `template_detail`, `template_edit`, `template_delete`, `template_instantiate`)
+  - [ ] `templates/documents/document_authoring/document_template/list.html`
+  - [ ] `templates/documents/document_authoring/document_template/detail.html`
+  - [ ] `templates/documents/document_authoring/document_template/form.html`
+  - [ ] `templates/documents/document_authoring/document_template/instantiate_modal.html`
+- [ ] **Entity 2: TemplateSection** (`DSEC-`)
+  - [ ] `apps/documents/models/DocumentAuthoring/TemplateSections.py`
+  - [ ] `apps/documents/forms/DocumentAuthoring/TemplateSections.py` (`TemplateSectionForm`)
+  - [ ] `apps/documents/views/DocumentAuthoring/TemplateSections.py` (`template_section_list`, `template_section_create`, `template_section_detail`, `template_section_edit`, `template_section_delete`)
+  - [ ] `apps/documents/urls/DocumentAuthoring/TemplateSections.py` (`template_section_list`, `template_section_create`, `template_section_detail`, `template_section_edit`, `template_section_delete`)
+  - [ ] `templates/documents/document_authoring/template_section/list.html`
+  - [ ] `templates/documents/document_authoring/template_section/detail.html`
+  - [ ] `templates/documents/document_authoring/template_section/form.html`
+- [ ] **Entity 3: DocumentDraft** (`DDFT-`)
+  - [ ] `apps/documents/models/DocumentAuthoring/DocumentDrafts.py`
+  - [ ] `apps/documents/forms/DocumentAuthoring/DocumentDrafts.py` (`DocumentDraftForm`)
+  - [ ] `apps/documents/views/DocumentAuthoring/DocumentDrafts.py` (`draft_list`, `draft_create`, `draft_detail`, `draft_edit`, `draft_delete`, `draft_auto_save`, `draft_promote`, `draft_toggle_lock`)
+  - [ ] `apps/documents/views/DocumentAuthoring/DocumentEditorCanvas.py` (`draft_canvas`)
+  - [ ] `apps/documents/views/DocumentAuthoring/DraftComparisons.py` (`draft_compare`)
+  - [ ] `apps/documents/views/DocumentAuthoring/ConflictResolutions.py` (`draft_resolve_conflict`)
+  - [ ] `apps/documents/urls/DocumentAuthoring/DocumentDrafts.py` (`draft_list`, `draft_create`, `draft_detail`, `draft_edit`, `draft_delete`, `draft_auto_save`, `draft_promote`, `draft_toggle_lock`, `draft_canvas`, `draft_compare`, `draft_resolve_conflict`)
+  - [ ] `templates/documents/document_authoring/document_draft/list.html`
+  - [ ] `templates/documents/document_authoring/document_draft/detail.html`
+  - [ ] `templates/documents/document_authoring/document_draft/form.html`
+  - [ ] `templates/documents/document_authoring/document_draft/canvas.html` (Authoring canvas workbench)
+  - [ ] `templates/documents/document_authoring/document_draft/compare.html` (Baseline diff comparison)
+  - [ ] `templates/documents/document_authoring/document_draft/conflict_resolution.html` (Offline conflict workbench)
+- [ ] **Entity 4: DraftCollaboration** (`DCMT-`)
+  - [ ] `apps/documents/models/DocumentAuthoring/DraftCollaborations.py`
+  - [ ] `apps/documents/forms/DocumentAuthoring/DraftCollaborations.py` (`DraftCollaborationForm`, `SuggestionReviewForm`)
+  - [ ] `apps/documents/views/DocumentAuthoring/DraftCollaborations.py` (`collaboration_list`, `collaboration_create`, `collaboration_detail`, `collaboration_edit`, `collaboration_delete`, `collaboration_accept`, `collaboration_reject`, `collaboration_resolve`)
+  - [ ] `apps/documents/urls/DocumentAuthoring/DraftCollaborations.py` (`collaboration_list`, `collaboration_create`, `collaboration_detail`, `collaboration_edit`, `collaboration_delete`, `collaboration_accept`, `collaboration_reject`, `collaboration_resolve`)
+  - [ ] `templates/documents/document_authoring/draft_collaboration/list.html`
+  - [ ] `templates/documents/document_authoring/draft_collaboration/detail.html`
+  - [ ] `templates/documents/document_authoring/draft_collaboration/form.html`
+
+### Phase 3.4: Integration & Wire-up
+- [ ] Re-export all models in `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/__init__.py`
+- [ ] Wire all URL modules into `apps/documents/urls/__init__.py`
+- [ ] Register all 4 models in `apps/documents/admin.py`
+- [ ] Wire `'apps.documents'` into `INSTALLED_APPS` in `config/settings.py`
+- [ ] Wire `path("documents/", include("apps.documents.urls"))` into `config/urls.py`
+- [ ] Wire `LIVE_LINKS["13.1"]` in `apps/core/navigation.py` mapping all 5 NavERP.md bullets:
+  - `"Template Library & Standardization": "documents:template_list"`
+  - `"Rich Text & Collaborative Editing": "documents:draft_list"`
+  - `"Version Zero & Draft Management": "documents:draft_list"`
+  - `"Embedded Media & Objects": "documents:template_section_list"`
+  - `"Offline Authoring & Sync": "documents:draft_list"`
+- [ ] Implement demo data seeder in `apps/documents/management/commands/seed_documents.py` (idempotent, supports `--flush`, realistic templates, sections, drafts, comments, suggestions, conflict states)
+- [ ] Generate initial migration: `python manage.py makemigrations documents` (`0001_initial.py`)
+- [ ] Apply migration: `python manage.py migrate`
+- [ ] Seed database twice: `python manage.py seed_documents` (verify idempotence)
+- [ ] Run Django system checks: `python manage.py check`
+
+### Phase 3.5: Smoke Testing Gate
+- [ ] Run test client smoke sweep script in `temp/` as `admin_acme` / `password`
+- [ ] Assert HTTP 200/302 for all 13.1 routes (list, create, detail, edit, canvas, compare, resolve-conflict)
+- [ ] Assert content presence (table headers, seeded records, form inputs, no raw template tags `{#` / `{% comment`)
+- [ ] Assert cross-tenant IDOR isolation (Acme accessing Beta record returns HTTP 404)
+- [ ] Verify sidebar navigation displays `13.1` Live
+
+### Phase 4: Six Specialist Reviewers (One after another)
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.1.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.1.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite (Unfiltered)
+- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [ ] Implement `apps/documents/tests/test_authoring_models.py`
+- [ ] Implement `apps/documents/tests/test_authoring_forms.py`
+- [ ] Implement `apps/documents/tests/test_authoring_views.py`
+- [ ] Implement `apps/documents/tests/test_authoring_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.1 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.1 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.1.md` (or declare None)
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+
+## Later passes / deferred
+- **WebSocket Real-Time Collaborative Cursor Engine (OT / CRDT)**: True Google Docs style simultaneous multi-cursor typing requires Daphne/Redis/Channels. In this Django 5.1 HTMX pass, collaborative editing is supported through optimistic concurrency, async auto-save polling, suggestion mode (propose/accept/reject), and author lockouts.
+- **Microsoft 365 / Word Online WOPI Cloud Protocol Integration**: Direct web check-out to Office 365 cloud editors requires external Azure tenant setup; deferred to future external integration sprint.
+- **ServiceWorker PWA Client & IndexedDB for Complete Offline Desktop/Mobile App**: Client-side ServiceWorker and IndexedDB offline storage shell will be layered on top in Sub-module 13.13 (Mobile Document Access).
+- **Post-Promotion Major/Minor Revision Control, Check-in / Check-out Locks, and Historical Branching**: Scoped for Sub-module 13.2 (Version Control & Revision Management).
+- **Multi-tier visual approval routing and 21 CFR Part 11 / e-signatures**: Scoped for Sub-module 13.3 (Document Approval & Review Workflow).
+- **Nested taxonomy, folder hierarchy, and storage quotas**: Scoped for Sub-module 13.4 (Document Storage & Repository).
+
+## Review notes
+(filled in at the end)
