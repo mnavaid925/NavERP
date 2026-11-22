@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Repository Folder Tree Hierarchy — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <a href="{% url 'documents:folder_list' %}">Folders</a>
+            <span>/</span>
+            <span>Tree Hierarchy</span>
+        </div>
+        <h1 class="page-title">Repository Folder Hierarchy Tree</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:folder_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>List View</span>
+        </a>
+        <a href="{% url 'documents:folder_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Folder</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Hierarchical Taxonomy Browser</h2>
+            <p class="text-xs text-muted">Browse parent-child nested folder structures and virtual folder collections</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 text-xs text-slate-500">
+                <span class="w-3 h-3 rounded bg-blue-500 inline-block"></span> Standard Storage
+            </span>
+            <span class="inline-flex items-center gap-1 text-xs text-purple-600">
+                <span class="w-3 h-3 rounded bg-purple-500 inline-block"></span> Smart Virtual
+            </span>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="space-y-3 font-sans">
+            {% for root in root_folders %}
+            <div class="border border-slate-200 rounded-lg p-3 bg-white hover:border-slate-300 transition-colors">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-7 h-7 rounded flex items-center justify-center text-white" style="background-color: {{ root.color_code|default:'#3B82F6' }};">
+                            <i data-lucide="{{ root.icon_name|default:'folder' }}" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <a href="{% url 'documents:folder_detail' root.pk %}" class="font-semibold text-slate-800 hover:text-primary">
+                                {{ root.name }}
+                            </a>
+                            <span class="font-mono text-xs text-muted ml-2">{{ root.path }}</span>
+                        </div>
+                        {% if root.is_virtual %}
+                        <span class="badge badge-purple text-xs">Smart Virtual</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <a href="{% url 'documents:folder_create' %}?parent={{ root.pk }}" class="btn btn-sm btn-icon" title="Add subfolder">
+                            <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+                        </a>
+                        <a href="{% url 'documents:folder_detail' root.pk %}" class="btn btn-sm btn-outline">
+                            Open
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Children Recursive Rendering -->
+                {% if root.children.exists %}
+                <div class="ml-6 pl-4 border-l-2 border-slate-100 mt-2 space-y-2">
+                    {% for child in root.children.all %}
+                    {% if child.is_active %}
+                    <div class="flex items-center justify-between py-1 hover:bg-slate-50 rounded px-2">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="corner-down-right" class="w-3.5 h-3.5 text-slate-400"></i>
+                            <div class="w-5 h-5 rounded flex items-center justify-center text-white" style="background-color: {{ child.color_code|default:'#3B82F6' }};">
+                                <i data-lucide="{{ child.icon_name|default:'folder' }}" class="w-3 h-3"></i>
+                            </div>
+                            <a href="{% url 'documents:folder_detail' child.pk %}" class="text-sm font-medium text-slate-700 hover:text-primary">
+                                {{ child.name }}
+                            </a>
+                            <span class="font-mono text-xs text-muted">{{ child.path }}</span>
+                            {% if child.is_virtual %}
+                            <span class="badge badge-purple text-xs">Smart</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <a href="{% url 'documents:folder_create' %}?parent={{ child.pk }}" class="btn btn-sm btn-icon" title="Add subfolder">
+                                <i data-lucide="plus" class="w-3 h-3"></i>
+                            </a>
+                            <a href="{% url 'documents:folder_detail' child.pk %}" class="btn btn-sm btn-icon" title="View details">
+                                <i data-lucide="chevron-right" class="w-3 h-3"></i>
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% empty %}
+            <div class="empty-state text-center py-10">
+                <i data-lucide="network" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                <h3 class="text-base font-semibold text-slate-800">No folder tree available</h3>
+                <p class="text-sm text-muted mb-4">Create your first root level repository folder to build a hierarchy tree.</p>
+                <a href="{% url 'documents:folder_create' %}" class="btn btn-primary">
+                    <i data-lucide="plus"></i>
+                    <span>Create Root Folder</span>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
