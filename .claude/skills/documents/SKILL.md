@@ -1,6 +1,6 @@
 ---
 name: documents
-description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3), or invokes /documents.
+description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4), or invokes /documents.
 ---
 
 # Document Management System (DMS) (Module 13)
@@ -8,17 +8,18 @@ description: Work on the Document Management System (DMS) module (Module 13 — 
 App path: `apps/documents`. Templates: `templates/documents/`. URL prefix: `/documents/`, `app_name = "documents"`.
 Mirrors `NavERP.md` "## 13. Document Management System (DMS)" (Sub-modules 13.1–13.20).
 
-**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow.**
+**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository.**
 Build the next sub-module with `/next-module next` — see `apps/quality`/`apps/procurement` for reference package layout and the mandatory Module Creation Sequence.
 
 ---
 
 ## Overview
 
-Module 13 provides an enterprise document repository, authoring workspace, revision control, and approval orchestration engine:
+Module 13 provides an enterprise document repository, authoring workspace, revision control, approval orchestration, and storage repository engine:
 - **13.1 Document Authoring**: Reusable master document blueprints (`DocumentTemplate`), modular clause library (`TemplateSection`), draft lifecycle tracking (`DocumentDraft`), full-screen interactive authoring canvas (`canvas.html`), critique/feedback notes (`DraftCollaboration`), and promotion to official released documents.
 - **13.2 Version Control & Revision Management**: Automatic multi-scheme version numbering (`Document`, `DocumentVersion`), exclusive check-in/check-out concurrency locking (`DocumentLock`), side-by-side visual redline diff comparison (`compare.html`), parallel scenario branching and merge-back (`DocumentBranch`), and point-in-time version restoration/rollback.
 - **13.3 Document Approval & Review Workflow**: Multi-stage approval pipelines (`DocumentApprovalWorkflow`), granular participant routing with sequential/parallel/first-responder rules (`DocumentApprovalRequest`), 21 CFR Part 11 cryptographic electronic signatures and certificate manifests (`DocumentSignature`), threaded critique and blocking annotations (`DocumentReviewComment`), visual stage layout designer (`designer.html`), and bottleneck analytics cockpit (`approval_dashboard.html`).
+- **13.4 Document Storage & Repository**: Hierarchical taxonomic folder trees and smart virtual query filters (`DocumentFolder`), physical and cloud tiered storage targets with quota enforcement (`StorageVolume`), multi-type document dependency and reference network graphs (`DocumentRelationship`), streaming bulk zip ingestion with archive safety thresholds (`DocumentBatchImport`), and repository command center (`repository_dashboard.html`).
 
 ---
 
@@ -119,6 +120,42 @@ Shared base in `models/_base.py`:
   - `resolved_by` (FK `settings.AUTH_USER_MODEL`), `resolved_at`, `resolution_notes`.
   - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, document, status)`, `(tenant, workflow, is_blocking)`, `(tenant, is_blocking, status)`.
 
+### 13.4 StorageRepository (`apps/documents/models/StorageRepository/`)
+
+- **`DocumentFolders.py`** — `DocumentFolder` (`NUMBER_PREFIX = "DFLD"`):
+  - `name`, `slug`, `parent` (FK self, nullable, `related_name="children"`), `path` (materialized path).
+  - `folder_type` (standard, smart_virtual, department, system, archive).
+  - `classification` (public, internal, confidential, restricted), `department` (FK `core.OrgUnit`, nullable).
+  - `owner` (FK `settings.AUTH_USER_MODEL`, nullable), `is_virtual`, `virtual_criteria` (JSONField).
+  - `color_code`, `icon_name`, `is_active`, `is_system`.
+  - Properties & Methods: `is_root` (`parent_id is None`), recursive path cascade on slug/name changes.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, parent, slug)` where parent is not null, unique `(tenant, slug)` where parent is null, indexes on `(tenant, path)`, `(tenant, is_virtual)`, `(tenant, folder_type)`.
+
+- **`StorageVolumes.py`** — `StorageVolume` (`NUMBER_PREFIX = "DSTG"`):
+  - `name`, `volume_code`, `backend_type` (local_filesystem, network_nas, s3_compatible, azure_blob, google_cloud_storage, air_gapped).
+  - `base_path`, `storage_tier` (hot, warm, cold, glacier_archive).
+  - `compression_algorithm` (none, gzip, zstandard), `encryption_at_rest` (none, aes_256, kms_managed).
+  - `max_capacity_bytes`, `utilized_bytes`, `is_default`, `is_active`, `is_read_only`.
+  - `auto_rollover_enabled`, `rollover_threshold_percent`, `rollover_volume` (FK self, nullable).
+  - Invariants: single default volume per tenant (enforced atomically on save), utilized/capacity properties.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, volume_code)`, indexes on `(tenant, backend_type)`, `(tenant, storage_tier)`, `(tenant, is_default)`.
+
+- **`DocumentRelationships.py`** — `DocumentRelationship` (`NUMBER_PREFIX = "DREL"`):
+  - `source_document` (FK `Document`, `related_name="outgoing_relationships"`).
+  - `target_document` (FK `Document`, `related_name="incoming_relationships"`).
+  - `relationship_type` (references, supersedes, derived_from, translates, accompanies, annexes, countersigns).
+  - `description`, `is_bidirectional`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Validation: rejects self-referential links (`source_document == target_document`).
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, source_document, target_document, relationship_type)`, indexes on `(tenant, source_document)`, `(tenant, target_document)`, `(tenant, relationship_type)`.
+
+- **`DocumentBatchImports.py`** — `DocumentBatchImport` (`NUMBER_PREFIX = "DBLK"`):
+  - `title`, `source_type` (zip_archive, tar_gz, s3_bucket, local_folder, metadata_csv), `import_mode` (standard, append_version, dry_run).
+  - `archive_file`, `storage_volume` (FK `StorageVolume`, nullable), `target_folder` (FK `DocumentFolder`, nullable).
+  - `status` (pending, extracting, ingesting, completed, failed, cancelled).
+  - `total_files`, `processed_files`, `failed_files`, `total_bytes`, `processed_bytes`.
+  - `error_log`, `import_summary` (JSONField), `started_at`, `completed_at`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, status)`, `(tenant, storage_volume)`.
+
 ---
 
 ## URLs & Routes (`apps/documents/urls/`)
@@ -192,6 +229,20 @@ Registered under namespace `documents:`:
 - `/documents/review-comments/<int:pk>/reply/`: `review_comment_reply` (POST-only)
 - `/documents/dashboard/`: `approval_dashboard` (analytics command center & bottleneck KPIs)
 
+### 13.4 Storage Repository Routes
+- `/documents/storage/dashboard/`: `repository_dashboard` (KPI command center & storage utilization overview)
+- `/documents/storage/folders/`: `folder_list`, `folder_create`
+- `/documents/storage/folders/tree/`: `folder_tree` (adjacency-list JSON & DOM taxonomy tree)
+- `/documents/storage/folders/<int:pk>/`: `folder_detail`, `folder_edit`, `folder_delete` (POST-only)
+- `/documents/storage/volumes/`: `storage_volume_list`, `storage_volume_create` (`@tenant_admin_required`)
+- `/documents/storage/volumes/<int:pk>/`: `storage_volume_detail`, `storage_volume_edit` (`@tenant_admin_required`), `storage_volume_delete` (POST-only, `@tenant_admin_required`)
+- `/documents/storage/relationships/`: `relationship_list`, `relationship_create`
+- `/documents/storage/relationships/graph/`: `relationship_graph` (network topology visualization & nodes/edges JSON)
+- `/documents/storage/relationships/<int:pk>/`: `relationship_detail`, `relationship_edit`, `relationship_delete` (POST-only)
+- `/documents/storage/batch-imports/`: `batch_import_list`, `batch_import_create`
+- `/documents/storage/batch-imports/<int:pk>/`: `batch_import_detail`, `batch_import_edit`, `batch_import_delete` (POST-only)
+- `/documents/storage/batch-imports/<int:pk>/process/`: `batch_import_process` (POST-only streaming extraction & document ingestion)
+
 ---
 
 ## Templates
@@ -209,6 +260,12 @@ Located in:
   - `document_signature/`: `list.html`, `detail.html`, `form.html`, `manifest.html`, `verify.html`
   - `document_review_comment/`: `list.html`, `detail.html`, `form.html`
   - `approval_dashboard.html`: Command center & bottleneck analytics cockpit
+- `templates/documents/storage_repository/` (13.4 templates):
+  - `repository_dashboard.html`: Command center, storage capacity gauges, recent batch ingestions
+  - `document_folder/`: `list.html`, `detail.html`, `form.html`, `tree.html`
+  - `storage_volume/`: `list.html`, `detail.html`, `form.html`
+  - `document_relationship/`: `list.html`, `detail.html`, `form.html`, `graph.html`
+  - `document_batch_import/`: `list.html`, `detail.html`, `form.html`
 
 ---
 
@@ -230,6 +287,10 @@ Supports `--flush` option to reset module data cleanly. Demo data seeds:
 9. Granular Approval Requests (Sequential, Parallel All, Parallel First Responder, Delegated, Escalated).
 10. Electronic Signatures (Biometric seal, X.509 cryptographic thumbprint, SHA-256 checksum, UUID verification token).
 11. Collaborative Review Comments (Page annotations, highlighted passages, blocking critique, threaded replies).
+12. Enterprise Folder Taxonomies (Corporate policies, SOP master trees, virtual query filters).
+13. Tiered Storage Volumes (NVMe SSD hot tier, S3 object storage warm tier, Deep Glacier cold archive).
+14. Document Relationships (Cross-document citations, superseding links, annex attachments).
+15. Batch Import Ingestion Jobs (Completed bulk zip packages, processing audit logs).
 
 ---
 
@@ -251,6 +312,13 @@ LIVE_LINKS["13.3"] = {
     "Electronic Signatures": "documents:signature_list",
     "Review Comments": "documents:review_comment_list",
 }
+LIVE_LINKS["13.4"] = {
+    "Folder Hierarchy & Taxonomy": "documents:folder_list",
+    "Cloud & On-Premises Deployment": "documents:storage_volume_list",
+    "Storage Tiering & Optimization": "documents:storage_volume_list?tier=hot",
+    "Document Linking & Relationships": "documents:relationship_list",
+    "Bulk Upload & Import": "documents:batch_import_list",
+}
 ```
 
 ---
@@ -267,3 +335,7 @@ LIVE_LINKS["13.3"] = {
 8. **XSS Protection in Diff View**: `difflib.HtmlDiff` escapes body lines but interpolates `fromdesc` and `todesc` raw into `<th>` headers. Always escape user version labels using `django.utils.html.escape` before passing to `make_table`.
 9. **File Upload Security**: All document and version uploads are validated via `validate_safe_doc_upload(f)` enforcing `ALLOWED_DOC_EXTENSIONS` and `MAX_UPLOAD_BYTES`.
 10. **Privileged Operations**: `document_force_unlock`, `document_delete`, `document_version_delete`, and `document_branch_delete` require tenant administrator privileges (`@tenant_admin_required`).
+11. **Storage Infrastructure Privilege Gate**: Storage volume management (`storage_volume_create`, `storage_volume_edit`, `storage_volume_delete`) strictly requires tenant administrator privileges (`@tenant_admin_required`).
+12. **Streaming Archive Processing**: Batch import extraction MUST stream archives via `batch.archive_file.open("rb")` instead of accessing `.path` to remain fully compatible with S3/Azure/GCS cloud storage backends. Enforce safety thresholds: `MAX_BATCH_FILES = 500`, `MAX_BATCH_BYTES = 100MB`, `MAX_BATCH_UPLOAD_BYTES = 50MB`, and filter against `ALLOWED_DOC_EXTENSIONS`.
+13. **Hierarchical Folder Performance**: `folder_tree` builds taxonomy hierarchies in Python memory using an adjacency list (`defaultdict(list)`) from a single query rather than issuing recursive database queries.
+14. **Single Default Storage Volume**: `StorageVolume.save()` guarantees exactly one default storage volume per tenant by unsetting `is_default` on sibling volumes within an atomic transaction block.
