@@ -117,6 +117,18 @@
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Testing Facility / Unit</dt>
         <dd class="text-sm text-slate-700 mt-1">{{ sample.facility|default:"Central QC Laboratory" }}</dd>
       </div>
+      <div class="detail-item">
+        <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Manufacturing Work Order</dt>
+        <dd class="text-sm font-medium text-slate-900 mt-1">
+          {% if sample.work_order %}
+            <a href="{% url 'scm:workorder_detail' sample.work_order.pk %}" class="text-blue-600 hover:underline">
+              {{ sample.work_order.number }}
+            </a>
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </div>
     </dl>
   </div>
 
