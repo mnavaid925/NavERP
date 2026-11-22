@@ -3547,6 +3547,14 @@ LIVE_LINKS = {
         "Review Comments & Annotation": "documents:review_comment_list",
         "Approval Dashboard & Status Tracking": "documents:approval_dashboard",
     },
+    # 13.4 Document Storage & Repository
+    "13.4": {
+        "Folder Hierarchy & Taxonomy": "documents:folder_list",
+        "Cloud & On-Premises Deployment": "documents:storage_volume_list",
+        "Storage Tiering & Optimization": "documents:storage_volume_list",
+        "Document Linking & Relationships": "documents:relationship_list",
+        "Bulk Upload & Import": "documents:batch_import_list",
+    },
 
 
 
