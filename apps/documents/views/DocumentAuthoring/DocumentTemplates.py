@@ -7,16 +7,16 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.DocumentAuthoring.DocumentTemplates import DocumentTemplateForm
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.views._common import documents_object, documents_scope
+from apps.documents.views._helpers import count_words
 
 
 @login_required
 def template_list(request):
-    qs = documents_scope(DocumentTemplate.objects.all(), request)
+    qs = documents_scope(DocumentTemplate.objects.defer("content"), request)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -36,8 +36,8 @@ def template_list(request):
     elif is_active in ("0", "false", "False"):
         qs = qs.filter(is_active=False)
 
-    total_count = qs.count()
     paginator = Paginator(qs, 15)
+    total_count = paginator.count
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
@@ -62,9 +62,9 @@ def template_detail(request, pk):
         DocumentTemplate,
         pk,
         select_related=("target_org_unit", "owner"),
-        prefetch_related=("sections", "derived_drafts"),
+        prefetch_related=("sections",),
     )
-    sections = template.sections.all().order_by("order", "id")
+    sections = template.sections.all()
     drafts_count = template.derived_drafts.count()
 
     return render(
@@ -162,6 +162,7 @@ def template_instantiate(request, pk):
             title=f"Draft: {template.name}",
             document_type=template.template_type if template.template_type in dict(DocumentDraft.DOCUMENT_TYPE_CHOICES) else "sop",
             content=template.content,
+            word_count=count_words(template.content),
             status="draft",
             author=request.user,
             department=template.target_org_unit,
