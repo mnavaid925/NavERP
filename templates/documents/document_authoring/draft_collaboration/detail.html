@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Collaboration Note {{ collaboration.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <nav class="breadcrumb">
+            <a href="{% url 'dashboard:index' %}">Home</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_list' %}">Collaborations</a>
+            <span>/</span>
+            <span class="text-slate-800 font-medium">{{ collaboration.number }}</span>
+        </nav>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Collaboration Feedback {{ collaboration.number }}</h1>
+            <span class="badge badge-info text-xs">{{ collaboration.get_entry_type_display }}</span>
+            {% if collaboration.status == 'open' %}
+            <span class="badge badge-amber text-xs">Open</span>
+            {% elif collaboration.status == 'accepted' %}
+            <span class="badge badge-green text-xs">Accepted</span>
+            {% elif collaboration.status == 'rejected' %}
+            <span class="badge badge-red text-xs">Rejected</span>
+            {% else %}
+            <span class="badge badge-muted text-xs">Resolved</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if collaboration.status == 'open' %}
+        <form method="POST" action="{% url 'documents:collaboration_resolve' collaboration.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="accept">
+            <button type="submit" class="btn btn-primary bg-green-600 hover:bg-green-700">
+                <i data-lucide="check" class="w-4 h-4 mr-1.5"></i> Accept Suggestion
+            </button>
+        </form>
+        <form method="POST" action="{% url 'documents:collaboration_resolve' collaboration.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reject">
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="x" class="w-4 h-4 mr-1.5"></i> Reject Suggestion
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'documents:draft_detail' collaboration.draft.pk %}" class="btn btn-outline">
+            View Parent Draft
+        </a>
+        <a href="{% url 'documents:collaboration_edit' collaboration.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1.5"></i> Edit
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Feedback Note & Critique</h2>
+            </div>
+            <div class="card-body p-5 space-y-4">
+                <p class="text-sm text-slate-800 leading-relaxed">{{ collaboration.comment_text }}</p>
+
+                {% if collaboration.selected_text %}
+                <div>
+                    <label class="text-xs font-semibold uppercase text-slate-400 block mb-1">Referenced Original Text</label>
+                    <div class="p-3 bg-red-50 text-red-900 rounded border border-red-200 font-mono text-xs">
+                        {{ collaboration.selected_text }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if collaboration.replacement_text %}
+                <div>
+                    <label class="text-xs font-semibold uppercase text-slate-400 block mb-1">Proposed Replacement Content</label>
+                    <div class="p-3 bg-green-50 text-green-900 rounded border border-green-200 font-mono text-xs">
+                        {{ collaboration.replacement_text }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header py-3 px-4">
+                <h2 class="text-sm font-semibold text-slate-800">Collaboration Properties</h2>
+            </div>
+            <div class="card-body p-4 text-xs space-y-3">
+                <div>
+                    <span class="text-slate-400 block">Referenced Draft</span>
+                    <a href="{% url 'documents:draft_detail' collaboration.draft.pk %}" class="font-medium text-blue-600 hover:underline">
+                        {{ collaboration.draft.title }} ({{ collaboration.draft.number }})
+                    </a>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Feedback Author</span>
+                    <span class="font-medium text-slate-800">{{ collaboration.author.get_full_name|default:collaboration.author.username }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Section Anchor</span>
+                    <span class="font-medium font-mono text-slate-800">{{ collaboration.section_anchor|default:"Full Document Scope" }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">Submitted At</span>
+                    <span class="font-medium text-slate-800">{{ collaboration.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                {% if collaboration.resolved_by %}
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-slate-400 block">Resolved By</span>
+                    <span class="font-medium text-slate-800">{{ collaboration.resolved_by.username }} ({{ collaboration.resolved_at|date:"Y-m-d H:i" }})</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
