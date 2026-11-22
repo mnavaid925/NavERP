@@ -133,6 +133,15 @@ def review_comment_create(request):
 @login_required
 def review_comment_edit(request, pk):
     comment = documents_object(request, DocumentReviewComment, pk)
+    is_authorized = (
+        request.user == comment.author
+        or request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+    )
+    if not is_authorized:
+        messages.error(request, "You are not authorized to edit this review comment.")
+        return redirect("documents:review_comment_detail", pk=comment.pk)
+
     if request.method == "POST":
         form = DocumentReviewCommentForm(request.POST, instance=comment, tenant=request.tenant)
         if form.is_valid():
@@ -155,6 +164,15 @@ def review_comment_edit(request, pk):
 @require_POST
 def review_comment_delete(request, pk):
     comment = documents_object(request, DocumentReviewComment, pk)
+    is_authorized = (
+        request.user == comment.author
+        or request.user.is_superuser
+        or getattr(request.user, "is_tenant_admin", False)
+    )
+    if not is_authorized:
+        messages.error(request, "You are not authorized to delete this review comment.")
+        return redirect("documents:review_comment_detail", pk=comment.pk)
+
     number = comment.number
     wf = comment.workflow
     write_audit_log(request.user, comment, "delete", tenant=request.tenant)
