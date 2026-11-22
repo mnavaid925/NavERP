@@ -149,6 +149,14 @@ def collaboration_resolve(request, pk):
     action = request.POST.get("action", "resolve")
     draft = collaboration.draft
 
+    if collaboration.status != "open":
+        messages.warning(request, f"Collaboration feedback is already {collaboration.get_status_display().lower()}.")
+        return redirect("documents:draft_detail", pk=draft.pk)
+
+    if action not in ("accept", "reject", "resolve"):
+        messages.error(request, "Invalid resolution action.")
+        return redirect("documents:draft_detail", pk=draft.pk)
+
     with transaction.atomic():
         if action == "accept":
             collaboration.status = "accepted"
