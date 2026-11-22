@@ -148,10 +148,10 @@
                         <span class="badge {{ ver.status_badge_class }}">{{ ver.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right whitespace-nowrap">
-                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="btn btn-icon" title="View Version">
+                        <a href="{% url 'documents:document_version_detail' ver.pk %}" class="btn btn-icon" title="View Version" aria-label="View Version">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'documents:document_version_edit' ver.pk %}" class="btn btn-icon" title="Edit Metadata">
+                        <a href="{% url 'documents:document_version_edit' ver.pk %}" class="btn btn-icon" title="Edit Metadata" aria-label="Edit Metadata">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'documents:document_version_rollback' ver.pk %}" class="inline" onsubmit="return confirm('Restore document to v{{ ver.version_label }}?');">
