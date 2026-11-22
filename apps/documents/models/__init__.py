@@ -12,6 +12,10 @@ from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
 from apps.documents.models.DocumentAuthoring.TemplateSections import TemplateSection
+from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
+from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
+from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
+from apps.documents.models.StorageRepository.StorageVolumes import StorageVolume
 from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
 from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
 from apps.documents.models.VersionControl.Documents import Document
@@ -30,4 +34,8 @@ __all__ = [
     "DocumentApprovalRequest",
     "DocumentSignature",
     "DocumentReviewComment",
+    "DocumentFolder",
+    "StorageVolume",
+    "DocumentRelationship",
+    "DocumentBatchImport",
 ]
