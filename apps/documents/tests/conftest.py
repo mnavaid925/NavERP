@@ -5,6 +5,10 @@ from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
 from apps.documents.models.DocumentAuthoring.TemplateSections import TemplateSection
+from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
+from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
+from apps.documents.models.VersionControl.Documents import Document
+from apps.documents.models.VersionControl.DocumentVersions import DocumentVersion
 
 
 @pytest.fixture
@@ -67,3 +71,73 @@ def draft_collaboration(db, tenant_a, member_user, document_draft):
         replacement_text="temperature-controlled testing suite",
         status="open",
     )
+
+
+@pytest.fixture
+def document(db, tenant_a, admin_user):
+    """Fixture providing a baseline active Document in tenant_a."""
+    return Document.objects.create(
+        tenant=tenant_a,
+        title="Enterprise Standard Operating Procedure",
+        document_type="sop",
+        classification="internal",
+        status="published",
+        versioning_scheme="semantic",
+        current_version_label="1.0.0",
+        current_version_no=1,
+        owner=admin_user,
+        description="Core operational procedure standard.",
+    )
+
+
+@pytest.fixture
+def document_version(db, tenant_a, admin_user, document):
+    """Fixture providing an official baseline DocumentVersion for document."""
+    return DocumentVersion.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version_label="1.0.0",
+        major_number=1,
+        minor_number=0,
+        patch_number=0,
+        version_type="major",
+        status="approved",
+        is_official=True,
+        change_summary="Initial official release",
+        extracted_text="Section 1: Operating protocols and safety checks baseline.",
+        author=admin_user,
+    )
+
+
+@pytest.fixture
+def document_lock(db, tenant_a, admin_user, document, document_version):
+    """Fixture providing an active DocumentLock held on document."""
+    doc_lock = DocumentLock.objects.create(
+        tenant=tenant_a,
+        document=document,
+        base_version=document_version,
+        locked_by=admin_user,
+        lock_type="exclusive",
+        status="active",
+        checkout_note="Annual procedure review and updates",
+    )
+    document.is_locked = True
+    document.locked_by = admin_user
+    document.save(update_fields=["is_locked", "locked_by"])
+    return doc_lock
+
+
+@pytest.fixture
+def document_branch(db, tenant_a, admin_user, document, document_version):
+    """Fixture providing an active DocumentBranch for what-if scenarios."""
+    return DocumentBranch.objects.create(
+        tenant=tenant_a,
+        document=document,
+        name="Branch-Safety-Spike",
+        base_version=document_version,
+        branch_type="what_if",
+        status="active",
+        created_by=admin_user,
+        description="Exploring high-voltage quarantine protocols.",
+    )
+
