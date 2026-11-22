@@ -37,8 +37,8 @@ Base changeset: `046eecb0bbea97d5200c85f8c7a5b81eae74aa9b...548321965d2527d8ba1d
   - *Fix*: Defer `extracted_text` on dropdown versions queryset and evaluate `versions_list = list(versions)` once to resolve default selections in memory without repeated DB queries. — fixed: `perf(documents): defer extracted_text and resolve compare defaults in memory`
 - [x] **I11**: `apps/documents/models/VersionControl/DocumentVersions.py:80` — Missing database index on `DocumentVersion.status`.
   - *Fix*: Add `db_index=True` to `status` and `models.Index(fields=["tenant", "status"], name="idx_dver_ten_stat")` to Meta.indexes. — fixed: `fix(documents): add db_index and composite index on DocumentVersion status` & migration 0004
-- [ ] **I12**: `templates/documents/version_control/document_version/list.html:142`, `detail.html:29`, `document_branch/list.html:123`, `detail.html:26` — Missing CRUD Delete Actions in version and branch lists and detail pages.
-  - *Fix*: Add POST-only delete forms with CSRF and confirm prompt targeting `documents:document_version_delete` and `documents:document_branch_delete`.
+- [x] **I12**: `templates/documents/version_control/document_version/list.html:142`, `detail.html:29`, `document_branch/list.html:123`, `detail.html:26` — Missing CRUD Delete Actions in version and branch lists and detail pages.
+  - *Fix*: Add POST-only delete forms with CSRF and confirm prompt targeting `documents:document_version_delete` and `documents:document_branch_delete`. — fixed: `feat(documents): add delete action button in document_version and branch lists and details`
 - [ ] **I13**: `templates/documents/version_control/document_version/detail.html:29` & `document_branch/detail.html:26` — Missing "Back to List" navigation action in detail headers.
   - *Fix*: Add Back button navigating to `documents:document_version_list` and `documents:document_branch_list`.
 - [x] **I14**: `apps/documents/views/VersionControl/DocumentLocks.py:94` — `document.locked_by.username` raises `AttributeError` if `document.locked_by` is null.
