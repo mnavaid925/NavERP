@@ -1,8 +1,21 @@
+import os
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 
 from apps.core.forms import TenantModelForm
+from apps.core.forms._common import ALLOWED_DOC_EXTENSIONS, MAX_UPLOAD_BYTES
+
+
+def validate_safe_doc_upload(file):
+    if file and hasattr(file, "name"):
+        ext = os.path.splitext(file.name)[1].lower()
+        if ext not in ALLOWED_DOC_EXTENSIONS:
+            raise forms.ValidationError(f"File type '{ext}' is not allowed.")
+        if getattr(file, "size", 0) and file.size > MAX_UPLOAD_BYTES:
+            raise forms.ValidationError("File exceeds the 20 MB limit.")
+    return file
 
 
 class TenantUniqueMixin:
