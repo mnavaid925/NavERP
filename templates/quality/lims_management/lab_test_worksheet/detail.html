@@ -92,13 +92,13 @@
       <div class="detail-item">
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Analyst</dt>
         <dd class="text-sm font-medium text-slate-900 mt-1">
-          {{ worksheet.assigned_analyst.get_full_name|default:worksheet.assigned_analyst.username|default:"Unassigned" }}
+          {% if worksheet.assigned_analyst %}{{ worksheet.assigned_analyst.get_full_name|default:worksheet.assigned_analyst.username }}{% else %}Unassigned{% endif %}
         </dd>
       </div>
       <div class="detail-item">
         <dt class="text-xs font-semibold text-slate-500 uppercase tracking-wider">QA Reviewer</dt>
         <dd class="text-sm text-slate-700 mt-1">
-          {{ worksheet.reviewer.get_full_name|default:worksheet.reviewer.username|default:"Pending Review" }}
+          {% if worksheet.reviewer %}{{ worksheet.reviewer.get_full_name|default:worksheet.reviewer.username }}{% else %}Pending Review{% endif %}
         </dd>
       </div>
       <div class="detail-item">
