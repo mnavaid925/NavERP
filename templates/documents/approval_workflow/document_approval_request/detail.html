@@ -26,6 +26,10 @@
             <i data-lucide="arrow-left"></i>
             <span>Workflow Detail</span>
         </a>
+        <a href="{% url 'documents:approval_request_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Requests</span>
+        </a>
         {% if request_obj.status == "pending" %}
         <a href="{% url 'documents:approval_request_edit' request_obj.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i>
@@ -39,6 +43,15 @@
             <i data-lucide="arrow-up-right"></i>
             <span>Escalate</span>
         </button>
+        {% endif %}
+        {% if request_obj.workflow.status == "draft" and request_obj.status == "pending" %}
+        <form method="post" action="{% url 'documents:approval_request_delete' request_obj.pk %}" class="inline" onsubmit="return confirm('Delete this approval request?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-outline">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
         {% endif %}
     </div>
 </div>
@@ -111,8 +124,8 @@
                     <div class="detail-item col-span-full bg-blue-50 p-3 rounded text-blue-900">
                         <dt class="text-blue-700">Delegated Assignment</dt>
                         <dd>
-                            Delegated to <strong>{{ request_obj.delegated_to.get_full_name|default:request_obj.delegated_to.username }}</strong> on {{ request_obj.delegated_at|date:"Y-m-d H:i" }}<br>
-                            <strong>Reason:</strong> {{ request_obj.delegation_reason }}
+                            Delegated to <strong>{% if request_obj.delegated_to %}{{ request_obj.delegated_to.get_full_name|default:request_obj.delegated_to.username }}{% else %}—{% endif %}</strong> on {{ request_obj.delegated_at|date:"Y-m-d H:i" }}<br>
+                            <strong>Reason:</strong> {{ request_obj.delegation_reason|default:"—" }}
                         </dd>
                     </div>
                     {% endif %}
@@ -121,8 +134,8 @@
                     <div class="detail-item col-span-full bg-amber-50 p-3 rounded text-amber-900">
                         <dt class="text-amber-700">Timeout Escalation</dt>
                         <dd>
-                            Escalated to <strong>{{ request_obj.escalated_to.get_full_name|default:request_obj.escalated_to.username }}</strong> on {{ request_obj.escalated_at|date:"Y-m-d H:i" }}<br>
-                            <strong>Reason:</strong> {{ request_obj.escalation_reason }}
+                            Escalated to <strong>{% if request_obj.escalated_to %}{{ request_obj.escalated_to.get_full_name|default:request_obj.escalated_to.username }}{% else %}Unassigned{% endif %}</strong> on {{ request_obj.escalated_at|date:"Y-m-d H:i" }}<br>
+                            <strong>Reason:</strong> {{ request_obj.escalation_reason|default:"Timeout rule exceeded" }}
                         </dd>
                     </div>
                     {% endif %}
