@@ -123,10 +123,10 @@ All core contracted entities, routes, views, templates, navigation entries, migr
   - **Problem**: Both "Cloud & On-Premises Deployment" and "Storage Tiering & Optimization" point identically to `documents:storage_volume_list`.
   - **Fix**: Differentiate "Storage Tiering & Optimization" to `documents:storage_volume_list?tier=hot`. [x] fixed — 087fe531: differentiate storage tiering leaf with tier=hot param in 13.4
 
-- [ ] **M2**: Implicit FK Evaluation in `DocumentFolder.is_root`.
+- [x] **M2**: Implicit FK Evaluation in `DocumentFolder.is_root`.
   - **Location**: `apps/documents/models/StorageRepository/DocumentFolders.py:130`
   - **Problem**: `return self.parent is None` causes Django to evaluate the FK relation if not prefetched.
-  - **Fix**: Change to `return self.parent_id is None`.
+  - **Fix**: Change to `return self.parent_id is None`. [x] fixed — b4223940: use parent_id is None instead of parent is None in is_root
 
 - [ ] **M3**: Duplicate Count Query in `folder_detail`.
   - **Location**: `apps/documents/views/StorageRepository/DocumentFolders.py:155`
