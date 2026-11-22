@@ -8,7 +8,11 @@ from django.views.decorators.http import require_POST
 from apps.core.utils import write_audit_log
 from apps.documents.forms.StorageRepository.StorageVolumes import StorageVolumeForm
 from apps.documents.models.StorageRepository.StorageVolumes import StorageVolume
-from apps.documents.views._common import documents_object, documents_scope
+from apps.documents.views._common import (
+    documents_object,
+    documents_scope,
+    tenant_admin_required,
+)
 
 
 @login_required
@@ -67,6 +71,7 @@ def storage_volume_list(request):
 
 
 @login_required
+@tenant_admin_required
 def storage_volume_create(request):
     if request.method == "POST":
         form = StorageVolumeForm(request.POST, tenant=request.tenant)
@@ -107,6 +112,7 @@ def storage_volume_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def storage_volume_edit(request, pk):
     volume = documents_object(request, StorageVolume, pk)
     if request.method == "POST":
@@ -130,6 +136,7 @@ def storage_volume_edit(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def storage_volume_delete(request, pk):
     volume = documents_object(request, StorageVolume, pk)
     if volume.is_default:
