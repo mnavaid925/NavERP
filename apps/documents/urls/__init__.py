@@ -25,6 +25,21 @@ from apps.documents.urls.DocumentAuthoring.DraftCollaborations import (
 from apps.documents.urls.DocumentAuthoring.TemplateSections import (
     urlpatterns as template_sections_urls,
 )
+from apps.documents.urls.StorageRepository.DocumentBatchImports import (
+    urlpatterns as document_batch_imports_urls,
+)
+from apps.documents.urls.StorageRepository.DocumentFolders import (
+    urlpatterns as document_folders_urls,
+)
+from apps.documents.urls.StorageRepository.DocumentRelationships import (
+    urlpatterns as document_relationships_urls,
+)
+from apps.documents.urls.StorageRepository.RepositoryDashboard import (
+    urlpatterns as repository_dashboard_urls,
+)
+from apps.documents.urls.StorageRepository.StorageVolumes import (
+    urlpatterns as storage_volumes_urls,
+)
 from apps.documents.urls.VersionControl.DocumentBranches import (
     urlpatterns as document_branches_urls,
 )
@@ -54,4 +69,9 @@ urlpatterns = (
     + approval_requests_urls
     + signatures_urls
     + review_comments_urls
+    + repository_dashboard_urls
+    + document_folders_urls
+    + storage_volumes_urls
+    + document_relationships_urls
+    + document_batch_imports_urls
 )
