@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Bulk Upload & Batch Import Jobs — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <span>Batch Imports</span>
+        </div>
+        <h1 class="page-title">Bulk Ingestion & Batch Imports</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:batch_import_create' %}" class="btn btn-primary">
+            <i data-lucide="upload-cloud"></i>
+            <span>New Batch Import</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="package-search"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Ingestion Jobs</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-green font-normal">ZIP & Multi-File</span></div>
+            <div class="stat-label">Supported Packages</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="archive"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-info font-normal">Automated Filing</span></div>
+            <div class="stat-label">Taxonomy Routing</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" class="form-input" placeholder="Batch name, number...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="status">Job Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="source_type">Package Format</label>
+                <select name="source_type" id="source_type" class="form-select">
+                    <option value="">All Formats</option>
+                    {% for val, label in source_choices %}
+                    <option value="{{ val }}" {% if source_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="sm:col-span-2 md:col-span-3 flex justify-end gap-2">
+                <a href="{% url 'documents:batch_import_list' %}" class="btn btn-outline">Clear Filters</a>
+                <button type="submit" class="btn btn-primary">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Batch Name & Identifier</th>
+                    <th>Package Format</th>
+                    <th>Target Destination</th>
+                    <th>Files Progress</th>
+                    <th>Status</th>
+                    <th>Initiator & Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for batch in batch_imports %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:batch_import_detail' batch.pk %}" class="font-medium text-primary hover:underline">
+                            {{ batch.batch_name }}
+                        </a>
+                        <div class="font-mono text-xs text-muted">{{ batch.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ batch.source_type_badge_class }}">
+                            {{ batch.get_source_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-sm">
+                            {% if batch.target_folder %}
+                            <a href="{% url 'documents:folder_detail' batch.target_folder.pk %}" class="text-primary hover:underline flex items-center gap-1">
+                                <i data-lucide="folder" class="w-3.5 h-3.5"></i>
+                                <span>{{ batch.target_folder.name }}</span>
+                            </a>
+                            {% else %}
+                            <span class="text-muted text-xs">Root Level</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-slate-500 font-mono mt-0.5">
+                            {{ batch.storage_volume.name|default:"Default Volume" }}
+                        </div>
+                    </td>
+                    <td style="min-width: 140px;">
+                        <div class="flex items-center justify-between text-xs mb-1">
+                            <span>{{ batch.processed_files_count }} / {{ batch.total_files_detected }} files</span>
+                            <span class="font-semibold">{{ batch.progress_percentage }}%</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                            <div class="h-2 rounded-full {% if batch.status == 'failed' %}bg-red-500{% elif batch.status == 'completed' %}bg-green-500{% else %}bg-blue-600{% endif %}" style="width: {{ batch.progress_percentage }}%;"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ batch.status_badge_class }}">
+                            {{ batch.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-700">{{ batch.created_by.get_full_name|default:batch.created_by.username }}</div>
+                        <div class="text-xs text-muted">{{ batch.created_at|date:"M d, Y" }}</div>
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'documents:batch_import_detail' batch.pk %}" class="btn btn-icon" title="View Job Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if batch.status != 'completed' and batch.status != 'processing' %}
+                            <form method="post" action="{% url 'documents:batch_import_process' batch.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-primary" title="Execute Ingestion">
+                                    <i data-lucide="play"></i>
+                                </button>
+                            </form>
+                            <a href="{% url 'documents:batch_import_edit' batch.pk %}" class="btn btn-icon" title="Edit Parameters">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% endif %}
+                            <form method="post" action="{% url 'documents:batch_import_delete' batch.pk %}" onsubmit="return confirm('Delete batch import job \'{{ batch.batch_name }}\'?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Job" {% if batch.status == 'processing' %}disabled{% endif %}>
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state text-center py-12">
+                            <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4 text-slate-400">
+                                <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="text-base font-semibold text-slate-800 mb-1">No batch imports defined</h3>
+                            <p class="text-sm text-muted mb-4">Upload ZIP packages or multi-file archives to ingest documents in bulk.</p>
+                            <a href="{% url 'documents:batch_import_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Batch Import</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} jobs
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if source_type %}&source_type={{ source_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="btn btn-outline btn-sm active font-bold">{{ page_obj.number }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if source_type %}&source_type={{ source_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
