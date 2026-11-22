@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ volume.name }} — Storage Volume — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:repository_dashboard' %}">Repository</a>
+            <span>/</span>
+            <a href="{% url 'documents:storage_volume_list' %}">Storage Volumes</a>
+            <span>/</span>
+            <span>{{ volume.code }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700">
+                <i data-lucide="hard-drive" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="page-title mb-0">{{ volume.name }}</h1>
+                <div class="font-mono text-xs text-muted">{{ volume.code }} • {{ volume.number }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:storage_volume_edit' volume.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Volume</span>
+        </a>
+        <form method="post" action="{% url 'documents:storage_volume_delete' volume.pk %}" onsubmit="return confirm('Are you sure you want to delete this volume?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" {% if volume.is_default %}disabled title="Cannot delete default volume"{% endif %}>
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Volume Config -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="card-title">Storage Configuration & Policies</h3>
+            <div class="flex gap-2">
+                <span class="badge {{ volume.tier_badge_class }}">{{ volume.get_tier_display }}</span>
+                <span class="badge {{ volume.backend_badge_class }}">{{ volume.get_backend_type_display }}</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Volume Code</dt>
+                    <dd class="font-mono text-xs font-semibold">{{ volume.code }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Storage Backend</dt>
+                    <dd>{{ volume.get_backend_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Storage Tier</dt>
+                    <dd>{{ volume.get_tier_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Base Path / Bucket</dt>
+                    <dd class="font-mono text-xs text-slate-700">{{ volume.base_path }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Region / Zone</dt>
+                    <dd>{{ volume.region|default:"Local / Not Specified" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Endpoint URL</dt>
+                    <dd class="font-mono text-xs">{{ volume.endpoint_url|default:"Native Mount" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Compression Policy</dt>
+                    <dd>{{ volume.get_compression_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Encryption Policy</dt>
+                    <dd>{{ volume.get_encryption_type_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Content Deduplication</dt>
+                    <dd>{% if volume.deduplication_enabled %}<span class="badge badge-green">Enabled (SHA-256)</span>{% else %}<span class="badge badge-slate">Disabled</span>{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Default Upload Target</dt>
+                    <dd>{% if volume.is_default %}<span class="badge badge-green">Primary Default</span>{% else %}No{% endif %}</dd>
+                </div>
+                <div class="detail-item sm:col-span-2">
+                    <dt>Automatic Rollover Volume</dt>
+                    <dd>
+                        {% if volume.rollover_volume %}
+                        <a href="{% url 'documents:storage_volume_detail' volume.rollover_volume.pk %}" class="text-primary hover:underline flex items-center gap-1 font-medium">
+                            <i data-lucide="corner-down-right" class="w-3.5 h-3.5"></i>
+                            <span>{{ volume.rollover_volume.name }} ({{ volume.rollover_volume.code }})</span>
+                        </a>
+                        {% else %}
+                        <span class="text-muted">No rollover volume assigned</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item sm:col-span-2">
+                    <dt>Description & Architecture Notes</dt>
+                    <dd>{{ volume.description|default:"No description provided." }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Capacity Cockpit -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Capacity & Quota Cockpit</h3>
+        </div>
+        <div class="card-body">
+            <div class="mb-6">
+                <div class="flex items-center justify-between text-sm mb-2">
+                    <span class="font-medium text-slate-700">Storage Utilization</span>
+                    <span class="font-bold {% if volume.is_full %}text-red-600{% elif volume.is_over_warning %}text-amber-600{% else %}text-slate-700{% endif %}">
+                        {{ volume.utilized_percentage }}%
+                    </span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                    <div class="h-3 rounded-full {% if volume.is_full %}bg-red-500{% elif volume.is_over_warning %}bg-amber-500{% else %}bg-blue-600{% endif %}" style="width: {{ volume.utilized_percentage }}%;"></div>
+                </div>
+                {% if volume.is_over_warning %}
+                <div class="mt-2 text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200 flex items-center gap-1.5">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>
+                    <span>Warning: Volume has exceeded its {{ volume.warning_threshold_pct }}% threshold.</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="space-y-3 pt-3 border-t border-slate-100">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Total Max Capacity</span>
+                    <span class="font-semibold text-slate-800">{{ volume.max_capacity_gb }} GB</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Utilized Space</span>
+                    <span class="font-semibold text-slate-800">{{ volume.utilized_gb }} GB</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Available Free Space</span>
+                    <span class="font-semibold text-green-600">{{ volume.free_gb }} GB</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-muted">Volume Operational Status</span>
+                    <span class="badge {% if volume.is_active %}badge-green{% else %}badge-slate{% endif %}">
+                        {% if volume.is_active %}Online & Writable{% else %}Offline{% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <a href="{% url 'documents:batch_import_create' %}?volume={{ volume.pk }}" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="upload-cloud"></i>
+                    <span>Target Bulk Ingest Here</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Linked Batch Ingestion Jobs -->
+{% if batch_imports %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Recent Ingestion Jobs Targeted to this Volume</h3>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Batch Name & Number</th>
+                    <th>Source Type</th>
+                    <th>Files Processed</th>
+                    <th>Status</th>
+                    <th>Initiator</th>
+                    <th>Started</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in batch_imports %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:batch_import_detail' b.pk %}" class="font-medium text-primary hover:underline">
+                            {{ b.batch_name }}
+                        </a>
+                        <div class="font-mono text-xs text-muted">{{ b.number }}</div>
+                    </td>
+                    <td>{{ b.get_source_type_display }}</td>
+                    <td>{{ b.processed_files_count }} / {{ b.total_files_detected }}</td>
+                    <td><span class="badge {{ b.status_badge_class }}">{{ b.get_status_display }}</span></td>
+                    <td>{{ b.created_by.get_full_name|default:b.created_by.username }}</td>
+                    <td><span class="text-xs text-muted">{{ b.created_at|date:"M d, Y H:i" }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
