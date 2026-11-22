@@ -68,7 +68,7 @@
                         <dt>Computerized System</dt>
                         <dd>
                             {% if policy.system %}
-                            <span class="font-medium">{{ policy.system.system_name }} ({{ policy.system.number }})</span>
+                            <a href="{% url 'quality:computer_system_validation_detail' policy.system.pk %}" class="font-medium text-brand hover:underline">{{ policy.system.system_name }} ({{ policy.system.number }})</a>
                             {% else %}
                             <span class="text-muted">—</span>
                             {% endif %}
@@ -78,7 +78,7 @@
                         <dt>Governing SOP Document</dt>
                         <dd>
                             {% if policy.governing_sop %}
-                            <span class="font-medium">{{ policy.governing_sop.title }} ({{ policy.governing_sop.number }})</span>
+                            <a href="{% url 'quality:controlled_document_detail' policy.governing_sop.pk %}" class="font-medium text-brand hover:underline">{{ policy.governing_sop.title }} ({{ policy.governing_sop.number }})</a>
                             {% else %}
                             <span class="text-muted">—</span>
                             {% endif %}
