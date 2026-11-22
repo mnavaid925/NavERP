@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Document Approval Workflows — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Approval Workflows</span>
+        </div>
+        <h1 class="page-title">Document Approval Workflows</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:approval_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Approval Dashboard</span>
+        </a>
+        <a href="{% url 'documents:workflow_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Workflow</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="git-pull-request"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Workflows</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ pending_count }}</div>
+            <div class="stat-label">Pending / In Progress</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ approved_count }}</div>
+            <div class="stat-label">Fully Approved</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ request.GET.q }}" class="form-input" placeholder="Title, number, document...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="workflow_type">Workflow Type</label>
+                <select name="workflow_type" id="workflow_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in workflow_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.workflow_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="status">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="urgency">Urgency</label>
+                <select name="urgency" id="urgency" class="form-select">
+                    <option value="">All Urgencies</option>
+                    {% for val, label in urgency_choices %}
+                    <option value="{{ val }}" {% if request.GET.urgency == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-span-full flex justify-end gap-2">
+                <a href="{% url 'documents:workflow_list' %}" class="btn btn-outline">Clear</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Approval Workflows ({{ total_count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Workflow #</th>
+                    <th>Title & Document</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Stage</th>
+                    <th>Urgency</th>
+                    <th>Initiator</th>
+                    <th>Due Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in workflows %}
+                <tr>
+                    <td class="font-mono text-sm">
+                        <a href="{% url 'documents:workflow_detail' w.pk %}" class="text-blue-600 hover:underline font-semibold">
+                            {{ w.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ w.title }}</div>
+                        <div class="text-xs text-slate-500">
+                            Doc: <a href="{% url 'documents:document_detail' w.document.pk %}" class="hover:underline">{{ w.document.title }}</a>
+                            {% if w.version %}({{ w.version.version_label }}){% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ w.workflow_type_css_class }}">{{ w.get_workflow_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ w.status_css_class }}">{{ w.get_status_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">Stage {{ w.current_stage }} / {{ w.total_stages }}</div>
+                        <div class="text-xs text-slate-400">Target: {{ w.target_turnaround_hours }}h</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ w.urgency_css_class }}">{{ w.get_urgency_display }}</span>
+                    </td>
+                    <td class="text-sm">
+                        {% if w.initiator %}
+                            {{ w.initiator.get_full_name|default:w.initiator.username }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        {{ w.due_date|date:"Y-m-d H:i"|default:"—" }}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'documents:workflow_detail' w.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'documents:workflow_designer' w.pk %}" class="btn btn-icon" title="Visual Designer">
+                                <i data-lucide="workflow"></i>
+                            </a>
+                            {% if w.status == "draft" or w.status == "pending" %}
+                            <a href="{% url 'documents:workflow_edit' w.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% endif %}
+                            <form method="post" action="{% url 'documents:workflow_delete' w.pk %}" class="inline" onsubmit="return confirm('Delete workflow {{ w.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="git-pull-request"></i>
+                            </div>
+                            <div class="empty-state-title">No Approval Workflows Found</div>
+                            <div class="empty-state-text">Create your first document approval workflow or adjust filter parameters.</div>
+                            <a href="{% url 'documents:workflow_create' %}" class="btn btn-primary mt-3">Create Workflow</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if workflows.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-sm text-slate-500">
+            Page {{ workflows.number }} of {{ workflows.paginator.num_pages }} ({{ total_count }} records)
+        </div>
+        <div class="flex gap-1">
+            {% if workflows.has_previous %}
+            <a href="?page={{ workflows.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.workflow_type %}&workflow_type={{ request.GET.workflow_type }}{% endif %}{% if request.GET.urgency %}&urgency={{ request.GET.urgency }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Prev</span>
+            {% endif %}
+
+            {% if workflows.has_next %}
+            <a href="?page={{ workflows.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.workflow_type %}&workflow_type={{ request.GET.workflow_type }}{% endif %}{% if request.GET.urgency %}&urgency={{ request.GET.urgency }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
