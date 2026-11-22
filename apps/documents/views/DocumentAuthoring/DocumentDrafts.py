@@ -236,6 +236,16 @@ def draft_resolve_conflict(request, pk):
 @require_POST
 def draft_promote(request, pk):
     draft = documents_object(request, DocumentDraft, pk)
+    if draft.status == "promoted":
+        messages.warning(request, f"Draft '{draft.title}' has already been promoted to an official document.")
+        return redirect("documents:draft_detail", pk=draft.pk)
+    if draft.status == "discarded":
+        messages.error(request, f"Discarded draft '{draft.title}' cannot be promoted.")
+        return redirect("documents:draft_detail", pk=draft.pk)
+    if draft.sync_status == "conflict_pending":
+        messages.error(request, f"Draft '{draft.title}' has unresolved sync conflicts and cannot be promoted.")
+        return redirect("documents:draft_detail", pk=draft.pk)
+
     with transaction.atomic():
         # Create or link core.Document
         doc = Document.objects.create(
