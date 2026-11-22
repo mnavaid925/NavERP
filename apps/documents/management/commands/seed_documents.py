@@ -6,9 +6,13 @@ from django.utils import timezone
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.documents.models import (
     Document,
+    DocumentApprovalRequest,
+    DocumentApprovalWorkflow,
     DocumentBranch,
     DocumentDraft,
     DocumentLock,
+    DocumentReviewComment,
+    DocumentSignature,
     DocumentTemplate,
     DocumentVersion,
     DraftCollaboration,
@@ -30,6 +34,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options.get("flush"):
             self.stdout.write("Flushing documents module data...")
+            DocumentReviewComment.objects.all().delete()
+            DocumentSignature.objects.all().delete()
+            DocumentApprovalRequest.objects.all().delete()
+            DocumentApprovalWorkflow.objects.all().delete()
             DraftCollaboration.objects.all().delete()
             DocumentDraft.objects.all().delete()
             TemplateSection.objects.all().delete()
@@ -572,6 +580,172 @@ class Command(BaseCommand):
                         merged_at=timezone.now(),
                         description="Evaluation of Helm charts and container orchestration topologies (merged into 0.9.1).",
                     )
+
+                # ---------------------------------------------------------
+                # 13.3 Approval & Review Workflow Demo Data
+                # ---------------------------------------------------------
+                if not DocumentApprovalWorkflow.objects.filter(tenant=tenant).exists():
+                    self.stdout.write(f"Seeding Document Approval Workflow records for tenant '{tenant.slug}'...")
+
+                    doc_target = Document.objects.filter(tenant=tenant).first()
+                    doc_ver_target = DocumentVersion.objects.filter(tenant=tenant, document=doc_target).first() if doc_target else None
+
+                    if doc_target:
+                        # 1. In-Progress Sequential Approval Workflow
+                        wf1 = DocumentApprovalWorkflow.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            version=doc_ver_target,
+                            title="Standard Operating Procedure (SOP) Regulatory Sign-Off",
+                            workflow_type="sequential",
+                            status="pending",
+                            urgency="high",
+                            current_stage=1,
+                            total_stages=2,
+                            target_turnaround_hours=48,
+                            initiator=user,
+                            department=org_unit,
+                            due_date=timezone.now() + timezone.timedelta(days=2),
+                            requires_all_comments_resolved=True,
+                            allow_emergency_bypass=True,
+                            definition_json='{"nodes":[{"id":"start","label":"Draft"},{"id":"stage1","label":"QA Review"},{"id":"stage2","label":"Executive Signoff"}]}',
+                        )
+
+                        req1 = DocumentApprovalRequest.objects.create(
+                            tenant=tenant,
+                            workflow=wf1,
+                            stage_number=1,
+                            stage_name="QA & Regulatory Compliance Audit",
+                            stage_type="sequential",
+                            order=1,
+                            approver=user,
+                            status="approved",
+                            decided_at=timezone.now(),
+                            decision_comments="Verified all procedural steps comply with ISO 9001:2015 and current GMP standards.",
+                        )
+
+                        req2 = DocumentApprovalRequest.objects.create(
+                            tenant=tenant,
+                            workflow=wf1,
+                            stage_number=2,
+                            stage_name="Executive Management Sign-Off",
+                            stage_type="final_signoff",
+                            order=1,
+                            approver=user,
+                            status="pending",
+                            due_date=timezone.now() + timezone.timedelta(days=2),
+                        )
+
+                        # 2. Approved Parallel Workflow
+                        wf2 = DocumentApprovalWorkflow.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            version=doc_ver_target,
+                            title="Vendor Master Services Agreement Executive Approval",
+                            workflow_type="parallel",
+                            status="approved",
+                            urgency="medium",
+                            current_stage=1,
+                            total_stages=1,
+                            target_turnaround_hours=72,
+                            initiator=user,
+                            department=org_unit,
+                            completed_at=timezone.now(),
+                            requires_all_comments_resolved=False,
+                            allow_emergency_bypass=False,
+                        )
+
+                        req3 = DocumentApprovalRequest.objects.create(
+                            tenant=tenant,
+                            workflow=wf2,
+                            stage_number=1,
+                            stage_name="Legal & Corporate Risk Sign-Off",
+                            stage_type="parallel_all",
+                            order=1,
+                            approver=user,
+                            status="approved",
+                            decided_at=timezone.now(),
+                            decision_comments="Commercial terms and indemnity provisions accepted.",
+                        )
+
+                        # 3. Electronic Signatures
+                        sig1 = DocumentSignature.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            version=doc_ver_target,
+                            approval_request=req1,
+                            signer=user,
+                            signer_name="Dr. Eleanor Vance",
+                            signer_title="VP of Quality & Regulatory Affairs",
+                            signer_email="eleanor.vance@example.com",
+                            signature_type="digital_cert",
+                            signature_meaning="approval",
+                            document_checksum="d2c3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
+                            certificate_serial="US-FDA-PKI-2026-994821",
+                            is_valid=True,
+                        )
+
+                        sig2 = DocumentSignature.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            version=doc_ver_target,
+                            signer=user,
+                            signer_name="Marcus Sterling",
+                            signer_title="Chief Technology Officer",
+                            signer_email="marcus.sterling@example.com",
+                            signature_type="click_to_sign",
+                            signature_meaning="authorship",
+                            document_checksum="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+                            is_valid=True,
+                        )
+
+                        # 4. Review Comments & Markup Annotations
+                        comm1 = DocumentReviewComment.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            version=doc_ver_target,
+                            workflow=wf1,
+                            author=user,
+                            annotation_type="redline",
+                            page_number=2,
+                            coordinate_ref="150,220,400,60",
+                            selected_text="Production batch release cycle turnaround target of 4 hours",
+                            content="Please clarify whether emergency expedited protocols are covered by this release threshold.",
+                            status="open",
+                            is_blocking=True,
+                        )
+
+                        comm2 = DocumentReviewComment.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            version=doc_ver_target,
+                            workflow=wf1,
+                            author=user,
+                            annotation_type="highlight",
+                            page_number=4,
+                            coordinate_ref="100,500,300,40",
+                            selected_text="Audit log and revision history retention floor: 7 years minimum",
+                            content="Verified against corporate archival standard.",
+                            status="resolved",
+                            is_blocking=False,
+                            resolved_by=user,
+                            resolved_at=timezone.now(),
+                            resolution_notes="Confirmed compliant with regulatory retention baseline.",
+                        )
+
+                        DocumentReviewComment.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            version=doc_ver_target,
+                            workflow=wf1,
+                            author=user,
+                            annotation_type="inline_comment",
+                            page_number=2,
+                            parent=comm1,
+                            content="Agreed, we will explicitly detail the expedited batch protocol in Section 2.3.",
+                            status="open",
+                            is_blocking=False,
+                        )
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
 
