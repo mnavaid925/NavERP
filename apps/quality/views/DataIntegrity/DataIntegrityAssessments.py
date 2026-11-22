@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
@@ -112,7 +113,10 @@ def data_integrity_assessment_create(request):
             with transaction.atomic():
                 assessment = form.save(commit=False)
                 assessment.tenant = request.tenant
+                if assessment.status == "approved" and not assessment.qa_approved_at:
+                    assessment.qa_approved_at = timezone.now()
                 assessment.save()
+                form.save_m2m()
                 write_audit_log(request.user, assessment, "create", tenant=request.tenant)
             messages.success(request, f"Data Integrity Assessment {assessment.number} created successfully.")
             return redirect("quality:data_integrity_assessment_detail", pk=assessment.pk)
@@ -133,7 +137,11 @@ def data_integrity_assessment_edit(request, pk):
         form = DataIntegrityAssessmentForm(request.POST, instance=assessment, tenant=request.tenant)
         if form.is_valid():
             with transaction.atomic():
-                assessment = form.save()
+                assessment = form.save(commit=False)
+                if assessment.status == "approved" and not assessment.qa_approved_at:
+                    assessment.qa_approved_at = timezone.now()
+                assessment.save()
+                form.save_m2m()
                 write_audit_log(request.user, assessment, "update", tenant=request.tenant)
             messages.success(request, f"Data Integrity Assessment {assessment.number} updated successfully.")
             return redirect("quality:data_integrity_assessment_detail", pk=assessment.pk)
