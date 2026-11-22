@@ -79,6 +79,10 @@ from apps.quality.models import (
     ProductRegistration,
     RegulatoryCommitment,
     PostMarketSurveillanceReport,
+    LabSample,
+    LabSpecification,
+    LabTestWorksheet,
+    OosInvestigation,
 )
 
 
@@ -3583,5 +3587,184 @@ def post_market_surveillance_report_b(db, tenant_b, product_registration_b, admi
         status="draft",
         prepared_by=admin_b,
     )
+
+
+# =========================================================================
+# 12.19 Laboratory Information Management (LIMS) Fixtures
+# =========================================================================
+
+@pytest.fixture
+def lab_specification_a(db, tenant_a, controlled_document_a, admin_user):
+    today = timezone.now().date()
+    return LabSpecification.objects.create(
+        tenant=tenant_a,
+        title="Hydrocortisone API Assay Purity",
+        specification_type="raw_material",
+        status="approved",
+        version="1.0",
+        product_code="API-001",
+        product_name="Hydrocortisone API Powder",
+        analytical_method_number="AM-QC-304",
+        test_category="chromatographic",
+        sop_document=controlled_document_a,
+        target_parameter_name="Assay Purity",
+        parameter_unit="%",
+        lower_limit=Decimal("98.5000"),
+        upper_limit=Decimal("101.5000"),
+        target_value=Decimal("100.0000"),
+        text_acceptance_criteria="Single clear peak matching retention time.",
+        effective_date=today - timedelta(days=30),
+        review_due_date=today + timedelta(days=335),
+        approved_by=admin_user,
+    )
+
+
+@pytest.fixture
+def lab_specification_b(db, tenant_b, admin_b):
+    today = timezone.now().date()
+    return LabSpecification.objects.create(
+        tenant=tenant_b,
+        title="Globex Reagent Concentration Specification",
+        specification_type="in_process",
+        status="approved",
+        version="1.0",
+        product_code="GLX-RGT-01",
+        product_name="Globex Buffer Solution",
+        analytical_method_number="AM-GLX-01",
+        test_category="chemical",
+        target_parameter_name="pH Level",
+        parameter_unit="pH",
+        lower_limit=Decimal("7.2000"),
+        upper_limit=Decimal("7.6000"),
+        target_value=Decimal("7.4000"),
+        text_acceptance_criteria="Clear colorless solution.",
+        effective_date=today - timedelta(days=20),
+        approved_by=admin_b,
+    )
+
+
+@pytest.fixture
+def lab_sample_a(db, tenant_a, admin_user):
+    now = timezone.now()
+    return LabSample.objects.create(
+        tenant=tenant_a,
+        sample_name="API Hydrocortisone Inbound Lot 099",
+        sample_type="raw_material",
+        status="received",
+        matrix_description="Crystalline White Powder",
+        source_batch_number="BATCH-2026-API-099",
+        item_code="API-001",
+        item_name="Hydrocortisone API Powder",
+        sampling_point="Warehouse Quarantine Bay 3",
+        sampled_by=admin_user,
+        sampled_at=now - timedelta(days=2),
+        received_by=admin_user,
+        received_at=now - timedelta(days=1),
+        current_custodian=admin_user,
+        storage_location="Cold Room 02, Shelf 4B",
+        storage_condition="refrigerated_2_8c",
+        quantity_collected=Decimal("250.0000"),
+        unit_of_measure="g",
+        barcode_identifier="BC-QSMP-2026-0001",
+        chain_of_custody_log=f"[{now.strftime('%Y-%m-%d %H:%M')}] Logged and received by {admin_user.username}",
+    )
+
+
+@pytest.fixture
+def lab_sample_b(db, tenant_b, admin_b):
+    now = timezone.now()
+    return LabSample.objects.create(
+        tenant=tenant_b,
+        sample_name="Globex Solvent Lot 400",
+        sample_type="raw_material",
+        status="registered",
+        matrix_description="Clear Liquid",
+        source_batch_number="GLX-SOL-400",
+        item_code="GLX-SOL",
+        item_name="Globex Solvent",
+        sampled_by=admin_b,
+        sampled_at=now - timedelta(days=1),
+        current_custodian=admin_b,
+        storage_location="Flammables Cabinet",
+        storage_condition="ambient",
+        quantity_collected=Decimal("500.0000"),
+        unit_of_measure="mL",
+        barcode_identifier="BC-QSMP-GLX-001",
+    )
+
+
+@pytest.fixture
+def lab_test_worksheet_a(db, tenant_a, lab_sample_a, lab_specification_a, admin_user):
+    today = timezone.now().date()
+    return LabTestWorksheet.objects.create(
+        tenant=tenant_a,
+        title="Assay Purity HPLC Worksheet #1",
+        sample=lab_sample_a,
+        specification=lab_specification_a,
+        status="in_progress",
+        disposition="pending",
+        assigned_analyst=admin_user,
+        scheduled_date=today,
+        execution_date=today,
+        instrument_name="Agilent 1260 HPLC",
+        reagent_lot_number="MEOH-2026-04",
+        raw_data_summary="Replicate 1: 99.85%",
+        numeric_result=Decimal("99.8500"),
+        is_within_specification=True,
+    )
+
+
+@pytest.fixture
+def lab_test_worksheet_b(db, tenant_b, lab_sample_b, lab_specification_b, admin_b):
+    today = timezone.now().date()
+    return LabTestWorksheet.objects.create(
+        tenant=tenant_b,
+        title="Globex pH Worksheet #1",
+        sample=lab_sample_b,
+        specification=lab_specification_b,
+        status="assigned",
+        disposition="pending",
+        assigned_analyst=admin_b,
+        scheduled_date=today,
+    )
+
+
+@pytest.fixture
+def oos_investigation_a(db, tenant_a, lab_test_worksheet_a, lab_sample_a, admin_user):
+    today = timezone.now().date()
+    return OosInvestigation.objects.create(
+        tenant=tenant_a,
+        title="OOS Dissolution Rate Investigation #1",
+        test_worksheet=lab_test_worksheet_a,
+        sample=lab_sample_a,
+        investigation_phase="phase_1_lab",
+        status="open",
+        severity="critical",
+        analyst_interview_completed=True,
+        calculation_verification_completed=True,
+        instrument_verification_completed=True,
+        reagent_verification_completed=True,
+        lab_error_identified=False,
+        lab_error_description="Lab error checklist completed without findings.",
+        investigation_lead=admin_user,
+        target_completion_date=today + timedelta(days=7),
+    )
+
+
+@pytest.fixture
+def oos_investigation_b(db, tenant_b, lab_test_worksheet_b, lab_sample_b, admin_b):
+    today = timezone.now().date()
+    return OosInvestigation.objects.create(
+        tenant=tenant_b,
+        title="Globex pH OOS Event",
+        test_worksheet=lab_test_worksheet_b,
+        sample=lab_sample_b,
+        investigation_phase="phase_1_lab",
+        status="open",
+        severity="major",
+        investigation_lead=admin_b,
+        target_completion_date=today + timedelta(days=5),
+    )
+
 
 
