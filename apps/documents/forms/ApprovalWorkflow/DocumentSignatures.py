@@ -42,14 +42,19 @@ class DocumentSignatureForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["document"].queryset = Document.objects.filter(tenant=self.tenant).order_by("title")
-            self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant).order_by("-created_at")
-            self.fields["approval_request"].queryset = DocumentApprovalRequest.objects.filter(tenant=self.tenant).order_by("-created_at")
+            self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant).select_related("document").order_by("-created_at")
+            self.fields["approval_request"].queryset = DocumentApprovalRequest.objects.filter(tenant=self.tenant).select_related("workflow", "approver").order_by("-created_at")
         self.fields["version"].required = False
         self.fields["approval_request"].required = False
         self.fields["signer_title"].required = False
         self.fields["signer_email"].required = False
         self.fields["signature_glyph"].required = False
         self.fields["certificate_serial"].required = False
+
+        if self.instance and self.instance.pk:
+            for field_name in ["document", "version", "approval_request", "signer_name", "signature_type"]:
+                if field_name in self.fields:
+                    self.fields[field_name].disabled = True
 
     def clean(self):
         cleaned = super().clean()
