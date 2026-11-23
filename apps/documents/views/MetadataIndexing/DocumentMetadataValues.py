@@ -186,12 +186,30 @@ def metadata_value_validate(request, pk):
     is_valid = True
     error_msg = ""
 
-    if val.data_type in ["integer", "decimal"] and val.value_number is None and not val.value_text:
-        is_valid = False
-        error_msg = "Expected numeric value."
-    elif val.data_type in ["date", "datetime"] and val.value_date is None and not val.value_text:
-        is_valid = False
-        error_msg = "Expected calendar date value."
+    if val.data_type in ["integer", "decimal"]:
+        if val.value_number is not None:
+            pass
+        elif val.value_text:
+            try:
+                from decimal import Decimal, InvalidOperation
+                Decimal(val.value_text.strip())
+            except (InvalidOperation, ValueError):
+                is_valid = False
+                error_msg = f"Expected numeric value, got '{val.value_text}'."
+        else:
+            is_valid = False
+            error_msg = "Expected numeric value."
+    elif val.data_type in ["date", "datetime"]:
+        if val.value_date is not None:
+            pass
+        elif val.value_text:
+            from django.utils.dateparse import parse_date, parse_datetime
+            if not parse_date(val.value_text.strip()) and not parse_datetime(val.value_text.strip()):
+                is_valid = False
+                error_msg = f"Expected calendar date value, got '{val.value_text}'."
+        else:
+            is_valid = False
+            error_msg = "Expected calendar date value."
 
     with transaction.atomic():
         val.validation_status = "valid" if is_valid else "invalid"
