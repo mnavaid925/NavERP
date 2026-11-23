@@ -29,7 +29,7 @@ def public_share_preview(request, share_token):
             submitted_password = request.POST.get("password", "")
             if share.check_password(submitted_password):
                 request.session[session_key] = True
-                password_required = False
+                return redirect("documents:public_share_preview", share_token=share.share_token)
             else:
                 password_error = "Incorrect password. Please verify and try again."
 
@@ -101,6 +101,8 @@ def public_share_download(request, share_token):
 
     if not version:
         raise Http404("No document file revision available for download.")
+
+    share.record_access()
 
     guest_identifier = request.META.get("REMOTE_ADDR") or "External Guest"
     DocumentActivity.objects.create(
