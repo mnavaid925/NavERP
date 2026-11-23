@@ -94,15 +94,20 @@ def document_search_query_log_delete(request, pk):
 def document_search_analytics(request):
     base_qs = documents_scope(DocumentSearchQueryLog.objects.all(), request)
 
-    total_searches = base_qs.count()
-    zero_result_searches = base_qs.filter(is_zero_result=True).count()
+    stats = base_qs.aggregate(
+        total=Count("id"),
+        zero_results=Count("id", filter=Q(is_zero_result=True)),
+        avg_latency=Avg("execution_time_ms"),
+    )
+    total_searches = stats["total"] or 0
+    zero_result_searches = stats["zero_results"] or 0
 
     if total_searches > 0:
         zero_result_rate = round((zero_result_searches / total_searches) * 100, 1)
     else:
         zero_result_rate = 0.0
 
-    avg_latency = base_qs.aggregate(avg=Avg("execution_time_ms"))["avg"]
+    avg_latency = stats["avg_latency"]
     avg_latency_ms = round(avg_latency, 1) if avg_latency else 0.0
 
     # Top popular successful queries
