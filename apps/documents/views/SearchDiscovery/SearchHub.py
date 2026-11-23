@@ -4,7 +4,6 @@ import json
 import re
 import time
 
-from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, F, Q
@@ -219,7 +218,6 @@ def search_hub(request):
     }
 
     folders = DocumentFolder.objects.filter(tenant=request.tenant, is_active=True).order_by("path", "name")
-    authors = get_user_model().objects.filter(tenant=request.tenant, is_active=True).order_by("username")
 
     popular_searches = (
         DocumentSearchQueryLog.objects.filter(tenant=request.tenant, is_zero_result=False)
@@ -263,7 +261,6 @@ def search_hub(request):
             "query_text": raw_query,
             "facets": facets,
             "folders": folders,
-            "authors": authors,
             "active_filters": active_filters,
             "intent_chips": intent_chips,
             "popular_searches": popular_searches,
