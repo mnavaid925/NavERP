@@ -102,6 +102,42 @@ from apps.documents.views.MetadataIndexing.MetadataSchemas import (
     metadata_schema_edit,
     metadata_schema_list,
 )
+from apps.documents.views.SearchDiscovery.DocumentSavedSearches import (
+    document_saved_search_create,
+    document_saved_search_delete,
+    document_saved_search_detail,
+    document_saved_search_edit,
+    document_saved_search_list,
+    document_saved_search_run,
+    document_saved_search_toggle_pin,
+)
+from apps.documents.views.SearchDiscovery.DocumentSearchAlerts import (
+    document_search_alert_create,
+    document_search_alert_delete,
+    document_search_alert_detail,
+    document_search_alert_edit,
+    document_search_alert_list,
+    document_search_alert_run_check,
+    document_search_alert_toggle_active,
+)
+from apps.documents.views.SearchDiscovery.DocumentSearchQueryLogs import (
+    document_search_analytics,
+    document_search_query_log_delete,
+    document_search_query_log_detail,
+    document_search_query_log_list,
+)
+from apps.documents.views.SearchDiscovery.DocumentSearchSynonyms import (
+    document_search_synonym_create,
+    document_search_synonym_delete,
+    document_search_synonym_detail,
+    document_search_synonym_edit,
+    document_search_synonym_list,
+)
+from apps.documents.views.SearchDiscovery.SearchHub import (
+    search_click_track,
+    search_export_csv,
+    search_hub,
+)
 from apps.documents.views.MetadataIndexing.TaxonomyTerms import (
     taxonomy_term_create,
     taxonomy_term_delete,
@@ -320,4 +356,31 @@ __all__ = [
     "document_ocr_job_apply",
     "document_ocr_job_delete",
     "metadata_indexing_dashboard",
+    # SearchDiscovery
+    "search_hub",
+    "search_click_track",
+    "search_export_csv",
+    "document_saved_search_list",
+    "document_saved_search_create",
+    "document_saved_search_detail",
+    "document_saved_search_edit",
+    "document_saved_search_delete",
+    "document_saved_search_run",
+    "document_saved_search_toggle_pin",
+    "document_search_alert_list",
+    "document_search_alert_create",
+    "document_search_alert_detail",
+    "document_search_alert_edit",
+    "document_search_alert_delete",
+    "document_search_alert_toggle_active",
+    "document_search_alert_run_check",
+    "document_search_synonym_list",
+    "document_search_synonym_create",
+    "document_search_synonym_detail",
+    "document_search_synonym_edit",
+    "document_search_synonym_delete",
+    "document_search_query_log_list",
+    "document_search_query_log_detail",
+    "document_search_query_log_delete",
+    "document_search_analytics",
 ]
