@@ -52,14 +52,6 @@ class TaxonomyTermForm(forms.ModelForm):
         code = self.cleaned_data.get("term_code", "").strip().upper()
         if not code:
             raise ValidationError("Term code is required.")
-        category = self.cleaned_data.get("category")
-        qs = TaxonomyTerm.objects.filter(category=category, term_code=code)
-        if self.tenant:
-            qs = qs.filter(tenant=self.tenant)
-        if self.instance.pk:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise ValidationError(f"Term code '{code}' already exists in category '{category}'.")
         return code
 
     def clean_synonyms_json(self):
@@ -81,7 +73,18 @@ class TaxonomyTermForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        code = cleaned_data.get("term_code")
+        category = cleaned_data.get("category")
+        if code and category:
+            qs = TaxonomyTerm.objects.filter(category=category, term_code=code)
+            if self.tenant:
+                qs = qs.filter(tenant=self.tenant)
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                self.add_error("term_code", f"Term code '{code}' already exists in category '{category}'.")
+
         parent = cleaned_data.get("parent")
         if parent and self.tenant and parent.tenant != self.tenant:
-            raise ValidationError("Parent taxonomy term does not belong to your organization.")
+            self.add_error("parent", "Parent taxonomy term does not belong to your organization.")
         return cleaned_data
