@@ -126,9 +126,9 @@ def secure_viewer(request, pk=None):
             watermark_text = f"{document.get_classification_display().upper()} | {request.user.get_full_name() or request.user.username} | {ip_addr} | {ts}"
 
         if not has_read_permission:
-            write_audit_log(request.user, document, "view_denied", tenant=request.tenant)
+            write_audit_log(request.user, document, "denied", tenant=request.tenant)
         elif is_drm_revoked:
-            write_audit_log(request.user, document, "view_revoked", tenant=request.tenant)
+            write_audit_log(request.user, document, "revoked", tenant=request.tenant)
         else:
             write_audit_log(request.user, document, "view", tenant=request.tenant)
 
