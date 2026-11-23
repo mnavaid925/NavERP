@@ -87,7 +87,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/forms/SecurityAccessControl/DlpIncidents.py:6`
   - **Description**: Inherits from `forms.ModelForm` instead of `TenantModelForm`.
   - **Fix**: Inherit from `TenantModelForm`.
-- [ ] **M2: Filter state dropped on pagination in `dlp_incident_list` and `permission_list`**
+- [x] **M2: Filter state dropped on pagination in `dlp_incident_list` and `permission_list`**
   - **Files & Lines**:
     - `templates/documents/security_access_control/dlp_incident/list.html:143`
     - `templates/documents/security_access_control/document_access_permission/list.html:191`
