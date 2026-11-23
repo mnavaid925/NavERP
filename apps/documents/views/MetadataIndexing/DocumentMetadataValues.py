@@ -74,15 +74,20 @@ def metadata_value_create(request):
     if request.method == "POST":
         form = DocumentMetadataValueForm(request.POST, tenant=tenant)
         if form.is_valid():
-            with transaction.atomic():
-                val = form.save(commit=False)
-                val.tenant = tenant
-                val.updated_by = request.user
-                val.last_validated_at = timezone.now()
-                val.save()
-                write_audit_log(request.user, val, "create", tenant=tenant)
-            messages.success(request, f"Metadata property '{val.field_name}' added to {val.document.title}.")
-            return redirect("documents:metadata_value_detail", pk=val.pk)
+            doc = form.cleaned_data.get("document")
+            if doc and doc.is_locked and doc.locked_by != request.user and not request.user.is_superuser:
+                locked_by_str = getattr(doc.locked_by, "username", "another user")
+                messages.error(request, f"Document '{doc.number}' is currently checked out by {locked_by_str} and metadata cannot be added.")
+            else:
+                with transaction.atomic():
+                    val = form.save(commit=False)
+                    val.tenant = tenant
+                    val.updated_by = request.user
+                    val.last_validated_at = timezone.now()
+                    val.save()
+                    write_audit_log(request.user, val, "create", tenant=tenant)
+                messages.success(request, f"Metadata property '{val.field_name}' added to {val.document.title}.")
+                return redirect("documents:metadata_value_detail", pk=val.pk)
     else:
         initial = {}
         doc_id = request.GET.get("document", "").strip()
@@ -128,7 +133,16 @@ def metadata_value_edit(request, pk):
     Update an existing document metadata value.
     """
     tenant = request.tenant
-    val = get_object_or_404(DocumentMetadataValue, pk=pk, tenant=tenant)
+    val = get_object_or_404(
+        DocumentMetadataValue.objects.select_related("document__locked_by"),
+        pk=pk,
+        tenant=tenant,
+    )
+    doc = val.document
+    if doc.is_locked and doc.locked_by != request.user and not request.user.is_superuser:
+        locked_by_str = getattr(doc.locked_by, "username", "another user")
+        messages.error(request, f"Document '{doc.number}' is currently checked out by {locked_by_str} and metadata cannot be modified.")
+        return redirect("documents:metadata_value_detail", pk=val.pk)
 
     if request.method == "POST":
         form = DocumentMetadataValueForm(request.POST, instance=val, tenant=tenant)
@@ -164,9 +178,18 @@ def metadata_value_delete(request, pk):
     Remove a metadata value from a document.
     """
     tenant = request.tenant
-    val = get_object_or_404(DocumentMetadataValue, pk=pk, tenant=tenant)
+    val = get_object_or_404(
+        DocumentMetadataValue.objects.select_related("document__locked_by"),
+        pk=pk,
+        tenant=tenant,
+    )
+    doc = val.document
+    if doc.is_locked and doc.locked_by != request.user and not request.user.is_superuser:
+        locked_by_str = getattr(doc.locked_by, "username", "another user")
+        messages.error(request, f"Document '{doc.number}' is currently checked out by {locked_by_str} and metadata cannot be deleted.")
+        return redirect("documents:metadata_value_detail", pk=val.pk)
+
     field_name = val.field_name
-    doc_pk = val.document_id
     with transaction.atomic():
         write_audit_log(request.user, val, "delete", tenant=tenant)
         val.delete()
