@@ -71,7 +71,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/SecureViewer.py:20` & `templates/documents/security_access_control/secure_viewer.html:145`
   - **Description**: Template renders `document.department.name`, causing an extra query on every viewer load.
   - **Fix**: Add `.select_related("department")` to `docs_qs`.
-- [ ] **I9: Missing `list_select_related` in Django Admin**
+- [x] **I9: Missing `list_select_related` in Django Admin**
   - **Files & Lines**: `apps/documents/admin.py:242-246,273-278`
   - **Description**: `DocumentAccessPermissionAdmin` and `DlpIncidentAdmin` render foreign key columns without `list_select_related`, triggering `1 + 4N` queries.
   - **Fix**: Add `list_select_related` to both admin classes.
