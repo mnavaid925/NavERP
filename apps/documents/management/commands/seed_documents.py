@@ -13,13 +13,17 @@ from apps.documents.models import (
     DocumentDraft,
     DocumentFolder,
     DocumentLock,
+    DocumentMetadataValue,
+    DocumentOcrJob,
     DocumentRelationship,
     DocumentReviewComment,
     DocumentSignature,
     DocumentTemplate,
     DocumentVersion,
     DraftCollaboration,
+    MetadataSchema,
     StorageVolume,
+    TaxonomyTerm,
     TemplateSection,
 )
 from apps.documents.views._helpers import count_words
@@ -38,6 +42,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options.get("flush"):
             self.stdout.write("Flushing documents module data...")
+            DocumentOcrJob.objects.all().delete()
+            DocumentMetadataValue.objects.all().delete()
+            TaxonomyTerm.objects.all().delete()
+            MetadataSchema.objects.all().delete()
             DocumentRelationship.objects.all().delete()
             DocumentBatchImport.objects.all().delete()
             DocumentFolder.objects.all().delete()
@@ -968,6 +976,237 @@ class Command(BaseCommand):
                         log_summary="Ingestion job registered in queue. Waiting for extraction trigger.",
                         created_by=user,
                     )
+
+                # ---------------------------------------------------------
+                # 13.5 Metadata & Indexing Demo Data
+                # ---------------------------------------------------------
+                if not MetadataSchema.objects.filter(tenant=tenant).exists():
+                    self.stdout.write(f"Seeding Metadata & Indexing records for tenant '{tenant.slug}'...")
+
+                    import json
+                    nda_fields = [
+                        {"key": "counterparty", "label": "Counterparty Name", "data_type": "text", "required": True},
+                        {"key": "effective_date", "label": "Effective Date", "data_type": "date", "required": True},
+                        {"key": "expiration_date", "label": "Expiration Date", "data_type": "date", "required": False},
+                        {"key": "contract_value", "label": "Contract Value", "data_type": "decimal", "required": False},
+                        {"key": "governing_law", "label": "Governing Jurisdiction", "data_type": "dropdown", "choices": ["Delaware", "California", "New York", "England & Wales"]},
+                        {"key": "confidentiality_years", "label": "Confidentiality Term (Years)", "data_type": "integer", "default": 5},
+                    ]
+                    schema_nda = MetadataSchema.objects.create(
+                        tenant=tenant,
+                        name="Corporate NDA & Confidentiality Schema",
+                        code="NDA_SCHEMA",
+                        description="Standardized legal metadata properties for non-disclosure agreements and confidentiality riders.",
+                        target_type="contract",
+                        inheritance_mode="folder_default",
+                        fields_definition_json=json.dumps(nda_fields, indent=2),
+                        is_required=True,
+                        allow_custom_fields=True,
+                        created_by=user,
+                    )
+
+                    sop_fields = [
+                        {"key": "sop_code", "label": "SOP Identifier", "data_type": "text", "required": True},
+                        {"key": "iso_clause", "label": "ISO Standard Clause", "data_type": "text", "required": False},
+                        {"key": "review_cycle_months", "label": "Review Cycle (Months)", "data_type": "integer", "default": 12},
+                        {"key": "safety_critical", "label": "Safety Critical Procedure", "data_type": "boolean", "default": False},
+                    ]
+                    schema_sop = MetadataSchema.objects.create(
+                        tenant=tenant,
+                        name="Standard Operating Procedure (SOP) Metadata",
+                        code="SOP_SCHEMA",
+                        description="Operational and quality compliance metadata for SOPs and work instructions.",
+                        target_type="sop",
+                        inheritance_mode="folder_strict",
+                        fields_definition_json=json.dumps(sop_fields, indent=2),
+                        is_required=False,
+                        allow_custom_fields=True,
+                        created_by=user,
+                    )
+
+                    # 2. Controlled Vocabularies & Thesauri
+                    tax_legal = TaxonomyTerm.objects.create(
+                        tenant=tenant,
+                        name="Legal & Corporate Governance Thesaurus",
+                        term_code="TAX_LEGAL",
+                        category="legal",
+                        description="Controlled vocabulary covering contract types, covenants, and legal jurisdiction.",
+                        synonyms_json=json.dumps(["Legal", "Law", "Corporate Counsel", "Jurisprudence"]),
+                        external_code="LEGAL-THES-2026",
+                        is_governed=True,
+                        created_by=user,
+                    )
+
+                    tax_nda = TaxonomyTerm.objects.create(
+                        tenant=tenant,
+                        name="Non-Disclosure & Confidentiality",
+                        term_code="TAX_NDA",
+                        category="legal",
+                        parent=tax_legal,
+                        description="Bilateral and unilateral secrecy and non-disclosure instruments.",
+                        synonyms_json=json.dumps(["NDA", "Confidentiality Agreement", "Proprietary Info Agreement", "MNDA"]),
+                        external_code="ISO 27001:A.13.2.4",
+                        is_governed=True,
+                        created_by=user,
+                    )
+
+                    tax_msa = TaxonomyTerm.objects.create(
+                        tenant=tenant,
+                        name="Master Services Agreements",
+                        term_code="TAX_MSA",
+                        category="legal",
+                        parent=tax_legal,
+                        description="Umbrella commercial contracts governing client and vendor service engagements.",
+                        synonyms_json=json.dumps(["MSA", "Framework Agreement", "Service Contract"]),
+                        is_governed=True,
+                        created_by=user,
+                    )
+
+                    tax_compliance = TaxonomyTerm.objects.create(
+                        tenant=tenant,
+                        name="Quality & Regulatory Compliance",
+                        term_code="TAX_COMPLIANCE",
+                        category="compliance",
+                        description="Standard terms relating to ISO, OSHA, FDA, and enterprise audits.",
+                        synonyms_json=json.dumps(["Compliance", "Audit", "Regulatory", "Quality Assurance"]),
+                        external_code="ISO 9001:2015",
+                        is_governed=True,
+                        created_by=user,
+                    )
+
+                    tax_sop = TaxonomyTerm.objects.create(
+                        tenant=tenant,
+                        name="Standard Operating Procedures",
+                        term_code="TAX_SOP",
+                        category="compliance",
+                        parent=tax_compliance,
+                        description="Formal documentation of operational methods and work instructions.",
+                        synonyms_json=json.dumps(["SOP", "Work Instruction", "Operating Procedure"]),
+                        is_governed=True,
+                        created_by=user,
+                    )
+
+                    # 3. Document Metadata Values
+                    docs = Document.objects.filter(tenant=tenant).order_by("pk")
+                    doc1 = docs.first()
+                    doc2 = docs.last()
+
+                    if doc1:
+                        DocumentMetadataValue.objects.create(
+                            tenant=tenant,
+                            document=doc1,
+                            schema=schema_nda,
+                            field_name="counterparty",
+                            field_label="Counterparty Name",
+                            data_type="text",
+                            value_text="Acme International Holdings LLC",
+                            source="manual_entry",
+                            validation_status="valid",
+                            last_validated_at=timezone.now(),
+                            updated_by=user,
+                        )
+                        DocumentMetadataValue.objects.create(
+                            tenant=tenant,
+                            document=doc1,
+                            schema=schema_nda,
+                            field_name="contract_value",
+                            field_label="Contract Value",
+                            data_type="decimal",
+                            value_number=250000.0000,
+                            source="manual_entry",
+                            validation_status="valid",
+                            last_validated_at=timezone.now(),
+                            updated_by=user,
+                        )
+                        DocumentMetadataValue.objects.create(
+                            tenant=tenant,
+                            document=doc1,
+                            schema=schema_nda,
+                            field_name="effective_date",
+                            field_label="Effective Date",
+                            data_type="date",
+                            value_date=timezone.now().date(),
+                            source="folder_inherited",
+                            validation_status="valid",
+                            last_validated_at=timezone.now(),
+                            updated_by=user,
+                        )
+
+                    if doc2 and doc2 != doc1:
+                        DocumentMetadataValue.objects.create(
+                            tenant=tenant,
+                            document=doc2,
+                            schema=schema_sop,
+                            field_name="sop_code",
+                            field_label="SOP Identifier",
+                            data_type="text",
+                            value_text="SOP-PROD-2026-001",
+                            source="template_inherited",
+                            validation_status="valid",
+                            last_validated_at=timezone.now(),
+                            updated_by=user,
+                        )
+                        DocumentMetadataValue.objects.create(
+                            tenant=tenant,
+                            document=doc2,
+                            schema=schema_sop,
+                            field_name="safety_critical",
+                            field_label="Safety Critical Procedure",
+                            data_type="boolean",
+                            value_boolean=True,
+                            source="manual_entry",
+                            validation_status="valid",
+                            last_validated_at=timezone.now(),
+                            updated_by=user,
+                        )
+
+                    # 4. Document OCR Jobs
+                    if doc1:
+                        ocr_text_doc1 = (
+                            f"CONFIDENTIAL NON-DISCLOSURE AGREEMENT\n"
+                            f"DOCUMENT IDENTIFIER: {doc1.number}\n"
+                            f"BETWEEN: {tenant.name} AND Acme International Holdings LLC\n"
+                            f"EFFECTIVE DATE: {timezone.now().strftime('%Y-%m-%d')}\n\n"
+                            "1. DEFINITION OF CONFIDENTIAL INFORMATION.\n"
+                            "All trade secrets, algorithms, customer lists, and financial forecasts.\n"
+                            "2. TERM AND TERMINATION.\n"
+                            "The confidentiality obligations shall endure for a duration of five (5) years.\n"
+                        )
+                        DocumentOcrJob.objects.create(
+                            tenant=tenant,
+                            document=doc1,
+                            version=doc1.versions.first() if hasattr(doc1, "versions") else None,
+                            status="completed",
+                            ocr_engine="azure_document_intelligence",
+                            extracted_full_text=ocr_text_doc1,
+                            confidence_score=98.20,
+                            page_count=3,
+                            suggested_category="Legal Contracts & Agreements",
+                            suggested_tags_json=json.dumps(["NDA", "Confidential", "Legal", "Acme"]),
+                            extracted_entities_json=json.dumps({
+                                "counterparty": "Acme International Holdings LLC",
+                                "term_duration": "5 years",
+                                "effective_date": timezone.now().strftime("%Y-%m-%d"),
+                                "jurisdiction": "Delaware"
+                            }, indent=2),
+                            has_handwriting=False,
+                            has_barcode=True,
+                            processing_duration_ms=1450,
+                            applied_to_document=True,
+                            created_by=user,
+                        )
+
+                    if doc2 and doc2 != doc1:
+                        DocumentOcrJob.objects.create(
+                            tenant=tenant,
+                            document=doc2,
+                            version=doc2.versions.first() if hasattr(doc2, "versions") else None,
+                            status="queued",
+                            ocr_engine="tesseract_ocr",
+                            page_count=2,
+                            confidence_score=0.00,
+                            created_by=user,
+                        )
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
 
