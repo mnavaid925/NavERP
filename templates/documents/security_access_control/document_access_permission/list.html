@@ -194,11 +194,11 @@
         </div>
         <div class="flex gap-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if grantee_type %}&grantee_type={{ grantee_type }}{% endif %}{% if permission_level %}&permission_level={{ permission_level }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if grantee_type %}&grantee_type={{ grantee_type }}{% endif %}{% if permission_level %}&permission_level={{ permission_level }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}{% if document %}&document={{ document }}{% endif %}{% if folder %}&folder={{ folder }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
             {% endif %}
             <span class="btn btn-sm btn-outline active">{{ page_obj.number }}</span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if grantee_type %}&grantee_type={{ grantee_type }}{% endif %}{% if permission_level %}&permission_level={{ permission_level }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if grantee_type %}&grantee_type={{ grantee_type }}{% endif %}{% if permission_level %}&permission_level={{ permission_level }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}{% if document %}&document={{ document }}{% endif %}{% if folder %}&folder={{ folder }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% endif %}
         </div>
     </div>
