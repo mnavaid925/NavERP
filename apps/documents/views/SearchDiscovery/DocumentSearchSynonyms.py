@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -103,6 +104,9 @@ def document_search_synonym_create(request):
 def document_search_synonym_edit(request, pk):
     search_synonym = documents_object(request, DocumentSearchSynonym, pk)
 
+    if search_synonym.created_by != request.user and not getattr(request.user, "is_tenant_admin", False):
+        return HttpResponseForbidden("You do not have permission to edit this search synonym.")
+
     if request.method == "POST":
         form = DocumentSearchSynonymForm(request.POST, instance=search_synonym, tenant=request.tenant)
         if form.is_valid():
@@ -128,6 +132,10 @@ def document_search_synonym_edit(request, pk):
 @require_POST
 def document_search_synonym_delete(request, pk):
     search_synonym = documents_object(request, DocumentSearchSynonym, pk)
+
+    if search_synonym.created_by != request.user and not getattr(request.user, "is_tenant_admin", False):
+        return HttpResponseForbidden("You do not have permission to delete this search synonym.")
+
     term = search_synonym.term
     write_audit_log(request.user, search_synonym, "delete", tenant=request.tenant)
     search_synonym.delete()
