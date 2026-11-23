@@ -128,7 +128,11 @@ def document_saved_search_create(request):
             messages.success(request, f"Saved search '{saved_search.name}' created successfully.")
             return redirect("documents:document_saved_search_detail", pk=saved_search.pk)
     else:
-        form = DocumentSavedSearchForm(tenant=request.tenant)
+        initial = {}
+        query_text = request.GET.get("query_text", "").strip()
+        if query_text:
+            initial["query_text"] = query_text
+        form = DocumentSavedSearchForm(initial=initial, tenant=request.tenant)
 
     return render(
         request,
