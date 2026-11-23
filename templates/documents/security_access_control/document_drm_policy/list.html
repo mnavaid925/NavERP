@@ -20,10 +20,12 @@
             <i data-lucide="shield"></i>
             <span>Secure Web Viewer</span>
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <a href="{% url 'documents:drm_policy_create' %}" class="btn btn-primary">
             <i data-lucide="plus"></i>
             <span>Configure DRM Policy</span>
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -134,6 +136,7 @@
                         <a href="{% url 'documents:drm_policy_detail' pol.pk %}" class="btn btn-icon btn-outline" title="View Policy">
                             <i data-lucide="eye"></i>
                         </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <a href="{% url 'documents:drm_policy_edit' pol.pk %}" class="btn btn-icon btn-outline" title="Edit Policy">
                             <i data-lucide="pencil"></i>
                         </a>
@@ -143,6 +146,7 @@
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
@@ -152,10 +156,12 @@
                             <i data-lucide="shield-check" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
                             <h3 class="text-base font-medium text-slate-900 mb-1">No DRM Policies Active</h3>
                             <p class="text-sm text-slate-500 mb-4">Protect proprietary documents with zero-download sandboxed viewing, copy protection, and kill switches.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'documents:drm_policy_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus"></i>
                                 <span>Create DRM Policy</span>
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
