@@ -167,7 +167,7 @@
                             </button>
                         </form>
                         {% endif %}
-                        <form method="post" action="{% url 'documents:document_ocr_job_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete OCR job {{ item.number }}?');">
+                        <form method="post" action="{% url 'documents:document_ocr_job_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete OCR job {{ item.number|escapejs }}?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Job">
                                 <i data-lucide="trash-2"></i>
