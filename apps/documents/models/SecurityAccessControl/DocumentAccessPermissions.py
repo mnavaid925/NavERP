@@ -125,6 +125,7 @@ class DocumentAccessPermission(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="doc_dprm_ten_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "created_at"], name="doc_dprm_tnt_crt_idx"),
             models.Index(fields=["tenant", "document", "is_active"], name="doc_dprm_tnt_doc_act_idx"),
             models.Index(fields=["tenant", "user", "is_active"], name="doc_dprm_tnt_usr_act_idx"),
             models.Index(fields=["tenant", "folder", "is_active"], name="doc_dprm_tnt_fld_act_idx"),
