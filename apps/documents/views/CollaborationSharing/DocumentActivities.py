@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.core.utils import write_audit_log
@@ -89,7 +90,10 @@ def document_activity_mark_read(request, pk):
     activity = documents_object(request, DocumentActivity, pk)
     activity.mark_as_read()
     messages.success(request, f"Activity {activity.number} marked as read.")
-    return redirect(request.META.get("HTTP_REFERER") or "documents:document_activity_list")
+    referer = request.META.get("HTTP_REFERER")
+    if referer and url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}):
+        return redirect(referer)
+    return redirect("documents:document_activity_list")
 
 
 @login_required
