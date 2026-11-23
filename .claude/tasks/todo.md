@@ -39518,94 +39518,94 @@ apps/quality/
 ## Detailed Checkable Work Items
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze `.claude/tasks/contract-documents-13.5.md` with every field, choice, URL name, and view context key.
+- [x] Freeze `.claude/tasks/contract-documents-13.5.md` with every field, choice, URL name, and view context key.
 
 ### Phase 3.2: Entity by Entity Implementation
-- [ ] **Entity 1: MetadataSchema** (`DSCH-`)
-  - [ ] `apps/documents/models/MetadataIndexing/MetadataSchemas.py`
-  - [ ] `apps/documents/forms/MetadataIndexing/MetadataSchemas.py`
-  - [ ] `apps/documents/views/MetadataIndexing/MetadataSchemas.py`
-  - [ ] `apps/documents/urls/MetadataIndexing/MetadataSchemas.py`
-  - [ ] `templates/documents/metadata_indexing/metadata_schema/list.html`
-  - [ ] `templates/documents/metadata_indexing/metadata_schema/detail.html`
-  - [ ] `templates/documents/metadata_indexing/metadata_schema/form.html`
-- [ ] **Entity 2: DocumentMetadataValue** (`DMETA-`)
-  - [ ] `apps/documents/models/MetadataIndexing/DocumentMetadataValues.py`
-  - [ ] `apps/documents/forms/MetadataIndexing/DocumentMetadataValues.py`
-  - [ ] `apps/documents/views/MetadataIndexing/DocumentMetadataValues.py`
-  - [ ] `apps/documents/urls/MetadataIndexing/DocumentMetadataValues.py`
-  - [ ] `templates/documents/metadata_indexing/document_metadata_value/list.html`
-  - [ ] `templates/documents/metadata_indexing/document_metadata_value/detail.html`
-  - [ ] `templates/documents/metadata_indexing/document_metadata_value/form.html`
-- [ ] **Entity 3: TaxonomyTerm** (`DTAX-`)
-  - [ ] `apps/documents/models/MetadataIndexing/TaxonomyTerms.py`
-  - [ ] `apps/documents/forms/MetadataIndexing/TaxonomyTerms.py`
-  - [ ] `apps/documents/views/MetadataIndexing/TaxonomyTerms.py`
-  - [ ] `apps/documents/urls/MetadataIndexing/TaxonomyTerms.py`
-  - [ ] `templates/documents/metadata_indexing/taxonomy_term/list.html`
-  - [ ] `templates/documents/metadata_indexing/taxonomy_term/detail.html`
-  - [ ] `templates/documents/metadata_indexing/taxonomy_term/form.html`
-  - [ ] `templates/documents/metadata_indexing/taxonomy_term/tree.html`
-- [ ] **Entity 4: DocumentOcrJob** (`DOCR-`)
-  - [ ] `apps/documents/models/MetadataIndexing/DocumentOcrJobs.py`
-  - [ ] `apps/documents/forms/MetadataIndexing/DocumentOcrJobs.py`
-  - [ ] `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py`
-  - [ ] `apps/documents/urls/MetadataIndexing/DocumentOcrJobs.py`
-  - [ ] `templates/documents/metadata_indexing/document_ocr_job/list.html`
-  - [ ] `templates/documents/metadata_indexing/document_ocr_job/detail.html`
-  - [ ] `templates/documents/metadata_indexing/document_ocr_job/form.html`
-  - [ ] `templates/documents/metadata_indexing/document_ocr_job/extract_viewer.html`
-- [ ] **Dedicated Metadata & Indexing Command Center Dashboard**
-  - [ ] `apps/documents/views/MetadataIndexing/MetadataIndexingDashboard.py`
-  - [ ] `apps/documents/urls/MetadataIndexing/MetadataIndexingDashboard.py`
-  - [ ] `templates/documents/metadata_indexing/metadata_indexing_dashboard.html`
+- [x] **Entity 1: MetadataSchema** (`DSCH-`)
+  - [x] `apps/documents/models/MetadataIndexing/MetadataSchemas.py`
+  - [x] `apps/documents/forms/MetadataIndexing/MetadataSchemas.py`
+  - [x] `apps/documents/views/MetadataIndexing/MetadataSchemas.py`
+  - [x] `apps/documents/urls/MetadataIndexing/MetadataSchemas.py`
+  - [x] `templates/documents/metadata_indexing/metadata_schema/list.html`
+  - [x] `templates/documents/metadata_indexing/metadata_schema/detail.html`
+  - [x] `templates/documents/metadata_indexing/metadata_schema/form.html`
+- [x] **Entity 2: DocumentMetadataValue** (`DMETA-`)
+  - [x] `apps/documents/models/MetadataIndexing/DocumentMetadataValues.py`
+  - [x] `apps/documents/forms/MetadataIndexing/DocumentMetadataValues.py`
+  - [x] `apps/documents/views/MetadataIndexing/DocumentMetadataValues.py`
+  - [x] `apps/documents/urls/MetadataIndexing/DocumentMetadataValues.py`
+  - [x] `templates/documents/metadata_indexing/document_metadata_value/list.html`
+  - [x] `templates/documents/metadata_indexing/document_metadata_value/detail.html`
+  - [x] `templates/documents/metadata_indexing/document_metadata_value/form.html`
+- [x] **Entity 3: TaxonomyTerm** (`DTAX-`)
+  - [x] `apps/documents/models/MetadataIndexing/TaxonomyTerms.py`
+  - [x] `apps/documents/forms/MetadataIndexing/TaxonomyTerms.py`
+  - [x] `apps/documents/views/MetadataIndexing/TaxonomyTerms.py`
+  - [x] `apps/documents/urls/MetadataIndexing/TaxonomyTerms.py`
+  - [x] `templates/documents/metadata_indexing/taxonomy_term/list.html`
+  - [x] `templates/documents/metadata_indexing/taxonomy_term/detail.html`
+  - [x] `templates/documents/metadata_indexing/taxonomy_term/form.html`
+  - [x] `templates/documents/metadata_indexing/taxonomy_term/tree.html`
+- [x] **Entity 4: DocumentOcrJob** (`DOCR-`)
+  - [x] `apps/documents/models/MetadataIndexing/DocumentOcrJobs.py`
+  - [x] `apps/documents/forms/MetadataIndexing/DocumentOcrJobs.py`
+  - [x] `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py`
+  - [x] `apps/documents/urls/MetadataIndexing/DocumentOcrJobs.py`
+  - [x] `templates/documents/metadata_indexing/document_ocr_job/list.html`
+  - [x] `templates/documents/metadata_indexing/document_ocr_job/detail.html`
+  - [x] `templates/documents/metadata_indexing/document_ocr_job/form.html`
+  - [x] `templates/documents/metadata_indexing/document_ocr_job/extract_viewer.html`
+- [x] **Dedicated Metadata & Indexing Command Center Dashboard**
+  - [x] `apps/documents/views/MetadataIndexing/MetadataIndexingDashboard.py`
+  - [x] `apps/documents/urls/MetadataIndexing/MetadataIndexingDashboard.py`
+  - [x] `templates/documents/metadata_indexing/metadata_indexing_dashboard.html`
 
 ### Phase 3.3: Integration & Migration
-- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
-- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
-- [ ] Re-export all views in `apps/documents/views/__init__.py`
-- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
-- [ ] Register all 4 models in `apps/documents/admin.py`
-- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.5 seed data
-- [ ] Wire `LIVE_LINKS["13.5"]` in `apps/core/navigation.py`:
+- [x] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [x] Re-export all forms in `apps/documents/forms/__init__.py`
+- [x] Re-export all views in `apps/documents/views/__init__.py`
+- [x] Wire URL routes in `apps/documents/urls/__init__.py`
+- [x] Register all 4 models in `apps/documents/admin.py`
+- [x] Extend `apps/documents/management/commands/seed_documents.py` with 13.5 seed data
+- [x] Wire `LIVE_LINKS["13.5"]` in `apps/core/navigation.py`:
   - `Custom Metadata Schema`: `documents:metadata_schema_list`
   - `Auto-Tagging & AI Classification`: `documents:document_ocr_job_list`
   - `Full-Text Indexing & OCR`: `documents:document_ocr_job_list`
   - `Controlled Vocabulary & Thesauri`: `documents:taxonomy_term_list`
   - `Metadata Inheritance & Propagation`: `documents:metadata_value_list`
-- [ ] Run `makemigrations documents`
-- [ ] Run `migrate`
-- [ ] Run `seed_documents` twice (idempotency check)
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations documents`
+- [x] Run `migrate`
+- [x] Run `seed_documents` twice (idempotency check)
+- [x] Run `manage.py check`
 
 ### Phase 3.4: Smoke Verification
-- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+- [x] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
-- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
-- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
-- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
-- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.5.md`
-- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
-- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.5.md`
+- [x] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [x] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [x] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [x] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [x] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [x] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [x] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.5.md`
 
 ### Phase 5: Code Fixer Burn-down
-- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+- [x] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
 
 ### Phase 6: Automated Test Suite (Unfiltered)
-- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
-- [ ] Implement `apps/documents/tests/test_metadata_indexing_models.py`
-- [ ] Implement `apps/documents/tests/test_metadata_indexing_forms.py`
-- [ ] Implement `apps/documents/tests/test_metadata_indexing_views.py`
-- [ ] Implement `apps/documents/tests/test_metadata_indexing_security.py`
-- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+- [x] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [x] Implement `apps/documents/tests/test_metadata_indexing_models.py`
+- [x] Implement `apps/documents/tests/test_metadata_indexing_forms.py`
+- [x] Implement `apps/documents/tests/test_metadata_indexing_views.py`
+- [x] Implement `apps/documents/tests/test_metadata_indexing_security.py`
+- [x] Run full unfiltered app test suite: `pytest apps/documents/tests/`
 
 ### Phase 7: Skill, README & Close-out
-- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.5 models, routes, templates, and seed details
-- [ ] Update `README.md` marking 13.5 complete and recording test statistics
-- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.5.md` and `.claude/tasks/gaps-documents-13.5.md`
-- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+- [x] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.5 models, routes, templates, and seed details
+- [x] Update `README.md` marking 13.5 complete and recording test statistics
+- [x] Record any gaps in `.agents/tasks/gaps-documents-13.5.md` and `.claude/tasks/gaps-documents-13.5.md`
+- [x] Document final review notes and close out in `.claude/tasks/todo.md`
 
 ---
 
@@ -39620,8 +39620,16 @@ apps/quality/
 - **Live Machine Learning Classification Models & Vector Embeddings (FAISS/pgvector)** — Classification in 13.5 uses regex, keyword density, and structured entity parsers, deferring vector embeddings to 13.6 (Search & Discovery).
 - **Background Asynchronous Worker Cluster (Celery/Redis)** — Jobs transition through states (`queued`, `processing`, `completed`, `failed`, `needs_review`) with synchronous fallback for tests and development.
 
-## Review notes
-(to be filled in at Phase 7 close-out)
+## Review notes (close-out 2026-11-23)
+- **Sub-module 13.5: Metadata & Indexing** completed end-to-end following the 8-phase Module Creation Sequence.
+- **Contract & Spec**: `.claude/tasks/contract-documents-13.5.md` frozen and honored 100%.
+- **Models & Packaging**: 4 core models (`MetadataSchema` [DSCH-], `DocumentMetadataValue` [DMETA-], `TaxonomyTerm` [DTAX-], `DocumentOcrJob` [DOCR-]), 4 model forms, 5 view packages (with dedicated `MetadataIndexingDashboard`), 5 url packages, 15 Tailwind/HTMX templates.
+- **Review Waves (6 Reviewers)**: All 6 specialist reviewers run serially. 27 total findings cataloged in `.claude/tasks/review-documents-13.5.md` (C1–C7, I1–I11, M1–M9).
+- **Code-Fixer Burn-down**: All 7 Critical and 11 Important findings resolved. Minor M1–M6, M9 resolved; M7 and M8 verified as false positives and skipped with documented reasons. 27 single-file commits executed.
+- **Automated Test Suite**: 38 dedicated tests added across 4 test modules (`test_metadata_indexing_models.py`, `_forms.py`, `_views.py`, `_security.py`). Full unfiltered suite `pytest apps/documents/tests/` passed 148 of 148 tests (100% green, SQLite in-memory).
+- **Gaps**: None. Declared in `.claude/tasks/gaps-documents-13.5.md`.
+- **Skill & README**: `.claude/skills/documents/SKILL.md` updated with models, routes, templates, and gotchas; `README.md` marked complete with 5/20 sub-modules and 148 tests.
+
 
 
 ---
