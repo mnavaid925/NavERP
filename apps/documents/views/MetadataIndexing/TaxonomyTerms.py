@@ -184,6 +184,16 @@ def taxonomy_term_delete(request, pk):
     """
     tenant = request.tenant
     term = get_object_or_404(TaxonomyTerm, pk=pk, tenant=tenant)
+
+    if term.children.exists():
+        messages.error(request, f"Cannot delete taxonomy term '{term.name}' because it has child terms. Reassign or delete child terms first.")
+        return redirect("documents:taxonomy_term_detail", pk=term.pk)
+
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    if term.is_governed and not is_admin:
+        messages.error(request, f"Taxonomy Term '{term.name}' is governed and requires administrator authorization to delete.")
+        return redirect("documents:taxonomy_term_detail", pk=term.pk)
+
     name = term.name
     with transaction.atomic():
         write_audit_log(request.user, term, "delete", tenant=tenant)
