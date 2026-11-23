@@ -86,17 +86,15 @@ def secure_viewer(request, pk=None):
         # Find matching DRM policy (both specific document and classification)
         drm_policy = DocumentDrmPolicy.objects.filter(
             tenant=request.tenant,
-            is_active=True,
             target_document=document,
-        ).first()
+        ).filter(Q(is_active=True) | Q(is_revoked=True)).first()
 
         if not drm_policy:
             drm_policy = DocumentDrmPolicy.objects.filter(
                 tenant=request.tenant,
-                is_active=True,
                 target_document__isnull=True,
                 classification=document.classification,
-            ).first()
+            ).filter(Q(is_active=True) | Q(is_revoked=True)).first()
 
         if drm_policy and drm_policy.is_revoked:
             is_drm_revoked = True
