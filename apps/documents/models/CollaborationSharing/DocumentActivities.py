@@ -104,6 +104,7 @@ class DocumentActivity(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "target_user", "is_read"], name="doc_dact_tnt_tgt_idx"),
             models.Index(fields=["tenant", "action_type"], name="doc_dact_tnt_act_idx"),
+            models.Index(fields=["tenant", "created_at"], name="doc_dact_tnt_crt_idx"),
         ]
 
     def __str__(self):
