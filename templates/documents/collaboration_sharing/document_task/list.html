@@ -106,7 +106,6 @@
                 <label class="form-label" for="status-select">Status</label>
                 <select name="status" id="status-select" class="form-select">
                     <option value="">All Statuses</option>
-                    <option value="overdue" {% if current_status == "overdue" %}selected{% endif %}>Overdue</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if current_status == code %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
