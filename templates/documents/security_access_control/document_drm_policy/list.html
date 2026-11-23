@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}DRM & Content Protection — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Security & Access Control</span>
+            <span>/</span>
+            <span>DRM Policies</span>
+        </div>
+        <h1 class="page-title">Digital Rights Management (DRM) & Protection</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:secure_viewer' %}" class="btn btn-outline">
+            <i data-lucide="shield"></i>
+            <span>Secure Web Viewer</span>
+        </a>
+        <a href="{% url 'documents:drm_policy_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Configure DRM Policy</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" class="form-input" placeholder="Policy name, document, #...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="classification">Classification</label>
+                <select name="classification" id="classification" class="form-select">
+                    <option value="">All Classifications</option>
+                    {% for val, label in classification_choices %}
+                    <option value="{{ val }}" {% if classification == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="is_revoked">Revocation State</label>
+                <select name="is_revoked" id="is_revoked" class="form-select">
+                    <option value="">All States</option>
+                    <option value="0" {% if is_revoked == "0" %}selected{% endif %}>Active / Non-Revoked</option>
+                    <option value="1" {% if is_revoked == "1" %}selected{% endif %}>Revoked (Killed)</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <a href="{% url 'documents:drm_policy_list' %}" class="btn btn-outline">Clear</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">DRM Security Policies ({{ paginator.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Policy #</th>
+                    <th>Policy Name</th>
+                    <th>Target Scope</th>
+                    <th>Classification</th>
+                    <th>Anti-Exfiltration Controls</th>
+                    <th>Security Standard</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pol in policies %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'documents:drm_policy_detail' pol.pk %}" class="text-primary-600 hover:underline">
+                            {{ pol.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ pol.name }}</div>
+                        <div class="text-xs text-slate-500">Expires in {{ pol.expiry_days }}d</div>
+                    </td>
+                    <td>
+                        {% if pol.target_document %}
+                        <div class="flex items-center gap-1.5 text-sm">
+                            <i data-lucide="file-text" class="w-4 h-4 text-slate-400"></i>
+                            <span class="truncate max-w-xs">{{ pol.target_document.title }}</span>
+                        </div>
+                        {% elif pol.target_folder %}
+                        <div class="flex items-center gap-1.5 text-sm">
+                            <i data-lucide="folder" class="w-4 h-4 text-amber-500"></i>
+                            <span>{{ pol.target_folder.name }}</span>
+                        </div>
+                        {% else %}
+                        <span class="text-slate-400">Type: {{ pol.document_type }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ pol.classification_badge }}">{{ pol.get_classification_display }}</span>
+                    </td>
+                    <td>
+                        <div class="flex gap-1 text-xs">
+                            {% if not pol.allow_download %}<span class="px-1.5 py-0.5 bg-red-50 text-red-700 rounded font-mono" title="Zero Download Enforced">No-DL</span>{% endif %}
+                            {% if not pol.allow_print %}<span class="px-1.5 py-0.5 bg-red-50 text-red-700 rounded font-mono" title="No Print Allowed">No-Print</span>{% endif %}
+                            {% if not pol.allow_copy_paste %}<span class="px-1.5 py-0.5 bg-red-50 text-red-700 rounded font-mono" title="Clipboard Blocked">No-Copy</span>{% endif %}
+                            {% if pol.screen_shield_enabled %}<span class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-mono" title="Screen Shield Blur">Shield</span>{% endif %}
+                            {% if pol.require_watermark %}<span class="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-mono" title="Watermark Enforced">Watermark</span>{% endif %}
+                        </div>
+                    </td>
+                    <td class="text-xs font-mono text-slate-600">
+                        {{ pol.encryption_standard }}
+                    </td>
+                    <td>
+                        {% if pol.is_revoked %}
+                        <span class="badge badge-red">Revoked</span>
+                        {% elif pol.is_active %}
+                        <span class="badge badge-green">Enforced</span>
+                        {% else %}
+                        <span class="badge badge-slate">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:drm_policy_detail' pol.pk %}" class="btn btn-icon btn-outline" title="View Policy">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:drm_policy_edit' pol.pk %}" class="btn btn-icon btn-outline" title="Edit Policy">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:drm_policy_delete' pol.pk %}" class="inline" onsubmit="return confirm('Delete DRM policy {{ pol.name }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Policy">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-900 mb-1">No DRM Policies Active</h3>
+                            <p class="text-sm text-slate-500 mb-4">Protect proprietary documents with zero-download sandboxed viewing, copy protection, and kill switches.</p>
+                            <a href="{% url 'documents:drm_policy_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create DRM Policy</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="text-sm text-slate-600">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} entries
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if classification %}&classification={{ classification }}{% endif %}{% if is_revoked %}&is_revoked={{ is_revoked }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            <span class="btn btn-sm btn-outline active">{{ page_obj.number }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if classification %}&classification={{ classification }}{% endif %}{% if is_revoked %}&is_revoked={{ is_revoked }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
