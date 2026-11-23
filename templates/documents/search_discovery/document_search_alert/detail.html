@@ -135,7 +135,7 @@
                         <tr>
                             <th>Number</th>
                             <th>Title</th>
-                            <th>Folder</th>
+                            <th>Department</th>
                             <th>Classification</th>
                             <th>Status</th>
                         </tr>
@@ -149,7 +149,7 @@
                                 </a>
                             </td>
                             <td class="font-medium text-slate-800 dark:text-slate-200">{{ doc.title }}</td>
-                            <td>{{ doc.folder.name|default:"Root" }}</td>
+                            <td>{{ doc.department.name|default:"General" }}</td>
                             <td><span class="badge badge-info">{{ doc.get_classification_display }}</span></td>
                             <td><span class="badge badge-green">{{ doc.get_status_display }}</span></td>
                         </tr>
