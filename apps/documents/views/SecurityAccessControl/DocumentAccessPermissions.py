@@ -66,9 +66,6 @@ def permission_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    documents = Document.objects.filter(tenant=request.tenant).order_by("title")[:100]
-    folders = DocumentFolder.objects.filter(tenant=request.tenant).order_by("name")[:100]
-
     context = {
         "permissions": page_obj,
         "page_obj": page_obj,
@@ -80,8 +77,6 @@ def permission_list(request):
         "is_active": is_active_val,
         "grantee_choices": DocumentAccessPermission.GRANTEE_TYPE_CHOICES,
         "level_choices": DocumentAccessPermission.PERMISSION_LEVEL_CHOICES,
-        "documents": documents,
-        "folders": folders,
     }
     return render(
         request,
