@@ -1582,7 +1582,7 @@ class Command(BaseCommand):
                     doc_collab = Document.objects.filter(tenant=tenant).order_by("created_at").first()
                     version_collab = DocumentVersion.objects.filter(tenant=tenant, document=doc_collab).first() if doc_collab else None
                     review_comment_target = DocumentReviewComment.objects.filter(tenant=tenant, document=doc_collab).first() if doc_collab else None
-                    org_unit_target = OrgUnit.objects.filter(tenant=tenant, is_active=True).first()
+                    org_unit_target = OrgUnit.objects.filter(tenant=tenant).first()
 
                     if doc_collab and user:
                         # 1. Document Shares
