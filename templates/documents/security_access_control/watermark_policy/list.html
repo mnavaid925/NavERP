@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Watermark Policies — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Security & Access Control</span>
+            <span>/</span>
+            <span>Watermark Policies</span>
+        </div>
+        <h1 class="page-title">Dynamic Watermark Policies</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:watermark_preview' %}" class="btn btn-outline">
+            <i data-lucide="eye"></i>
+            <span>Visual Watermark Studio</span>
+        </a>
+        <a href="{% url 'documents:watermark_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Watermark Policy</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ search_query }}" class="form-input" placeholder="Policy name, token, text...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="classification">Classification</label>
+                <select name="classification" id="classification" class="form-select">
+                    <option value="">All Classifications</option>
+                    {% for val, label in classification_choices %}
+                    <option value="{{ val }}" {% if classification == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="is_active">Status</label>
+                <select name="is_active" id="is_active" class="form-select">
+                    <option value="">All</option>
+                    <option value="1" {% if is_active == "1" %}selected{% endif %}>Active Only</option>
+                    <option value="0" {% if is_active == "0" %}selected{% endif %}>Inactive Only</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <a href="{% url 'documents:watermark_list' %}" class="btn btn-outline">Clear</a>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Watermark Policies ({{ paginator.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Policy #</th>
+                    <th>Policy Name</th>
+                    <th>Classification</th>
+                    <th>Watermark Pattern</th>
+                    <th>Layout & Opacity</th>
+                    <th>Enforcement</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pol in policies %}
+                <tr>
+                    <td class="font-medium text-slate-900">
+                        <a href="{% url 'documents:watermark_detail' pol.pk %}" class="text-primary-600 hover:underline">
+                            {{ pol.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ pol.name }}</div>
+                        {% if pol.department %}
+                        <div class="text-xs text-slate-500">Dept: {{ pol.department.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ pol.classification_badge }}">{{ pol.get_classification_display }}</span>
+                    </td>
+                    <td class="max-w-xs truncate text-xs font-mono text-slate-600">
+                        {{ pol.watermark_text }}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        <div>{{ pol.get_position_display }}</div>
+                        <div class="text-slate-400">{{ pol.opacity_percent }}% opacity, {{ pol.rotation_angle }}°</div>
+                    </td>
+                    <td>
+                        <div class="flex gap-1 text-xs">
+                            {% if pol.enforce_on_view %}<span class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-mono" title="Preview View">View</span>{% endif %}
+                            {% if pol.enforce_on_download %}<span class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-mono" title="Download">DL</span>{% endif %}
+                            {% if pol.enforce_on_print %}<span class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-mono" title="Print">Print</span>{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if pol.is_active %}
+                        <span class="badge badge-green">Active</span>
+                        {% else %}
+                        <span class="badge badge-slate">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:watermark_detail' pol.pk %}" class="btn btn-icon btn-outline" title="View Policy">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:watermark_preview' %}?policy_id={{ pol.pk }}" class="btn btn-icon btn-outline" title="Live Preview">
+                            <i data-lucide="sparkles"></i>
+                        </a>
+                        <a href="{% url 'documents:watermark_edit' pol.pk %}" class="btn btn-icon btn-outline" title="Edit Policy">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:watermark_delete' pol.pk %}" class="inline" onsubmit="return confirm('Delete watermark policy {{ pol.name }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Policy">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="layers" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-900 mb-1">No Watermark Policies Configured</h3>
+                            <p class="text-sm text-slate-500 mb-4">Establish dynamic watermark rules to protect sensitive and confidential documents.</p>
+                            <a href="{% url 'documents:watermark_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Policy</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="text-sm text-slate-600">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} entries
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if classification %}&classification={{ classification }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            <span class="btn btn-sm btn-outline active">{{ page_obj.number }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if classification %}&classification={{ classification }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
