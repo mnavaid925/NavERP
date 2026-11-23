@@ -20,6 +20,15 @@ from apps.documents.models.SearchDiscovery.DocumentSavedSearches import Document
 from apps.documents.models.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlert
 from apps.documents.models.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLog
 from apps.documents.models.SearchDiscovery.DocumentSearchSynonyms import DocumentSearchSynonym
+from apps.documents.models.SecurityAccessControl.DlpIncidents import DlpIncident
+from apps.documents.models.SecurityAccessControl.DlpPolicies import DlpPolicy
+from apps.documents.models.SecurityAccessControl.DocumentAccessPermissions import (
+    DocumentAccessPermission,
+)
+from apps.documents.models.SecurityAccessControl.DocumentDrmPolicies import (
+    DocumentDrmPolicy,
+)
+from apps.documents.models.SecurityAccessControl.WatermarkPolicies import WatermarkPolicy
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
@@ -54,4 +63,9 @@ __all__ = [
     "DocumentSearchAlert",
     "DocumentSearchSynonym",
     "DocumentSearchQueryLog",
+    "DocumentAccessPermission",
+    "WatermarkPolicy",
+    "DocumentDrmPolicy",
+    "DlpPolicy",
+    "DlpIncident",
 ]
