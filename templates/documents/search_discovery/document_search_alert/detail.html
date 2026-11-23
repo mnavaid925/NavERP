@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Search Alert {{ search_alert.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:search_hub' %}">Search & Discovery</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_search_alert_list' %}">Search Alerts</a>
+            <span>/</span>
+            <span>{{ search_alert.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Alert: {{ search_alert.saved_search.name }}</h1>
+            <span class="badge {{ search_alert.frequency_badge_class }}">{{ search_alert.get_frequency_display }}</span>
+            <span class="badge {{ search_alert.status_badge_class }}">{{ search_alert.get_status_display }}</span>
+            <span class="badge {{ search_alert.delivery_badge_class }}">{{ search_alert.get_delivery_channel_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'documents:document_search_alert_run_check' search_alert.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="refresh-cw"></i>
+                <span>Check Matches Now</span>
+            </button>
+        </form>
+        <a href="{% url 'documents:document_saved_search_run' search_alert.saved_search.pk %}" class="btn btn-outline">
+            <i data-lucide="play"></i>
+            <span>Run Query in Hub</span>
+        </a>
+        <a href="{% url 'documents:document_search_alert_edit' search_alert.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'documents:document_search_alert_delete' search_alert.pk %}" class="inline" onsubmit="return confirm('Delete this search alert subscription?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Alert Subscription Details</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Alert Reference</dt>
+                        <dd class="font-mono text-sm font-semibold">{{ search_alert.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Subscriber</dt>
+                        <dd>{{ search_alert.subscriber.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Saved Search</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_saved_search_detail' search_alert.saved_search.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ search_alert.saved_search.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Query Keywords</dt>
+                        <dd class="font-mono text-xs bg-slate-50 dark:bg-slate-800 p-2 rounded">
+                            {{ search_alert.saved_search.query_text|default:"(All documents with specified filters)" }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Monitoring Cadence</dt>
+                        <dd><span class="badge {{ search_alert.frequency_badge_class }}">{{ search_alert.get_frequency_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Notification Channel</dt>
+                        <dd><span class="badge {{ search_alert.delivery_badge_class }}">{{ search_alert.get_delivery_channel_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Checked Timestamp</dt>
+                        <dd>{{ search_alert.last_checked_at|date:"M d, Y H:i:s"|default:"Never checked" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Notification Sent</dt>
+                        <dd>{{ search_alert.last_notified_at|date:"M d, Y H:i:s"|default:"Never notified" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Delta Matches Detected</dt>
+                        <dd>
+                            {% if search_alert.new_matches_count > 0 %}
+                            <span class="badge badge-amber font-semibold">{{ search_alert.new_matches_count }} new documents</span>
+                            {% else %}
+                            <span class="text-slate-500">0 unread matches</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Subscription Status</dt>
+                        <dd><span class="badge {{ search_alert.status_badge_class }}">{{ search_alert.get_status_display }}</span></dd>
+                    </div>
+                </dl>
+
+                {% if search_alert.notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Subscriber Notes</h3>
+                    <p class="text-sm text-slate-700 dark:text-slate-300">{{ search_alert.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Matched Documents Table -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold">Recent Matched Documents (Sample)</h2>
+                <a href="{% url 'documents:document_saved_search_run' search_alert.saved_search.pk %}" class="btn btn-outline btn-sm">
+                    <i data-lucide="external-link"></i>
+                    <span>View All in Hub</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Title</th>
+                            <th>Folder</th>
+                            <th>Classification</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in matched_documents %}
+                        <tr>
+                            <td class="font-mono text-xs">
+                                <a href="{% url 'documents:document_detail' doc.pk %}" class="text-blue-600 hover:underline">
+                                    {{ doc.number }}
+                                </a>
+                            </td>
+                            <td class="font-medium text-slate-800 dark:text-slate-200">{{ doc.title }}</td>
+                            <td>{{ doc.folder.name|default:"Root" }}</td>
+                            <td><span class="badge badge-info">{{ doc.get_classification_display }}</span></td>
+                            <td><span class="badge badge-green">{{ doc.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-slate-400">
+                                No matched document snapshots recorded yet. Run a match check to populate.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Control & Metadata -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Alert Management</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <form method="post" action="{% url 'documents:document_search_alert_toggle_active' search_alert.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline w-full justify-center">
+                        <i data-lucide="{% if search_alert.is_active %}pause{% else %}play{% endif %}"></i>
+                        <span>{% if search_alert.is_active %}Pause Notifications{% else %}Activate Alert{% endif %}</span>
+                    </button>
+                </form>
+                <a href="{% url 'documents:document_search_alert_list' %}" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to Alerts List</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Audit Timestamps</h2>
+            </div>
+            <div class="card-body text-xs space-y-2 text-slate-500">
+                <div class="flex justify-between">
+                    <span>Subscribed At:</span>
+                    <span class="font-medium text-slate-700 dark:text-slate-300">{{ search_alert.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Last Rule Edit:</span>
+                    <span class="font-medium text-slate-700 dark:text-slate-300">{{ search_alert.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Tenant ID:</span>
+                    <span class="font-mono">{{ search_alert.tenant_id }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
