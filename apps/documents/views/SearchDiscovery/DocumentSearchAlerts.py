@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.core.utils import write_audit_log
@@ -182,7 +183,10 @@ def document_search_alert_toggle_active(request, pk):
 
     status_str = "activated" if search_alert.is_active else "paused"
     messages.success(request, f"Search alert '{search_alert.number}' has been {status_str}.")
-    return redirect(request.META.get("HTTP_REFERER", "documents:document_search_alert_list"))
+    referer = request.META.get("HTTP_REFERER")
+    if referer and url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}):
+        return redirect(referer)
+    return redirect("documents:document_search_alert_list")
 
 
 @login_required
