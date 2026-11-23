@@ -330,8 +330,8 @@ def metadata_schema(db, tenant_a, admin_user):
         tenant=tenant_a,
         name="Contract Metadata Schema",
         code="CONTRACT_V1",
-        target_type="document_type",
-        fields_definition_json='[{"name": "effective_date", "type": "date", "required": true}, {"name": "contract_value", "type": "decimal", "required": false}]',
+        target_type="contract",
+        fields_definition_json='[{"key": "effective_date", "label": "Effective Date", "data_type": "date", "required": true}, {"key": "contract_value", "label": "Contract Value", "data_type": "decimal", "required": false}]',
         is_active=True,
         created_by=admin_user,
     )
