@@ -87,7 +87,11 @@ def document_search_synonym_create(request):
             messages.success(request, f"Search synonym '{synonym.term}' created successfully.")
             return redirect("documents:document_search_synonym_detail", pk=synonym.pk)
     else:
-        form = DocumentSearchSynonymForm(tenant=request.tenant)
+        initial = {}
+        term = request.GET.get("term", "").strip()
+        if term:
+            initial["term"] = term
+        form = DocumentSearchSynonymForm(initial=initial, tenant=request.tenant)
 
     return render(
         request,
