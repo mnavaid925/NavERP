@@ -113,7 +113,7 @@ def search_hub(request):
             qs = qs.filter(owner__username__icontains=v)
 
     # Facet filter parameters
-    selected_doc_type = request.GET.get("doc_type", "").strip()
+    selected_doc_type = (request.GET.get("doc_type") or request.GET.get("document_type") or "").strip()
     if selected_doc_type:
         qs = qs.filter(document_type=selected_doc_type)
 
@@ -310,7 +310,7 @@ def search_export_csv(request):
             Q(number__icontains=raw_query)
         )
 
-    selected_doc_type = request.GET.get("doc_type", "").strip()
+    selected_doc_type = (request.GET.get("doc_type") or request.GET.get("document_type") or "").strip()
     if selected_doc_type:
         qs = qs.filter(document_type=selected_doc_type)
 
