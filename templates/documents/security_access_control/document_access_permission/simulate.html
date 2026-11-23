@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Effective Rights Simulator — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:permission_list' %}">Access Permissions</a>
+            <span>/</span>
+            <span>Effective Rights Simulator</span>
+        </div>
+        <h1 class="page-title">Effective Permissions Simulator</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:permission_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Permissions</span>
+        </a>
+    </div>
+</div>
+
+<!-- Simulation Selector Card -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Select Document & User Principal</h2>
+    </div>
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div class="form-group mb-0">
+                <label class="form-label" for="document">Target Document <span class="text-red-500">*</span></label>
+                <select name="document" id="document" class="form-select" required>
+                    <option value="">Select Document...</option>
+                    {% for doc in documents %}
+                    <option value="{{ doc.pk }}" {% if target_document and target_document.pk == doc.pk %}selected{% endif %}>
+                        {{ doc.number }} — {{ doc.title }} ({{ doc.get_classification_display }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="user">User Principal <span class="text-red-500">*</span></label>
+                <select name="user" id="user" class="form-select" required>
+                    <option value="">Select User...</option>
+                    {% for u in users %}
+                    <option value="{{ u.pk }}" {% if target_user and target_user.pk == u.pk %}selected{% endif %}>
+                        {{ u.get_full_name|default:u.username }} ({{ u.username }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="play"></i>
+                    <span>Calculate Effective Rights</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if simulated %}
+<!-- Simulation Results -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Evaluation Result</h2>
+            <p class="text-xs text-slate-500">Evaluated {{ target_user.get_full_name|default:target_user.username }} against {{ target_document.title }}</p>
+        </div>
+        <span class="badge {% if effective_capabilities.can_read %}badge-green{% else %}badge-red{% endif %}">
+            {% if effective_capabilities.can_read %}Access Permitted{% else %}Access Denied{% endif %}
+        </span>
+    </div>
+    <div class="card-body space-y-6">
+        <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Reason & Resolution Logic</div>
+            <div class="text-sm font-medium text-slate-900">{{ effective_capabilities.reason }}</div>
+            {% if effective_capabilities.matched_rules %}
+            <div class="mt-2 text-xs text-slate-600">
+                <span class="font-semibold">Contributing Rules:</span>
+                <ul class="list-disc list-inside mt-1 space-y-0.5">
+                    {% for rule in effective_capabilities.matched_rules %}
+                    <li>{{ rule }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+
+        <div>
+            <h3 class="text-sm font-semibold text-slate-800 mb-3">Net Effective Capabilities</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                <div class="p-3 rounded-lg border text-center {% if effective_capabilities.can_read %}border-emerald-200 bg-emerald-50/50{% else %}border-red-200 bg-red-50/30{% endif %}">
+                    <i data-lucide="{% if effective_capabilities.can_read %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 mx-auto mb-1 {% if effective_capabilities.can_read %}text-emerald-600{% else %}text-red-500{% endif %}"></i>
+                    <div class="text-xs font-bold {% if effective_capabilities.can_read %}text-emerald-900{% else %}text-red-900{% endif %}">Can Read</div>
+                    <div class="text-[10px] text-slate-500">{% if effective_capabilities.can_read %}Allowed{% else %}Blocked{% endif %}</div>
+                </div>
+
+                <div class="p-3 rounded-lg border text-center {% if effective_capabilities.can_write %}border-emerald-200 bg-emerald-50/50{% else %}border-red-200 bg-red-50/30{% endif %}">
+                    <i data-lucide="{% if effective_capabilities.can_write %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 mx-auto mb-1 {% if effective_capabilities.can_write %}text-emerald-600{% else %}text-red-500{% endif %}"></i>
+                    <div class="text-xs font-bold {% if effective_capabilities.can_write %}text-emerald-900{% else %}text-red-900{% endif %}">Can Write</div>
+                    <div class="text-[10px] text-slate-500">{% if effective_capabilities.can_write %}Allowed{% else %}Blocked{% endif %}</div>
+                </div>
+
+                <div class="p-3 rounded-lg border text-center {% if effective_capabilities.can_delete %}border-emerald-200 bg-emerald-50/50{% else %}border-red-200 bg-red-50/30{% endif %}">
+                    <i data-lucide="{% if effective_capabilities.can_delete %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 mx-auto mb-1 {% if effective_capabilities.can_delete %}text-emerald-600{% else %}text-red-500{% endif %}"></i>
+                    <div class="text-xs font-bold {% if effective_capabilities.can_delete %}text-emerald-900{% else %}text-red-900{% endif %}">Can Delete</div>
+                    <div class="text-[10px] text-slate-500">{% if effective_capabilities.can_delete %}Allowed{% else %}Blocked{% endif %}</div>
+                </div>
+
+                <div class="p-3 rounded-lg border text-center {% if effective_capabilities.can_download %}border-emerald-200 bg-emerald-50/50{% else %}border-red-200 bg-red-50/30{% endif %}">
+                    <i data-lucide="{% if effective_capabilities.can_download %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 mx-auto mb-1 {% if effective_capabilities.can_download %}text-emerald-600{% else %}text-red-500{% endif %}"></i>
+                    <div class="text-xs font-bold {% if effective_capabilities.can_download %}text-emerald-900{% else %}text-red-900{% endif %}">Can Download</div>
+                    <div class="text-[10px] text-slate-500">{% if effective_capabilities.can_download %}Allowed{% else %}Blocked{% endif %}</div>
+                </div>
+
+                <div class="p-3 rounded-lg border text-center {% if effective_capabilities.can_print %}border-emerald-200 bg-emerald-50/50{% else %}border-red-200 bg-red-50/30{% endif %}">
+                    <i data-lucide="{% if effective_capabilities.can_print %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 mx-auto mb-1 {% if effective_capabilities.can_print %}text-emerald-600{% else %}text-red-500{% endif %}"></i>
+                    <div class="text-xs font-bold {% if effective_capabilities.can_print %}text-emerald-900{% else %}text-red-900{% endif %}">Can Print</div>
+                    <div class="text-[10px] text-slate-500">{% if effective_capabilities.can_print %}Allowed{% else %}Blocked{% endif %}</div>
+                </div>
+
+                <div class="p-3 rounded-lg border text-center {% if effective_capabilities.can_share %}border-emerald-200 bg-emerald-50/50{% else %}border-red-200 bg-red-50/30{% endif %}">
+                    <i data-lucide="{% if effective_capabilities.can_share %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 mx-auto mb-1 {% if effective_capabilities.can_share %}text-emerald-600{% else %}text-red-500{% endif %}"></i>
+                    <div class="text-xs font-bold {% if effective_capabilities.can_share %}text-emerald-900{% else %}text-red-900{% endif %}">Can Share</div>
+                    <div class="text-[10px] text-slate-500">{% if effective_capabilities.can_share %}Allowed{% else %}Blocked{% endif %}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
