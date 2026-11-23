@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -67,8 +67,12 @@ def collaboration_hub(request):
     ).select_related("document", "user", "draft").order_by("-last_heartbeat")[:10]
 
     # KPI counts
-    stat_my_tasks_count = my_tasks.filter(status__in=["pending", "in_progress"]).count()
-    stat_overdue_tasks_count = my_tasks.exclude(status="completed").filter(due_date__lt=now_date).count()
+    task_counts = my_tasks.aggregate(
+        active=Count("id", filter=Q(status__in=["pending", "in_progress"])),
+        overdue=Count("id", filter=~Q(status="completed") & Q(due_date__lt=now_date)),
+    )
+    stat_my_tasks_count = task_counts["active"]
+    stat_overdue_tasks_count = task_counts["overdue"]
     stat_shares_by_me_count = shared_by_me.filter(is_active=True).count()
     stat_shares_with_me_count = shared_with_me.count()
     stat_unread_activities_count = DocumentActivity.objects.filter(
