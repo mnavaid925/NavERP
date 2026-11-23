@@ -8,6 +8,10 @@ from apps.documents.models.ApprovalWorkflow.DocumentReviewComments import (
     DocumentReviewComment,
 )
 from apps.documents.models.ApprovalWorkflow.DocumentSignatures import DocumentSignature
+from apps.documents.models.CollaborationSharing.CoauthorSessions import CoauthorSession
+from apps.documents.models.CollaborationSharing.DocumentActivities import DocumentActivity
+from apps.documents.models.CollaborationSharing.DocumentShares import DocumentShare
+from apps.documents.models.CollaborationSharing.DocumentTasks import DocumentTask
 from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
@@ -68,4 +72,8 @@ __all__ = [
     "DocumentDrmPolicy",
     "DlpPolicy",
     "DlpIncident",
+    "DocumentShare",
+    "CoauthorSession",
+    "DocumentTask",
+    "DocumentActivity",
 ]
