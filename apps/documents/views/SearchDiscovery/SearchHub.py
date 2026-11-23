@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import json
 import re
 import time
@@ -170,7 +171,7 @@ def search_hub(request):
                 is_zero_result=(total_count == 0),
                 execution_time_ms=duration_ms,
                 search_source="search_hub",
-                session_key=request.session.session_key or "",
+                session_key=hashlib.sha256(request.session.session_key.encode("utf-8")).hexdigest()[:16] if (request.session and request.session.session_key) else "",
             )
         except Exception:
             pass  # Non-blocking telemetry log
