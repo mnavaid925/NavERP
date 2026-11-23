@@ -29,6 +29,15 @@ from apps.documents.forms.SearchDiscovery.DocumentSavedSearches import DocumentS
 from apps.documents.forms.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlertForm
 from apps.documents.forms.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLogForm
 from apps.documents.forms.SearchDiscovery.DocumentSearchSynonyms import DocumentSearchSynonymForm
+from apps.documents.forms.SecurityAccessControl.DlpIncidents import DlpIncidentResolveForm
+from apps.documents.forms.SecurityAccessControl.DlpPolicies import DlpPolicyForm
+from apps.documents.forms.SecurityAccessControl.DocumentAccessPermissions import (
+    DocumentAccessPermissionForm,
+)
+from apps.documents.forms.SecurityAccessControl.DocumentDrmPolicies import (
+    DocumentDrmPolicyForm,
+)
+from apps.documents.forms.SecurityAccessControl.WatermarkPolicies import WatermarkPolicyForm
 from apps.documents.forms.StorageRepository.DocumentBatchImports import DocumentBatchImportForm
 from apps.documents.forms.StorageRepository.DocumentFolders import DocumentFolderForm
 from apps.documents.forms.StorageRepository.DocumentRelationships import DocumentRelationshipForm
@@ -88,4 +97,9 @@ __all__ = [
     "DocumentSearchAlertForm",
     "DocumentSearchSynonymForm",
     "DocumentSearchQueryLogForm",
+    "DocumentAccessPermissionForm",
+    "WatermarkPolicyForm",
+    "DocumentDrmPolicyForm",
+    "DlpPolicyForm",
+    "DlpIncidentResolveForm",
 ]
