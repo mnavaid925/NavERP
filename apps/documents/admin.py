@@ -10,6 +10,10 @@ from apps.documents.models.ApprovalWorkflow.DocumentReviewComments import (
     DocumentReviewComment,
 )
 from apps.documents.models.ApprovalWorkflow.DocumentSignatures import DocumentSignature
+from apps.documents.models.CollaborationSharing.CoauthorSessions import CoauthorSession
+from apps.documents.models.CollaborationSharing.DocumentActivities import DocumentActivity
+from apps.documents.models.CollaborationSharing.DocumentShares import DocumentShare
+from apps.documents.models.CollaborationSharing.DocumentTasks import DocumentTask
 from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
@@ -272,6 +276,39 @@ class DlpIncidentAdmin(admin.ModelAdmin):
     list_filter = ("severity", "action_taken", "resolution_status", "tenant")
     search_fields = ("number", "snippet_redacted", "resolution_notes", "policy__name", "document__title")
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentShare)
+class DocumentShareAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "share_type", "access_level", "shared_by", "shared_with_user", "shared_with_email", "access_count", "expires_at", "is_active", "tenant")
+    list_filter = ("share_type", "access_level", "is_active", "tenant")
+    search_fields = ("number", "share_token", "shared_with_email", "document__title")
+    readonly_fields = ("number", "share_token", "access_count", "last_accessed_at", "revoked_at", "created_at", "updated_at")
+
+
+@admin.register(CoauthorSession)
+class CoauthorSessionAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "user", "guest_name", "color_code", "status", "is_editing", "current_section", "last_heartbeat", "tenant")
+    list_filter = ("status", "is_editing", "tenant")
+    search_fields = ("number", "session_token", "guest_name", "current_section", "document__title")
+    readonly_fields = ("number", "session_token", "joined_at", "last_heartbeat", "disconnected_at", "created_at", "updated_at")
+
+
+@admin.register(DocumentTask)
+class DocumentTaskAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "document", "task_type", "priority", "status", "assigned_to", "assigned_org_unit", "due_date", "tenant")
+    list_filter = ("task_type", "priority", "status", "tenant")
+    search_fields = ("number", "title", "description", "document__title")
+    readonly_fields = ("number", "completed_at", "created_at", "updated_at")
+
+
+@admin.register(DocumentActivity)
+class DocumentActivityAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "actor", "guest_name", "target_user", "action_type", "is_read", "created_at", "tenant")
+    list_filter = ("action_type", "is_read", "notification_channel", "tenant")
+    search_fields = ("number", "summary", "document__title")
+    readonly_fields = ("number", "read_at", "created_at", "updated_at")
+
 
 
 
