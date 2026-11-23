@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Controlled Vocabularies & Thesauri — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_indexing_dashboard' %}">Metadata & Indexing</a>
+            <span>/</span>
+            <span>Taxonomy</span>
+        </div>
+        <h1 class="page-title">Controlled Vocabularies & Thesauri</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:taxonomy_term_tree' %}" class="btn btn-outline">
+            <i data-lucide="network"></i>
+            <span>Thesaurus Tree</span>
+        </a>
+        <a href="{% url 'documents:taxonomy_term_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Term</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="book-marked"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ taxonomy_terms|length }}</div>
+            <div class="stat-label">Terms on Current Page</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="git-merge"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-info">Standardized</span></div>
+            <div class="stat-label">Synonym Normalization</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-green">Governed</span></div>
+            <div class="stat-label">Enterprise Thesaurus</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" class="form-input" placeholder="Term, code, synonyms, standard...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="category">Thesaurus Category</label>
+                <select name="category" id="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                        <option value="{{ val }}" {% if category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="is_active">Status</label>
+                <select name="is_active" id="is_active" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="1" {% if is_active == "1" or is_active == "true" %}selected{% endif %}>Active</option>
+                    <option value="0" {% if is_active == "0" or is_active == "false" %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:taxonomy_term_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">Standardized Terms</h2>
+        <span class="text-xs text-slate-500">Sub-module 13.5</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Term Name</th>
+                    <th>Term Code</th>
+                    <th>Category</th>
+                    <th>Parent Term</th>
+                    <th>Synonyms</th>
+                    <th>Standard / External</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in taxonomy_terms %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-blue-600">
+                        <a href="{% url 'documents:taxonomy_term_detail' item.pk %}">{{ item.number }}</a>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:taxonomy_term_detail' item.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                            {{ item.name }}
+                        </a>
+                        {% if item.description %}
+                            <p class="text-xs text-slate-500 truncate max-w-xs">{{ item.description }}</p>
+                        {% endif %}
+                    </td>
+                    <td><span class="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{{ item.term_code }}</span></td>
+                    <td><span class="badge {{ item.category_badge }}">{{ item.get_category_display }}</span></td>
+                    <td>
+                        {% if item.parent %}
+                            <a href="{% url 'documents:taxonomy_term_detail' item.parent.pk %}" class="text-xs text-blue-600 hover:underline">
+                                {{ item.parent.name }}
+                            </a>
+                        {% else %}
+                            <span class="text-xs text-slate-400">— Top Level —</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate font-mono text-xs">{{ item.parsed_synonyms|length }} synonyms</span>
+                    </td>
+                    <td>
+                        {% if item.external_code %}
+                            <span class="font-mono text-xs text-slate-600">{{ item.external_code }}</span>
+                        {% else %}
+                            <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ item.status_badge }}">{{ item.is_active|yesno:"Active,Inactive" }}</span></td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:taxonomy_term_detail' item.pk %}" class="btn btn-icon" title="View Term">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:taxonomy_term_edit' item.pk %}" class="btn btn-icon" title="Edit Term">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:taxonomy_term_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete term {{ item.name }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Term">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <i data-lucide="book-marked"></i>
+                            </div>
+                            <h3>No Taxonomy Terms Found</h3>
+                            <p>Build enterprise controlled vocabularies and thesauri with hierarchical classifications.</p>
+                            <a href="{% url 'documents:taxonomy_term_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create Term</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex justify-between items-center">
+        <div class="text-sm text-slate-500">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+                <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+                <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
