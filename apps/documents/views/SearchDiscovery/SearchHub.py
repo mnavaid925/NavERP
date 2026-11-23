@@ -69,13 +69,23 @@ def search_hub(request):
         expansion_terms = set(query_words)
         matched_syn_ids = []
         for syn in active_synonyms:
+            canonical_term = syn.term.lower().strip()
             syn_terms = [t.lower() for t in syn.get_all_terms()]
+            matched = False
             for qw in query_words:
-                if qw in syn_terms:
-                    expansion_terms.update(syn_terms)
-                    synonyms_applied.append(f"{syn.term} ↔ {syn.synonyms}")
-                    matched_syn_ids.append(syn.id)
-                    break
+                if syn.is_bidirectional:
+                    if qw in syn_terms:
+                        matched = True
+                        break
+                else:
+                    if qw == canonical_term:
+                        matched = True
+                        break
+            if matched:
+                expansion_terms.update(syn_terms)
+                symbol = "↔" if syn.is_bidirectional else "→"
+                synonyms_applied.append(f"{syn.term} {symbol} {syn.synonyms}")
+                matched_syn_ids.append(syn.id)
 
         if matched_syn_ids:
             DocumentSearchSynonym.objects.filter(id__in=matched_syn_ids).update(hit_count=F("hit_count") + 1)
