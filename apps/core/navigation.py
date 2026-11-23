@@ -3575,6 +3575,16 @@ LIVE_LINKS = {
         "Search Synonyms": "documents:document_search_synonym_list",
         "Search Query Logs": "documents:document_search_query_log_list",
     },
+    # 13.7 Document Security & Access Control
+    "13.7": {
+        "Document-Level Permissions": "documents:permission_list",
+        "Dynamic Watermarking": "documents:watermark_list",
+        "DRM & Document Protection": "documents:drm_policy_list",
+        "Data Loss Prevention (DLP)": "documents:dlp_policy_list",
+        # Extra live leaves:
+        "DLP Incidents": "documents:dlp_incident_list",
+        "Secure Web Viewer": "documents:secure_viewer",
+    },
 
 
 
