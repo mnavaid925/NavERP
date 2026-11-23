@@ -47,7 +47,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
     1. `secure_viewer` retrieves documents without checking if user is document owner, tenant admin, or has `can_read` grant in `DocumentAccessPermission`.
     2. If a matching `DocumentDrmPolicy` has `is_revoked=True`, `secure_viewer` filters `is_revoked=False` when fetching policies and falls back to rendering the document unblocked rather than terminating access.
   - **Fix**: Check read permission or admin status before displaying document; if matching DRM policy is revoked (`is_revoked=True`), block viewing with an emergency revocation notice.
-- [ ] **I3: Missing view-level status guard on `drm_kill_switch`**
+- [x] **I3: Missing view-level status guard on `drm_kill_switch`**
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/DocumentDrmPolicies.py:150`
   - **Description**: The view does not check `if policy.is_revoked:` before calling `policy.revoke()`, so a direct POST can repeatedly re-revoke an already killed policy, overwriting audit timestamp and reason.
   - **Fix**: Add view-level guard: `if policy.is_revoked: messages.info(request, "This DRM policy has already been revoked."); return redirect("documents:drm_policy_detail", pk=policy.pk)`.
