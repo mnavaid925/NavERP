@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.SecurityAccessControl.DlpIncidents import DlpIncidentResolveForm
 from apps.documents.models.SecurityAccessControl.DlpIncidents import DlpIncident
@@ -86,7 +87,7 @@ def dlp_incident_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def dlp_incident_resolve(request, pk):
     incident = documents_object(request, DlpIncident, pk)
