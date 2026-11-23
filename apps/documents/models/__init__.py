@@ -12,6 +12,10 @@ from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
 from apps.documents.models.DocumentAuthoring.TemplateSections import TemplateSection
+from apps.documents.models.MetadataIndexing.DocumentMetadataValues import DocumentMetadataValue
+from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
+from apps.documents.models.MetadataIndexing.MetadataSchemas import MetadataSchema
+from apps.documents.models.MetadataIndexing.TaxonomyTerms import TaxonomyTerm
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
@@ -38,4 +42,8 @@ __all__ = [
     "StorageVolume",
     "DocumentRelationship",
     "DocumentBatchImport",
+    "MetadataSchema",
+    "DocumentMetadataValue",
+    "TaxonomyTerm",
+    "DocumentOcrJob",
 ]
