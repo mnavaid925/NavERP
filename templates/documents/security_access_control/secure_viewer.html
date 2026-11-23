@@ -230,10 +230,13 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
+    const allowPrint = {{ allow_print|yesno:"true,false" }};
+    const allowCopy = {{ allow_copy|yesno:"true,false" }};
+
     // Intercept print, copy, save shortcuts
     document.addEventListener("keydown", function(e) {
         // Ctrl+P / Cmd+P (Print)
-        if ((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")) {
+        if (!allowPrint && (e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")) {
             e.preventDefault();
             alert("Security Notice: Printing is restricted by DRM policy for this document.");
             return false;
@@ -245,7 +248,6 @@ document.addEventListener("DOMContentLoaded", function() {
             return false;
         }
         // Ctrl+C / Cmd+C (Copy) when copy disabled
-        const allowCopy = {{ allow_copy|yesno:"true,false" }};
         if (!allowCopy && (e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) {
             e.preventDefault();
             alert("Security Notice: Clipboard copy is prohibited by DRM policy.");
