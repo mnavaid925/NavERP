@@ -128,7 +128,7 @@ class DocumentShare(TenantNumbered):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="received_document_shares",
+        related_name="dms_received_document_shares",
     )
     shared_with_email = models.EmailField(
         blank=True,
