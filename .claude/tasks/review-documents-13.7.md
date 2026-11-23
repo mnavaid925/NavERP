@@ -103,3 +103,32 @@ None.
 - Sandboxed zero-download viewer with focus-loss blur overlay, context-menu blocking, and forensic watermark overlay.
 - Visual Watermark Studio with real-time slider controls.
 - Effective Rights Simulator with rich ACL contributing rule breakdown.
+
+
+---
+
+## 4. Performance Reviewer Pass (`performance-reviewer`)
+
+### Verdict
+Strong adherence to core database performance hygiene in primary list views (all 5 list views enforce pagination before evaluation and configure `select_related`). 1 Critical issue (unbounded, unprojected table scans in `permission_simulate`), 4 Important issues (redundant queries on `permission_list`, lazy FK on `document.department` in `secure_viewer`, lazy FK lookup on `self.tenant.name` in `render_watermark`, and missing `list_select_related` in Django Admin).
+
+### Critical
+1. `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py:183-184` — Unbounded, unprojected table scans in `permission_simulate`: Queries fetch all documents and users for the tenant without limits or `.only(...)`. Fix: add `.only("id", "number", "title", "classification")[:200]` and `.only("id", "username", "first_name", "last_name")[:200]`.
+
+### Important
+1. `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py:67-68` — Wasted database queries in `permission_list`: `documents` and `folders` are queried (`[:100]`) and passed to context, but not rendered in template filters. Fix: remove unused queries and context variables.
+2. `apps/documents/views/SecurityAccessControl/SecureViewer.py:20` — Missing `select_related("department")` in `secure_viewer`: Template renders `document.department.name`, causing an extra query. Fix: add `.select_related("department")` to `docs_qs`.
+3. `apps/documents/models/SecurityAccessControl/WatermarkPolicies.py:141` — Lazy FK evaluation of `self.tenant.name` in `WatermarkPolicy.render_watermark`: Accessing `self.tenant.name` triggers an extra query. Fix: pass `tenant_name` or prefetch tenant.
+4. `apps/documents/admin.py:242-246,273-278` — Missing `list_select_related` in Django Admin: `DocumentAccessPermissionAdmin` and `DlpIncidentAdmin` render foreign key columns without `list_select_related`, triggering `1 + 4N` queries. Fix: add `list_select_related` tuples.
+
+### Minor
+1. `apps/documents/views/SecurityAccessControl/SecureViewer.py:46-60` — Sequential 2-query fallback for DRM policy resolution: Can be consolidated with `Q(target_document=document) | Q(classification=document.classification)`.
+2. `apps/documents/models/SecurityAccessControl/DocumentAccessPermissions.py:121` & `DlpIncidents.py:113` — Missing composite index on `(tenant, created_at)` for reverse-chronological pagination.
+3. `apps/documents/models/SecurityAccessControl/DocumentDrmPolicies.py:107` — Missing composite index on `(tenant, target_document, is_active, is_revoked)`.
+4. `apps/documents/views/SecurityAccessControl/WatermarkPolicies.py:176` — Unprojected `policies` queryset in `watermark_preview`: Add `.only("id", "name", "classification")`.
+
+### Done well
+- Clean N+1 prevention across all 5 list views with explicit `select_related`.
+- Denormalized `incident_count` counter on `DlpPolicy` avoids subquery performance degradation.
+- Paginator count caching properly utilized.
+- In-memory sliced length used in `dlp_policy_detail`.
