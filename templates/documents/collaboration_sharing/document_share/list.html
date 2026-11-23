@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Document Shares & Links — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_hub' %}">Collaboration & Sharing</a>
+            <span>/</span>
+            <span>Document Shares</span>
+        </div>
+        <h1 class="page-title">Document Shares & Link Management</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:collaboration_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-grid"></i>
+            <span>Collaboration Hub</span>
+        </a>
+        <a href="{% url 'documents:document_share_create' %}" class="btn btn-primary">
+            <i data-lucide="share-2"></i>
+            <span>New Share Link</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Strip -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="share-2"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Created Shares</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ active_count }}</div>
+            <div class="stat-label">Active Valid Shares</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ expired_count }}</div>
+            <div class="stat-label">Expired Shares</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ revoked_count }}</div>
+            <div class="stat-label">Revoked Shares</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+            <div>
+                <label class="form-label" for="search-input">Search Shares</label>
+                <input type="text" name="q" id="search-input" value="{{ q }}" placeholder="Search by number, doc title, email..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="share-type-select">Share Type</label>
+                <select name="share_type" id="share-type-select" class="form-select">
+                    <option value="">All Share Types</option>
+                    {% for code, label in share_type_choices %}
+                    <option value="{{ code }}" {% if current_share_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="access-level-select">Access Level</label>
+                <select name="access_level" id="access-level-select" class="form-select">
+                    <option value="">All Permissions</option>
+                    {% for code, label in access_level_choices %}
+                    <option value="{{ code }}" {% if current_access_level == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status-select">Status</label>
+                <select name="status" id="status-select" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if current_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or current_share_type or current_access_level or current_status %}
+                <a href="{% url 'documents:document_share_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Shares Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Share Number</th>
+                    <th>Document / Folder</th>
+                    <th>Share Type</th>
+                    <th>Access Level</th>
+                    <th>Recipient</th>
+                    <th>Access Count</th>
+                    <th>Expires At</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for share in shares %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'documents:document_share_detail' share.pk %}" class="text-blue-600 hover:underline">
+                            {{ share.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            {% if share.document %}
+                            <a href="{% url 'documents:document_detail' share.document.pk %}" class="hover:underline">
+                                {{ share.document.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-500 italic">Folder Share</span>
+                            {% endif %}
+                        </div>
+                        {% if share.version %}
+                        <div class="text-xs text-slate-500">Locked to {{ share.version.number }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ share.get_share_type_badge }}">
+                            {{ share.get_share_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ share.get_access_level_badge }}">
+                            {{ share.get_access_level_display }}
+                        </span>
+                        {% if not share.allow_download %}
+                        <span class="badge badge-muted text-xs" title="Download disabled">No Download</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        {% if share.share_type == "internal_user" and share.shared_with_user %}
+                            {{ share.shared_with_user.get_full_name|default:share.shared_with_user.username }}
+                        {% elif share.share_type == "internal_dept" and share.shared_with_org_unit %}
+                            {{ share.shared_with_org_unit.name }}
+                        {% elif share.share_type == "external_email" and share.shared_with_email %}
+                            {{ share.shared_with_email }}
+                        {% else %}
+                            <span class="text-slate-500">Public Link</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        <span class="font-semibold">{{ share.access_count }}</span>
+                        {% if share.max_uses %}
+                        <span class="text-xs text-slate-500">/ {{ share.max_uses }} max</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        {% if share.expires_at %}
+                            {{ share.expires_at|date:"M d, Y H:i" }}
+                        {% else %}
+                            <span class="text-slate-400">Never</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ share.get_status_badge }}">
+                            {{ share.status_label|title }}
+                        </span>
+                        {% if share.has_password %}
+                        <span class="badge badge-slate text-xs" title="Password protected">
+                            <i data-lucide="lock" class="w-3 h-3 inline"></i>
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:document_share_detail' share.pk %}" class="btn btn-icon btn-outline" title="View Share Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if share.is_active %}
+                        <a href="{% url 'documents:document_share_edit' share.pk %}" class="btn btn-icon btn-outline" title="Edit Share">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:document_share_revoke' share.pk %}" class="inline" onsubmit="return confirm('Revoke this share link immediately?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-outline text-amber-600" title="Revoke Share">
+                                <i data-lucide="ban"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        <form method="post" action="{% url 'documents:document_share_delete' share.pk %}" class="inline" onsubmit="return confirm('Delete share record permanently?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Share">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="share-2" class="empty-icon"></i>
+                            <h3>No Document Shares Found</h3>
+                            <p>Share documents with colleagues or external collaborators securely.</p>
+                            <a href="{% url 'documents:document_share_create' %}" class="btn btn-primary mt-3">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Share Link</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} shares
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if current_share_type %}&share_type={{ current_share_type }}{% endif %}{% if current_access_level %}&access_level={{ current_access_level }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if current_share_type %}&share_type={{ current_share_type }}{% endif %}{% if current_access_level %}&access_level={{ current_access_level }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
