@@ -18,7 +18,7 @@ from apps.documents.views._common import documents_object, documents_scope
 @login_required
 def document_task_list(request):
     base_qs = documents_scope(DocumentTask.objects.all(), request).select_related(
-        "document", "assigned_to", "assigned_by", "assigned_org_unit"
+        "document", "assigned_to", "assigned_by", "assigned_org_unit", "review_comment"
     )
 
     now_date = timezone.now().date()
@@ -97,7 +97,7 @@ def document_task_detail(request, pk):
         request,
         DocumentTask,
         pk,
-        select_related=["document", "version", "review_comment", "assigned_to", "assigned_by", "assigned_org_unit", "completed_by"],
+        select_related=["document", "version", "review_comment", "review_comment__author", "assigned_to", "assigned_by", "assigned_org_unit", "completed_by"],
     )
     context = {
         "task": task,
