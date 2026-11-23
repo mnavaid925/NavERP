@@ -160,7 +160,7 @@
                         <a href="{% url 'documents:taxonomy_term_edit' item.pk %}" class="btn btn-icon" title="Edit Term">
                             <i data-lucide="pencil"></i>
                         </a>
-                        <form method="post" action="{% url 'documents:taxonomy_term_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete term {{ item.name }}?');">
+                        <form method="post" action="{% url 'documents:taxonomy_term_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete term {{ item.name|escapejs }}?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Term">
                                 <i data-lucide="trash-2"></i>
