@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}DRM Policy: {{ policy.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:drm_policy_list' %}">DRM Policies</a>
+            <span>/</span>
+            <span>{{ policy.name }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ policy.name }}</h1>
+            <span class="badge {{ policy.classification_badge }}">{{ policy.get_classification_display }}</span>
+            {% if policy.is_revoked %}
+            <span class="badge badge-red">REVOKED (KILL-SWITCH ENGAGED)</span>
+            {% elif policy.is_active %}
+            <span class="badge badge-green">Active & Enforcing</span>
+            {% else %}
+            <span class="badge badge-slate">Disabled</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:drm_policy_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Policies</span>
+        </a>
+        {% if not policy.is_revoked %}
+        <button type="button" onclick="document.getElementById('kill_switch_modal').classList.remove('hidden')" class="btn btn-danger">
+            <i data-lucide="alert-octagon"></i>
+            <span>Engage Emergency Kill-Switch</span>
+        </button>
+        <a href="{% url 'documents:drm_policy_edit' policy.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Policy</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+{% if policy.is_revoked %}
+<div class="card mb-6 bg-red-50 border-red-300">
+    <div class="card-body">
+        <div class="flex items-start gap-3">
+            <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600 mt-0.5"></i>
+            <div>
+                <h3 class="text-base font-bold text-red-900">Emergency Document Revocation Active</h3>
+                <p class="text-sm text-red-700 mt-1">
+                    This policy was revoked on <strong>{{ policy.revoked_at|date:"M d, Y H:i" }}</strong>.
+                    Reason: <em>{{ policy.revocation_reason }}</em>.
+                    All active sessions and cryptographic tokens have been rendered invalid.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Anti-Exfiltration Safeguards -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Anti-Exfiltration & Protection Gates</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div class="p-3 rounded-lg border {% if not policy.allow_download %}border-emerald-200 bg-emerald-50/40{% else %}border-red-200 bg-red-50/40{% endif %}">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">File Download</div>
+                        <div class="text-sm font-bold mt-1 {% if not policy.allow_download %}text-emerald-800{% else %}text-red-700{% endif %}">
+                            {% if not policy.allow_download %}Zero Download (Blocked){% else %}Download Allowed{% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 rounded-lg border {% if not policy.allow_print %}border-emerald-200 bg-emerald-50/40{% else %}border-red-200 bg-red-50/40{% endif %}">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">Printing</div>
+                        <div class="text-sm font-bold mt-1 {% if not policy.allow_print %}text-emerald-800{% else %}text-red-700{% endif %}">
+                            {% if not policy.allow_print %}Printing Disabled{% else %}Printing Permitted{% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 rounded-lg border {% if not policy.allow_copy_paste %}border-emerald-200 bg-emerald-50/40{% else %}border-red-200 bg-red-50/40{% endif %}">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">Clipboard Copy</div>
+                        <div class="text-sm font-bold mt-1 {% if not policy.allow_copy_paste %}text-emerald-800{% else %}text-red-700{% endif %}">
+                            {% if not policy.allow_copy_paste %}Copy/Paste Blocked{% else %}Copy Allowed{% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 rounded-lg border {% if policy.screen_shield_enabled %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">Screen Shield</div>
+                        <div class="text-sm font-bold mt-1 {% if policy.screen_shield_enabled %}text-emerald-800{% else %}text-slate-500{% endif %}">
+                            {% if policy.screen_shield_enabled %}Focus-Loss Blur Active{% else %}Shield Off{% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 rounded-lg border {% if policy.secure_viewer_required %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">Secure Web Viewer</div>
+                        <div class="text-sm font-bold mt-1 {% if policy.secure_viewer_required %}text-emerald-800{% else %}text-slate-500{% endif %}">
+                            {% if policy.secure_viewer_required %}Canvas Sandbox Enforced{% else %}Standard Viewer{% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 rounded-lg border {% if policy.require_watermark %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <div class="text-xs font-semibold text-slate-500 uppercase">Watermark Overlay</div>
+                        <div class="text-sm font-bold mt-1 {% if policy.require_watermark %}text-emerald-800{% else %}text-slate-500{% endif %}">
+                            {% if policy.require_watermark %}Mandatory Watermark{% else %}Optional{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scope & Network Perimeter -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Target Scope & Network Geofencing</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            {% if policy.target_document %}
+                            <a href="{% url 'documents:document_detail' policy.target_document.pk %}" class="text-primary-600 hover:underline font-medium">
+                                {{ policy.target_document.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">All documents matching classification</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Folder</dt>
+                        <dd>
+                            {% if policy.target_folder %}
+                            <a href="{% url 'documents:folder_detail' policy.target_folder.pk %}" class="text-primary-600 hover:underline font-medium">
+                                {{ policy.target_folder.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">No specific folder restriction</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Access Expiration</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.expiry_days }} days after issue</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Offline Access Limit</dt>
+                        <dd class="font-medium text-slate-900">
+                            {% if policy.max_offline_hours == 0 %}
+                            <span class="badge badge-red">Offline Access Strictly Prohibited</span>
+                            {% else %}
+                            Max {{ policy.max_offline_hours }} hours offline cache
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>IP Allowlist</dt>
+                        <dd class="font-mono text-xs text-slate-800">{{ policy.ip_allowlist|default:"Any IP allowed (Global)" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Country Geofencing</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.geo_fencing_countries|default:"No country restrictions" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cryptographic Specs & Metadata -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Cryptographic Standard</h2>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-slate-500">Encryption Cipher</dt>
+                        <dd class="font-bold text-slate-900 font-mono">{{ policy.get_encryption_standard_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Key Derivation & Scoping</dt>
+                        <dd class="text-xs text-slate-600">Per-tenant isolated AES key store with ephemeral document session tokens</dd>
+                    </div>
+                    <hr class="border-slate-100">
+                    <div>
+                        <dt class="text-slate-500">Created By</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.created_by.get_full_name|default:policy.created_by.username }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Created At</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Kill Switch Confirmation Modal -->
+<div id="kill_switch_modal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-red-200">
+        <div class="flex items-center gap-3 text-red-600 mb-3">
+            <i data-lucide="alert-octagon" class="w-8 h-8"></i>
+            <h3 class="text-lg font-bold text-slate-900">Engage Kill-Switch</h3>
+        </div>
+        <p class="text-sm text-slate-600 mb-4">
+            Are you sure you want to engage the emergency kill-switch for <strong>{{ policy.name }}</strong>?
+            This will immediately invalidate all decrypt tokens and render targeted documents inaccessible.
+        </p>
+        <form method="post" action="{% url 'documents:drm_kill_switch' policy.pk %}" class="space-y-4">
+            {% csrf_token %}
+            <div class="form-group mb-0">
+                <label class="form-label" for="reason">Revocation Reason <span class="text-red-500">*</span></label>
+                <input type="text" name="reason" id="reason" class="form-input" required placeholder="e.g. Data leak suspected or security audit incident">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('kill_switch_modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-danger">Confirm Immediate Revocation</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
