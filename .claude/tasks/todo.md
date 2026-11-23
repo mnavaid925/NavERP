@@ -39884,3 +39884,344 @@ apps/quality/
 - **Findings Burn-down**: 30 findings (3 Critical, 16 Important, 11 Minor) consolidated in `.claude/tasks/review-documents-13.6.md`, 100% resolved and verified via `code-fixer` agent with individual git commits.
 - **Tests**: 112 dedicated new tests added across 4 test modules (`test_search_discovery_models.py` [20], `test_search_discovery_forms.py` [34], `test_search_discovery_views.py` [38], `test_search_discovery_security.py` [20]). Full unfiltered suite `pytest apps/documents/tests/` passed 260/260 (100% green).
 - **Gaps**: None. Recorded in `.claude/tasks/gaps-documents-13.6.md` and `.agents/tasks/gaps-documents-13.6.md`.
+
+
+---
+
+# Sub-module 13.7: Document Security & Access Control (Module 13: Document Management System, `documents`) — plan from `research-documents-13.7.md` (2026-11-23)
+
+> **This plan EXTENDS existing app `apps/documents/`.** (13.1, 13.2, 13.3, 13.4, 13.5, 13.6 already built and verified).
+> **Free prefixes verified (0 collisions repo-wide):** **`DPRM`** (`DocumentAccessPermission`), **`DWTR`** (`WatermarkPolicy`), **`DDRM`** (`DocumentDrmPolicy`), **`DDLP`** (`DlpPolicy`), **`DINC`** (`DlpIncident`).
+> **Plan written from:** `.claude/tasks/research-documents-13.7.md` (Phase 1) and `NavERP.md` (`### 13.7 Document Security & Access Control`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/SecurityAccessControl/<Entity>.py` (`DocumentAccessPermissions.py`, `WatermarkPolicies.py`, `DocumentDrmPolicies.py`, `DlpPolicies.py`, `DlpIncidents.py`, plus central sandboxed viewer `SecureViewer.py`)
+> **Template folder name:** `templates/documents/security_access_control/{document_access_permission,watermark_policy,document_drm_policy,dlp_policy,dlp_incident}/{list,detail,form}.html` + `secure_viewer.html` (sandboxed zero-download viewer with anti-screen capture guards and dynamic forensic watermarks)
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DPRM`** (`DocumentAccessPermission`), **`DWTR`** (`WatermarkPolicy`), **`DDRM`** (`DocumentDrmPolicy`), **`DDLP`** (`DlpPolicy`), and **`DINC`** (`DlpIncident`), all 5 model classes, and URL stems verified unique across all 13 modules and contract files. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - `core.Tenant` (`apps/core/models/Tenant.py:class Tenant`): Multi-tenant isolation anchor.
+  - `accounts.User` (`settings.AUTH_USER_MODEL` / `apps/accounts/models.py`): Permission grantees, policy creators, incident actors, triage officers.
+  - `core.OrgUnit` (`apps/core/models/OrgUnit.py:class OrgUnit`): Department-scoped permissions, watermark policies, and DLP exclusion boundaries.
+  - `documents.Document` (`apps/documents/models/VersionControl/Documents.py:8`): Target logical document master for ACL permissions, DRM policies, and DLP violations.
+  - `documents.DocumentVersion` (`apps/documents/models/VersionControl/DocumentVersions.py:9`): Physical file revision snapshot for watermarking, DRM encryption, and DLP content scans.
+  - `documents.DocumentFolder` (`apps/documents/models/StorageRepository/DocumentFolders.py:9`): Repository hierarchy tree for folder-level access control and permission inheritance.
+- **L65 Rule on CharField `max_length` vs Choice Values**: All `max_length` parameters strictly accommodate the longest choice value:
+  - `DocumentAccessPermission.grantee_type`: `max_length=20` (longest value: `tenant_wide` = 11 chars).
+  - `DocumentAccessPermission.permission_level`: `max_length=20` (longest value: `commenter` = 9 chars).
+  - `WatermarkPolicy.classification`: `max_length=20` (longest value: `confidential` = 12 chars).
+  - `WatermarkPolicy.position`: `max_length=20` (longest value: `diagonal_center` = 15 chars).
+  - `WatermarkPolicy.banner_position`: `max_length=20` (longest value: `bottom` = 6 chars).
+  - `DocumentDrmPolicy.classification`: `max_length=20` (longest value: `confidential` = 12 chars).
+  - `DocumentDrmPolicy.encryption_standard`: `max_length=30` (longest value: `CHACHA20_POLY1305` = 17 chars).
+  - `DlpPolicy.rule_type`: `max_length=30` (longest value: `classification_anomaly` = 22 chars).
+  - `DlpPolicy.built_in_pattern`: `max_length=30` (longest value: `api_keys_secrets` = 16 chars).
+  - `DlpPolicy.action`: `max_length=20` (longest value: `force_watermark` = 15 chars).
+  - `DlpPolicy.severity`: `max_length=20` (longest value: `critical` = 8 chars).
+  - `DlpIncident.severity`: `max_length=20` (longest value: `critical` = 8 chars).
+  - `DlpIncident.action_taken`: `max_length=20` (longest value: `quarantined` = 11 chars).
+  - `DlpIncident.resolution_status`: `max_length=25` (longest value: `under_investigation` = 19 chars).
+- **L65 Rule on Index / Constraint Name Lengths (`<= 30` chars)**:
+  - `doc_dprm_ten_num_uniq` (21 chars), `doc_dprm_tnt_doc_act_idx` (24 chars), `doc_dprm_tnt_usr_act_idx` (24 chars), `doc_dprm_tnt_fld_act_idx` (24 chars).
+  - `doc_dwtr_ten_num_uniq` (21 chars), `doc_dwtr_tnt_slug_uniq` (22 chars), `doc_dwtr_tnt_act_prio_idx` (25 chars), `doc_dwtr_tnt_cls_act_idx` (24 chars).
+  - `doc_ddrm_ten_num_uniq` (21 chars), `doc_ddrm_tnt_slug_uniq` (22 chars), `doc_ddrm_tnt_act_rvk_idx` (24 chars), `doc_ddrm_tnt_cls_act_idx` (24 chars).
+  - `doc_ddlp_ten_num_uniq` (21 chars), `doc_ddlp_tnt_slug_uniq` (22 chars), `doc_ddlp_tnt_act_sev_idx` (24 chars), `doc_ddlp_tnt_rule_act_idx` (25 chars).
+  - `doc_dinc_ten_num_uniq` (21 chars), `doc_dinc_tnt_pol_res_idx` (24 chars), `doc_dinc_tnt_doc_crt_idx` (24 chars), `doc_dinc_tnt_sev_res_idx` (24 chars).
+- **L66 Audit Log Signature**: Every mutating view strictly calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **Effective Permission Evaluator**: Interactive capability resolver computing net access rights by evaluating direct grants, department/OrgUnit inheritance, role templates, DRM limits, and validity windows.
+- **Watermark Token Interpolation**: Dynamic template parser interpolating variables: `{{user_name}}`, `{{user_email}}`, `{{ip_address}}`, `{{timestamp}}`, `{{classification}}`, `{{document_number}}`, `{{tenant_name}}`.
+- **DRM Anti-Exfiltration & Kill-Switch**: Sandboxed zero-download viewer canvas, disabled text selection (`user-select: none`), blocked right-click (`contextmenu`), screen shield focus-loss blur, print/save interception, and one-click emergency kill-switch revocation.
+- **DLP Pattern Library & Triage**: Built-in regex engine detecting PCI-DSS credit card numbers (with Luhn check), US SSN, IBAN banking numbers, national ID numbers, and API keys/secrets, paired with custom regex and keyword matching, multi-tier automated actions (log, warn, block, quarantine, force watermark), and incident triage with redacted context snippets.
+
+---
+
+## Models (from research — 1–4 + paired incident model)
+
+### 1. `DocumentAccessPermission` [PREFIX: `DPRM-`]
+- **Purpose**: Granular multi-tier Access Control List (ACL) mapping documents or folders to users, departments, or roles with capability flags and expiration.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DPRM"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, null=True, blank=True, related_name="access_permissions")`
+  - `folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.CASCADE, null=True, blank=True, related_name="access_permissions")`
+  - `grantee_type`: `CharField(max_length=20, choices=GRANTEE_TYPE_CHOICES, default="user")` (`user`, `org_unit`, `role`, `tenant_wide`)
+  - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="document_permissions")`
+  - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.CASCADE, null=True, blank=True, related_name="document_permissions")`
+  - `role_name`: `CharField(max_length=50, blank=True, help_text="e.g. legal_counsel, auditor, executive, compliance_officer")`
+  - `permission_level`: `CharField(max_length=20, choices=PERMISSION_LEVEL_CHOICES, default="viewer")` (`custom`, `viewer`, `commenter`, `editor`, `manager`, `owner`)
+  - `can_read`: `BooleanField(default=True)`
+  - `can_write`: `BooleanField(default=False)`
+  - `can_delete`: `BooleanField(default=False)`
+  - `can_download`: `BooleanField(default=True)`
+  - `can_print`: `BooleanField(default=True)`
+  - `can_share`: `BooleanField(default=False)`
+  - `is_inherited`: `BooleanField(default=False)`
+  - `inherited_from_folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.SET_NULL, null=True, blank=True, related_name="inherited_permissions")`
+  - `valid_from`: `DateTimeField(null=True, blank=True)`
+  - `valid_until`: `DateTimeField(null=True, blank=True)`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `access_count`: `PositiveIntegerField(default=0)`
+  - `last_accessed_at`: `DateTimeField(null=True, blank=True)`
+  - `notes`: `CharField(max_length=255, blank=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="granted_document_permissions")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dprm_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "document", "is_active"], name="doc_dprm_tnt_doc_act_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "user", "is_active"], name="doc_dprm_tnt_usr_act_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "folder", "is_active"], name="doc_dprm_tnt_fld_act_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `access_count`, `last_accessed_at`, `is_inherited`, `inherited_from_folder`, `created_by`, `created_at`, `updated_at`.
+- **Drivers**: Document-Level Permissions, Hierarchical Inheritance, Time-Bounded Access Grants, Stale Access Tracking.
+
+### 2. `WatermarkPolicy` [PREFIX: `DWTR-`]
+- **Purpose**: Dynamic watermarking rules and visual overlay configurations mapped by classification or document type.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DWTR"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `name`: `CharField(max_length=150)`
+  - `slug`: `SlugField(max_length=160, blank=True)`
+  - `description`: `TextField(blank=True)`
+  - `classification`: `CharField(max_length=20, choices=CLASSIFICATION_CHOICES, default="all")` (`all`, `public`, `internal`, `confidential`, `restricted`)
+  - `document_type`: `CharField(max_length=40, default="all")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="watermark_policies")`
+  - `apply_to_all`: `BooleanField(default=False)`
+  - `watermark_text`: `CharField(max_length=255, default="{{classification}} | {{user_name}} | {{timestamp}}")`
+  - `secondary_text`: `CharField(max_length=255, blank=True)`
+  - `position`: `CharField(max_length=20, choices=POSITION_CHOICES, default="diagonal_center")` (`diagonal_center`, `center`, `header_banner`, `footer_banner`, `tiled_grid`)
+  - `opacity_percent`: `PositiveIntegerField(default=25)`
+  - `font_size`: `PositiveIntegerField(default=32)`
+  - `font_color`: `CharField(max_length=20, default="#94a3b8")`
+  - `rotation_angle`: `IntegerField(default=-45)`
+  - `show_classification_banner`: `BooleanField(default=True)`
+  - `banner_position`: `CharField(max_length=20, choices=BANNER_POSITION_CHOICES, default="top")` (`top`, `bottom`, `both`)
+  - `enforce_on_view`: `BooleanField(default=True)`
+  - `enforce_on_download`: `BooleanField(default=True)`
+  - `enforce_on_print`: `BooleanField(default=True)`
+  - `priority`: `PositiveIntegerField(default=100)`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_watermark_policies")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dwtr_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "slug"], name="doc_dwtr_tnt_slug_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "is_active", "priority"], name="doc_dwtr_tnt_act_prio_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "classification", "is_active"], name="doc_dwtr_tnt_cls_act_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `created_by`, `created_at`, `updated_at`.
+- **Drivers**: Dynamic Watermarking, Variable & Token Interpolation, Classification Banners, Enforcement Gates.
+
+### 3. `DocumentDrmPolicy` [PREFIX: `DDRM-`]
+- **Purpose**: Digital Rights Management, anti-exfiltration restrictions, secure viewer controls, and emergency revocation kill-switch.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DDRM"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `name`: `CharField(max_length=150)`
+  - `slug`: `SlugField(max_length=160, blank=True)`
+  - `description`: `TextField(blank=True)`
+  - `classification`: `CharField(max_length=20, choices=CLASSIFICATION_CHOICES, default="confidential")` (`all`, `public`, `internal`, `confidential`, `restricted`)
+  - `document_type`: `CharField(max_length=40, default="all")`
+  - `target_document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, null=True, blank=True, related_name="drm_policies")`
+  - `target_folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.CASCADE, null=True, blank=True, related_name="drm_policies")`
+  - `allow_download`: `BooleanField(default=False)`
+  - `allow_print`: `BooleanField(default=False)`
+  - `allow_copy_paste`: `BooleanField(default=False)`
+  - `screen_shield_enabled`: `BooleanField(default=True)`
+  - `secure_viewer_required`: `BooleanField(default=True)`
+  - `require_watermark`: `BooleanField(default=True)`
+  - `max_offline_hours`: `PositiveIntegerField(default=0)`
+  - `expiry_days`: `PositiveIntegerField(default=30)`
+  - `ip_allowlist`: `TextField(blank=True)`
+  - `geo_fencing_countries`: `CharField(max_length=255, blank=True)`
+  - `is_revoked`: `BooleanField(default=False, db_index=True)`
+  - `revoked_at`: `DateTimeField(null=True, blank=True)`
+  - `revocation_reason`: `TextField(blank=True)`
+  - `encryption_standard`: `CharField(max_length=30, choices=ENCRYPTION_CHOICES, default="AES_256_GCM")` (`AES_256_GCM`, `AES_256_CBC`, `CHACHA20_POLY1305`)
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_drm_policies")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_ddrm_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "slug"], name="doc_ddrm_tnt_slug_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "is_active", "is_revoked"], name="doc_ddrm_tnt_act_rvk_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "classification", "is_active"], name="doc_ddrm_tnt_cls_act_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `is_revoked`, `revoked_at`, `revocation_reason`, `created_by`, `created_at`, `updated_at`.
+- **Drivers**: DRM & Document Protection, Zero-Download Viewer Enforcement, Screen Shield Defense, Emergency Kill-Switch.
+
+### 4. `DlpPolicy` [PREFIX: `DDLP-`]
+- **Purpose**: Data Loss Prevention inspection rules, regex pattern libraries, sensitive keyword detection, and automated enforcement actions.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DDLP"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `name`: `CharField(max_length=150)`
+  - `slug`: `SlugField(max_length=160, blank=True)`
+  - `description`: `TextField(blank=True)`
+  - `rule_type`: `CharField(max_length=30, choices=RULE_TYPE_CHOICES, default="built_in_pattern")` (`built_in_pattern`, `sensitive_keywords`, `custom_regex`, `classification_anomaly`)
+  - `built_in_pattern`: `CharField(max_length=30, choices=BUILT_IN_PATTERN_CHOICES, default="none")` (`none`, `credit_card_pci`, `us_ssn`, `iban_banking`, `national_id_pii`, `email_list`, `api_keys_secrets`)
+  - `custom_regex`: `TextField(blank=True)`
+  - `sensitive_keywords`: `JSONField(default=list, blank=True)`
+  - `match_threshold`: `PositiveIntegerField(default=1)`
+  - `action`: `CharField(max_length=20, choices=ACTION_CHOICES, default="warn_author")` (`log_only`, `warn_author`, `block_save`, `quarantine`, `force_watermark`)
+  - `severity`: `CharField(max_length=20, choices=SEVERITY_CHOICES, default="high")` (`low`, `medium`, `high`, `critical`)
+  - `notify_security_officer`: `BooleanField(default=True)`
+  - `notification_email`: `CharField(max_length=255, blank=True)`
+  - `apply_to_all_types`: `BooleanField(default=True)`
+  - `target_document_types`: `JSONField(default=list, blank=True)`
+  - `target_classifications`: `JSONField(default=list, blank=True)`
+  - `incident_count`: `PositiveIntegerField(default=0)`
+  - `last_triggered_at`: `DateTimeField(null=True, blank=True)`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_dlp_policies")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_ddlp_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "slug"], name="doc_ddlp_tnt_slug_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "is_active", "severity"], name="doc_ddlp_tnt_act_sev_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "rule_type", "is_active"], name="doc_ddlp_tnt_rule_act_idx")` (25 chars)
+- **Form exclusions**: `tenant`, `number`, `incident_count`, `last_triggered_at`, `created_by`, `created_at`, `updated_at`.
+- **Drivers**: Data Loss Prevention, Built-in SIT Pattern Library, Automated Enforcement Actions, Incident Alerting.
+
+### 5. `DlpIncident` [PREFIX: `DINC-`]
+- **Purpose**: Comprehensive telemetry repository logging DLP policy violations, masked evidence context snippets, automated actions taken, and officer triage workflow.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DINC"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `policy`: `ForeignKey("documents.DlpPolicy", on_delete=models.CASCADE, related_name="incidents")`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="dlp_incidents")`
+  - `document_version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="dlp_incidents")`
+  - `triggered_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="triggered_dlp_incidents")`
+  - `severity`: `CharField(max_length=20, choices=SEVERITY_CHOICES, default="high")` (`low`, `medium`, `high`, `critical`)
+  - `action_taken`: `CharField(max_length=20, choices=ACTION_TAKEN_CHOICES, default="logged")` (`logged`, `warned`, `blocked`, `quarantined`, `watermarked`)
+  - `matches_detected_count`: `PositiveIntegerField(default=1)`
+  - `snippet_redacted`: `TextField(blank=True, help_text="Masked evidence context e.g. 'Card: ****-****-****-4242'")`
+  - `resolution_status`: `CharField(max_length=25, choices=RESOLUTION_CHOICES, default="open", db_index=True)` (`open`, `under_investigation`, `resolved_justified`, `false_positive`, `dismissed`)
+  - `resolved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="resolved_dlp_incidents")`
+  - `resolution_notes`: `TextField(blank=True)`
+  - `created_at`: `DateTimeField(auto_now_add=True, db_index=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dinc_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "policy", "resolution_status"], name="doc_dinc_tnt_pol_res_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "document", "created_at"], name="doc_dinc_tnt_doc_crt_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "severity", "resolution_status"], name="doc_dinc_tnt_sev_res_idx")` (24 chars)
+- **Form exclusions**: Telemetry model; populated dynamically by DLP inspection service; triage resolution updated via dedicated `dlp_incident_resolve` action view.
+- **Drivers**: DLP Incident Logging & Triage Workbench, Quarantine Verification, Masked Audit Snippets.
+
+---
+
+## Detailed Build Plan (Phases 3 to 7)
+
+### Phase 3.1: Spec Contract
+- [ ] Read `NavERP.md`, `research-documents-13.7.md`, and sibling modules to author `.claude/tasks/contract-documents-13.7.md`.
+- [ ] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
+- [ ] Commit contract: `git add .claude/tasks/contract-documents-13.7.md; git commit -m "docs(documents): freeze 13.7 contract specification"`
+
+### Phase 3.2: Build Entity by Entity (Strictly Serial)
+- [ ] **Entity 1: DocumentAccessPermission** (`DPRM-`)
+  - [ ] `apps/documents/models/SecurityAccessControl/DocumentAccessPermissions.py`
+  - [ ] `apps/documents/forms/SecurityAccessControl/DocumentAccessPermissions.py`
+  - [ ] `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py` (`permission_list`, `permission_create`, `permission_detail`, `permission_edit`, `permission_delete`, `permission_simulate`)
+  - [ ] `apps/documents/urls/SecurityAccessControl/DocumentAccessPermissions.py`
+  - [ ] `templates/documents/security_access_control/document_access_permission/list.html`
+  - [ ] `templates/documents/security_access_control/document_access_permission/detail.html`
+  - [ ] `templates/documents/security_access_control/document_access_permission/form.html`
+- [ ] **Entity 2: WatermarkPolicy** (`DWTR-`)
+  - [ ] `apps/documents/models/SecurityAccessControl/WatermarkPolicies.py`
+  - [ ] `apps/documents/forms/SecurityAccessControl/WatermarkPolicies.py`
+  - [ ] `apps/documents/views/SecurityAccessControl/WatermarkPolicies.py` (`watermark_list`, `watermark_create`, `watermark_detail`, `watermark_edit`, `watermark_delete`, `watermark_preview`)
+  - [ ] `apps/documents/urls/SecurityAccessControl/WatermarkPolicies.py`
+  - [ ] `templates/documents/security_access_control/watermark_policy/list.html`
+  - [ ] `templates/documents/security_access_control/watermark_policy/detail.html`
+  - [ ] `templates/documents/security_access_control/watermark_policy/form.html`
+  - [ ] `templates/documents/security_access_control/watermark_policy/preview.html`
+- [ ] **Entity 3: DocumentDrmPolicy** (`DDRM-`)
+  - [ ] `apps/documents/models/SecurityAccessControl/DocumentDrmPolicies.py`
+  - [ ] `apps/documents/forms/SecurityAccessControl/DocumentDrmPolicies.py`
+  - [ ] `apps/documents/views/SecurityAccessControl/DocumentDrmPolicies.py` (`drm_policy_list`, `drm_policy_create`, `drm_policy_detail`, `drm_policy_edit`, `drm_policy_delete`, `drm_kill_switch`)
+  - [ ] `apps/documents/urls/SecurityAccessControl/DocumentDrmPolicies.py`
+  - [ ] `templates/documents/security_access_control/document_drm_policy/list.html`
+  - [ ] `templates/documents/security_access_control/document_drm_policy/detail.html`
+  - [ ] `templates/documents/security_access_control/document_drm_policy/form.html`
+  - [ ] `templates/documents/security_access_control/document_drm_policy/kill_switch_modal.html`
+- [ ] **Entity 4: DlpPolicy (`DDLP-`) & DlpIncident (`DINC-`)**
+  - [ ] `apps/documents/models/SecurityAccessControl/DlpPolicies.py`
+  - [ ] `apps/documents/models/SecurityAccessControl/DlpIncidents.py`
+  - [ ] `apps/documents/forms/SecurityAccessControl/DlpPolicies.py`
+  - [ ] `apps/documents/forms/SecurityAccessControl/DlpIncidents.py`
+  - [ ] `apps/documents/views/SecurityAccessControl/DlpPolicies.py` (`dlp_policy_list`, `dlp_policy_create`, `dlp_policy_detail`, `dlp_policy_edit`, `dlp_policy_delete`)
+  - [ ] `apps/documents/views/SecurityAccessControl/DlpIncidents.py` (`dlp_incident_list`, `dlp_incident_detail`, `dlp_incident_resolve`)
+  - [ ] `apps/documents/urls/SecurityAccessControl/DlpPolicies.py`
+  - [ ] `apps/documents/urls/SecurityAccessControl/DlpIncidents.py`
+  - [ ] `templates/documents/security_access_control/dlp_policy/list.html`
+  - [ ] `templates/documents/security_access_control/dlp_policy/detail.html`
+  - [ ] `templates/documents/security_access_control/dlp_policy/form.html`
+  - [ ] `templates/documents/security_access_control/dlp_incident/list.html`
+  - [ ] `templates/documents/security_access_control/dlp_incident/detail.html`
+  - [ ] `templates/documents/security_access_control/dlp_incident/resolve_modal.html`
+- [ ] **Dedicated Feature View & Console: SecureViewer**
+  - [ ] `apps/documents/views/SecurityAccessControl/SecureViewer.py` (`secure_viewer`)
+  - [ ] `apps/documents/urls/SecurityAccessControl/SecureViewer.py`
+  - [ ] `templates/documents/security_access_control/secure_viewer.html`
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all 5 models in `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/__init__.py`
+- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
+- [ ] Register all 5 models in `apps/documents/admin.py`
+- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.7 seed data (permissions, watermark policies, DRM rules, DLP rules, and triage incidents)
+- [ ] Wire `LIVE_LINKS["13.7"]` in `apps/core/navigation.py`:
+  - `Document-Level Permissions`: `documents:permission_list`
+  - `Dynamic Watermarking`: `documents:watermark_list`
+  - `DRM & Document Protection`: `documents:drm_policy_list`
+  - `Data Loss Prevention (DLP)`: `documents:dlp_policy_list`
+  - Extra live leaves:
+    - `DLP Incidents`: `documents:dlp_incident_list`
+    - `Secure Web Viewer`: `documents:secure_viewer`
+- [ ] Run `makemigrations documents`
+- [ ] Run `migrate`
+- [ ] Run `seed_documents` twice (idempotency check)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.7.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite (Unfiltered)
+- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [ ] Implement `apps/documents/tests/test_security_access_control_models.py`
+- [ ] Implement `apps/documents/tests/test_security_access_control_forms.py`
+- [ ] Implement `apps/documents/tests/test_security_access_control_views.py`
+- [ ] Implement `apps/documents/tests/test_security_access_control_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.7 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.7 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.7.md` and `.claude/tasks/gaps-documents-13.7.md`
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+
+---
+
+## Belongs to sibling sub-modules (parked, not scoped here)
+- **13.1 Document Creation & Authoring** — Template creation, rich text drafts, and authoring collaboration. (13.7 provides DLP hooks during draft save/publish).
+- **13.2 Version Control & Revision Management** — File binary storage, version numbering, and check-in / check-out locks. (13.7 controls read/write/download access to these versions).
+- **13.3 Document Approval & Review Workflow** — Multi-stage approval routing, sequential sign-off chains, and digital signatures.
+- **13.4 Document Storage & Repository** — Physical storage volume tiering, folder hierarchy taxonomies, and bulk batch imports. (13.7 folder permissions attach to `DocumentFolder`).
+- **13.5 Metadata & Indexing** — Metadata schemas, OCR extraction queues, and taxonomy term controlled vocabulary. (13.7 DLP engine scans OCR text output for sensitive patterns).
+- **13.6 Search & Discovery** — Compound search engine, faceted navigation, saved queries, and search analytics. (13.7 ensures search result queries enforce document ACLs so unauthorized files are never leaked in search listings).
+- **13.8 Collaboration & Sharing** — External public shared links, guest access tokens, password-protected shared URLs, and co-authoring presence. (13.7 handles internal tenant ACLs, watermarking, DRM policies, and DLP content inspection; 13.8 handles external sharing links and collaboration threads).
+- **13.9 Records Management & Compliance** — Automatic legal hold placement, retention schedules, destruction authorization, and disposition certification.
+- **13.10 Audit Trail & Reporting** — Universal tenant-wide immutable audit event stream logging every view, edit, download, and export event across the entire system.
+
+## Later passes / deferred (from `research-documents-13.7.md`)
+- **Hardware Security Module (HSM) & Cloud KMS BYOK Integration** — Dedicated hardware key storage integration with AWS KMS, Azure Key Vault, or Google Cloud KMS for Bring Your Own Key (BYOK) customer-managed encryption keys.
+- **OS-Level Kernel Screen-Capture Filter Driver** — Native endpoint desktop agent blocking Windows Snipping Tool, macOS Screenshot, and third-party screen grabbers at the operating system display compositor level.
+- **Steganographic Invisible Micro-Dot Fingerprinting** — High-security forensic steganography embedding invisible zero-width whitespace sequences or subtle imperceptible pixel luminance perturbations into PDF/image payloads to trace photographed document leaks back to individual user sessions.
+- **Deep-Learning NLP DLP Classifier** — Fine-tuned transformer models (BERT / LLM) for nuanced contextual semantic classification of proprietary trade secrets, unreleased financial reports, and confidential source code beyond regex pattern matching.
+
+## Review notes
+(To be filled in at Phase 7 close-out)
