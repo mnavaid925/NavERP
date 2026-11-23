@@ -109,7 +109,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `templates/documents/security_access_control/secure_viewer.html:215-219`
   - **Description**: Intercepts `Ctrl+P` even when `allow_print` is True.
   - **Fix**: Check `allowPrint` before blocking.
-- [ ] **M7: Missing composite indexes for ordering**
+- [x] **M7: Missing composite indexes for ordering**
   - **Files & Lines**: `apps/documents/models/SecurityAccessControl/DocumentAccessPermissions.py:121`, `DlpIncidents.py:113`
   - **Description**: Missing index on `(tenant, created_at)`.
   - **Fix**: Add composite indexes in next migration or future pass.
