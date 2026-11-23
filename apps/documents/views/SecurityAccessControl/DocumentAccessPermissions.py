@@ -75,6 +75,8 @@ def permission_list(request):
         "grantee_type": grantee_type,
         "permission_level": permission_level,
         "is_active": is_active_val,
+        "document": doc_id,
+        "folder": folder_id,
         "grantee_choices": DocumentAccessPermission.GRANTEE_TYPE_CHOICES,
         "level_choices": DocumentAccessPermission.PERMISSION_LEVEL_CHOICES,
     }
