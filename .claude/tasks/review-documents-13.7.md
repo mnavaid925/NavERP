@@ -37,7 +37,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
 ---
 
 ### Important (Should Fix Before Merge)
-- [ ] **I1: Unchecked `doc_id` query param causes HTTP 500 on non-numeric input in `SecureViewer`**
+- [x] **I1: Unchecked `doc_id` query param causes HTTP 500 on non-numeric input in `SecureViewer`**
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/SecureViewer.py:22-27`
   - **Description**: `pk = request.GET.get("doc_id")` passes unvalidated input to `get_object_or_404(docs_qs, pk=pk)`, raising `ValueError` on non-numeric input (e.g. `?doc_id=abc`), violating L11.
   - **Fix**: Guard with `if not pk and request.GET.get("doc_id", "").strip().isdigit(): pk = int(request.GET.get("doc_id", "").strip())`.
