@@ -242,6 +242,7 @@ class DocumentSearchQueryLogAdmin(admin.ModelAdmin):
 class DocumentAccessPermissionAdmin(admin.ModelAdmin):
     list_display = ("number", "grantee_type", "permission_level", "document", "folder", "user", "is_active", "access_count", "tenant")
     list_filter = ("grantee_type", "permission_level", "is_active", "tenant")
+    list_select_related = ("document", "folder", "user", "tenant")
     search_fields = ("number", "role_name", "notes", "user__username", "document__title")
     readonly_fields = ("number", "access_count", "last_accessed_at", "created_at", "updated_at")
 
@@ -274,6 +275,7 @@ class DlpPolicyAdmin(admin.ModelAdmin):
 class DlpIncidentAdmin(admin.ModelAdmin):
     list_display = ("number", "policy", "document", "triggered_by", "severity", "action_taken", "resolution_status", "created_at", "tenant")
     list_filter = ("severity", "action_taken", "resolution_status", "tenant")
+    list_select_related = ("policy", "document", "triggered_by", "tenant")
     search_fields = ("number", "snippet_redacted", "resolution_notes", "policy__name", "document__title")
     readonly_fields = ("number", "created_at", "updated_at")
 
