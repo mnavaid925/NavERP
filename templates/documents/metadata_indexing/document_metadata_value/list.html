@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Document Metadata Values — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_indexing_dashboard' %}">Metadata & Indexing</a>
+            <span>/</span>
+            <span>Metadata Values</span>
+        </div>
+        <h1 class="page-title">Document Metadata Values</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:metadata_schema_list' %}" class="btn btn-outline">
+            <i data-lucide="schema"></i>
+            <span>View Schemas</span>
+        </a>
+        <a href="{% url 'documents:metadata_value_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Assign Property</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="tag"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ metadata_values|length }}</div>
+            <div class="stat-label">Properties Displayed</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="git-branch"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-info">Multi-Provenance</span></div>
+            <div class="stat-label">Inheritance Tracking</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-green">Type-Safe</span></div>
+            <div class="stat-label">Dynamic Verification</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" class="form-input" placeholder="Field, label, value, or document...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="data_type">Data Type</label>
+                <select name="data_type" id="data_type" class="form-select">
+                    <option value="">All Data Types</option>
+                    {% for val, label in data_type_choices %}
+                        <option value="{{ val }}" {% if data_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="source">Source / Provenance</label>
+                <select name="source" id="source" class="form-select">
+                    <option value="">All Sources</option>
+                    {% for val, label in source_choices %}
+                        <option value="{{ val }}" {% if source == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="validation_status">Validation Status</label>
+                <select name="validation_status" id="validation_status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in validation_status_choices %}
+                        <option value="{{ val }}" {% if validation_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:metadata_value_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">Document Metadata Properties</h2>
+        <span class="text-xs text-slate-500">Sub-module 13.5</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Document</th>
+                    <th>Property Name</th>
+                    <th>Type</th>
+                    <th>Assigned Value</th>
+                    <th>Provenance Source</th>
+                    <th>Validation</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in metadata_values %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-blue-600">
+                        <a href="{% url 'documents:metadata_value_detail' item.pk %}">{{ item.number }}</a>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:document_detail' item.document.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                            {{ item.document.title }}
+                        </a>
+                        <span class="block text-xs text-slate-500 font-mono">{{ item.document.number }}</span>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:metadata_value_detail' item.pk %}" class="font-mono text-xs font-semibold text-slate-800">
+                            {{ item.field_name }}
+                        </a>
+                        {% if item.field_label %}
+                            <p class="text-xs text-slate-500">{{ item.field_label }}</p>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ item.data_type_badge }}">{{ item.get_data_type_display }}</span></td>
+                    <td>
+                        <span class="font-mono text-xs text-slate-800 bg-slate-50 px-2 py-1 rounded border border-slate-200 block truncate max-w-xs">
+                            {{ item.display_value }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.source_badge }}">{{ item.get_source_display }}</span>
+                        {% if item.is_overridden %}
+                            <span class="badge badge-amber text-xs ml-1" title="Modified manually after inheritance">Overridden</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ item.validation_status_badge }}">{{ item.get_validation_status_display }}</span></td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:metadata_value_detail' item.pk %}" class="btn btn-icon" title="View Property">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:metadata_value_edit' item.pk %}" class="btn btn-icon" title="Edit Property">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:metadata_value_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete this metadata property?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Property">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <i data-lucide="tag"></i>
+                            </div>
+                            <h3>No Document Metadata Values Found</h3>
+                            <p>Assign custom properties to documents manually or extract them via OCR indexing.</p>
+                            <a href="{% url 'documents:metadata_value_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Assign Property</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex justify-between items-center">
+        <div class="text-sm text-slate-500">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if data_type %}&data_type={{ data_type }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if validation_status %}&validation_status={{ validation_status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+                <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if data_type %}&data_type={{ data_type }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if validation_status %}&validation_status={{ validation_status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+                <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
