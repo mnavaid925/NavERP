@@ -1,6 +1,6 @@
 ---
 name: documents
-description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics) + 13.8 Collaboration & Sharing (DocumentShare[DSHR-], CoauthorSession[DCOA-], DocumentTask[DTSK-], DocumentActivity[DACT-], unified CollaborationHub, guest passcode challenge, presence telemetry & heartbeats, task action tracking, in-app notification inbox). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6/13.8), or invokes /documents.
+description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics) + 13.7 Document Security & Access Control (DocumentAccessPermission[DPRM-], WatermarkPolicy[DWTR-], DocumentDrmPolicy[DDRM-], DlpPolicy[DDLP-], DlpIncident[DINC-], effective permissions simulator, visual watermark studio, DRM emergency kill-switch, DLP incident triage workbench, zero-download sandboxed secure viewer) + 13.8 Collaboration & Sharing (DocumentShare[DSHR-], CoauthorSession[DCOA-], DocumentTask[DTSK-], DocumentActivity[DACT-], unified CollaborationHub, guest passcode challenge, presence telemetry & heartbeats, task action tracking, in-app notification inbox). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6/13.7/13.8), or invokes /documents.
 ---
 
 # Document Management System (DMS) (Module 13)
@@ -8,7 +8,7 @@ description: Work on the Document Management System (DMS) module (Module 13 — 
 App path: `apps/documents`. Templates: `templates/documents/`. URL prefix: `/documents/`, `app_name = "documents"`.
 Mirrors `NavERP.md` "## 13. Document Management System (DMS)" (Sub-modules 13.1–13.20).
 
-**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery + 13.8 Collaboration & Sharing.**
+**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery + 13.7 Document Security & Access Control + 13.8 Collaboration & Sharing.**
 Build the next sub-module with `/next-module next` — see `apps/quality`/`apps/procurement` for reference package layout and the mandatory Module Creation Sequence.
 
 ---
@@ -22,6 +22,7 @@ Module 13 provides an enterprise document repository, authoring workspace, revis
 - **13.4 Document Storage & Repository**: Hierarchical taxonomic folder trees and smart virtual query filters (`DocumentFolder`), physical and cloud tiered storage targets with quota enforcement (`StorageVolume`), multi-type document dependency and reference network graphs (`DocumentRelationship`), streaming bulk zip ingestion with archive safety thresholds (`DocumentBatchImport`), and repository command center (`repository_dashboard.html`).
 - **13.5 Metadata & Indexing**: Flexible enterprise metadata schema definitions with inheritance cascade policies (`MetadataSchema`), polymorphic key-value document and revision property storage (`DocumentMetadataValue`), hierarchical controlled vocabularies and multilingual thesauri (`TaxonomyTerm`), automated OCR text extraction pipeline with confidence metrics and tag extraction (`DocumentOcrJob`), and metadata analytics command center (`metadata_indexing_dashboard.html`).
 - **13.6 Search & Discovery**: Multi-faceted omni-search console (`SearchHub`), natural language search filter chip parsing (`type:`, `status:`), synonym dictionary expansion (`DocumentSearchSynonym`), saved search queries and visibility scopes (`DocumentSavedSearch`), automated notification monitors (`DocumentSearchAlert`), and organization-wide search telemetry and query gap analytics (`DocumentSearchQueryLog`).
+- **13.7 Document Security & Access Control**: Document-level and folder-level ACL permissions with capability matrices and precedence inheritance (`DocumentAccessPermission`), dynamic token-interpolated visual watermarks (`WatermarkPolicy`) with live interactive studio, digital rights management policies (`DocumentDrmPolicy`) with emergency kill-switch revocation, regex-based DLP inspection engine and incident triage workbench (`DlpPolicy`, `DlpIncident`), and zero-download DOM-sandboxed secure web viewer with focus-loss blur and anti-screen capture defense (`SecureViewer`).
 - **13.8 Collaboration & Sharing**: Link-based and targeted document sharing (`DocumentShare`), real-time co-author presence telemetry and cursor positions (`CoauthorSession`), workflow action item assignment and completion tracking (`DocumentTask`), granular audit feeds and targeted notification inbox (`DocumentActivity`), unified multi-tab collaboration cockpit (`collaboration_hub.html`), and secure public guest preview portal (`public_share_preview.html`).
 
 ---
@@ -225,6 +226,50 @@ Shared base in `models/_base.py`:
   - Helper properties: `parsed_filters`, `parsed_filters_applied`, `get_filters_dict`.
   - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, is_zero_result, -created_at)`, `(tenant, user, -created_at)`, `(tenant, query_text)`.
 
+### 13.7 SecurityAccessControl (`apps/documents/models/SecurityAccessControl/`)
+
+- **`DocumentAccessPermissions.py`** — `DocumentAccessPermission` (`NUMBER_PREFIX = "DPRM"`):
+  - `document` (FK `Document`, nullable), `folder` (FK `DocumentFolder`, nullable).
+  - `grantee_type`: user, org_unit, role, tenant_wide.
+  - `user` (FK `settings.AUTH_USER_MODEL`, nullable), `org_unit` (FK `core.OrgUnit`, nullable), `role_name`.
+  - `permission_level`: viewer, commenter, editor, manager, owner, custom.
+  - Granular capabilities: `can_read`, `can_write`, `can_delete`, `can_download`, `can_print`, `can_share`.
+  - Temporal boundaries: `valid_from`, `valid_until`.
+  - Inheritance: `is_inherited`, `inherited_from_folder` (FK `DocumentFolder`, nullable).
+  - Telemetry & status: `is_active`, `access_count`, `last_accessed_at`, `notes`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Helper properties: `is_currently_valid`, `grantee_display`, `grantee_badge`, `permission_badge`.
+  - Constraints & Indexes: unique `(tenant, number)`, composite indexes on `(tenant, document, is_active)`, `(tenant, user, is_active)`, `(tenant, folder, is_active)`, `(tenant, -created_at)`.
+
+- **`WatermarkPolicies.py`** — `WatermarkPolicy` (`NUMBER_PREFIX = "DWTR"`):
+  - `name`, `slug`, `description`, `classification` (all, public, internal, confidential, restricted), `document_type`, `department` (FK `core.OrgUnit`, nullable), `apply_to_all`.
+  - Overlay styling: `watermark_text` (dynamic token interpolation template), `secondary_text`, `position` (diagonal, horizontal, header_footer, tiled_grid), `rotation_angle`, `opacity_percent` (1-100), `font_size`, `font_color`, `priority`.
+  - Classification banner: `show_classification_banner`, `banner_position` (top, bottom, both).
+  - Enforcement gates: `enforce_on_view`, `enforce_on_download`, `enforce_on_print`.
+  - Helper methods: `render_watermark(user, document, ip_address)` with dynamic token interpolation (`{{user_name}}`, `{{user_email}}`, `{{classification}}`, `{{document_number}}`, `{{tenant_name}}`, `{{ip_address}}`, `{{timestamp}}`), `classification_badge`.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, slug)`, indexes on `(tenant, is_active, priority)`, `(tenant, classification)`.
+
+- **`DocumentDrmPolicies.py`** — `DocumentDrmPolicy` (`NUMBER_PREFIX = "DDRM"`):
+  - `name`, `slug`, `description`, `classification`, `target_document` (FK `Document`, nullable), `target_folder` (FK `DocumentFolder`, nullable).
+  - Exfiltration defenses: `allow_download`, `allow_print`, `allow_copy_paste`, `screen_shield_enabled`, `secure_viewer_required`, `require_watermark`.
+  - Perimeter parameters: `expiry_days`, `max_offline_hours`, `ip_allowlist`, `geo_fencing_countries`, `encryption_standard` (aes_128_gcm, aes_256_gcm, chacha20_poly1305).
+  - Emergency Kill-Switch: `is_revoked`, `revoked_at`, `revoked_by` (FK `settings.AUTH_USER_MODEL`, nullable), `revocation_reason`, `revoke(user, reason)`.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, slug)`, indexes on `(tenant, is_active, is_revoked)`, `(tenant, target_document, is_active, is_revoked)`.
+
+- **`DlpPolicies.py`** — `DlpPolicy` (`NUMBER_PREFIX = "DDLP"`):
+  - `name`, `slug`, `description`, `rule_type` (credit_card_pci, us_ssn, api_keys_secrets, sensitive_keywords, custom_regex).
+  - Engine parameters: `built_in_pattern`, `custom_regex`, `sensitive_keywords` (JSONField), `match_threshold`, `action` (warn_user, redact_preview, quarantine, block_and_alert).
+  - Target scoping: `apply_to_all_types`, `target_document_types` (JSONField), `target_classifications` (JSONField), `severity` (low, medium, high, critical).
+  - Telemetry & alerting: `notify_security_officer`, `notification_email`, `incident_count`, `last_triggered_at`, `is_active`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Core inspection engine: `inspect_text(text, filename)` detecting built-in patterns, sensitive keywords, and custom regex with redaction snippet masking.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, slug)`, indexes on `(tenant, rule_type, is_active)`, `(tenant, severity, is_active)`.
+
+- **`DlpIncidents.py`** — `DlpIncident` (`NUMBER_PREFIX = "DINC"`):
+  - `policy` (FK `DlpPolicy`, `related_name="incidents"`), `document` (FK `Document`, nullable), `version` (FK `DocumentVersion`, nullable).
+  - `triggered_by` (FK `settings.AUTH_USER_MODEL`, nullable), `incident_type`, `action_taken`, `severity`.
+  - Evidence: `snippet_masked`, `context_notes`, `client_ip`.
+  - Resolution triage: `resolution_status` (open, under_investigation, resolved_justified, false_positive, dismissed), `resolved_by` (FK `settings.AUTH_USER_MODEL`, nullable), `resolved_at`, `resolution_notes`, `resolve(status, user, notes)`.
+  - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, policy, resolution_status)`, `(tenant, resolution_status, severity)`, `(tenant, document, -created_at)`, `(tenant, -created_at)`.
+
 ### 13.8 CollaborationSharing (`apps/documents/models/CollaborationSharing/`)
 
 - **`DocumentShares.py`** — `DocumentShare` (`NUMBER_PREFIX = "DSHR"`):
@@ -387,6 +432,37 @@ Registered under namespace `documents:`:
 - `/documents/search-query-logs/`: `document_search_query_log_list` (`@tenant_admin_required`), `<int:pk>/` (`@tenant_admin_required`), `<int:pk>/delete/` (POST-only, `@tenant_admin_required`)
 - `/documents/search-analytics/`: `document_search_analytics` (`@tenant_admin_required`)
 
+### 13.7 Document Security & Access Control Routes
+- `/documents/access-permissions/`: `permission_list`
+- `/documents/access-permissions/create/`: `permission_create` (`@tenant_admin_required`)
+- `/documents/access-permissions/simulate/`: `permission_simulate` (effective capability matrix calculation)
+- `/documents/access-permissions/<int:pk>/`: `permission_detail`
+- `/documents/access-permissions/<int:pk>/edit/`: `permission_edit` (`@tenant_admin_required`)
+- `/documents/access-permissions/<int:pk>/delete/`: `permission_delete` (POST-only, `@tenant_admin_required`)
+- `/documents/watermark-policies/`: `watermark_list`
+- `/documents/watermark-policies/create/`: `watermark_create` (`@tenant_admin_required`)
+- `/documents/watermark-policies/preview/`: `watermark_preview` (interactive visual canvas studio)
+- `/documents/watermark-policies/<int:pk>/`: `watermark_detail`
+- `/documents/watermark-policies/<int:pk>/edit/`: `watermark_edit` (`@tenant_admin_required`)
+- `/documents/watermark-policies/<int:pk>/delete/`: `watermark_delete` (POST-only, `@tenant_admin_required`)
+- `/documents/drm-policies/`: `drm_policy_list`
+- `/documents/drm-policies/create/`: `drm_policy_create` (`@tenant_admin_required`)
+- `/documents/drm-policies/<int:pk>/`: `drm_policy_detail`
+- `/documents/drm-policies/<int:pk>/edit/`: `drm_policy_edit` (`@tenant_admin_required`)
+- `/documents/drm-policies/<int:pk>/delete/`: `drm_policy_delete` (POST-only, `@tenant_admin_required`)
+- `/documents/drm-policies/<int:pk>/kill-switch/`: `drm_kill_switch` (POST-only emergency revocation, `@tenant_admin_required`)
+- `/documents/dlp-policies/`: `dlp_policy_list`
+- `/documents/dlp-policies/create/`: `dlp_policy_create` (`@tenant_admin_required`)
+- `/documents/dlp-policies/<int:pk>/`: `dlp_policy_detail`
+- `/documents/dlp-policies/<int:pk>/edit/`: `dlp_policy_edit` (`@tenant_admin_required`)
+- `/documents/dlp-policies/<int:pk>/delete/`: `dlp_policy_delete` (POST-only, `@tenant_admin_required`)
+- `/documents/dlp-incidents/`: `dlp_incident_list`
+- `/documents/dlp-incidents/<int:pk>/`: `dlp_incident_detail`
+- `/documents/dlp-incidents/<int:pk>/resolve/`: `dlp_incident_resolve` (POST-only triage, `@tenant_admin_required`)
+- `/documents/secure-viewer/`: `secure_viewer` (sandboxed zero-download console with forensic watermark & screen blur)
+- `/documents/secure-viewer/<int:pk>/`: `secure_viewer_doc`
+- `/documents/secure-viewer/log-event/`: `secure_viewer_log` (AJAX telemetry logger)
+
 ### 13.8 Collaboration & Sharing Routes
 - `/documents/collaboration/`: `collaboration_hub` (unified multi-tab cockpit with tabs: shared_with_me, shared_by_me, my_tasks, activity)
 - `/documents/shares/`: `document_share_list`, `document_share_create`
@@ -440,6 +516,13 @@ Located in:
   - `document_search_alert/`: `list.html`, `detail.html`, `form.html`
   - `document_search_synonym/`: `list.html`, `detail.html`, `form.html`
   - `document_search_query_log/`: `list.html`, `detail.html`, `analytics.html`
+- `templates/documents/security_access_control/` (13.7 templates):
+  - `document_access_permission/`: `list.html`, `detail.html`, `form.html`, `simulate.html` (effective capabilities matrix calculator)
+  - `watermark_policy/`: `list.html`, `detail.html`, `form.html`, `preview.html` (interactive real-time visual canvas studio)
+  - `document_drm_policy/`: `list.html`, `detail.html`, `form.html` (with emergency kill-switch confirmation modal)
+  - `dlp_policy/`: `list.html`, `detail.html`, `form.html` (with violation incident feed)
+  - `dlp_incident/`: `list.html`, `detail.html` (with triage resolution workbench)
+  - `secure_viewer.html`: Sandboxed zero-download viewer console, client-side focus-loss blur shield (`screen_shield_overlay`), context-menu blocking, and forensic dynamic watermark overlay
 - `templates/documents/collaboration_sharing/` (13.8 templates):
   - `collaboration_hub.html`: Unified multi-tab collaboration workspace with live coauthor presence banner and KPI stats
   - `document_share/`: `list.html`, `detail.html`, `form.html`
@@ -481,10 +564,15 @@ Supports `--flush` option to reset module data cleanly. Demo data seeds:
 21. Search Alerts (Daily, weekly, and instant email/in-app alert subscriptions).
 22. Search Synonyms (Bidirectional terms, domain expansions, acronym mappings).
 23. Search Query Logs (Telemetry logs, zero-result telemetry, click ranks).
-24. Document Shares (Internal user share with view access, Department share with download access, External email share, Public guest link with Argon2/PBKDF2 passcode challenge).
-25. Co-Authoring Sessions (Active session with presence color #3B82F6 and JSON cursor position, Idle session, Disconnected session with telemetry).
-26. Document Review & Action Tasks (Review clause compliance, Sign authorization, Revise security section, Translate SOP into French with due dates and priority badges).
-27. Collaborative Document Activities (Document shared, link accessed, guest download, coauthor joined, task assigned, task completed audit event stream).
+24. Document Access Permissions (Tenant-wide public read permissions, Departmental compliance editor permissions, Individual user restricted owner grants).
+25. Dynamic Watermark Policies (Confidential diagonal overlay policy, Internal footer policy, Restricted top/bottom banner policy).
+26. Document DRM Policies (Executive NDA restricted DRM shield with screen-shield blur and print blocking, Revoked leak test policy with kill-switch engaged).
+27. Data Loss Prevention Policies (PCI-DSS credit card shield with block-and-alert, PII social security number detector, API secret key detector).
+28. DLP Incidents & Triage Log (Open critical PCI violation incident, Resolved false positive incident with security officer triage notes).
+29. Document Shares (Internal user share with view access, Department share with download access, External email share, Public guest link with Argon2/PBKDF2 passcode challenge).
+30. Co-Authoring Sessions (Active session with presence color #3B82F6 and JSON cursor position, Idle session, Disconnected session with telemetry).
+31. Document Review & Action Tasks (Review clause compliance, Sign authorization, Revise security section, Translate SOP into French with due dates and priority badges).
+32. Collaborative Document Activities (Document shared, link accessed, guest download, coauthor joined, task assigned, task completed audit event stream).
 
 ---
 
@@ -531,6 +619,14 @@ LIVE_LINKS["13.6"] = {
     "Search Synonyms": "documents:document_search_synonym_list",
     "Search Query Logs": "documents:document_search_query_log_list",
 }
+LIVE_LINKS["13.7"] = {
+    "Document-Level Permissions": "documents:permission_list",
+    "Dynamic Watermarking": "documents:watermark_list",
+    "DRM & Document Protection": "documents:drm_policy_list",
+    "Data Loss Prevention (DLP)": "documents:dlp_policy_list",
+    "DLP Incidents": "documents:dlp_incident_list",
+    "Secure Web Viewer": "documents:secure_viewer",
+}
 LIVE_LINKS["13.8"] = {
     "Collaboration Workspace": "documents:collaboration_hub",
     "Shared Documents": "documents:document_share_list",
@@ -570,3 +666,8 @@ LIVE_LINKS["13.8"] = {
 24. **Open Redirect Mitigation**: Quick-action toggles and read-mark handlers (`document_task_toggle_complete`, `document_activity_mark_read`) must validate any `HTTP_REFERER` against allowed request hosts using `django.utils.http.url_has_allowed_host_and_scheme()` before issuing redirects, safely falling back to canonical named routes.
 25. **Targeted Notification Privacy**: `document_activity_mark_read` strictly validates object ownership (`target_user=request.user`) to ensure tenant members cannot mark or manipulate private notifications intended for other users.
 26. **Cross-Record Foreign Key Integrity**: Form validation across `DocumentShareForm`, `CoauthorSessionForm`, and `DocumentTaskForm` verifies that child relations (`version`, `draft`, `review_comment`) strictly belong to the specified parent `Document`.
+27. **Administrative Authorization on Security Mutations**: Modifying security policies (`permission_create`, `permission_edit`, `permission_delete`, `watermark_create`, `watermark_edit`, `watermark_delete`, `drm_policy_create`, `drm_policy_edit`, `drm_policy_delete`, `dlp_policy_create`, `dlp_policy_edit`, `dlp_policy_delete`), resolving DLP incidents (`dlp_incident_resolve`), and engaging the emergency kill-switch (`drm_kill_switch`) strictly enforce `@tenant_admin_required`.
+28. **Emergency Kill-Switch Idempotency**: `drm_kill_switch` enforces view-level status guarding. Repeated POSTs against an already revoked policy redirect gracefully without altering original audit timestamps or revocation reasons. In `secure_viewer`, revoked DRM policies immediately terminate document rendering and present an emergency revocation notice card.
+29. **ReDoS Defense in Custom DLP Regular Expressions**: Custom regular expressions in `DlpPolicyForm` are validated against nested quantifiers and overlapping repetitions before saving, preventing catastrophic backtracking ReDoS denial of service.
+30. **Dynamic Watermark Token Interpolation & Template Safety**: Watermark template strings interpolate tokens safely in Python memory (`render_watermark()`), avoiding server-side template injection (SSTI). Template hints in `form.html` are wrapped in `{% verbatim %}` blocks to avoid colliding with Django's template engine.
+31. **Zero-Download Secure Web Viewer Sandboxing**: `secure_viewer.html` implements client-side focus-loss blur overlays (`onblur`/`onfocus`), keyboard shortcut interception (`Ctrl+P`, `Ctrl+C`, `Ctrl+S`), and context menu suppression as deterrents, backed by server-side payload access controls and active forensic watermark embedding.
