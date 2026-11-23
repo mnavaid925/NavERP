@@ -445,8 +445,8 @@ def document_search_synonym(db, tenant_a, admin_user):
     return DocumentSearchSynonym.objects.create(
         tenant=tenant_a,
         term="agreement",
-        synonyms_csv="contract, accord, deal",
-        category="domain_terms",
+        synonyms="contract, accord, deal",
+        category="domain",
         language="en",
         is_bidirectional=True,
         is_active=True,
