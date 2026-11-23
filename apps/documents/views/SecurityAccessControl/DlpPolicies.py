@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.SecurityAccessControl.DlpPolicies import DlpPolicyForm
 from apps.documents.models.SecurityAccessControl.DlpPolicies import DlpPolicy
@@ -79,7 +80,7 @@ def dlp_policy_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 def dlp_policy_create(request):
     if request.method == "POST":
         form = DlpPolicyForm(request.POST, tenant=request.tenant)
@@ -105,7 +106,7 @@ def dlp_policy_create(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def dlp_policy_edit(request, pk):
     policy = documents_object(request, DlpPolicy, pk)
     if request.method == "POST":
@@ -130,7 +131,7 @@ def dlp_policy_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def dlp_policy_delete(request, pk):
     policy = documents_object(request, DlpPolicy, pk)
