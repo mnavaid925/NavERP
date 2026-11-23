@@ -93,7 +93,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
     - `templates/documents/security_access_control/document_access_permission/list.html:191`
   - **Description**: Pagination links do not preserve `policy` or `document`/`folder` filters.
   - **Fix**: Append filter params to pagination links.
-- [ ] **M3: Stale grantee foreign keys in `DocumentAccessPermissionForm`**
+- [x] **M3: Stale grantee foreign keys in `DocumentAccessPermissionForm`**
   - **Files & Lines**: `apps/documents/forms/SecurityAccessControl/DocumentAccessPermissions.py:83`
   - **Description**: If user changes `grantee_type` (e.g. from `org_unit` to `user`), non-matching FK fields are not cleared in `clean()`.
   - **Fix**: Clear non-matching grantee fields based on `grantee_type`.
