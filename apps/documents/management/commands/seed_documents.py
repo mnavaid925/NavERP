@@ -989,7 +989,6 @@ class Command(BaseCommand):
                 if not MetadataSchema.objects.filter(tenant=tenant).exists():
                     self.stdout.write(f"Seeding Metadata & Indexing records for tenant '{tenant.slug}'...")
 
-                    import json
                     nda_fields = [
                         {"key": "counterparty", "label": "Counterparty Name", "data_type": "text", "required": True},
                         {"key": "effective_date", "label": "Effective Date", "data_type": "date", "required": True},
