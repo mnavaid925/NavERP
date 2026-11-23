@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ taxonomy_term.name }} — Taxonomy Term — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_indexing_dashboard' %}">Metadata & Indexing</a>
+            <span>/</span>
+            <a href="{% url 'documents:taxonomy_term_list' %}">Taxonomy</a>
+            <span>/</span>
+            <span>{{ taxonomy_term.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ taxonomy_term.name }}</h1>
+            <span class="badge {{ taxonomy_term.category_badge }}">{{ taxonomy_term.get_category_display }}</span>
+            <span class="badge {{ taxonomy_term.status_badge }}">{{ taxonomy_term.is_active|yesno:"Active,Inactive" }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:taxonomy_term_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Taxonomy</span>
+        </a>
+        <a href="{% url 'documents:taxonomy_term_create' %}?parent={{ taxonomy_term.pk }}&category={{ taxonomy_term.category }}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>Add Child Term</span>
+        </a>
+        <a href="{% url 'documents:taxonomy_term_edit' taxonomy_term.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Term</span>
+        </a>
+        <form method="post" action="{% url 'documents:taxonomy_term_delete' taxonomy_term.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this taxonomy term?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div class="card md:col-span-2">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title">Term Specification</h2>
+            <span class="font-mono text-sm text-slate-500">{{ taxonomy_term.number }}</span>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Canonical Term Code</dt>
+                    <dd><span class="font-mono text-sm font-semibold bg-slate-100 text-slate-800 px-2.5 py-1 rounded">{{ taxonomy_term.term_code }}</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Thesaurus Category</dt>
+                    <dd><span class="badge {{ taxonomy_term.category_badge }}">{{ taxonomy_term.get_category_display }}</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Parent Hierarchy Term</dt>
+                    <dd>
+                        {% if taxonomy_term.parent %}
+                            <a href="{% url 'documents:taxonomy_term_detail' taxonomy_term.parent.pk %}" class="text-blue-600 font-semibold hover:underline">
+                                {{ taxonomy_term.parent.name }} [{{ taxonomy_term.parent.term_code }}]
+                            </a>
+                        {% else %}
+                            <span class="badge badge-info">Root Level Term</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>External Reference Standard</dt>
+                    <dd>
+                        {% if taxonomy_term.external_code %}
+                            <span class="font-mono text-sm text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">{{ taxonomy_term.external_code }}</span>
+                        {% else %}
+                            <span class="text-slate-400">— Internal Term —</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Governance Rule</dt>
+                    <dd>
+                        {% if taxonomy_term.is_governed %}
+                            <span class="badge badge-green">Governed Vocabulary</span>
+                        {% else %}
+                            <span class="badge badge-slate">Open Vocabulary</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Usage Counter</dt>
+                    <dd><span class="font-mono text-sm font-bold text-slate-900">{{ taxonomy_term.usage_count }} document citations</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Created By</dt>
+                    <dd>{{ taxonomy_term.created_by.get_full_name|default:taxonomy_term.created_by.username }} on {{ taxonomy_term.created_at|date:"Y-m-d H:i" }}</dd>
+                </div>
+            </dl>
+
+            {% if taxonomy_term.description %}
+            <div class="mt-4 pt-4 border-t border-slate-200">
+                <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description & Scope Note</h3>
+                <p class="text-slate-700 text-sm leading-relaxed">{{ taxonomy_term.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Synonyms & Alternate Labels -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title">Synonyms & Search Expansion</h2>
+            <span class="badge badge-slate font-mono">{{ synonyms_list|length }}</span>
+        </div>
+        <div class="card-body">
+            <p class="text-xs text-slate-500 mb-3">Alternate expressions normalized to this term during OCR indexing and faceted search.</p>
+            <div class="flex flex-wrap gap-2">
+                {% for syn in synonyms_list %}
+                    <span class="badge badge-info text-xs">{{ syn }}</span>
+                {% empty %}
+                    <p class="text-sm text-slate-400">No alternate synonyms registered.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Child Terms Section -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">Narrower Terms (Children)</h2>
+        <span class="badge badge-slate font-mono">{{ child_terms|length }} Direct Children</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Term Name</th>
+                    <th>Code</th>
+                    <th>Synonyms</th>
+                    <th>Status</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for child in child_terms %}
+                <tr>
+                    <td class="font-mono text-xs text-blue-600">{{ child.number }}</td>
+                    <td>
+                        <a href="{% url 'documents:taxonomy_term_detail' child.pk %}" class="font-semibold text-slate-900 hover:text-blue-600">
+                            {{ child.name }}
+                        </a>
+                    </td>
+                    <td><span class="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{{ child.term_code }}</span></td>
+                    <td>
+                        <span class="text-xs text-slate-500">{{ child.parsed_synonyms|join:", "|default:"—" }}</span>
+                    </td>
+                    <td><span class="badge {{ child.status_badge }}">{{ child.is_active|yesno:"Active,Inactive" }}</span></td>
+                    <td class="text-right">
+                        <a href="{% url 'documents:taxonomy_term_detail' child.pk %}" class="btn btn-outline btn-xs">
+                            View
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-6 text-slate-400 text-sm">
+                        No narrower child terms defined under this entry.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
