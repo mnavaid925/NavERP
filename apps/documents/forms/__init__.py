@@ -21,6 +21,10 @@ from apps.documents.forms.DocumentAuthoring.DocumentDrafts import DocumentDraftF
 from apps.documents.forms.DocumentAuthoring.DocumentTemplates import DocumentTemplateForm
 from apps.documents.forms.DocumentAuthoring.DraftCollaborations import DraftCollaborationForm
 from apps.documents.forms.DocumentAuthoring.TemplateSections import TemplateSectionForm
+from apps.documents.forms.MetadataIndexing.DocumentMetadataValues import DocumentMetadataValueForm
+from apps.documents.forms.MetadataIndexing.DocumentOcrJobs import DocumentOcrJobForm
+from apps.documents.forms.MetadataIndexing.MetadataSchemas import MetadataSchemaForm
+from apps.documents.forms.MetadataIndexing.TaxonomyTerms import TaxonomyTermForm
 from apps.documents.forms.StorageRepository.DocumentBatchImports import DocumentBatchImportForm
 from apps.documents.forms.StorageRepository.DocumentFolders import DocumentFolderForm
 from apps.documents.forms.StorageRepository.DocumentRelationships import DocumentRelationshipForm
@@ -72,4 +76,8 @@ __all__ = [
     "StorageVolumeForm",
     "DocumentRelationshipForm",
     "DocumentBatchImportForm",
+    "MetadataSchemaForm",
+    "DocumentMetadataValueForm",
+    "TaxonomyTermForm",
+    "DocumentOcrJobForm",
 ]
