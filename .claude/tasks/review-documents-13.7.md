@@ -97,7 +97,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/forms/SecurityAccessControl/DocumentAccessPermissions.py:83`
   - **Description**: If user changes `grantee_type` (e.g. from `org_unit` to `user`), non-matching FK fields are not cleared in `clean()`.
   - **Fix**: Clear non-matching grantee fields based on `grantee_type`.
-- [ ] **M4: Missing package `__init__.py` markers in `SecurityAccessControl` subdirectories**
+- [x] **M4: Missing package `__init__.py` markers in `SecurityAccessControl` subdirectories**
   - **Files & Lines**: `apps/documents/{models,forms,views,urls}/SecurityAccessControl/`
   - **Description**: Add empty `__init__.py` files for consistency with sibling packages.
   - **Fix**: Create empty `__init__.py` in each.
