@@ -68,6 +68,10 @@ class DocumentSearchSynonym(TenantNumbered):
                 fields=["tenant", "category", "is_active"],
                 name="doc_dsyn_tnt_cat_act_idx",
             ),
+            models.Index(
+                fields=["tenant", "is_active", "term"],
+                name="doc_dsyn_tnt_act_trm_idx",
+            ),
         ]
 
     def __str__(self):
