@@ -75,6 +75,41 @@ from apps.documents.views.DocumentAuthoring.TemplateSections import (
     template_section_edit,
     template_section_list,
 )
+from apps.documents.views.MetadataIndexing.DocumentMetadataValues import (
+    metadata_value_create,
+    metadata_value_delete,
+    metadata_value_detail,
+    metadata_value_edit,
+    metadata_value_list,
+    metadata_value_validate,
+)
+from apps.documents.views.MetadataIndexing.DocumentOcrJobs import (
+    document_ocr_job_apply,
+    document_ocr_job_create,
+    document_ocr_job_delete,
+    document_ocr_job_detail,
+    document_ocr_job_list,
+    document_ocr_job_process,
+    document_ocr_job_viewer,
+)
+from apps.documents.views.MetadataIndexing.MetadataIndexingDashboard import (
+    metadata_indexing_dashboard,
+)
+from apps.documents.views.MetadataIndexing.MetadataSchemas import (
+    metadata_schema_create,
+    metadata_schema_delete,
+    metadata_schema_detail,
+    metadata_schema_edit,
+    metadata_schema_list,
+)
+from apps.documents.views.MetadataIndexing.TaxonomyTerms import (
+    taxonomy_term_create,
+    taxonomy_term_delete,
+    taxonomy_term_detail,
+    taxonomy_term_edit,
+    taxonomy_term_list,
+    taxonomy_term_tree,
+)
 from apps.documents.views.StorageRepository.DocumentBatchImports import (
     batch_import_create,
     batch_import_delete,
@@ -259,4 +294,30 @@ __all__ = [
     "batch_import_delete",
     "batch_import_process",
     "repository_dashboard",
+    # MetadataIndexing
+    "metadata_schema_list",
+    "metadata_schema_create",
+    "metadata_schema_detail",
+    "metadata_schema_edit",
+    "metadata_schema_delete",
+    "metadata_value_list",
+    "metadata_value_create",
+    "metadata_value_detail",
+    "metadata_value_edit",
+    "metadata_value_delete",
+    "metadata_value_validate",
+    "taxonomy_term_list",
+    "taxonomy_term_tree",
+    "taxonomy_term_create",
+    "taxonomy_term_detail",
+    "taxonomy_term_edit",
+    "taxonomy_term_delete",
+    "document_ocr_job_list",
+    "document_ocr_job_create",
+    "document_ocr_job_detail",
+    "document_ocr_job_viewer",
+    "document_ocr_job_process",
+    "document_ocr_job_apply",
+    "document_ocr_job_delete",
+    "metadata_indexing_dashboard",
 ]
