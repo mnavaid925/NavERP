@@ -83,7 +83,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
 ---
 
 ### Minor (Clean-up & Polish)
-- [ ] **M1: Form inheritance inconsistency in `DlpIncidentResolveForm`**
+- [x] **M1: Form inheritance inconsistency in `DlpIncidentResolveForm`**
   - **Files & Lines**: `apps/documents/forms/SecurityAccessControl/DlpIncidents.py:6`
   - **Description**: Inherits from `forms.ModelForm` instead of `TenantModelForm`.
   - **Fix**: Inherit from `TenantModelForm`.
