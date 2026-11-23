@@ -197,7 +197,7 @@
                         <div class="flex-1">
                             <p class="text-sm text-slate-900">{{ act.summary }}</p>
                             <div class="text-xs text-slate-500 mt-0.5">
-                                By {{ act.actor.get_full_name|default:act.actor.username|default:"Guest" }} &bull; {{ act.created_at|date:"M d, Y H:i" }}
+                                By {{ act.actor_display_name }} &bull; {{ act.created_at|date:"M d, Y H:i" }}
                             </div>
                         </div>
                     </div>
