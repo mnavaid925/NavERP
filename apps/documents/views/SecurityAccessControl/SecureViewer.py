@@ -19,6 +19,9 @@ def secure_viewer(request, pk=None):
     """
     docs_qs = documents_scope(Document.objects.all(), request).order_by("-updated_at")
 
+    if not pk and request.GET.get("doc_id"):
+        pk = request.GET.get("doc_id")
+
     document = None
     if pk:
         document = get_object_or_404(docs_qs, pk=pk)
@@ -37,7 +40,7 @@ def secure_viewer(request, pk=None):
     ip_addr = request.META.get("REMOTE_ADDR", "127.0.0.1")
 
     if document:
-        version = document.versions.order_by("-version_number").first()
+        version = document.versions.order_by("-created_at").first()
 
         # Find matching DRM policy
         drm_policy = DocumentDrmPolicy.objects.filter(
