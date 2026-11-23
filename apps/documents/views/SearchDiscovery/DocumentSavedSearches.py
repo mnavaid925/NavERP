@@ -15,6 +15,20 @@ from apps.documents.models.SearchDiscovery.DocumentSavedSearches import Document
 from apps.documents.views._common import documents_object, documents_scope
 
 
+def _can_access_saved_search(user, saved_search):
+    if getattr(user, "is_tenant_admin", False) or getattr(user, "is_superuser", False):
+        return True
+    if saved_search.owner == user:
+        return True
+    if saved_search.visibility == "public":
+        return True
+    if saved_search.visibility == "shared_department":
+        user_dept = getattr(user, "department", None)
+        if user_dept and saved_search.department_id == user_dept.id:
+            return True
+    return False
+
+
 @login_required
 def document_saved_search_list(request):
     qs = documents_scope(DocumentSavedSearch.objects.all(), request).select_related("owner", "department")
@@ -81,6 +95,8 @@ def document_saved_search_detail(request, pk):
         pk,
         select_related=("owner", "department"),
     )
+    if not _can_access_saved_search(request.user, saved_search):
+        return HttpResponseForbidden("You do not have permission to view this saved search.")
     alerts = saved_search.alerts.filter(tenant=request.tenant).select_related("subscriber")
     parsed_filters = saved_search.get_filters_dict()
     parsed_facet_filters = saved_search.get_facet_filters_dict()
@@ -169,6 +185,9 @@ def document_saved_search_delete(request, pk):
 @login_required
 def document_saved_search_run(request, pk):
     saved_search = documents_object(request, DocumentSavedSearch, pk)
+
+    if not _can_access_saved_search(request.user, saved_search):
+        return HttpResponseForbidden("You do not have permission to run this saved search.")
 
     saved_search.run_count += 1
     saved_search.last_run_at = timezone.now()
