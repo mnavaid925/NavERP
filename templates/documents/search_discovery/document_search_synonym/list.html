@@ -150,7 +150,7 @@
                         <a href="{% url 'documents:document_search_synonym_edit' item.pk %}" class="btn btn-icon" title="Edit">
                             <i data-lucide="pencil"></i>
                         </a>
-                        <form method="post" action="{% url 'documents:document_search_synonym_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete synonym rule {{ item.term }}?');">
+                        <form method="post" action="{% url 'documents:document_search_synonym_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete synonym rule {{ item.term|escapejs }}?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
                                 <i data-lucide="trash-2"></i>
