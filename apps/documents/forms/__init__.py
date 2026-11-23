@@ -25,6 +25,10 @@ from apps.documents.forms.MetadataIndexing.DocumentMetadataValues import Documen
 from apps.documents.forms.MetadataIndexing.DocumentOcrJobs import DocumentOcrJobForm
 from apps.documents.forms.MetadataIndexing.MetadataSchemas import MetadataSchemaForm
 from apps.documents.forms.MetadataIndexing.TaxonomyTerms import TaxonomyTermForm
+from apps.documents.forms.SearchDiscovery.DocumentSavedSearches import DocumentSavedSearchForm
+from apps.documents.forms.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlertForm
+from apps.documents.forms.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLogForm
+from apps.documents.forms.SearchDiscovery.DocumentSearchSynonyms import DocumentSearchSynonymForm
 from apps.documents.forms.StorageRepository.DocumentBatchImports import DocumentBatchImportForm
 from apps.documents.forms.StorageRepository.DocumentFolders import DocumentFolderForm
 from apps.documents.forms.StorageRepository.DocumentRelationships import DocumentRelationshipForm
@@ -80,4 +84,8 @@ __all__ = [
     "DocumentMetadataValueForm",
     "TaxonomyTermForm",
     "DocumentOcrJobForm",
+    "DocumentSavedSearchForm",
+    "DocumentSearchAlertForm",
+    "DocumentSearchSynonymForm",
+    "DocumentSearchQueryLogForm",
 ]
