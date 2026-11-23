@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Incident {{ incident.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:dlp_incident_list' %}">DLP Incidents</a>
+            <span>/</span>
+            <span>{{ incident.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ incident.number }}</h1>
+            <span class="badge {{ incident.severity_badge }}">{{ incident.get_severity_display }} Severity</span>
+            <span class="badge {{ incident.action_badge }}">{{ incident.get_action_taken_display }}</span>
+            <span class="badge {{ incident.resolution_badge }}">{{ incident.get_resolution_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:dlp_incident_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Incidents</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Evidence Box -->
+        <div class="card border-red-200">
+            <div class="card-header bg-red-50/50 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600"></i>
+                    <h2 class="text-base font-semibold text-red-900">Detected Sensitive Content Evidence</h2>
+                </div>
+                <span class="text-xs font-mono text-red-700">{{ incident.matches_detected_count }} match(es) detected</span>
+            </div>
+            <div class="card-body">
+                <div class="p-4 bg-slate-900 rounded-lg text-emerald-400 font-mono text-xs leading-relaxed overflow-x-auto select-none">
+                    {{ incident.snippet_redacted|default:"[Sensitive data pattern detected and quarantined. Exact payload masked in accordance with privacy rules.]" }}
+                </div>
+                <p class="text-xs text-slate-500 mt-2">
+                    Sensitive text matches are automatically masked with asterisks to protect personal data and confidential credentials from secondary exposure during triage.
+                </p>
+            </div>
+        </div>
+
+        <!-- Incident Metadata -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Violation Details</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' incident.document.pk %}" class="text-primary-600 hover:underline font-medium">
+                                {{ incident.document.title }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Triggering Policy</dt>
+                        <dd>
+                            <a href="{% url 'documents:dlp_policy_detail' incident.policy.pk %}" class="text-primary-600 hover:underline font-medium">
+                                {{ incident.policy.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Triggered By User</dt>
+                        <dd class="font-medium text-slate-900">{{ incident.triggered_by.get_full_name|default:incident.triggered_by.username }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Enforcement Action Taken</dt>
+                        <dd><span class="badge {{ incident.action_badge }}">{{ incident.get_action_taken_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Detection Timestamp</dt>
+                        <dd class="font-medium text-slate-900">{{ incident.created_at|date:"M d, Y H:i:s" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Triage Status</dt>
+                        <dd><span class="badge {{ incident.resolution_badge }}">{{ incident.get_resolution_status_display }}</span></dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Triage & Resolution Workbench -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Security Officer Resolution</h2>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'documents:dlp_incident_resolve' incident.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div class="form-group mb-0">
+                        <label class="form-label" for="{{ resolve_form.resolution_status.id_for_label }}">Update Triage Status <span class="text-red-500">*</span></label>
+                        {{ resolve_form.resolution_status }}
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="form-label" for="{{ resolve_form.resolution_notes.id_for_label }}">Investigation / Justification Notes <span class="text-red-500">*</span></label>
+                        {{ resolve_form.resolution_notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="check-shield"></i>
+                        <span>Save Triage Determination</span>
+                    </button>
+                </form>
+
+                {% if incident.resolved_by %}
+                <hr class="border-slate-200 my-4">
+                <div class="text-xs text-slate-500">
+                    <div>Last resolved by: <strong>{{ incident.resolved_by.get_full_name|default:incident.resolved_by.username }}</strong></div>
+                    {% if incident.resolution_notes %}
+                    <div class="mt-1 p-2 bg-slate-50 rounded border border-slate-200 italic text-slate-700">"{{ incident.resolution_notes }}"</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
