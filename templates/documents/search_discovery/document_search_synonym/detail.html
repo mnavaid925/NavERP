@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Synonym Rule {{ search_synonym.term }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:search_hub' %}">Search & Discovery</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_search_synonym_list' %}">Synonyms</a>
+            <span>/</span>
+            <span>{{ search_synonym.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ search_synonym.term }}</h1>
+            <span class="badge {{ search_synonym.category_badge_class }}">{{ search_synonym.get_category_display }}</span>
+            <span class="badge {{ search_synonym.status_badge_class }}">{% if search_synonym.is_active %}Active{% else %}Inactive{% endif %}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:search_hub' %}?q={{ search_synonym.term }}" class="btn btn-primary">
+            <i data-lucide="search"></i>
+            <span>Test Query in Hub</span>
+        </a>
+        <a href="{% url 'documents:document_search_synonym_edit' search_synonym.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'documents:document_search_synonym_delete' search_synonym.pk %}" class="inline" onsubmit="return confirm('Delete synonym rule {{ search_synonym.term }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Synonym Rule Definition</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Rule Identifier</dt>
+                        <dd class="font-mono text-sm font-semibold">{{ search_synonym.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Trigger / Base Term</dt>
+                        <dd class="text-base font-bold text-slate-800 dark:text-slate-100">{{ search_synonym.term }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Vocabulary Category</dt>
+                        <dd><span class="badge {{ search_synonym.category_badge_class }}">{{ search_synonym.get_category_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Expansion Mapping Direction</dt>
+                        <dd>
+                            {% if search_synonym.is_bidirectional %}
+                            <span class="text-sm font-semibold text-blue-600">↔ Bidirectional (Any term expands to all synonyms)</span>
+                            {% else %}
+                            <span class="text-sm font-semibold text-slate-600">→ Unidirectional (Only base term expands)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Language Locale</dt>
+                        <dd class="font-mono text-xs uppercase">{{ search_synonym.language }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Search Expansion Hits</dt>
+                        <dd class="font-medium text-slate-800 dark:text-slate-200">{{ search_synonym.hit_count }} times triggered</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created By</dt>
+                        <dd>{{ search_synonym.created_by.username|default:"System Engine" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Operational Status</dt>
+                        <dd><span class="badge {{ search_synonym.status_badge_class }}">{% if search_synonym.is_active %}Active in Search Engine{% else %}Disabled{% endif %}</span></dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Equivalent Terms Cloud -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Expanded Token Equivalence Set</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">
+                    When a user searches for any of these terms, the Search Hub engine automatically broadens the full-text and metadata match criteria to include all associated synonyms.
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    {% for term in expanded_terms_list %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-mono font-medium {% if forloop.first %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border border-blue-300{% else %}bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700{% endif %}">
+                        {% if forloop.first %}<i data-lucide="key" class="w-3.5 h-3.5"></i>{% endif %}
+                        {{ term }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Meta & Actions -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Test In Search Hub</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <a href="{% url 'documents:search_hub' %}?q={{ search_synonym.term }}" class="btn btn-primary w-full justify-center">
+                    <i data-lucide="search"></i>
+                    <span>Search "{{ search_synonym.term }}"</span>
+                </a>
+                <a href="{% url 'documents:document_search_synonym_list' %}" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to Synonym List</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Audit Timestamps</h2>
+            </div>
+            <div class="card-body text-xs space-y-2 text-slate-500">
+                <div class="flex justify-between">
+                    <span>Created:</span>
+                    <span class="font-medium text-slate-700 dark:text-slate-300">{{ search_synonym.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Updated:</span>
+                    <span class="font-medium text-slate-700 dark:text-slate-300">{{ search_synonym.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Tenant ID:</span>
+                    <span class="font-mono">{{ search_synonym.tenant_id }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
