@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ taxonomy_term.name }}{% else %}New Taxonomy Term{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_indexing_dashboard' %}">Metadata & Indexing</a>
+            <span>/</span>
+            <a href="{% url 'documents:taxonomy_term_list' %}">Taxonomy</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ taxonomy_term.term_code }}{% else %}New Term{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Term: {{ taxonomy_term.name }}{% else %}Create Controlled Vocabulary Term{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:taxonomy_term_detail' taxonomy_term.pk %}{% else %}{% url 'documents:taxonomy_term_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+{% if form.errors %}
+<div class="card mb-6 border-red-300 bg-red-50">
+    <div class="card-body">
+        <div class="flex items-center gap-2 text-red-700 font-semibold mb-2">
+            <i data-lucide="alert-circle"></i>
+            <span>Please correct the errors below:</span>
+        </div>
+        <ul class="list-disc list-inside text-sm text-red-600">
+            {% for field in form %}
+                {% for error in field.errors %}
+                    <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Term Identity & Hierarchy</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Term Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<p class="form-error">{{ form.name.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.term_code.id_for_label }}">Canonical Term Code <span class="text-red-500">*</span></label>
+                {{ form.term_code }}
+                <p class="text-xs text-slate-500 mt-1">Unique uppercase code within category e.g. <code>TAX_NDA</code>, <code>FIN_EBITDA</code>.</p>
+                {% if form.term_code.errors %}<p class="form-error">{{ form.term_code.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.category.id_for_label }}">Thesaurus Category <span class="text-red-500">*</span></label>
+                {{ form.category }}
+                {% if form.category.errors %}<p class="form-error">{{ form.category.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.parent.id_for_label }}">Parent Term (Broader Term)</label>
+                {{ form.parent }}
+                <p class="text-xs text-slate-500 mt-1">Leave empty to establish as a root/top-level category term.</p>
+                {% if form.parent.errors %}<p class="form-error">{{ form.parent.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.external_code.id_for_label }}">Standard Cross-Reference Code (Optional)</label>
+                {{ form.external_code }}
+                <p class="text-xs text-slate-500 mt-1">External ontology code e.g. <code>ISO 27001:A.13.2</code>, <code>NAICS 541512</code>.</p>
+                {% if form.external_code.errors %}<p class="form-error">{{ form.external_code.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description & Scope Note</label>
+                {{ form.description }}
+                {% if form.description.errors %}<p class="form-error">{{ form.description.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Synonyms & Search Expansion</h2>
+            <p class="text-xs text-slate-500">Provide comma-separated synonyms or a JSON array of alternate phrases to expand full-text and semantic queries.</p>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.synonyms_json.id_for_label }}">Alternate Terms / Synonyms</label>
+                {{ form.synonyms_json }}
+                <p class="text-xs text-slate-500 mt-1">e.g. <code>["NDA", "Non-Disclosure", "Proprietary Information Agreement"]</code> or comma-separated list.</p>
+                {% if form.synonyms_json.errors %}<p class="form-error">{{ form.synonyms_json.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Governance & Status</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="flex items-center gap-3">
+                {{ form.is_governed }}
+                <label for="{{ form.is_governed.id_for_label }}" class="text-sm font-medium text-slate-800">
+                    Governed Term (Requires administrator authorization to alter or deprecate)
+                </label>
+            </div>
+            <div class="flex items-center gap-3">
+                {{ form.is_active }}
+                <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800">
+                    Active Term (Available for classification and metadata tagging)
+                </label>
+            </div>
+        </div>
+        <div class="card-footer flex justify-end gap-3">
+            <a href="{% if is_edit %}{% url 'documents:taxonomy_term_detail' taxonomy_term.pk %}{% else %}{% url 'documents:taxonomy_term_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="save"></i>
+                <span>{% if is_edit %}Update Term{% else %}Create Term{% endif %}</span>
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}
