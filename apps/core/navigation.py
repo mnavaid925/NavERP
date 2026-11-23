@@ -3563,6 +3563,18 @@ LIVE_LINKS = {
         "Controlled Vocabulary & Thesauri": "documents:taxonomy_term_list",
         "Metadata Inheritance & Propagation": "documents:metadata_value_list",
     },
+    # 13.6 Search & Discovery
+    "13.6": {
+        "Advanced Search & Filters": "documents:search_hub",
+        "Faceted Search Navigation": "documents:search_hub",
+        "Saved Searches & Alerts": "documents:document_saved_search_list",
+        "Natural Language Query & AI Search": "documents:search_hub",
+        "Search Analytics & Query Optimization": "documents:document_search_analytics",
+        # Extra live leaves:
+        "Search Alerts": "documents:document_search_alert_list",
+        "Search Synonyms": "documents:document_search_synonym_list",
+        "Search Query Logs": "documents:document_search_query_log_list",
+    },
 
 
 
