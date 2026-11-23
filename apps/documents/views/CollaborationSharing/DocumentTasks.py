@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -22,11 +22,18 @@ def document_task_list(request):
     )
 
     now_date = timezone.now().date()
-    total_count = base_qs.count()
-    pending_count = base_qs.filter(status="pending").count()
-    in_progress_count = base_qs.filter(status="in_progress").count()
-    completed_count = base_qs.filter(status="completed").count()
-    overdue_count = base_qs.exclude(status__in=["completed", "cancelled"]).filter(due_date__lt=now_date).count()
+    counts = base_qs.aggregate(
+        total=Count("id"),
+        pending=Count("id", filter=Q(status="pending")),
+        in_progress=Count("id", filter=Q(status="in_progress")),
+        completed=Count("id", filter=Q(status="completed")),
+        overdue=Count("id", filter=~Q(status__in=["completed", "cancelled"]) & Q(due_date__lt=now_date)),
+    )
+    total_count = counts["total"]
+    pending_count = counts["pending"]
+    in_progress_count = counts["in_progress"]
+    completed_count = counts["completed"]
+    overdue_count = counts["overdue"]
 
     qs = base_qs
     q = request.GET.get("q", "").strip()
