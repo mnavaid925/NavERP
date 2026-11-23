@@ -29,7 +29,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
     - `apps/documents/views/SecurityAccessControl/WatermarkPolicies.py:86,117,138` (`watermark_create`, `watermark_edit`, `watermark_delete`)
   - **Description**: Mutating security policies, emergency DRM kill-switch, DLP incident resolution, and granting/editing document permissions are decorated only with `@login_required` instead of `@tenant_admin_required`, allowing standard employees to escalate privileges or revoke policies company-wide.
   - **Fix**: Add `@tenant_admin_required` (from `apps.core.decorators`) to these views and hide administrative buttons in templates when the user is not a tenant admin.
-- [ ] **C2: Unbounded table scan and memory bloat in `permission_simulate`**
+- [x] **C2: Unbounded table scan and memory bloat in `permission_simulate`**
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py:183-184`
   - **Description**: On every hit to `/documents/permissions/simulate/`, queries fetch all documents and users for the tenant without limits or `.only(...)` column projections. In enterprise tenants with 10k+ documents, this causes full table scans and high memory consumption.
   - **Fix**: Add `.only("id", "number", "title", "classification")[:200]` and `.only("id", "username", "first_name", "last_name")[:200]`.
