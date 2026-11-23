@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Permission {{ permission.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:permission_list' %}">Access Permissions</a>
+            <span>/</span>
+            <span>{{ permission.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ permission.number }}</h1>
+            <span class="badge {{ permission.grantee_type_badge }}">{{ permission.get_grantee_type_display }}</span>
+            <span class="badge {{ permission.permission_level_badge }}">{{ permission.get_permission_level_display }}</span>
+            {% if permission.is_currently_valid %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-slate">Inactive / Expired</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:permission_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Permissions</span>
+        </a>
+        <a href="{% url 'documents:permission_edit' permission.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'documents:permission_delete' permission.pk %}" class="inline" onsubmit="return confirm('Revoke and delete permission {{ permission.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Revoke</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Info -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Target & Grantee Specification</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Target Type</dt>
+                        <dd>
+                            {% if document %}
+                            <span class="flex items-center gap-1.5 font-medium text-slate-900">
+                                <i data-lucide="file-text" class="w-4 h-4 text-slate-500"></i>
+                                Document: <a href="{% url 'documents:document_detail' document.pk %}" class="text-primary-600 hover:underline">{{ document.title }}</a>
+                            </span>
+                            {% elif folder %}
+                            <span class="flex items-center gap-1.5 font-medium text-slate-900">
+                                <i data-lucide="folder" class="w-4 h-4 text-amber-500"></i>
+                                Folder: <a href="{% url 'documents:folder_detail' folder.pk %}" class="text-primary-600 hover:underline">{{ folder.name }}</a>
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400">General Scope</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Grantee</dt>
+                        <dd class="font-medium text-slate-900">{{ grantee }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Permission Level</dt>
+                        <dd>
+                            <span class="badge {{ permission.permission_level_badge }}">{{ permission.get_permission_level_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Inheritance</dt>
+                        <dd>
+                            {% if permission.is_inherited %}
+                            <span class="badge badge-info">Inherited</span>
+                            {% if permission.inherited_from_folder %}
+                            from <a href="{% url 'documents:folder_detail' permission.inherited_from_folder.pk %}" class="text-primary-600 hover:underline">{{ permission.inherited_from_folder.name }}</a>
+                            {% endif %}
+                            {% else %}
+                            <span class="badge badge-slate">Explicit Grant (Root)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Notes / Business Justification</dt>
+                        <dd>{{ permission.notes|default:"None provided" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Capability Matrix -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Granted Capability Flags</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div class="flex items-center gap-3 p-3 rounded-lg border {% if permission.can_read %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <i data-lucide="{% if permission.can_read %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 {% if permission.can_read %}text-emerald-600{% else %}text-slate-400{% endif %}"></i>
+                        <div>
+                            <div class="text-sm font-medium {% if permission.can_read %}text-emerald-900{% else %}text-slate-500{% endif %}">Read & View</div>
+                            <div class="text-xs text-slate-500">Access document text & metadata</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 rounded-lg border {% if permission.can_write %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <i data-lucide="{% if permission.can_write %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 {% if permission.can_write %}text-emerald-600{% else %}text-slate-400{% endif %}"></i>
+                        <div>
+                            <div class="text-sm font-medium {% if permission.can_write %}text-emerald-900{% else %}text-slate-500{% endif %}">Write & Edit</div>
+                            <div class="text-xs text-slate-500">Create new version drafts</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 rounded-lg border {% if permission.can_delete %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <i data-lucide="{% if permission.can_delete %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 {% if permission.can_delete %}text-emerald-600{% else %}text-slate-400{% endif %}"></i>
+                        <div>
+                            <div class="text-sm font-medium {% if permission.can_delete %}text-emerald-900{% else %}text-slate-500{% endif %}">Delete</div>
+                            <div class="text-xs text-slate-500">Archive or delete record</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 rounded-lg border {% if permission.can_download %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <i data-lucide="{% if permission.can_download %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 {% if permission.can_download %}text-emerald-600{% else %}text-slate-400{% endif %}"></i>
+                        <div>
+                            <div class="text-sm font-medium {% if permission.can_download %}text-emerald-900{% else %}text-slate-500{% endif %}">Download</div>
+                            <div class="text-xs text-slate-500">Export raw physical binary</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 rounded-lg border {% if permission.can_print %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <i data-lucide="{% if permission.can_print %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 {% if permission.can_print %}text-emerald-600{% else %}text-slate-400{% endif %}"></i>
+                        <div>
+                            <div class="text-sm font-medium {% if permission.can_print %}text-emerald-900{% else %}text-slate-500{% endif %}">Print</div>
+                            <div class="text-xs text-slate-500">Generate physical hardcopy</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 rounded-lg border {% if permission.can_share %}border-emerald-200 bg-emerald-50/40{% else %}border-slate-200 bg-slate-50{% endif %}">
+                        <i data-lucide="{% if permission.can_share %}check-circle{% else %}x-circle{% endif %}" class="w-5 h-5 {% if permission.can_share %}text-emerald-600{% else %}text-slate-400{% endif %}"></i>
+                        <div>
+                            <div class="text-sm font-medium {% if permission.can_share %}text-emerald-900{% else %}text-slate-500{% endif %}">Share</div>
+                            <div class="text-xs text-slate-500">Grant delegate permissions</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metadata & Audit Sidebar -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Validity & Audit</h2>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-slate-500">Valid From</dt>
+                        <dd class="font-medium text-slate-900">{{ permission.valid_from|date:"M d, Y H:i"|default:"Immediate" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Valid Until</dt>
+                        <dd class="font-medium text-slate-900">{{ permission.valid_until|date:"M d, Y H:i"|default:"Permanent (No expiry)" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Access Telemetry</dt>
+                        <dd class="font-medium text-slate-900">{{ permission.access_count }} accesses logged</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Last Accessed</dt>
+                        <dd class="font-medium text-slate-900">{{ permission.last_accessed_at|date:"M d, Y H:i"|default:"Never" }}</dd>
+                    </div>
+                    <hr class="border-slate-200">
+                    <div>
+                        <dt class="text-slate-500">Granted By</dt>
+                        <dd class="font-medium text-slate-900">{{ permission.created_by.get_full_name|default:permission.created_by.username }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Created At</dt>
+                        <dd class="font-medium text-slate-900">{{ permission.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
