@@ -32,6 +32,7 @@
             <i data-lucide="sparkles"></i>
             <span>Live Preview</span>
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <a href="{% url 'documents:watermark_edit' policy.pk %}" class="btn btn-primary">
             <i data-lucide="pencil"></i>
             <span>Edit</span>
@@ -43,6 +44,7 @@
                 <span>Delete</span>
             </button>
         </form>
+        {% endif %}
     </div>
 </div>
 
