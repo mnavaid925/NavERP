@@ -100,6 +100,10 @@ class DocumentSearchAlert(TenantNumbered):
                 fields=["tenant", "frequency", "status"],
                 name="doc_dalt_tnt_frq_stat_idx",
             ),
+            models.Index(
+                fields=["tenant", "subscriber", "-created_at"],
+                name="doc_dalt_tnt_sub_crt_idx",
+            ),
         ]
 
     def __str__(self):
