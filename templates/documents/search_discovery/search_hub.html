@@ -47,7 +47,7 @@
                     autofocus
                 >
                 {% if query_text %}
-                <a href="{% url 'documents:search_hub' %}" class="absolute right-20 text-slate-400 hover:text-slate-600" title="Clear query">
+                <a href="{% url 'documents:search_hub' %}" class="absolute right-20 text-slate-400 hover:text-slate-600" title="Clear query" aria-label="Clear search query">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
