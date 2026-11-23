@@ -95,7 +95,9 @@
                 <label class="form-label" for="{{ form.watermark_text.id_for_label }}">Watermark Text Template <span class="text-red-500">*</span></label>
                 {{ form.watermark_text }}
                 {% if form.watermark_text.errors %}<div class="form-error">{{ form.watermark_text.errors.0 }}</div>{% endif %}
-                <p class="text-xs text-slate-500 mt-1">Available dynamic tokens: <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{user_name}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{user_email}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{classification}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{document_number}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{timestamp}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{ip_address}}' }}</code>.</p>
+                {% verbatim %}
+                <p class="text-xs text-slate-500 mt-1">Available dynamic tokens: <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{user_name}}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{user_email}}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{classification}}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{document_number}}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{timestamp}}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ip_address}}</code>.</p>
+                {% endverbatim %}
             </div>
 
             <div class="form-group md:col-span-2">
