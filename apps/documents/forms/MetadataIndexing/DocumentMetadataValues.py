@@ -1,0 +1,67 @@
+from django import forms
+from django.core.exceptions import ValidationError
+
+from apps.documents.models import Document, DocumentMetadataValue, DocumentVersion, MetadataSchema
+
+
+class DocumentMetadataValueForm(forms.ModelForm):
+    class Meta:
+        model = DocumentMetadataValue
+        fields = [
+            "document",
+            "version",
+            "schema",
+            "field_name",
+            "field_label",
+            "data_type",
+            "value_text",
+            "value_number",
+            "value_date",
+            "value_boolean",
+            "value_json",
+            "source",
+            "validation_status",
+        ]
+        widgets = {
+            "document": forms.Select(attrs={"class": "form-select"}),
+            "version": forms.Select(attrs={"class": "form-select"}),
+            "schema": forms.Select(attrs={"class": "form-select"}),
+            "field_name": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. counterparty_name"}),
+            "field_label": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Counterparty Name"}),
+            "data_type": forms.Select(attrs={"class": "form-select"}),
+            "value_text": forms.TextInput(attrs={"class": "form-input", "placeholder": "String/text value..."}),
+            "value_number": forms.NumberInput(attrs={"class": "form-input", "placeholder": "0.00"}),
+            "value_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
+            "value_boolean": forms.Select(attrs={"class": "form-select"}, choices=[(None, "— Not Set —"), (True, "Yes / True"), (False, "No / False")]),
+            "value_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-sm", "rows": 3, "placeholder": '{"key": "value"}'}),
+            "source": forms.Select(attrs={"class": "form-select"}),
+            "validation_status": forms.Select(attrs={"class": "form-select"}),
+        }
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        self.tenant = tenant
+        super().__init__(*args, **kwargs)
+        if self.tenant:
+            self.fields["document"].queryset = Document.objects.filter(tenant=self.tenant)
+            self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant)
+            self.fields["schema"].queryset = MetadataSchema.objects.filter(tenant=self.tenant)
+        else:
+            self.fields["document"].queryset = Document.objects.none()
+            self.fields["version"].queryset = DocumentVersion.objects.none()
+            self.fields["schema"].queryset = MetadataSchema.objects.none()
+
+        self.fields["version"].empty_label = "— Global Document Level (All Versions) —"
+        self.fields["schema"].empty_label = "— Ad-hoc / Standalone (No Schema) —"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        doc = cleaned_data.get("document")
+        if doc and self.tenant and doc.tenant != self.tenant:
+            raise ValidationError("Selected document does not belong to your organization.")
+        ver = cleaned_data.get("version")
+        if ver and doc and ver.document != doc:
+            raise ValidationError("Selected revision version does not belong to the selected document.")
+        schema = cleaned_data.get("schema")
+        if schema and self.tenant and schema.tenant != self.tenant:
+            raise ValidationError("Selected metadata schema does not belong to your organization.")
+        return cleaned_data
