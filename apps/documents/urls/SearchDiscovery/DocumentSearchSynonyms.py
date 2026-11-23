@@ -8,4 +8,5 @@ urlpatterns = [
     path("search-synonyms/<int:pk>/", views.document_search_synonym_detail, name="document_search_synonym_detail"),
     path("search-synonyms/<int:pk>/edit/", views.document_search_synonym_edit, name="document_search_synonym_edit"),
     path("search-synonyms/<int:pk>/delete/", views.document_search_synonym_delete, name="document_search_synonym_delete"),
+    path("search-synonyms/<int:pk>/toggle-active/", views.document_search_synonym_toggle_active, name="document_search_synonym_toggle_active"),
 ]
