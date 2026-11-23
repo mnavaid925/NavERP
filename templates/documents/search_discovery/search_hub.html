@@ -34,11 +34,13 @@
     <div class="card-body p-6">
         <form method="get" action="{% url 'documents:search_hub' %}" id="search-form">
             <div class="relative flex items-center">
+                <label for="search-input" class="sr-only">Search documents</label>
                 <i data-lucide="search" class="absolute left-4 w-5 h-5 text-blue-500"></i>
                 <input 
                     type="text" 
                     name="q" 
                     id="search-input"
+                    aria-label="Search documents"
                     value="{{ query_text }}" 
                     placeholder="Search documents by keywords, text, or try natural syntax: type:contract status:approved author:admin..." 
                     class="form-input pl-12 pr-28 py-3 text-base w-full rounded-xl border-2 border-slate-200 focus:border-blue-500"
@@ -195,7 +197,8 @@
                 <!-- Folder Filter -->
                 <div class="border-t border-slate-100 dark:border-slate-800 pt-4">
                     <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Target Folder</h3>
-                    <select onchange="window.location.href=this.value" class="form-select text-xs w-full">
+                    <label for="hub-folder-filter" class="sr-only">Target Folder</label>
+                    <select id="hub-folder-filter" aria-label="Target Folder" onchange="window.location.href=this.value" class="form-select text-xs w-full">
                         <option value="?{% if query_text %}q={{ query_text }}&{% endif %}{% if active_filters.doc_type %}doc_type={{ active_filters.doc_type }}&{% endif %}{% if active_filters.classification %}classification={{ active_filters.classification }}&{% endif %}{% if active_filters.status %}status={{ active_filters.status }}&{% endif %}{% if sort_by %}sort_by={{ sort_by }}&{% endif %}folder=">All Folders</option>
                         {% for fld in folders %}
                         <option value="?{% if query_text %}q={{ query_text }}&{% endif %}{% if active_filters.doc_type %}doc_type={{ active_filters.doc_type }}&{% endif %}{% if active_filters.classification %}classification={{ active_filters.classification }}&{% endif %}{% if active_filters.status %}status={{ active_filters.status }}&{% endif %}{% if sort_by %}sort_by={{ sort_by }}&{% endif %}folder={{ fld.pk }}" {% if active_filters.folder == fld.pk|stringformat:"d" %}selected{% endif %}>
