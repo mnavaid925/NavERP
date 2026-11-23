@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.SecurityAccessControl.DocumentDrmPolicies import DocumentDrmPolicyForm
 from apps.documents.models.SecurityAccessControl.DocumentDrmPolicies import DocumentDrmPolicy
@@ -80,7 +81,7 @@ def drm_policy_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 def drm_policy_create(request):
     if request.method == "POST":
         form = DocumentDrmPolicyForm(request.POST, tenant=request.tenant)
@@ -106,7 +107,7 @@ def drm_policy_create(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def drm_policy_edit(request, pk):
     policy = documents_object(request, DocumentDrmPolicy, pk)
     if request.method == "POST":
@@ -131,7 +132,7 @@ def drm_policy_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def drm_policy_delete(request, pk):
     policy = documents_object(request, DocumentDrmPolicy, pk)
@@ -142,7 +143,7 @@ def drm_policy_delete(request, pk):
     return redirect(reverse("documents:drm_policy_list"))
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def drm_kill_switch(request, pk):
     """Emergency kill switch: instantly invalidates policy and revokes all active document access."""
