@@ -1,6 +1,6 @@
 ---
 name: documents
-description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5), or invokes /documents.
+description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6), or invokes /documents.
 ---
 
 # Document Management System (DMS) (Module 13)
@@ -8,7 +8,7 @@ description: Work on the Document Management System (DMS) module (Module 13 — 
 App path: `apps/documents`. Templates: `templates/documents/`. URL prefix: `/documents/`, `app_name = "documents"`.
 Mirrors `NavERP.md` "## 13. Document Management System (DMS)" (Sub-modules 13.1–13.20).
 
-**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing.**
+**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery.**
 Build the next sub-module with `/next-module next` — see `apps/quality`/`apps/procurement` for reference package layout and the mandatory Module Creation Sequence.
 
 ---
@@ -21,6 +21,7 @@ Module 13 provides an enterprise document repository, authoring workspace, revis
 - **13.3 Document Approval & Review Workflow**: Multi-stage approval pipelines (`DocumentApprovalWorkflow`), granular participant routing with sequential/parallel/first-responder rules (`DocumentApprovalRequest`), 21 CFR Part 11 cryptographic electronic signatures and certificate manifests (`DocumentSignature`), threaded critique and blocking annotations (`DocumentReviewComment`), visual stage layout designer (`designer.html`), and bottleneck analytics cockpit (`approval_dashboard.html`).
 - **13.4 Document Storage & Repository**: Hierarchical taxonomic folder trees and smart virtual query filters (`DocumentFolder`), physical and cloud tiered storage targets with quota enforcement (`StorageVolume`), multi-type document dependency and reference network graphs (`DocumentRelationship`), streaming bulk zip ingestion with archive safety thresholds (`DocumentBatchImport`), and repository command center (`repository_dashboard.html`).
 - **13.5 Metadata & Indexing**: Flexible enterprise metadata schema definitions with inheritance cascade policies (`MetadataSchema`), polymorphic key-value document and revision property storage (`DocumentMetadataValue`), hierarchical controlled vocabularies and multilingual thesauri (`TaxonomyTerm`), automated OCR text extraction pipeline with confidence metrics and tag extraction (`DocumentOcrJob`), and metadata analytics command center (`metadata_indexing_dashboard.html`).
+- **13.6 Search & Discovery**: Multi-faceted omni-search console (`SearchHub`), natural language search filter chip parsing (`type:`, `status:`), synonym dictionary expansion (`DocumentSearchSynonym`), saved search queries and visibility scopes (`DocumentSavedSearch`), automated notification monitors (`DocumentSearchAlert`), and organization-wide search telemetry and query gap analytics (`DocumentSearchQueryLog`).
 
 ---
 
@@ -191,6 +192,38 @@ Shared base in `models/_base.py`:
   - Helper properties: `parsed_tags`, `parsed_entities`.
   - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, status, created_at)`, `(tenant, document, status)`, `(tenant, -created_at)`.
 
+### 13.6 SearchDiscovery (`apps/documents/models/SearchDiscovery/`)
+
+- **`DocumentSavedSearches.py`** — `DocumentSavedSearch` (`NUMBER_PREFIX = "DSVD"`):
+  - `name`, `slug`, `description`, `query_text`, `filters_json`, `facet_filters_json`, `sort_by`, `sort_order`.
+  - `visibility` (private, shared_department, public), `department` (FK `core.OrgUnit`, nullable).
+  - `owner` (FK `settings.AUTH_USER_MODEL`), `is_pinned`, `is_favorite`, `is_active`.
+  - `run_count`, `total_results_last_run`, `last_run_at`.
+  - Helper properties: `parsed_filters`, `parsed_facet_filters`, `get_filters_dict`, `get_facet_filters_dict`.
+  - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, owner, is_pinned)`, `(tenant, visibility, is_active)`.
+
+- **`DocumentSearchAlerts.py`** — `DocumentSearchAlert` (`NUMBER_PREFIX = "DALT"`):
+  - `saved_search` (FK `DocumentSavedSearch`, `related_name="alerts"`), `subscriber` (FK `settings.AUTH_USER_MODEL`).
+  - `frequency` (instant, daily, weekly), `delivery_channel` (in_app, email, webhook).
+  - `is_active`, `status` (active, paused, disabled).
+  - `last_notified_at`, `last_checked_at`, `new_matches_count`, `last_result_ids`.
+  - Helper properties: `get_last_result_ids_list`, `increment_match_count`.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, saved_search, subscriber)`, indexes on `(tenant, frequency, status)`, `(tenant, subscriber, -created_at)`.
+
+- **`DocumentSearchSynonyms.py`** — `DocumentSearchSynonym` (`NUMBER_PREFIX = "DSYN"`):
+  - `term`, `synonyms` (comma-separated expansion list), `category` (general, acronym, domain, spelling).
+  - `is_bidirectional`, `language`, `is_active`, `hit_count`.
+  - `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Helper properties: `get_synonym_list`, `expanded_terms_list`, `get_all_terms`, `increment_hit_count`.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, term, language)`, indexes on `(tenant, category, is_active)`, `(tenant, is_active, term)`.
+
+- **`DocumentSearchQueryLogs.py`** — `DocumentSearchQueryLog` (`NUMBER_PREFIX = "DQRY"`):
+  - `query_text`, `search_source` (search_hub, omni_bar, api, saved_search_run, related_search).
+  - `filters_applied_json`, `results_count`, `is_zero_result`, `execution_time_ms`.
+  - `user` (FK `settings.AUTH_USER_MODEL`, nullable), `session_key` (SHA-256 pseudonymized), `ip_address`, `clicked_document` (FK `Document`, nullable), `clicked_rank`.
+  - Helper properties: `parsed_filters`, `parsed_filters_applied`, `get_filters_dict`.
+  - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, is_zero_result, -created_at)`, `(tenant, user, -created_at)`, `(tenant, query_text)`.
+
 
 ---
 
@@ -296,6 +329,24 @@ Registered under namespace `documents:`:
 - `/documents/ocr-jobs/<int:pk>/apply/`: `document_ocr_job_apply` (POST-only commit OCR text & tags to document)
 - `/documents/ocr-jobs/<int:pk>/delete/`: `document_ocr_job_delete` (POST-only)
 
+### 13.6 Search & Discovery Routes
+- `/documents/search/`: `search_hub` (faceted omni-search console)
+- `/documents/search/export/`: `search_export_csv` (CSV search results export)
+- `/documents/search/click/`: `search_click_track` (search click rank telemetry tracker)
+- `/documents/saved-searches/`: `document_saved_search_list`, `document_saved_search_create`
+- `/documents/saved-searches/<int:pk>/`: `document_saved_search_detail`, `document_saved_search_edit`, `document_saved_search_delete` (POST-only)
+- `/documents/saved-searches/<int:pk>/run/`: `document_saved_search_run` (executes query, increments counters, redirects)
+- `/documents/saved-searches/<int:pk>/toggle-pin/`: `document_saved_search_toggle_pin` (POST-only)
+- `/documents/search-alerts/`: `document_search_alert_list`, `document_search_alert_create`
+- `/documents/search-alerts/<int:pk>/`: `document_search_alert_detail`, `document_search_alert_edit`, `document_search_alert_delete` (POST-only)
+- `/documents/search-alerts/<int:pk>/toggle-active/`: `document_search_alert_toggle_active` (POST-only)
+- `/documents/search-alerts/<int:pk>/run-check/`: `document_search_alert_run_check` (POST-only delta check)
+- `/documents/search-synonyms/`: `document_search_synonym_list`, `document_search_synonym_create`
+- `/documents/search-synonyms/<int:pk>/`: `document_search_synonym_detail`, `document_search_synonym_edit`, `document_search_synonym_delete` (POST-only)
+- `/documents/search-synonyms/<int:pk>/toggle-active/`: `document_search_synonym_toggle_active` (POST-only)
+- `/documents/search-query-logs/`: `document_search_query_log_list` (`@tenant_admin_required`), `<int:pk>/` (`@tenant_admin_required`), `<int:pk>/delete/` (POST-only, `@tenant_admin_required`)
+- `/documents/search-analytics/`: `document_search_analytics` (`@tenant_admin_required`)
+
 ---
 
 ## Templates
@@ -325,6 +376,12 @@ Located in:
   - `taxonomy_term/`: `list.html`, `detail.html`, `form.html`, `tree.html`
   - `document_metadata_value/`: `list.html`, `detail.html`, `form.html`
   - `document_ocr_job/`: `list.html`, `detail.html`, `form.html`, `extract_viewer.html`
+- `templates/documents/search_discovery/` (13.6 templates):
+  - `search_hub.html`: Multi-faceted discovery console, natural language chips, real-time filters
+  - `document_saved_search/`: `list.html`, `detail.html`, `form.html`
+  - `document_search_alert/`: `list.html`, `detail.html`, `form.html`
+  - `document_search_synonym/`: `list.html`, `detail.html`, `form.html`
+  - `document_search_query_log/`: `list.html`, `detail.html`, `analytics.html`
 
 
 ---
@@ -355,6 +412,10 @@ Supports `--flush` option to reset module data cleanly. Demo data seeds:
 17. Controlled Taxonomies & Thesauri (Legal & Contract terms, Regulatory Compliance codes, Financial terms, Industry classifications).
 18. Document Metadata Values (Heterogeneous decimal amounts, dates, booleans, and JSON structured payloads).
 19. Document OCR Extraction Jobs (Completed, processing, and queued OCR jobs with confidence scores, full text layers, and entity tags).
+20. Saved Searches (Public policy searches, private user filters, pinned department searches).
+21. Search Alerts (Daily, weekly, and instant email/in-app alert subscriptions).
+22. Search Synonyms (Bidirectional terms, domain expansions, acronym mappings).
+23. Search Query Logs (Telemetry logs, zero-result telemetry, click ranks).
 
 ---
 
@@ -391,6 +452,16 @@ LIVE_LINKS["13.5"] = {
     "Document Metadata Values": "documents:metadata_value_list",
     "Full-Text OCR Extraction Jobs": "documents:document_ocr_job_list",
 }
+LIVE_LINKS["13.6"] = {
+    "Advanced Search & Filters": "documents:search_hub",
+    "Faceted Search Navigation": "documents:search_hub",
+    "Saved Searches & Alerts": "documents:document_saved_search_list",
+    "Natural Language Query & AI Search": "documents:search_hub",
+    "Search Analytics & Query Optimization": "documents:document_search_analytics",
+    "Search Alerts": "documents:document_search_alert_list",
+    "Search Synonyms": "documents:document_search_synonym_list",
+    "Search Query Logs": "documents:document_search_query_log_list",
+}
 ```
 
 ---
@@ -415,3 +486,6 @@ LIVE_LINKS["13.5"] = {
 16. **Checkout Lock Enforcement on Metadata Mutations**: Metadata values and OCR job text cannot be created, modified, deleted, or committed if the target `Document` is currently checked out / locked by another custodian.
 17. **Taxonomy Term Governance & Anti-Cycle Traversal**: Governed taxonomy terms (`is_governed=True`) require administrator privileges to delete. Deleting a parent term with active child terms is blocked to prevent accidental destructive cascade. Ancestor traversal in `TaxonomyTermForm.clean()` detects and rejects circular parent assignments.
 18. **OCR Completion Verification & Revision Fallback**: `document_ocr_job_apply` strictly verifies `job.status == 'completed'`. When `job.version` is NULL, text is committed to the document's latest revision (`doc.versions.order_by("-created_at").first()`), and suggested tags are merged cleanly into `doc.tags`.
+19. **Search Telemetry & Session Token Pseudonymization**: Active Django session keys are never stored raw in `DocumentSearchQueryLog`. They are hashed via SHA-256 and redacted in detail views to prevent token harvesting.
+20. **Atomic Synonym Counter Increment**: Read-path searches matching active synonyms must not execute individual synchronous `.save()` calls in a loop. Matching synonym IDs are collected and bulk-updated atomically using `.update(hit_count=F("hit_count") + 1)`.
+21. **Distinct Facet Counting**: Aggregating document counts across facets (`doc_type`, `classification`, `status`) on querysets joined to `DocumentVersion` full-text layers MUST use `Count("id", distinct=True)` to prevent Cartesian product count multiplication.
