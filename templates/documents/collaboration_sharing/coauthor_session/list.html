@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Coauthoring & Presence Sessions — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_hub' %}">Collaboration & Sharing</a>
+            <span>/</span>
+            <span>Coauthor Sessions</span>
+        </div>
+        <h1 class="page-title">Real-Time Co-Authoring & Presence Sessions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:collaboration_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-grid"></i>
+            <span>Collaboration Hub</span>
+        </a>
+        <a href="{% url 'documents:coauthor_session_create' %}" class="btn btn-primary">
+            <i data-lucide="user-plus"></i>
+            <span>Register Session</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Strip -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Registered Sessions</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ active_count }}</div>
+            <div class="stat-label">Actively Editing Now</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ idle_count }}</div>
+            <div class="stat-label">Idle / Inactive</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="user-x"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ disconnected_count }}</div>
+            <div class="stat-label">Disconnected</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <div>
+                <label class="form-label" for="search-input">Search Sessions</label>
+                <input type="text" name="q" id="search-input" value="{{ q }}" placeholder="Search by number, doc title, user, section..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="status-select">Session Status</label>
+                <select name="status" id="status-select" class="form-select">
+                    <option value="">All Session Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if current_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or current_status %}
+                <a href="{% url 'documents:coauthor_session_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Session Number</th>
+                    <th>Document</th>
+                    <th>Collaborator</th>
+                    <th>Presence Color</th>
+                    <th>Occupied Section</th>
+                    <th>Status</th>
+                    <th>Last Heartbeat</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'documents:coauthor_session_detail' session.pk %}" class="text-blue-600 hover:underline">
+                            {{ session.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'documents:document_detail' session.document.pk %}" class="hover:underline">
+                                {{ session.document.title }}
+                            </a>
+                        </div>
+                        {% if session.draft %}
+                        <span class="text-xs text-slate-500">Draft: {{ session.draft.title }}</span>
+                        {% elif session.version %}
+                        <span class="text-xs text-slate-500">Version: {{ session.version.number }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full shrink-0" style="background-color: {{ session.color_code }};"></span>
+                            <span class="font-medium text-slate-900">{{ session.display_name }}</span>
+                        </div>
+                        {% if session.user %}
+                        <span class="text-xs text-slate-500 block">{{ session.user.email }}</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400 block">External Guest</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-xs">
+                        <span class="px-2 py-0.5 rounded text-white font-semibold" style="background-color: {{ session.color_code }};">
+                            {{ session.color_code }}
+                        </span>
+                    </td>
+                    <td class="text-sm">
+                        {% if session.current_section %}
+                            <span class="font-medium text-slate-800">{{ session.current_section }}</span>
+                            {% if session.is_editing %}
+                            <span class="badge badge-amber text-xs ml-1">Locking</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-slate-400 italic">None</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ session.get_status_badge }}">
+                            {{ session.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        {{ session.last_heartbeat|date:"M d, H:i:s" }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:coauthor_session_detail' session.pk %}" class="btn btn-icon btn-outline" title="View Session">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:coauthor_session_edit' session.pk %}" class="btn btn-icon btn-outline" title="Edit Session">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:coauthor_session_delete' session.pk %}" class="inline" onsubmit="return confirm('Disconnect and remove session?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Disconnect Session">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="users" class="empty-icon"></i>
+                            <h3>No Co-Authoring Sessions Active</h3>
+                            <p>Collaborators actively editing documents or drafts will appear here in real time.</p>
+                            <a href="{% url 'documents:coauthor_session_create' %}" class="btn btn-primary mt-3">
+                                <i data-lucide="plus"></i>
+                                <span>Register Co-Authoring Session</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} sessions
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
