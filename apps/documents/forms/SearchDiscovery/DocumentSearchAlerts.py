@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 
 from apps.core.forms import TenantModelForm
 from apps.documents.forms._common import TenantUniqueMixin, reject_foreign
@@ -30,10 +31,17 @@ class DocumentSearchAlertForm(TenantUniqueMixin, TenantModelForm):
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["saved_search"].queryset = DocumentSavedSearch.objects.filter(
+            qs = DocumentSavedSearch.objects.filter(
                 tenant=self.tenant,
                 is_active=True,
-            ).order_by("name")
+            )
+            if self.user and not getattr(self.user, "is_tenant_admin", False) and not getattr(self.user, "is_superuser", False):
+                user_dept = getattr(self.user, "department", None)
+                vis_filter = Q(owner=self.user) | Q(visibility="public")
+                if user_dept:
+                    vis_filter |= Q(visibility="shared_department", department=user_dept)
+                qs = qs.filter(vis_filter)
+            self.fields["saved_search"].queryset = qs.order_by("name")
         self.fields["notes"].required = False
 
     def clean(self):
