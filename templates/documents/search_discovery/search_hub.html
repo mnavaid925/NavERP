@@ -264,10 +264,10 @@
                         </p>
                         {% endif %}
                         <div class="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                            {% if doc.folder %}
+                            {% if doc.department %}
                             <span class="flex items-center gap-1">
-                                <i data-lucide="folder" class="w-3.5 h-3.5"></i>
-                                <span>{{ doc.folder.path|default:doc.folder.name }}</span>
+                                <i data-lucide="building" class="w-3.5 h-3.5"></i>
+                                <span>{{ doc.department.name }}</span>
                             </span>
                             {% endif %}
                             <span class="flex items-center gap-1">
@@ -278,9 +278,9 @@
                                 <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
                                 <span>{{ doc.updated_at|date:"M d, Y" }}</span>
                             </span>
-                            {% if doc.current_version %}
+                            {% if doc.current_version_label %}
                             <span class="flex items-center gap-1 font-mono text-slate-500">
-                                <span>v{{ doc.current_version.version_number }}</span>
+                                <span>v{{ doc.current_version_label }}</span>
                             </span>
                             {% endif %}
                         </div>
