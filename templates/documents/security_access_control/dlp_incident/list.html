@@ -140,11 +140,11 @@
         </div>
         <div class="flex gap-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if resolution_status %}&resolution_status={{ resolution_status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if resolution_status %}&resolution_status={{ resolution_status }}{% endif %}{% if policy %}&policy={{ policy }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
             {% endif %}
             <span class="btn btn-sm btn-outline active">{{ page_obj.number }}</span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if resolution_status %}&resolution_status={{ resolution_status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if resolution_status %}&resolution_status={{ resolution_status }}{% endif %}{% if policy %}&policy={{ policy }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% endif %}
         </div>
     </div>
