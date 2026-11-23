@@ -78,6 +78,8 @@ def collaboration_hub(request):
     ).count()
 
     active_tab = request.GET.get("tab", "shared_with_me").strip()
+    if active_tab == "activity_feed":
+        active_tab = "activity"
     if active_tab not in ("shared_with_me", "shared_by_me", "my_tasks", "activity"):
         active_tab = "shared_with_me"
 
