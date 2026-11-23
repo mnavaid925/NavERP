@@ -74,3 +74,32 @@ None.
 - Literal URL routes strictly precede parameterized routes.
 - Full contract compliance across all 5 models and their view context dictionaries.
 - Multi-tenancy and audit logging enforced across all mutation operations.
+
+
+---
+
+## 3. Frontend Reviewer Pass (`frontend-reviewer`)
+
+### Verdict
+Commit after fixing Critical+Important (no Critical bugs found; 2 Important issues identified regarding missing badge class method lookup in Secure Viewer and missing POST-only Delete action on DRM Policy detail page).
+
+### Critical
+None.
+
+### Important
+1. `templates/documents/security_access_control/secure_viewer.html:19,48` — Invalid badge property on `Document` model renders blank badge classes: Lines 19 and 48 call `.classification_badge`, but `Document` model defines `classification_badge_class`, resulting in unstyled badge pills `<span class="badge ">`. Fix: use `{{ document.classification_badge_class }}` and `{{ doc.classification_badge_class }}`.
+2. `templates/documents/security_access_control/document_drm_policy/detail.html:28-44` — Missing POST-only Delete action in detail page actions: `drm_policy_delete` view and URL pattern exist, but `detail.html` omits the standard POST-only delete button with CSRF token and `confirm(...)` dialog. Fix: add the standard POST-only Delete form button to `page-actions`.
+
+### Minor
+1. `templates/documents/security_access_control/secure_viewer.html:215-219` — Unconditional `Ctrl+P` print blocking ignores `allow_print` context: Keyboard handler intercepts `Ctrl+P` even when `allow_print` is True. Fix: check `allowPrint` before blocking.
+2. `templates/documents/security_access_control/dlp_incident/list.html:143-149` — Pagination drops `policy` filter query parameter: Navigating to page 2 drops the policy filter. Fix: append `{% if policy_id %}&policy={{ policy_id }}{% endif %}` to pagination links.
+3. `templates/documents/security_access_control/document_access_permission/list.html:191-195` — Pagination drops `document` and `folder` filter query parameters. Fix: append `{% if doc_id %}&document={{ doc_id }}{% endif %}{% if folder_id %}&folder={{ folder_id }}{% endif %}` to pagination links.
+4. `templates/documents/security_access_control/watermark_policy/preview.html:71` — Hardcoded badge class in visual studio preview: Line 71 hardcodes `<span class="badge badge-amber">`. Fix: use `{{ policy.classification_badge|default:'badge-amber' }}`.
+
+### Done well
+- Strict Theme.css badge compliance across all 17 templates (no invalid classes).
+- Zero comment leaks (`{# ... #}`).
+- Robust CSRF and POST protections on all mutating actions.
+- Sandboxed zero-download viewer with focus-loss blur overlay, context-menu blocking, and forensic watermark overlay.
+- Visual Watermark Studio with real-time slider controls.
+- Effective Rights Simulator with rich ACL contributing rule breakdown.
