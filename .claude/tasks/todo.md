@@ -39622,3 +39622,251 @@ apps/quality/
 
 ## Review notes
 (to be filled in at Phase 7 close-out)
+
+
+---
+
+# Sub-module 13.6: Search & Discovery (Module 13: Document Management System, `documents`) — plan from `research-documents-13.6.md` (2026-11-23)
+
+> **This plan EXTENDS existing app `apps/documents/`.** (13.1, 13.2, 13.3, 13.4, 13.5 already built and verified).
+> **Free prefixes verified (0 collisions repo-wide):** **`DSVD`** (`DocumentSavedSearch`), **`DALT`** (`DocumentSearchAlert`), **`DSYN`** (`DocumentSearchSynonym`), **`DQRY`** (`DocumentSearchQueryLog`).
+> **Plan written from:** `.claude/tasks/research-documents-13.6.md` (Phase 1) and `NavERP.md` (`### 13.6 Search & Discovery`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/SearchDiscovery/<Entity>.py` (`DocumentSavedSearches.py`, `DocumentSearchAlerts.py`, `DocumentSearchSynonyms.py`, `DocumentSearchQueryLogs.py`, plus central search console & discovery workbench `SearchHub.py`)
+> **Template folder name:** `templates/documents/search_discovery/{document_saved_search,document_search_alert,document_search_synonym,document_search_query_log}/{list,detail,form}.html` + `search_hub.html` (central discovery hub with live facets, NLP intent chips, and omni-search)
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DSVD`** (`DocumentSavedSearch`), **`DALT`** (`DocumentSearchAlert`), **`DSYN`** (`DocumentSearchSynonym`), **`DQRY`** (`DocumentSearchQueryLog`), all 4 model classes, and URL stems verified unique across all 13 modules and contract files. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - `core.Tenant` (`apps/core/models/Tenant.py:class Tenant`): Multi-tenant isolation anchor.
+  - `accounts.User` (`settings.AUTH_USER_MODEL` / `apps/accounts/models.py`): Search users, saved search owners, and alert recipients.
+  - `core.OrgUnit` (`apps/core/models/OrgUnit.py:class OrgUnit`): Department-scoped sharing and filtered search boundaries.
+  - `documents.Document` (`apps/documents/models/VersionControl/Documents.py:8`): Target logical document master for search clicks, telemetry, and criteria filtering.
+  - `documents.DocumentVersion` (`apps/documents/models/VersionControl/DocumentVersions.py:9`): Extracted full-text search body (`extracted_text`).
+  - `documents.DocumentFolder` (`apps/documents/models/StorageRepository/DocumentFolders.py:9`): Repository hierarchy and search boundary scopes.
+  - `documents.MetadataSchema` & `documents.DocumentMetadataValue` (`apps/documents/models/MetadataIndexing/`): Metadata-driven search criteria.
+  - `documents.TaxonomyTerm` (`apps/documents/models/MetadataIndexing/TaxonomyTerms.py`): Controlled vocabulary integration.
+- **L65 Rule on CharField `max_length` vs Choice Values**: All `max_length` parameters strictly accommodate the longest choice value:
+  - `DocumentSavedSearch.visibility`: `max_length=20` (longest value: `shared_department` = 17 chars).
+  - `DocumentSavedSearch.sort_by`: `max_length=40` (longest value: `document_type` = 13 chars).
+  - `DocumentSearchAlert.frequency`: `max_length=20` (longest value: `realtime` = 8 chars).
+  - `DocumentSearchAlert.delivery_channel`: `max_length=20` (longest value: `in_app` = 6 chars).
+  - `DocumentSearchSynonym.mapping_type`: `max_length=20` (longest value: `unidirectional` = 14 chars).
+  - `DocumentSearchQueryLog.search_source`: `max_length=30` (longest value: `alert_execution` = 15 chars).
+- **L65 Rule on Index / Constraint Name Lengths (`<= 30` chars)**:
+  - `doc_dsvd_ten_num_uniq` (21 chars), `doc_dsvd_tnt_usr_vis_idx` (24 chars), `doc_dsvd_tnt_pin_ord_idx` (24 chars).
+  - `doc_dalt_ten_num_uniq` (21 chars), `doc_dalt_tnt_act_freq_idx` (25 chars), `doc_dalt_tnt_usr_act_idx` (24 chars).
+  - `doc_dsyn_ten_num_uniq` (21 chars), `doc_dsyn_tnt_term_uniq` (21 chars), `doc_dsyn_tnt_act_trm_idx` (24 chars).
+  - `doc_dqry_ten_num_uniq` (21 chars), `doc_dqry_tnt_zr_crt_idx` (24 chars), `doc_dqry_tnt_usr_crt_idx` (24 chars).
+- **L66 Audit Log Signature**: Every mutating view strictly calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **Search Engine Interceptor & Synonyms**: Search execution normalizes query tokens, checks against active tenant synonyms in `DocumentSearchSynonym` (handling bidirectional mutual replacement and unidirectional term expansion), and constructs comprehensive `Q` expressions querying `Document.title`, `Document.description`, `Document.tags`, and `DocumentVersion.extracted_text`.
+- **NLP Intent Recognition**: Regex and keyword heuristics detect natural language constraints (e.g., `"confidential contracts authored by Sarah last month"`) and surface active smart chips for instant refinement in the Search Hub.
+- **Faceted Aggregations**: Dynamic count tallies grouped by `document_type`, `classification`, `status`, `department`, and `folder` calculated on the active filtered queryset.
+- **Zero-Result Telemetry**: Every executed search logs to `DocumentSearchQueryLog`, marking `is_zero_result=True` when `result_count == 0` for administrative gap analysis and synonym tuning.
+
+---
+
+## Models (from research — 1–4)
+
+### 1. `DocumentSavedSearch` [PREFIX: `DSVD-`]
+- **Purpose**: Persistent multi-criteria query definitions, personal/department/public sharing controls, pinned navigation shortcuts, and execution frequency telemetry.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DSVD"`)
+  - `name`: `CharField(max_length=150)`
+  - `slug`: `SlugField(max_length=160, blank=True)`
+  - `description`: `TextField(blank=True)`
+  - `query_text`: `CharField(max_length=255, blank=True, help_text="Main free-text search string")`
+  - `criteria_json`: `JSONField(default=dict, blank=True, help_text="Structured filter criteria: document_type, classification, status, department_id, folder_id, date_range, tags, metadata_filters")`
+  - `sort_by`: `CharField(max_length=40, choices=SORT_CHOICES, default="-created_at")` (`relevance`, `-created_at`, `created_at`, `-updated_at`, `title`, `document_type`)
+  - `visibility`: `CharField(max_length=20, choices=VISIBILITY_CHOICES, default="private", db_index=True)` (`private`, `shared_department`, `public`)
+  - `shared_department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="shared_saved_searches")`
+  - `is_pinned`: `BooleanField(default=False, db_index=True, help_text="Pin to Search Hub quick-launch bar")`
+  - `sort_order`: `PositiveIntegerField(default=0)`
+  - `execution_count`: `PositiveIntegerField(default=0)`
+  - `last_executed_at`: `DateTimeField(null=True, blank=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="saved_searches")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dsvd_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "created_by", "visibility"], name="doc_dsvd_tnt_usr_vis_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "is_pinned", "sort_order"], name="doc_dsvd_tnt_pin_ord_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `execution_count`, `last_executed_at`, `created_by`, `created_at`, `updated_at`.
+- **Drivers**: Persistent Saved Search Definitions, Sharing Controls, Pinned Shortcuts, Search Hub Console.
+
+### 2. `DocumentSearchAlert` [PREFIX: `DALT-`]
+- **Purpose**: Automated query monitoring subscription with scheduled execution frequencies, delta change detection, and multi-channel notifications.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DALT"`)
+  - `saved_search`: `ForeignKey("documents.DocumentSavedSearch", on_delete=models.CASCADE, related_name="alerts")`
+  - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="document_search_alerts")`
+  - `title`: `CharField(max_length=150)`
+  - `frequency`: `CharField(max_length=20, choices=FREQUENCY_CHOICES, default="daily", db_index=True)` (`realtime`, `daily`, `weekly`, `monthly`)
+  - `delivery_channel`: `CharField(max_length=20, choices=DELIVERY_CHANNEL_CHOICES, default="in_app")` (`in_app`, `email`, `both`)
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `last_checked_at`: `DateTimeField(null=True, blank=True)`
+  - `last_notified_at`: `DateTimeField(null=True, blank=True)`
+  - `last_result_count`: `PositiveIntegerField(default=0)`
+  - `last_result_ids`: `JSONField(default=list, blank=True, help_text="Document IDs snapshot from previous run for delta match detection")`
+  - `total_notifications_sent`: `PositiveIntegerField(default=0)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_search_alerts")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dalt_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "is_active", "frequency"], name="doc_dalt_tnt_act_freq_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "user", "is_active"], name="doc_dalt_tnt_usr_act_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `last_checked_at`, `last_notified_at`, `last_result_count`, `last_result_ids`, `total_notifications_sent`, `created_by`, `created_at`, `updated_at`.
+- **Drivers**: Automated Search Alert Subscriptions, New-Match Delta Detection, Delivery Channel Preferences.
+
+### 3. `DocumentSearchSynonym` [PREFIX: `DSYN-`]
+- **Purpose**: Tenant-wide synonym registry for search-time query token expansion supporting bidirectional equivalent mappings and unidirectional query expansions.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DSYN"`)
+  - `term`: `CharField(max_length=100, db_index=True, help_text="Primary search term or acronym")`
+  - `synonyms`: `JSONField(default=list, help_text="List of equivalent search strings or expanded phrases")`
+  - `mapping_type`: `CharField(max_length=20, choices=MAPPING_TYPE_CHOICES, default="bidirectional")` (`bidirectional`, `unidirectional`)
+  - `category`: `CharField(max_length=50, blank=True, help_text="Functional domain: Legal, Quality, Technical, HR, Finance")`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `description`: `TextField(blank=True)`
+  - `hit_count`: `PositiveIntegerField(default=0, help_text="Number of searches that utilized this synonym")`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="document_search_synonyms")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dsyn_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "term"], name="doc_dsyn_tnt_term_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "is_active", "term"], name="doc_dsyn_tnt_act_trm_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `hit_count`, `created_by`, `created_at`, `updated_at`.
+- **Drivers**: Enterprise Synonym Dictionary, Query Expansion, Zero-Result Synonym Workbench.
+
+### 4. `DocumentSearchQueryLog` [PREFIX: `DQRY-`]
+- **Purpose**: Telemetry repository capturing search queries, filter payloads, execution latency, zero-result identification, and click precision.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DQRY"`)
+  - `query_text`: `CharField(max_length=255, blank=True, db_index=True)`
+  - `filters_json`: `JSONField(default=dict, blank=True)`
+  - `result_count`: `PositiveIntegerField(default=0)`
+  - `execution_time_ms`: `PositiveIntegerField(default=0)`
+  - `is_zero_result`: `BooleanField(default=False, db_index=True)`
+  - `clicked_document`: `ForeignKey("documents.Document", on_delete=models.SET_NULL, null=True, blank=True, related_name="search_clicks")`
+  - `click_rank`: `PositiveIntegerField(null=True, blank=True)`
+  - `search_source`: `CharField(max_length=30, choices=SEARCH_SOURCE_CHOICES, default="search_hub")` (`search_hub`, `omni_bar`, `saved_search`, `alert_execution`)
+  - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="document_search_logs")`
+  - `ip_address`: `GenericIPAddressField(null=True, blank=True)`
+  - `created_at`: `DateTimeField(auto_now_add=True, db_index=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dqry_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "is_zero_result", "created_at"], name="doc_dqry_tnt_zr_crt_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "user", "created_at"], name="doc_dqry_tnt_usr_crt_idx")` (24 chars)
+- **Form exclusions**: Telemetry model; populated dynamically by search views; administrative filtering and inspection only.
+- **Drivers**: Search Telemetry & Audit Query Logging, Zero-Result Query Tracking, Popular Searches & Trending Discovery, Click-Through Tracking.
+
+---
+
+## Detailed Build Plan (Phases 3 to 7)
+
+### Phase 3.1: Spec Contract
+- [ ] Read `NavERP.md`, `research-documents-13.6.md`, and sibling modules to author `.claude/tasks/contract-documents-13.6.md`.
+- [ ] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
+- [ ] Commit contract: `git add .claude/tasks/contract-documents-13.6.md; git commit -m "docs(documents): freeze 13.6 contract specification"`
+
+### Phase 3.2: Build Entity by Entity (Strictly Serial)
+- [ ] **Entity 1: DocumentSavedSearch** (`DSVD-`)
+  - [ ] `apps/documents/models/SearchDiscovery/DocumentSavedSearches.py`
+  - [ ] `apps/documents/forms/SearchDiscovery/DocumentSavedSearches.py`
+  - [ ] `apps/documents/views/SearchDiscovery/DocumentSavedSearches.py`
+  - [ ] `apps/documents/urls/SearchDiscovery/DocumentSavedSearches.py`
+  - [ ] `templates/documents/search_discovery/document_saved_search/list.html`
+  - [ ] `templates/documents/search_discovery/document_saved_search/detail.html`
+  - [ ] `templates/documents/search_discovery/document_saved_search/form.html`
+- [ ] **Entity 2: DocumentSearchAlert** (`DALT-`)
+  - [ ] `apps/documents/models/SearchDiscovery/DocumentSearchAlerts.py`
+  - [ ] `apps/documents/forms/SearchDiscovery/DocumentSearchAlerts.py`
+  - [ ] `apps/documents/views/SearchDiscovery/DocumentSearchAlerts.py`
+  - [ ] `apps/documents/urls/SearchDiscovery/DocumentSearchAlerts.py`
+  - [ ] `templates/documents/search_discovery/document_search_alert/list.html`
+  - [ ] `templates/documents/search_discovery/document_search_alert/detail.html`
+  - [ ] `templates/documents/search_discovery/document_search_alert/form.html`
+- [ ] **Entity 3: DocumentSearchSynonym** (`DSYN-`)
+  - [ ] `apps/documents/models/SearchDiscovery/DocumentSearchSynonyms.py`
+  - [ ] `apps/documents/forms/SearchDiscovery/DocumentSearchSynonyms.py`
+  - [ ] `apps/documents/views/SearchDiscovery/DocumentSearchSynonyms.py`
+  - [ ] `apps/documents/urls/SearchDiscovery/DocumentSearchSynonyms.py`
+  - [ ] `templates/documents/search_discovery/document_search_synonym/list.html`
+  - [ ] `templates/documents/search_discovery/document_search_synonym/detail.html`
+  - [ ] `templates/documents/search_discovery/document_search_synonym/form.html`
+- [ ] **Entity 4: DocumentSearchQueryLog** (`DQRY-`)
+  - [ ] `apps/documents/models/SearchDiscovery/DocumentSearchQueryLogs.py`
+  - [ ] `apps/documents/forms/SearchDiscovery/DocumentSearchQueryLogs.py`
+  - [ ] `apps/documents/views/SearchDiscovery/DocumentSearchQueryLogs.py`
+  - [ ] `apps/documents/urls/SearchDiscovery/DocumentSearchQueryLogs.py`
+  - [ ] `templates/documents/search_discovery/document_search_query_log/list.html`
+  - [ ] `templates/documents/search_discovery/document_search_query_log/detail.html`
+- [ ] **Dedicated Feature View & Console: SearchHub**
+  - [ ] `apps/documents/views/SearchDiscovery/SearchHub.py`
+  - [ ] `apps/documents/urls/SearchDiscovery/SearchHub.py`
+  - [ ] `templates/documents/search_discovery/search_hub.html`
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/__init__.py`
+- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
+- [ ] Register all 4 models in `apps/documents/admin.py`
+- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.6 seed data
+- [ ] Wire `LIVE_LINKS["13.6"]` in `apps/core/navigation.py`:
+  - `Advanced Search & Filters`: `documents:search_hub`
+  - `Faceted Search Navigation`: `documents:search_hub`
+  - `Saved Searches & Alerts`: `documents:document_saved_search_list`
+  - `Natural Language Query & AI Search`: `documents:search_hub`
+  - `Search Analytics & Query Optimization`: `documents:document_search_query_log_list`
+  - Extra live leaves:
+    - `Search Alerts`: `documents:document_search_alert_list`
+    - `Search Synonyms`: `documents:document_search_synonym_list`
+- [ ] Run `makemigrations documents`
+- [ ] Run `migrate`
+- [ ] Run `seed_documents` twice (idempotency check)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.6.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite (Unfiltered)
+- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [ ] Implement `apps/documents/tests/test_search_discovery_models.py`
+- [ ] Implement `apps/documents/tests/test_search_discovery_forms.py`
+- [ ] Implement `apps/documents/tests/test_search_discovery_views.py`
+- [ ] Implement `apps/documents/tests/test_search_discovery_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.6 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.6 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.6.md` and `.claude/tasks/gaps-documents-13.6.md`
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+
+---
+
+## Belongs to sibling sub-modules (parked, not scoped here)
+- **13.5 Metadata & Indexing** — Metadata schema definition, custom field types, OCR extraction pipelines, and taxonomy controlled vocabulary (built in 13.5).
+- **13.7 Document Security & Access Control** — Granular document-level and folder-level permission enforcement (read/write/delete/download/print), dynamic watermarking overlays, DRM encryption, and DLP content inspection.
+- **13.8 Collaboration & Sharing** — External secure links, password-protected sharing, co-authoring presence.
+- **13.9 Records Management & Compliance** — Automatic legal hold placement triggered by search queries, retention schedules, and disposition certification.
+- **13.10 Audit Trail & Reporting** — Immutable document lifecycle event audit trail (who viewed, downloaded, printed, or exported documents).
+- **13.16 Contract Lifecycle Management (CLM)** — Specialized contract clause search, contract term extraction, and contract obligation tracking.
+- **13.17 Knowledge Management & Wikis** — Wiki article full-text search, FAQ indexing, and cross-wiki knowledge graph linking.
+
+## Later passes / deferred (from research-documents-13.6.md)
+- **Vector Database & Dense Semantic Retrieval** — External vector database integration (e.g. pgvector, Pinecone, Qdrant) with embedding models for dense semantic vector search and hybrid keyword-vector reciprocal rank fusion (RRF).
+- **Conversational RAG (Retrieval-Augmented Generation) Assistant** — Generative AI question answering that synthesizes natural language answers from retrieved document passages with inline citations.
+- **Real-Time WebSocket Percolator Feeds** — Live websocket push notifications that stream new document matches to open client browser tabs immediately upon document publication.
+- **External Federated Search Connectors** — Federated search crawlers indexing external repositories (SharePoint Online, Google Drive, Box, network file shares) via 13.12 Integration & API Ecosystem.
+
+## Review notes
+(to be filled in at Phase 7 close-out)
