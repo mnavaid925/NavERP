@@ -62,6 +62,12 @@ class DocumentShareForm(TenantModelForm):
         )
 
         share_type = cleaned_data.get("share_type")
+        document = cleaned_data.get("document")
+        version = cleaned_data.get("version")
+
+        if document and version and version.document_id != document.id:
+            self.add_error("version", "The selected version does not belong to the selected document.")
+
         if share_type == "internal_user" and not cleaned_data.get("shared_with_user"):
             self.add_error("shared_with_user", "Please select the internal user to share with.")
         elif share_type == "internal_dept" and not cleaned_data.get("shared_with_org_unit"):
