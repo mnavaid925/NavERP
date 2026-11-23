@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Shared: {{ document.title }} — NavERP Secure Share{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto py-6">
+    {% if password_required %}
+    <!-- Password Challenge Dialog -->
+    <div class="max-w-md mx-auto card shadow-lg border-slate-200 mt-12">
+        <div class="card-header bg-slate-50 border-b border-slate-200 text-center py-6">
+            <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
+                <i data-lucide="lock" class="w-6 h-6"></i>
+            </div>
+            <h2 class="text-lg font-bold text-slate-900">Protected Document Share</h2>
+            <p class="text-sm text-slate-500 mt-1">This shared document requires an access passcode.</p>
+        </div>
+        <form method="post" class="card-body p-6 space-y-4">
+            {% csrf_token %}
+            {% if password_error %}
+            <div class="p-3 bg-red-50 text-red-700 text-sm rounded border border-red-200 flex items-center gap-2">
+                <i data-lucide="alert-circle" class="w-4 h-4 text-red-500 shrink-0"></i>
+                <span>{{ password_error }}</span>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label class="form-label" for="password-input">Enter Passcode</label>
+                <input type="password" name="password" id="password-input" class="form-input" placeholder="Passcode" required autofocus>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-full">
+                <i data-lucide="unlock"></i>
+                <span>Access Document</span>
+            </button>
+        </form>
+        <div class="card-footer bg-slate-50 text-center text-xs text-slate-500 py-3">
+            Shared by {{ share.shared_by.get_full_name|default:share.shared_by.username }} via NavERP Secure DMS
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Authorized Document Preview -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 py-4">
+            <div>
+                <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                    <span>Document: {{ document.number }}</span>
+                    <span>&bull;</span>
+                    <span>Version: {{ version.number|default:"Current" }}</span>
+                    <span>&bull;</span>
+                    <span class="badge {{ share.get_access_level_badge }}">{{ share.get_access_level_display }}</span>
+                </div>
+                <h1 class="text-xl font-bold text-slate-900">{{ document.title }}</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                {% if can_print %}
+                <button type="button" onclick="window.print()" class="btn btn-outline">
+                    <i data-lucide="printer"></i>
+                    <span>Print</span>
+                </button>
+                {% endif %}
+                {% if can_download %}
+                <a href="{% url 'documents:public_share_download' share.share_token %}" class="btn btn-primary">
+                    <i data-lucide="download"></i>
+                    <span>Download File</span>
+                </a>
+                {% else %}
+                <span class="badge badge-muted text-xs py-1 px-2.5">
+                    <i data-lucide="shield" class="w-3.5 h-3.5 inline mr-1"></i>
+                    <span>Download Disabled</span>
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card-body p-6 md:p-8">
+            {% if share.share_message %}
+            <div class="mb-6 p-4 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-900">
+                <div class="font-semibold text-xs uppercase tracking-wider text-blue-700 mb-1">Message from Sender:</div>
+                <p class="whitespace-pre-line">{{ share.share_message }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Document Content Body -->
+            <div class="prose max-w-none text-slate-800 leading-relaxed bg-white p-6 rounded-lg border border-slate-100 shadow-inner min-h-[400px]">
+                {% if version and version.extracted_text %}
+                    <div class="whitespace-pre-wrap font-sans text-sm">{{ version.extracted_text }}</div>
+                {% elif document.description %}
+                    <p class="text-sm">{{ document.description }}</p>
+                {% else %}
+                    <div class="text-center py-12 text-slate-400 italic">
+                        <i data-lucide="file-text" class="w-12 h-12 mx-auto mb-2 text-slate-300"></i>
+                        <p>Document preview placeholder for {{ document.title }}.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            {% if annotations %}
+            <!-- Annotations Overlay Section -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <h3 class="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                    <i data-lucide="message-square" class="w-4 h-4 text-blue-600"></i>
+                    <span>Review Annotations & Notes ({{ annotations|length }})</span>
+                </h3>
+                <div class="space-y-3">
+                    {% for ann in annotations %}
+                    <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm">
+                        <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+                            <span class="font-medium text-slate-800">{{ ann.author.get_full_name|default:ann.author.username }}</span>
+                            <span>{{ ann.created_at|date:"M d, Y" }}</span>
+                        </div>
+                        <p class="text-slate-800">{{ ann.comment_text }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card-footer bg-slate-50 border-t border-slate-200 py-3 text-center text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span>NavERP Secure Document Management System &bull; Tenant Isolation</span>
+            <span>Link ID: {{ share.number }}</span>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
