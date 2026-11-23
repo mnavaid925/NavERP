@@ -74,7 +74,7 @@ def dlp_incident_detail(request, pk):
         pk,
         select_related=("policy", "document", "document_version", "triggered_by", "resolved_by"),
     )
-    resolve_form = DlpIncidentResolveForm(instance=incident)
+    resolve_form = DlpIncidentResolveForm(instance=incident, tenant=request.tenant)
 
     context = {
         "incident": incident,
@@ -91,7 +91,7 @@ def dlp_incident_detail(request, pk):
 @require_POST
 def dlp_incident_resolve(request, pk):
     incident = documents_object(request, DlpIncident, pk)
-    form = DlpIncidentResolveForm(request.POST, instance=incident)
+    form = DlpIncidentResolveForm(request.POST, instance=incident, tenant=request.tenant)
     if form.is_valid():
         incident = form.save(commit=False)
         incident.resolved_by = request.user
