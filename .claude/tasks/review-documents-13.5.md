@@ -88,3 +88,41 @@
   - *Detail*: `prefetch_related("children")` does not constrain child items by `is_active=True`.
   - *Fix*: Prefetch with `TaxonomyTerm.objects.filter(tenant=tenant, is_active=True)`.
 
+---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Critical
+- **`REV3-C1`**: Unsafe user-FK lookup on `taxonomy_term/detail.html` (Lesson L10)
+  - *Location*: `templates/documents/metadata_indexing/taxonomy_term/detail.html:101`
+  - *Detail*: `{{ taxonomy_term.created_by.get_full_name|default:taxonomy_term.created_by.username }}` is executed without an `{% if %}` guard. When `created_by` is None, evaluating `default:taxonomy_term.created_by.username` raises `VariableDoesNotExist` and 500s.
+  - *Fix*: Guard with `{% if taxonomy_term.created_by %}{{ taxonomy_term.created_by.get_full_name|default:taxonomy_term.created_by.username }}{% else %}System{% endif %}`.
+
+- **`REV3-C2`**: Unsafe user-FK lookup on `metadata_schema/detail.html` (Lesson L10)
+  - *Location*: `templates/documents/metadata_indexing/metadata_schema/detail.html:93`
+  - *Detail*: `{{ schema.created_by.get_full_name|default:schema.created_by.username }}` is executed without an `{% if schema.created_by %}` guard, risking `VariableDoesNotExist` 500 when evaluated in detached/null contexts.
+  - *Fix*: Guard with `{% if schema.created_by %}{{ schema.created_by.get_full_name|default:schema.created_by.username }}{% else %}—{% endif %}`.
+
+### Important
+- **`REV3-I1`**: Non-existent Lucide icon `schema` renders empty / blank
+  - *Location*: `templates/documents/metadata_indexing/metadata_schema/list.html:34, 168`, `document_metadata_value/list.html:20`, `metadata_indexing_dashboard.html:36, 78`
+  - *Detail*: `<i data-lucide="schema"></i>` is used in 5 places. `schema` does not exist in Lucide and renders as a blank space.
+  - *Fix*: Replace with valid icon `database`, `boxes`, or `table-properties`.
+
+- **`REV3-I2`**: Unescaped JS string interpolation in form onsubmit confirm (Lesson L42)
+  - *Location*: `templates/documents/metadata_indexing/metadata_schema/list.html:155`, `taxonomy_term/list.html:163`
+  - *Detail*: `onsubmit="return confirm('... {{ item.name }} ...');"` breaks if `item.name` contains an apostrophe, causing JavaScript syntax error.
+  - *Fix*: Use `{{ item.name|escapejs }}`.
+
+### Minor
+- **`REV3-M1`**: Thesaurus tree inactive children visual distinction
+  - *Location*: `templates/documents/metadata_indexing/taxonomy_term/tree.html:88-105`
+  - *Detail*: Inactive child terms render identically to active ones.
+  - *Fix*: Add `{% if not child.is_active %}` visual opacity / badge.
+
+- **`REV3-M2`**: Tailwind text color classes instead of theme helper utilities
+  - *Location*: `templates/documents/metadata_indexing/document_ocr_job/list.html:137`
+  - *Detail*: Ad-hoc `text-green-600` / `text-amber-600` instead of `.text-ok` / `.text-warn`.
+  - *Fix*: Use theme CSS classes.
+
+
