@@ -1,10 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.core.models import Employment
 from apps.core.utils import write_audit_log
+from apps.documents.models.SecurityAccessControl.DocumentAccessPermissions import DocumentAccessPermission
 from apps.documents.models.SecurityAccessControl.DocumentDrmPolicies import DocumentDrmPolicy
 from apps.documents.models.SecurityAccessControl.WatermarkPolicies import WatermarkPolicy
 from apps.documents.models.VersionControl.Documents import Document
@@ -39,32 +42,67 @@ def secure_viewer(request, pk=None):
     allow_download = False
 
     ip_addr = request.META.get("REMOTE_ADDR", "127.0.0.1")
+    has_read_permission = False
+    is_drm_revoked = False
 
     if document:
-        version = document.versions.order_by("-created_at").first()
+        # Check read permission: superuser, tenant admin, document owner, or active ACL grant
+        is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+        is_owner = (document.owner_id == request.user.id)
+        has_read_permission = is_admin or is_owner
 
-        # Find matching DRM policy
+        if not has_read_permission:
+            user_party = getattr(request.user, "party", None)
+            user_emp = (
+                Employment.objects.filter(tenant=request.tenant, party=user_party).order_by("-id").first()
+                if user_party
+                else None
+            )
+            user_dept = user_emp.org_unit if user_emp else None
+
+            now = timezone.now()
+            q_target = Q(document=document)
+            if document.folder_id:
+                q_target |= Q(folder_id=document.folder_id)
+
+            has_read_permission = DocumentAccessPermission.objects.filter(
+                tenant=request.tenant,
+                is_active=True,
+                can_read=True,
+            ).filter(q_target).filter(
+                Q(grantee_type="tenant_wide")
+                | Q(grantee_type="user", user=request.user)
+                | (Q(grantee_type="org_unit", org_unit=user_dept) if user_dept else Q(pk__in=[]))
+            ).filter(
+                Q(valid_from__isnull=True) | Q(valid_from__lte=now),
+                Q(valid_until__isnull=True) | Q(valid_until__gte=now),
+            ).exists()
+
+        # Find matching DRM policy (both specific document and classification)
         drm_policy = DocumentDrmPolicy.objects.filter(
             tenant=request.tenant,
             is_active=True,
-            is_revoked=False,
-        ).filter(
-            target_document=document
+            target_document=document,
         ).first()
 
         if not drm_policy:
             drm_policy = DocumentDrmPolicy.objects.filter(
                 tenant=request.tenant,
                 is_active=True,
-                is_revoked=False,
+                target_document__isnull=True,
                 classification=document.classification,
             ).first()
 
-        if drm_policy:
+        if drm_policy and drm_policy.is_revoked:
+            is_drm_revoked = True
+
+        if drm_policy and not is_drm_revoked:
             screen_shield = drm_policy.screen_shield_enabled
             allow_copy = drm_policy.allow_copy_paste
             allow_print = drm_policy.allow_print
             allow_download = drm_policy.allow_download
+
+        version = document.versions.order_by("-created_at").first()
 
         # Find matching watermark policy
         watermark_policy = WatermarkPolicy.objects.filter(
@@ -84,12 +122,20 @@ def secure_viewer(request, pk=None):
             ts = timezone.now().strftime("%Y-%m-%d %H:%M UTC")
             watermark_text = f"{document.get_classification_display().upper()} | {request.user.get_full_name() or request.user.username} | {ip_addr} | {ts}"
 
-        write_audit_log(request.user, document, "view", tenant=request.tenant)
+        if not has_read_permission:
+            write_audit_log(request.user, document, "view_denied", tenant=request.tenant)
+        elif is_drm_revoked:
+            write_audit_log(request.user, document, "view_revoked", tenant=request.tenant)
+        else:
+            write_audit_log(request.user, document, "view", tenant=request.tenant)
 
     context = {
         "document": document,
         "version": version,
         "watermark_policy": watermark_policy,
+        "drm_policy": drm_policy,
+        "has_read_permission": has_read_permission,
+        "is_drm_revoked": is_drm_revoked,
         "drm_policy": drm_policy,
         "watermark_text": watermark_text,
         "screen_shield": screen_shield,
