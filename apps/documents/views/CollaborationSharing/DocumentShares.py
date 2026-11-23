@@ -117,7 +117,10 @@ def document_share_create(request):
     if request.method == "POST":
         form = DocumentShareForm(request.POST, tenant=request.tenant, user=request.user)
         if form.is_valid():
-            share = form.save()
+            share = form.save(commit=False)
+            share.tenant = request.tenant
+            share.save()
+            form.save_m2m()
             write_audit_log(request.user, share, "create", tenant=request.tenant)
 
             # Record collaboration activity
