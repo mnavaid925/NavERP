@@ -152,7 +152,7 @@
                         <a href="{% url 'documents:metadata_schema_edit' item.pk %}" class="btn btn-icon" title="Edit Schema">
                             <i data-lucide="pencil"></i>
                         </a>
-                        <form method="post" action="{% url 'documents:metadata_schema_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete schema {{ item.name }}?');">
+                        <form method="post" action="{% url 'documents:metadata_schema_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete schema {{ item.name|escapejs }}?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Schema">
                                 <i data-lucide="trash-2"></i>
