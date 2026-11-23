@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Permission {{ permission.number }}{% else %}Grant Access Permission{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:permission_list' %}">Access Permissions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ permission.number }}{% else %}Grant Permission{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Access Permission: {{ permission.number }}{% else %}Grant Document Access Permission{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:permission_detail' permission.pk %}{% else %}{% url 'documents:permission_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body text-sm text-red-700">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Scope & Target -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">1. Target Scope & Grantee</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.document.id_for_label }}">Target Document</label>
+                {{ form.document }}
+                {% if form.document.errors %}<div class="form-error">{{ form.document.errors.0 }}</div>{% endif %}
+                <p class="text-xs text-slate-500 mt-1">Select a specific document, or leave empty if targeting a folder.</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.folder.id_for_label }}">Target Folder</label>
+                {{ form.folder }}
+                {% if form.folder.errors %}<div class="form-error">{{ form.folder.errors.0 }}</div>{% endif %}
+                <p class="text-xs text-slate-500 mt-1">Select a repository folder to apply inherited permissions to all its files.</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.grantee_type.id_for_label }}">Grantee Scope Type <span class="text-red-500">*</span></label>
+                {{ form.grantee_type }}
+                {% if form.grantee_type.errors %}<div class="form-error">{{ form.grantee_type.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.user.id_for_label }}">Specific User</label>
+                {{ form.user }}
+                {% if form.user.errors %}<div class="form-error">{{ form.user.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.org_unit.id_for_label }}">Organizational Unit (Department)</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.role_name.id_for_label }}">Standardized Role Name</label>
+                {{ form.role_name }}
+                {% if form.role_name.errors %}<div class="form-error">{{ form.role_name.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Capabilities -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="text-base font-semibold text-slate-800">2. Permissions & Capabilities</h2>
+            <div class="text-xs text-slate-500">Choosing a level preset auto-toggles capability checkboxes</div>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="max-w-md">
+                <label class="form-label" for="{{ form.permission_level.id_for_label }}">Permission Level Preset</label>
+                {{ form.permission_level }}
+                {% if form.permission_level.errors %}<div class="form-error">{{ form.permission_level.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-2">
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.can_read }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Can Read</div>
+                        <div class="text-xs text-slate-500">Preview & view content</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.can_write }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Can Write</div>
+                        <div class="text-xs text-slate-500">Edit & draft new versions</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.can_delete }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Can Delete</div>
+                        <div class="text-xs text-slate-500">Remove or archive files</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.can_download }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Can Download</div>
+                        <div class="text-xs text-slate-500">Export raw binaries</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.can_print }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Can Print</div>
+                        <div class="text-xs text-slate-500">Physical hardcopy print</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.can_share }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Can Share</div>
+                        <div class="text-xs text-slate-500">Delegate to other users</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Validity & Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">3. Time-Bounding & Notes</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.valid_from.id_for_label }}">Valid From</label>
+                {{ form.valid_from }}
+                {% if form.valid_from.errors %}<div class="form-error">{{ form.valid_from.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.valid_until.id_for_label }}">Valid Until (Expiration)</label>
+                {{ form.valid_until }}
+                {% if form.valid_until.errors %}<div class="form-error">{{ form.valid_until.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Notes / Reference</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_active }}
+                    <span class="text-sm font-medium text-slate-800">Rule is Active</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'documents:permission_detail' permission.pk %}{% else %}{% url 'documents:permission_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Grant Permission{% endif %}</span>
+        </button>
+    </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const levelSelect = document.getElementById("id_permission_level");
+    const readBox = document.getElementById("id_can_read");
+    const writeBox = document.getElementById("id_can_write");
+    const deleteBox = document.getElementById("id_can_delete");
+    const downloadBox = document.getElementById("id_can_download");
+    const printBox = document.getElementById("id_can_print");
+    const shareBox = document.getElementById("id_can_share");
+
+    if (levelSelect) {
+        levelSelect.addEventListener("change", function() {
+            const val = this.value;
+            if (val === "viewer") {
+                readBox.checked = true;
+                writeBox.checked = false;
+                deleteBox.checked = false;
+                downloadBox.checked = true;
+                printBox.checked = true;
+                shareBox.checked = false;
+            } else if (val === "commenter") {
+                readBox.checked = true;
+                writeBox.checked = false;
+                deleteBox.checked = false;
+                downloadBox.checked = true;
+                printBox.checked = true;
+                shareBox.checked = false;
+            } else if (val === "editor") {
+                readBox.checked = true;
+                writeBox.checked = true;
+                deleteBox.checked = false;
+                downloadBox.checked = true;
+                printBox.checked = true;
+                shareBox.checked = false;
+            } else if (val === "manager") {
+                readBox.checked = true;
+                writeBox.checked = true;
+                deleteBox.checked = false;
+                downloadBox.checked = true;
+                printBox.checked = true;
+                shareBox.checked = true;
+            } else if (val === "owner") {
+                readBox.checked = true;
+                writeBox.checked = true;
+                deleteBox.checked = true;
+                downloadBox.checked = true;
+                printBox.checked = true;
+                shareBox.checked = true;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
