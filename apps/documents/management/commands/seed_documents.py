@@ -7,10 +7,12 @@ from django.utils import timezone
 
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.documents.models import (
+    CoauthorSession,
     DlpIncident,
     DlpPolicy,
     Document,
     DocumentAccessPermission,
+    DocumentActivity,
     DocumentApprovalRequest,
     DocumentApprovalWorkflow,
     DocumentBatchImport,
@@ -27,7 +29,9 @@ from apps.documents.models import (
     DocumentSearchAlert,
     DocumentSearchQueryLog,
     DocumentSearchSynonym,
+    DocumentShare,
     DocumentSignature,
+    DocumentTask,
     DocumentTemplate,
     DocumentVersion,
     DraftCollaboration,
@@ -53,6 +57,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options.get("flush"):
             self.stdout.write("Flushing documents module data...")
+            DocumentActivity.objects.all().delete()
+            DocumentTask.objects.all().delete()
+            CoauthorSession.objects.all().delete()
+            DocumentShare.objects.all().delete()
             DlpIncident.objects.all().delete()
             DlpPolicy.objects.all().delete()
             DocumentDrmPolicy.objects.all().delete()
@@ -1567,6 +1575,194 @@ class Command(BaseCommand):
                             resolution_status="resolved_justified",
                             resolved_by=user,
                             resolution_notes="Authorized M&A corporate development team review.",
+                        )
+
+                # 6. Sub-module 13.8: Collaboration & Sharing Demo Seeding
+                if not DocumentShare.objects.filter(tenant=tenant).exists():
+                    doc_collab = Document.objects.filter(tenant=tenant).order_by("created_at").first()
+                    version_collab = DocumentVersion.objects.filter(tenant=tenant, document=doc_collab).first() if doc_collab else None
+                    review_comment_target = DocumentReviewComment.objects.filter(tenant=tenant, document=doc_collab).first() if doc_collab else None
+                    org_unit_target = OrgUnit.objects.filter(tenant=tenant, is_active=True).first()
+
+                    if doc_collab and user:
+                        # 1. Document Shares
+                        share1 = DocumentShare(
+                            tenant=tenant,
+                            document=doc_collab,
+                            version=version_collab,
+                            share_type="public_link",
+                            access_level="view_only",
+                            allow_download=True,
+                            allow_print=True,
+                            include_annotations=True,
+                            expires_at=timezone.now() + timezone.timedelta(days=30),
+                            max_uses=100,
+                            access_count=14,
+                            last_accessed_at=timezone.now() - timezone.timedelta(hours=2),
+                            shared_by=user,
+                            share_message="Please review the published terms for Q4 operations.",
+                            is_active=True,
+                        )
+                        share1.save()
+
+                        share2 = DocumentShare(
+                            tenant=tenant,
+                            document=doc_collab,
+                            version=version_collab,
+                            share_type="external_email",
+                            access_level="comment",
+                            shared_with_email="counsel@externaladvisors.com",
+                            allow_download=False,
+                            allow_print=True,
+                            include_annotations=True,
+                            expires_at=timezone.now() + timezone.timedelta(days=14),
+                            max_uses=20,
+                            access_count=3,
+                            last_accessed_at=timezone.now() - timezone.timedelta(days=1),
+                            shared_by=user,
+                            share_message="External counsel review copy with comment permissions enabled.",
+                            is_active=True,
+                        )
+                        share2.set_password("AcmeLegal2026!")
+                        share2.save()
+
+                        share3 = DocumentShare(
+                            tenant=tenant,
+                            document=doc_collab,
+                            share_type="internal_dept",
+                            access_level="edit",
+                            shared_with_org_unit=org_unit_target,
+                            allow_download=True,
+                            allow_print=True,
+                            shared_by=user,
+                            is_active=True,
+                        )
+                        share3.save()
+
+                        # 2. Co-Authoring Sessions
+                        CoauthorSession.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            version=version_collab,
+                            user=user,
+                            color_code="#3B82F6",
+                            status="active",
+                            is_editing=True,
+                            current_section="Section 3: Deliverables & Specifications",
+                            client_ip="127.0.0.1",
+                            cursor_position='{"page": 2, "paragraph": 4, "offset": 120}',
+                        )
+                        CoauthorSession.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            version=version_collab,
+                            guest_name="Sarah Miller (External Auditor)",
+                            color_code="#10B981",
+                            status="active",
+                            is_editing=False,
+                            current_section="Section 1: Executive Summary",
+                            client_ip="192.168.1.45",
+                            cursor_position='{"page": 1, "paragraph": 2, "offset": 45}',
+                        )
+                        CoauthorSession.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            user=user,
+                            color_code="#F59E0B",
+                            status="idle",
+                            is_editing=False,
+                            current_section="Section 5: Pricing",
+                            client_ip="10.0.0.21",
+                        )
+
+                        # 3. Document Tasks
+                        task1 = DocumentTask.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            version=version_collab,
+                            review_comment=review_comment_target,
+                            title="Verify compliance with regulatory guidelines",
+                            description="Cross-check statutory clauses against the revised ISO 27001 Annex A controls.",
+                            task_type="review",
+                            priority="high",
+                            status="in_progress",
+                            assigned_to=user,
+                            assigned_by=user,
+                            due_date=timezone.now().date() + timezone.timedelta(days=7),
+                            reminder_date=timezone.now().date() + timezone.timedelta(days=5),
+                        )
+                        task2 = DocumentTask.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            version=version_collab,
+                            title="Sign-off on technical architecture exhibits",
+                            description="Formal technical review of API payload specifications and schemas.",
+                            task_type="approval_signoff",
+                            priority="urgent",
+                            status="pending",
+                            assigned_to=user,
+                            assigned_by=user,
+                            due_date=timezone.now().date() + timezone.timedelta(days=3),
+                            reminder_date=timezone.now().date() + timezone.timedelta(days=2),
+                        )
+                        task3 = DocumentTask.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            title="Update SLA schedule penalty clauses",
+                            description="Historical revision task resolved following committee consensus.",
+                            task_type="revision_requested",
+                            priority="medium",
+                            status="completed",
+                            assigned_to=user,
+                            assigned_by=user,
+                            due_date=timezone.now().date() - timezone.timedelta(days=2),
+                            completed_at=timezone.now() - timezone.timedelta(days=1),
+                            completed_by=user,
+                            completion_notes="Revised wording aligned with procurement legal templates.",
+                        )
+                        task4 = DocumentTask.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            title="Overdue statutory data retention review",
+                            description="Mandatory 30-day compliance milestone check.",
+                            task_type="fact_check",
+                            priority="urgent",
+                            status="pending",
+                            assigned_to=user,
+                            assigned_by=user,
+                            due_date=timezone.now().date() - timezone.timedelta(days=1),
+                        )
+
+                        # 4. Document Activities
+                        DocumentActivity.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            actor=user,
+                            target_user=user,
+                            action_type="document_shared",
+                            summary=f"Created public share link {share1.number} for '{doc_collab.title}'",
+                            notification_channel="in_app",
+                            is_read=True,
+                            read_at=timezone.now(),
+                        )
+                        DocumentActivity.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            actor=user,
+                            target_user=user,
+                            action_type="task_assigned",
+                            summary=f"Assigned task '{task1.title}' to {user.get_full_name() or user.username}",
+                            notification_channel="in_app",
+                            is_read=False,
+                        )
+                        DocumentActivity.objects.create(
+                            tenant=tenant,
+                            document=doc_collab,
+                            guest_name="Sarah Miller (External Auditor)",
+                            action_type="coauthor_joined",
+                            summary=f"External collaborator joined coauthoring session on '{doc_collab.title}'",
+                            notification_channel="in_app",
+                            is_read=False,
                         )
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
