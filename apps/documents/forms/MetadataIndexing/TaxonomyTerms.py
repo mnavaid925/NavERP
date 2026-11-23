@@ -85,6 +85,19 @@ class TaxonomyTermForm(forms.ModelForm):
                 self.add_error("term_code", f"Term code '{code}' already exists in category '{category}'.")
 
         parent = cleaned_data.get("parent")
-        if parent and self.tenant and parent.tenant != self.tenant:
-            self.add_error("parent", "Parent taxonomy term does not belong to your organization.")
+        if parent:
+            if self.tenant and parent.tenant != self.tenant:
+                self.add_error("parent", "Parent taxonomy term does not belong to your organization.")
+            if self.instance and self.instance.pk:
+                if parent.pk == self.instance.pk:
+                    self.add_error("parent", "A taxonomy term cannot be its own parent.")
+                else:
+                    curr = parent
+                    visited = {self.instance.pk}
+                    while curr and curr.parent_id:
+                        if curr.parent_id in visited:
+                            self.add_error("parent", f"Circular reference detected: '{parent.name}' is already a descendant of this term.")
+                            break
+                        visited.add(curr.parent_id)
+                        curr = curr.parent
         return cleaned_data
