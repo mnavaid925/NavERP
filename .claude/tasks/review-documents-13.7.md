@@ -67,7 +67,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py:67-68`
   - **Description**: `documents` and `folders` are queried (`[:100]`) and passed to context, but not rendered in template filters.
   - **Fix**: Remove unused queries and context variables.
-- [ ] **I8: Missing `select_related("department")` in `secure_viewer`**
+- [x] **I8: Missing `select_related("department")` in `secure_viewer`**
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/SecureViewer.py:20` & `templates/documents/security_access_control/secure_viewer.html:145`
   - **Description**: Template renders `document.department.name`, causing an extra query on every viewer load.
   - **Fix**: Add `.select_related("department")` to `docs_qs`.
