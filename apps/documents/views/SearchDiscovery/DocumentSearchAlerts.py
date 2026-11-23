@@ -101,7 +101,7 @@ def document_search_alert_create(request):
             initial["saved_search"] = saved_search
 
     if request.method == "POST":
-        form = DocumentSearchAlertForm(request.POST, tenant=request.tenant)
+        form = DocumentSearchAlertForm(request.POST, tenant=request.tenant, user=request.user)
         if form.is_valid():
             search_alert = form.save(commit=False)
             search_alert.tenant = request.tenant
@@ -111,7 +111,7 @@ def document_search_alert_create(request):
             messages.success(request, f"Search alert '{search_alert.number}' created successfully.")
             return redirect("documents:document_search_alert_detail", pk=search_alert.pk)
     else:
-        form = DocumentSearchAlertForm(initial=initial, tenant=request.tenant)
+        form = DocumentSearchAlertForm(initial=initial, tenant=request.tenant, user=request.user)
 
     return render(
         request,
@@ -132,14 +132,14 @@ def document_search_alert_edit(request, pk):
         return HttpResponseForbidden("You do not have permission to edit this search alert.")
 
     if request.method == "POST":
-        form = DocumentSearchAlertForm(request.POST, instance=search_alert, tenant=request.tenant)
+        form = DocumentSearchAlertForm(request.POST, instance=search_alert, tenant=request.tenant, user=request.user)
         if form.is_valid():
             search_alert = form.save()
             write_audit_log(request.user, search_alert, "update", tenant=request.tenant)
             messages.success(request, f"Search alert '{search_alert.number}' updated successfully.")
             return redirect("documents:document_search_alert_detail", pk=search_alert.pk)
     else:
-        form = DocumentSearchAlertForm(instance=search_alert, tenant=request.tenant)
+        form = DocumentSearchAlertForm(instance=search_alert, tenant=request.tenant, user=request.user)
 
     return render(
         request,
