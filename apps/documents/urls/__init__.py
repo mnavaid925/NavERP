@@ -40,6 +40,21 @@ from apps.documents.urls.MetadataIndexing.MetadataSchemas import (
 from apps.documents.urls.MetadataIndexing.TaxonomyTerms import (
     urlpatterns as taxonomy_terms_urls,
 )
+from apps.documents.urls.SearchDiscovery.DocumentSavedSearches import (
+    urlpatterns as document_saved_searches_urls,
+)
+from apps.documents.urls.SearchDiscovery.DocumentSearchAlerts import (
+    urlpatterns as document_search_alerts_urls,
+)
+from apps.documents.urls.SearchDiscovery.DocumentSearchQueryLogs import (
+    urlpatterns as document_search_query_logs_urls,
+)
+from apps.documents.urls.SearchDiscovery.DocumentSearchSynonyms import (
+    urlpatterns as document_search_synonyms_urls,
+)
+from apps.documents.urls.SearchDiscovery.SearchHub import (
+    urlpatterns as search_hub_urls,
+)
 from apps.documents.urls.StorageRepository.DocumentBatchImports import (
     urlpatterns as document_batch_imports_urls,
 )
@@ -94,4 +109,9 @@ urlpatterns = (
     + metadata_values_urls
     + taxonomy_terms_urls
     + document_ocr_jobs_urls
+    + search_hub_urls
+    + document_saved_searches_urls
+    + document_search_alerts_urls
+    + document_search_synonyms_urls
+    + document_search_query_logs_urls
 )
