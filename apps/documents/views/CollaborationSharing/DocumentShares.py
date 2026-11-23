@@ -17,7 +17,7 @@ from apps.documents.views._common import documents_object, documents_scope
 @login_required
 def document_share_list(request):
     base_qs = documents_scope(DocumentShare.objects.all(), request).select_related(
-        "document", "shared_by", "shared_with_user", "shared_with_org_unit"
+        "document", "version", "shared_by", "shared_with_user", "shared_with_org_unit"
     )
 
     total_count = base_qs.count()
@@ -104,7 +104,7 @@ def document_share_detail(request, pk):
         tenant=request.tenant,
         document=share.document,
         action_type__in=["document_shared", "share_revoked", "link_accessed", "file_downloaded"],
-    ).order_by("-created_at")[:10]
+    ).select_related("actor").order_by("-created_at")[:10]
 
     context = {
         "share": share,
