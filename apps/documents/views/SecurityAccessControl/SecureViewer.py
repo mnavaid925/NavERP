@@ -20,7 +20,11 @@ def secure_viewer(request, pk=None):
     Sandboxed zero-download secure viewer console with active forensic watermark,
     anti-screen capture blur, right-click disabling, and keyboard interceptors.
     """
-    docs_qs = documents_scope(Document.objects.all(), request).order_by("-updated_at")
+    docs_qs = (
+        documents_scope(Document.objects.all(), request)
+        .select_related("department")
+        .order_by("-updated_at")
+    )
 
     doc_id_param = request.GET.get("doc_id", "").strip()
     if not pk and doc_id_param.isdigit():
