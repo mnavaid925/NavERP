@@ -117,6 +117,7 @@ class DlpIncident(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="doc_dinc_ten_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "created_at"], name="doc_dinc_tnt_crt_idx"),
             models.Index(fields=["tenant", "policy", "resolution_status"], name="doc_dinc_tnt_pol_res_idx"),
             models.Index(fields=["tenant", "document", "created_at"], name="doc_dinc_tnt_doc_crt_idx"),
             models.Index(fields=["tenant", "severity", "resolution_status"], name="doc_dinc_tnt_sev_res_idx"),
