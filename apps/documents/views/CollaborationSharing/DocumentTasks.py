@@ -109,7 +109,10 @@ def document_task_create(request):
     if request.method == "POST":
         form = DocumentTaskForm(request.POST, tenant=request.tenant, user=request.user)
         if form.is_valid():
-            task = form.save()
+            task = form.save(commit=False)
+            task.tenant = request.tenant
+            task.save()
+            form.save_m2m()
             write_audit_log(request.user, task, "create", tenant=request.tenant)
 
             DocumentActivity.objects.create(
