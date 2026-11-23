@@ -39768,55 +39768,55 @@ apps/quality/
 ## Detailed Build Plan (Phases 3 to 7)
 
 ### Phase 3.1: Spec Contract
-- [ ] Read `NavERP.md`, `research-documents-13.6.md`, and sibling modules to author `.claude/tasks/contract-documents-13.6.md`.
-- [ ] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
-- [ ] Commit contract: `git add .claude/tasks/contract-documents-13.6.md; git commit -m "docs(documents): freeze 13.6 contract specification"`
+- [x] Read `NavERP.md`, `research-documents-13.6.md`, and sibling modules to author `.claude/tasks/contract-documents-13.6.md`.
+- [x] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
+- [x] Commit contract: `git add .claude/tasks/contract-documents-13.6.md; git commit -m "docs(documents): freeze 13.6 contract specification"`
 
 ### Phase 3.2: Build Entity by Entity (Strictly Serial)
-- [ ] **Entity 1: DocumentSavedSearch** (`DSVD-`)
-  - [ ] `apps/documents/models/SearchDiscovery/DocumentSavedSearches.py`
-  - [ ] `apps/documents/forms/SearchDiscovery/DocumentSavedSearches.py`
-  - [ ] `apps/documents/views/SearchDiscovery/DocumentSavedSearches.py`
-  - [ ] `apps/documents/urls/SearchDiscovery/DocumentSavedSearches.py`
-  - [ ] `templates/documents/search_discovery/document_saved_search/list.html`
-  - [ ] `templates/documents/search_discovery/document_saved_search/detail.html`
-  - [ ] `templates/documents/search_discovery/document_saved_search/form.html`
-- [ ] **Entity 2: DocumentSearchAlert** (`DALT-`)
-  - [ ] `apps/documents/models/SearchDiscovery/DocumentSearchAlerts.py`
-  - [ ] `apps/documents/forms/SearchDiscovery/DocumentSearchAlerts.py`
-  - [ ] `apps/documents/views/SearchDiscovery/DocumentSearchAlerts.py`
-  - [ ] `apps/documents/urls/SearchDiscovery/DocumentSearchAlerts.py`
-  - [ ] `templates/documents/search_discovery/document_search_alert/list.html`
-  - [ ] `templates/documents/search_discovery/document_search_alert/detail.html`
-  - [ ] `templates/documents/search_discovery/document_search_alert/form.html`
-- [ ] **Entity 3: DocumentSearchSynonym** (`DSYN-`)
-  - [ ] `apps/documents/models/SearchDiscovery/DocumentSearchSynonyms.py`
-  - [ ] `apps/documents/forms/SearchDiscovery/DocumentSearchSynonyms.py`
-  - [ ] `apps/documents/views/SearchDiscovery/DocumentSearchSynonyms.py`
-  - [ ] `apps/documents/urls/SearchDiscovery/DocumentSearchSynonyms.py`
-  - [ ] `templates/documents/search_discovery/document_search_synonym/list.html`
-  - [ ] `templates/documents/search_discovery/document_search_synonym/detail.html`
-  - [ ] `templates/documents/search_discovery/document_search_synonym/form.html`
-- [ ] **Entity 4: DocumentSearchQueryLog** (`DQRY-`)
-  - [ ] `apps/documents/models/SearchDiscovery/DocumentSearchQueryLogs.py`
-  - [ ] `apps/documents/forms/SearchDiscovery/DocumentSearchQueryLogs.py`
-  - [ ] `apps/documents/views/SearchDiscovery/DocumentSearchQueryLogs.py`
-  - [ ] `apps/documents/urls/SearchDiscovery/DocumentSearchQueryLogs.py`
-  - [ ] `templates/documents/search_discovery/document_search_query_log/list.html`
-  - [ ] `templates/documents/search_discovery/document_search_query_log/detail.html`
-- [ ] **Dedicated Feature View & Console: SearchHub**
-  - [ ] `apps/documents/views/SearchDiscovery/SearchHub.py`
-  - [ ] `apps/documents/urls/SearchDiscovery/SearchHub.py`
-  - [ ] `templates/documents/search_discovery/search_hub.html`
+- [x] **Entity 1: DocumentSavedSearch** (`DSVD-`)
+  - [x] `apps/documents/models/SearchDiscovery/DocumentSavedSearches.py`
+  - [x] `apps/documents/forms/SearchDiscovery/DocumentSavedSearches.py`
+  - [x] `apps/documents/views/SearchDiscovery/DocumentSavedSearches.py`
+  - [x] `apps/documents/urls/SearchDiscovery/DocumentSavedSearches.py`
+  - [x] `templates/documents/search_discovery/document_saved_search/list.html`
+  - [x] `templates/documents/search_discovery/document_saved_search/detail.html`
+  - [x] `templates/documents/search_discovery/document_saved_search/form.html`
+- [x] **Entity 2: DocumentSearchAlert** (`DALT-`)
+  - [x] `apps/documents/models/SearchDiscovery/DocumentSearchAlerts.py`
+  - [x] `apps/documents/forms/SearchDiscovery/DocumentSearchAlerts.py`
+  - [x] `apps/documents/views/SearchDiscovery/DocumentSearchAlerts.py`
+  - [x] `apps/documents/urls/SearchDiscovery/DocumentSearchAlerts.py`
+  - [x] `templates/documents/search_discovery/document_search_alert/list.html`
+  - [x] `templates/documents/search_discovery/document_search_alert/detail.html`
+  - [x] `templates/documents/search_discovery/document_search_alert/form.html`
+- [x] **Entity 3: DocumentSearchSynonym** (`DSYN-`)
+  - [x] `apps/documents/models/SearchDiscovery/DocumentSearchSynonyms.py`
+  - [x] `apps/documents/forms/SearchDiscovery/DocumentSearchSynonyms.py`
+  - [x] `apps/documents/views/SearchDiscovery/DocumentSearchSynonyms.py`
+  - [x] `apps/documents/urls/SearchDiscovery/DocumentSearchSynonyms.py`
+  - [x] `templates/documents/search_discovery/document_search_synonym/list.html`
+  - [x] `templates/documents/search_discovery/document_search_synonym/detail.html`
+  - [x] `templates/documents/search_discovery/document_search_synonym/form.html`
+- [x] **Entity 4: DocumentSearchQueryLog** (`DQRY-`)
+  - [x] `apps/documents/models/SearchDiscovery/DocumentSearchQueryLogs.py`
+  - [x] `apps/documents/forms/SearchDiscovery/DocumentSearchQueryLogs.py`
+  - [x] `apps/documents/views/SearchDiscovery/DocumentSearchQueryLogs.py`
+  - [x] `apps/documents/urls/SearchDiscovery/DocumentSearchQueryLogs.py`
+  - [x] `templates/documents/search_discovery/document_search_query_log/list.html`
+  - [x] `templates/documents/search_discovery/document_search_query_log/detail.html`
+- [x] **Dedicated Feature View & Console: SearchHub**
+  - [x] `apps/documents/views/SearchDiscovery/SearchHub.py`
+  - [x] `apps/documents/urls/SearchDiscovery/SearchHub.py`
+  - [x] `templates/documents/search_discovery/search_hub.html`
 
 ### Phase 3.3: Integration & Migration
-- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
-- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
-- [ ] Re-export all views in `apps/documents/views/__init__.py`
-- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
-- [ ] Register all 4 models in `apps/documents/admin.py`
-- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.6 seed data
-- [ ] Wire `LIVE_LINKS["13.6"]` in `apps/core/navigation.py`:
+- [x] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [x] Re-export all forms in `apps/documents/forms/__init__.py`
+- [x] Re-export all views in `apps/documents/views/__init__.py`
+- [x] Wire URL routes in `apps/documents/urls/__init__.py`
+- [x] Register all 4 models in `apps/documents/admin.py`
+- [x] Extend `apps/documents/management/commands/seed_documents.py` with 13.6 seed data
+- [x] Wire `LIVE_LINKS["13.6"]` in `apps/core/navigation.py`:
   - `Advanced Search & Filters`: `documents:search_hub`
   - `Faceted Search Navigation`: `documents:search_hub`
   - `Saved Searches & Alerts`: `documents:document_saved_search_list`
@@ -39825,39 +39825,39 @@ apps/quality/
   - Extra live leaves:
     - `Search Alerts`: `documents:document_search_alert_list`
     - `Search Synonyms`: `documents:document_search_synonym_list`
-- [ ] Run `makemigrations documents`
-- [ ] Run `migrate`
-- [ ] Run `seed_documents` twice (idempotency check)
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations documents`
+- [x] Run `migrate`
+- [x] Run `seed_documents` twice (idempotency check)
+- [x] Run `manage.py check`
 
 ### Phase 3.4: Smoke Verification
-- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+- [x] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
-- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
-- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
-- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
-- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.6.md`
-- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
-- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.6.md`
+- [x] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [x] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [x] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [x] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [x] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [x] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.6.md`
+- [x] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.6.md`
 
 ### Phase 5: Code Fixer Burn-down
-- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+- [x] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
 
 ### Phase 6: Automated Test Suite (Unfiltered)
-- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
-- [ ] Implement `apps/documents/tests/test_search_discovery_models.py`
-- [ ] Implement `apps/documents/tests/test_search_discovery_forms.py`
-- [ ] Implement `apps/documents/tests/test_search_discovery_views.py`
-- [ ] Implement `apps/documents/tests/test_search_discovery_security.py`
-- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+- [x] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [x] Implement `apps/documents/tests/test_search_discovery_models.py`
+- [x] Implement `apps/documents/tests/test_search_discovery_forms.py`
+- [x] Implement `apps/documents/tests/test_search_discovery_views.py`
+- [x] Implement `apps/documents/tests/test_search_discovery_security.py`
+- [x] Run full unfiltered app test suite: `pytest apps/documents/tests/`
 
 ### Phase 7: Skill, README & Close-out
-- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.6 models, routes, templates, and seed details
-- [ ] Update `README.md` marking 13.6 complete and recording test statistics
-- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.6.md` and `.claude/tasks/gaps-documents-13.6.md`
-- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+- [x] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.6 models, routes, templates, and seed details
+- [x] Update `README.md` marking 13.6 complete and recording test statistics
+- [x] Record any gaps in `.agents/tasks/gaps-documents-13.6.md` and `.claude/tasks/gaps-documents-13.6.md`
+- [x] Document final review notes and close out in `.claude/tasks/todo.md`
 
 ---
 
@@ -39877,4 +39877,10 @@ apps/quality/
 - **External Federated Search Connectors** — Federated search crawlers indexing external repositories (SharePoint Online, Google Drive, Box, network file shares) via 13.12 Integration & API Ecosystem.
 
 ## Review notes
-(to be filled in at Phase 7 close-out)
+- **Sub-module**: 13.6 Search & Discovery (`apps/documents/`).
+- **Models built**: `DocumentSavedSearch` (`DSVD-`), `DocumentSearchAlert` (`DALT-`), `DocumentSearchSynonym` (`DSYN-`), `DocumentSearchQueryLog` (`DQRY-`).
+- **Consoles & Workbenches built**: `SearchHub` faceted omni-search console, Saved Search manager, Alert configuration manager, Synonym dictionary manager, Telemetry query log viewer, and executive Search Analytics dashboard.
+- **Review Passes (Serial)**: 6 review passes executed sequentially (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`).
+- **Findings Burn-down**: 30 findings (3 Critical, 16 Important, 11 Minor) consolidated in `.claude/tasks/review-documents-13.6.md`, 100% resolved and verified via `code-fixer` agent with individual git commits.
+- **Tests**: 112 dedicated new tests added across 4 test modules (`test_search_discovery_models.py` [20], `test_search_discovery_forms.py` [34], `test_search_discovery_views.py` [38], `test_search_discovery_security.py` [20]). Full unfiltered suite `pytest apps/documents/tests/` passed 260/260 (100% green).
+- **Gaps**: None. Recorded in `.claude/tasks/gaps-documents-13.6.md` and `.agents/tasks/gaps-documents-13.6.md`.
