@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Saved Search {{ saved_search.name }}{% else %}New Saved Search{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:search_hub' %}">Search & Discovery</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_saved_search_list' %}">Saved Searches</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ saved_search.number }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Saved Search{% else %}New Saved Search & Query Preset{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Saved Search Configuration</h2>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Search Name *</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.visibility.id_for_label }}">Visibility Level *</label>
+                            {{ form.visibility }}
+                            {% if form.visibility.errors %}<div class="form-error">{{ form.visibility.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.department.id_for_label }}">Department (Optional)</label>
+                            {{ form.department }}
+                            {% if form.department.errors %}<div class="form-error">{{ form.department.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.query_text.id_for_label }}">Query Keyword / Syntax</label>
+                            {{ form.query_text }}
+                            {% if form.query_text.errors %}<div class="form-error">{{ form.query_text.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.filters_json.id_for_label }}">Attribute Filters (JSON)</label>
+                            {{ form.filters_json }}
+                            <div class="text-xs text-slate-500 mt-1">Key-value filter rules e.g. <code>{"classification": "confidential", "document_type": "contract"}</code></div>
+                            {% if form.filters_json.errors %}<div class="form-error">{{ form.filters_json.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.facet_filters_json.id_for_label }}">Facet Refinements (JSON)</label>
+                            {{ form.facet_filters_json }}
+                            <div class="text-xs text-slate-500 mt-1">Multi-facet selections e.g. <code>{"status": ["approved"], "extension": ["pdf"]}</code></div>
+                            {% if form.facet_filters_json.errors %}<div class="form-error">{{ form.facet_filters_json.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.sort_by.id_for_label }}">Default Sort Field</label>
+                            {{ form.sort_by }}
+                            {% if form.sort_by.errors %}<div class="form-error">{{ form.sort_by.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.sort_order.id_for_label }}">Sort Order</label>
+                            {{ form.sort_order }}
+                            {% if form.sort_order.errors %}<div class="form-error">{{ form.sort_order.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-6">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_pinned }}
+                            <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Pin to Search Hub shortcuts</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_favorite }}
+                            <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Mark as favorite query</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_active }}
+                            <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Active status</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
+                    <a href="{% if is_edit %}{% url 'documents:document_saved_search_detail' saved_search.pk %}{% else %}{% url 'documents:document_saved_search_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Saved Search{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
