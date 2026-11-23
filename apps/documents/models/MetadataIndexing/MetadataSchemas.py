@@ -101,6 +101,11 @@ class MetadataSchema(TenantNumbered):
     def __str__(self):
         return f"{self.name} ({self.code})"
 
+    def save(self, *args, **kwargs):
+        if self.code:
+            self.code = self.code.upper().strip()
+        super().save(*args, **kwargs)
+
     @property
     def target_type_badge(self):
         return self.TARGET_TYPE_CSS.get(self.target_type, "badge-info")
