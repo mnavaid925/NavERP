@@ -55,7 +55,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py:233-247`
   - **Description**: `user_dept = getattr(target_user, "department", None)` evaluates to `None` because `User` model has no `department` column in NavERP (mapped via `Employment.org_unit` on `target_user.party`).
   - **Fix**: Resolve `user_dept` via `Employment.objects.filter(tenant=request.tenant, party=getattr(target_user, "party", None)).order_by("-id").first()`.
-- [ ] **I5: Missing POST-only Delete action on DRM Policy detail page**
+- [x] **I5: Missing POST-only Delete action on DRM Policy detail page**
   - **Files & Lines**: `templates/documents/security_access_control/document_drm_policy/detail.html:28-44`
   - **Description**: `drm_policy_delete` view and URL pattern exist, but `detail.html` omits the standard POST-only delete button with CSRF token and `confirm(...)` dialog.
   - **Fix**: Add the standard POST-only Delete form button to `page-actions`.
