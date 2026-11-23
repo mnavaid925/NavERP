@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Collaboration & Sharing Workspace — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Collaboration & Sharing</span>
+        </div>
+        <h1 class="page-title">Collaboration & Sharing Workspace</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_task_create' %}" class="btn btn-outline">
+            <i data-lucide="plus-circle"></i>
+            <span>New Task</span>
+        </a>
+        <a href="{% url 'documents:document_share_create' %}" class="btn btn-primary">
+            <i data-lucide="share-2"></i>
+            <span>Create Share Link</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Strip -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="inbox"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ stat_shares_with_me_count }}</div>
+            <div class="stat-label">Shared With Me</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="send"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ stat_shares_by_me_count }}</div>
+            <div class="stat-label">Shared By Me</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="check-square"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ stat_my_tasks_count }}</div>
+            <div class="stat-label">My Pending Tasks</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value {% if stat_overdue_tasks_count > 0 %}text-red-600{% endif %}">{{ stat_overdue_tasks_count }}</div>
+            <div class="stat-label">Overdue Tasks</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="bell"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ stat_unread_activities_count }}</div>
+            <div class="stat-label">Unread Notifications</div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Presence Ribbon -->
+{% if active_sessions %}
+<div class="card mb-6 bg-slate-900 text-white border-none shadow-sm">
+    <div class="card-body py-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse"></span>
+                <span class="text-sm font-semibold tracking-wide uppercase text-slate-300">Live Co-Authoring Active:</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                {% for sess in active_sessions %}
+                <div class="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-full text-xs border border-slate-700">
+                    <span class="w-2 h-2 rounded-full" style="background-color: {{ sess.color_code }};"></span>
+                    <span class="font-medium text-slate-200">{{ sess.display_name }}</span>
+                    <span class="text-slate-400">&bull; {{ sess.document.title|truncatechars:20 }}</span>
+                    {% if sess.is_editing %}
+                    <span class="badge badge-amber text-[10px] py-0 px-1">Locking</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                <a href="{% url 'documents:coauthor_session_list' %}" class="text-xs text-blue-400 hover:underline ml-2">
+                    View All Sessions &rarr;
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Workspace Tabs -->
+<div class="card">
+    <div class="card-header border-b border-slate-200">
+        <div class="flex flex-wrap gap-2">
+            <a href="?tab=shared_with_me" class="btn btn-sm {% if active_tab == 'shared_with_me' %}btn-primary{% else %}btn-outline{% endif %}">
+                <i data-lucide="inbox"></i>
+                <span>Shared With Me ({{ stat_shares_with_me_count }})</span>
+            </a>
+            <a href="?tab=shared_by_me" class="btn btn-sm {% if active_tab == 'shared_by_me' %}btn-primary{% else %}btn-outline{% endif %}">
+                <i data-lucide="send"></i>
+                <span>Shared By Me ({{ stat_shares_by_me_count }})</span>
+            </a>
+            <a href="?tab=my_tasks" class="btn btn-sm {% if active_tab == 'my_tasks' %}btn-primary{% else %}btn-outline{% endif %}">
+                <i data-lucide="check-square"></i>
+                <span>My Tasks ({{ stat_my_tasks_count }})</span>
+            </a>
+            <a href="?tab=activity" class="btn btn-sm {% if active_tab == 'activity' %}btn-primary{% else %}btn-outline{% endif %}">
+                <i data-lucide="activity"></i>
+                <span>Live Feed</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        {% if active_tab == 'shared_with_me' %}
+        <!-- Tab 1: Shared With Me -->
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Document</th>
+                        <th>Shared By</th>
+                        <th>Permission</th>
+                        <th>Shared On</th>
+                        <th>Expires</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for share in shared_with_me %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900">
+                                <a href="{% url 'documents:document_detail' share.document.pk %}" class="hover:underline">
+                                    {{ share.document.title }}
+                                </a>
+                            </div>
+                            <span class="text-xs text-slate-500 font-mono">{{ share.document.number }}</span>
+                        </td>
+                        <td class="text-sm">
+                            {{ share.shared_by.get_full_name|default:share.shared_by.username }}
+                        </td>
+                        <td>
+                            <span class="badge {{ share.get_access_level_badge }}">
+                                {{ share.get_access_level_display }}
+                            </span>
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {{ share.created_at|date:"M d, Y" }}
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {{ share.expires_at|date:"M d, Y"|default:"Never" }}
+                        </td>
+                        <td class="text-right">
+                            <a href="{% url 'documents:document_detail' share.document.pk %}" class="btn btn-sm btn-outline">
+                                <i data-lucide="file-text"></i>
+                                <span>Open</span>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6">
+                            <div class="empty-state py-8">
+                                <i data-lucide="inbox" class="empty-icon"></i>
+                                <h3>No Shared Documents</h3>
+                                <p>Documents shared specifically with you or your department will appear here.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% elif active_tab == 'shared_by_me' %}
+        <!-- Tab 2: Shared By Me -->
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Share Number</th>
+                        <th>Document</th>
+                        <th>Target Recipient</th>
+                        <th>Access Level</th>
+                        <th>Access Count</th>
+                        <th>Status</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for share in shared_by_me %}
+                    <tr>
+                        <td class="font-mono text-sm font-semibold">
+                            <a href="{% url 'documents:document_share_detail' share.pk %}" class="text-blue-600 hover:underline">
+                                {{ share.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <a href="{% url 'documents:document_detail' share.document.pk %}" class="font-medium text-slate-900 hover:underline">
+                                {{ share.document.title }}
+                            </a>
+                        </td>
+                        <td class="text-sm">
+                            {{ share.get_share_type_display }}
+                        </td>
+                        <td>
+                            <span class="badge {{ share.get_access_level_badge }}">
+                                {{ share.get_access_level_display }}
+                            </span>
+                        </td>
+                        <td class="text-sm">
+                            <span class="font-semibold">{{ share.access_count }}</span>
+                            {% if share.max_uses %}<span class="text-xs text-slate-500">/ {{ share.max_uses }}</span>{% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ share.get_status_badge }}">
+                                {{ share.status_label|title }}
+                            </span>
+                        </td>
+                        <td class="text-right">
+                            <a href="{% url 'documents:document_share_detail' share.pk %}" class="btn btn-sm btn-outline">
+                                <i data-lucide="eye"></i>
+                                <span>Manage</span>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state py-8">
+                                <i data-lucide="send" class="empty-icon"></i>
+                                <h3>You Have Not Shared Any Documents</h3>
+                                <p>Generate secure share links or share directly with team members.</p>
+                                <a href="{% url 'documents:document_share_create' %}" class="btn btn-primary mt-3">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Share Link</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% elif active_tab == 'my_tasks' %}
+        <!-- Tab 3: My Tasks -->
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th style="width: 48px;">Done</th>
+                        <th>Task Number</th>
+                        <th>Task Title & Document</th>
+                        <th>Priority</th>
+                        <th>Type</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for task in my_tasks %}
+                    <tr class="{% if task.status == 'completed' %}opacity-70 bg-slate-50/50{% endif %}">
+                        <td class="text-center">
+                            <form method="post" action="{% url 'documents:document_task_toggle_complete' task.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="w-6 h-6 rounded border flex items-center justify-center transition-colors {% if task.status == 'completed' %}bg-green-600 border-green-600 text-white{% else %}border-slate-300 hover:border-blue-500 text-transparent hover:text-slate-300{% endif %}" title="Toggle Complete">
+                                    <i data-lucide="check" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </td>
+                        <td class="font-mono text-sm font-semibold">
+                            <a href="{% url 'documents:document_task_detail' task.pk %}" class="text-blue-600 hover:underline">
+                                {{ task.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900 {% if task.status == 'completed' %}line-through text-slate-500{% endif %}">
+                                <a href="{% url 'documents:document_task_detail' task.pk %}" class="hover:underline">
+                                    {{ task.title }}
+                                </a>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-0.5">
+                                On: <a href="{% url 'documents:document_detail' task.document.pk %}" class="hover:underline">{{ task.document.title }}</a>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {{ task.get_priority_badge }}">{{ task.get_priority_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {{ task.get_task_type_badge }}">{{ task.get_task_type_display }}</span>
+                        </td>
+                        <td class="text-sm">
+                            {% if task.due_date %}
+                            <span class="{% if task.is_overdue %}text-red-600 font-semibold{% else %}text-slate-700{% endif %}">
+                                {{ task.due_date|date:"M d, Y" }}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400">None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ task.get_status_badge }}">{{ task.effective_status|title }}</span>
+                        </td>
+                        <td class="text-right">
+                            <a href="{% url 'documents:document_task_detail' task.pk %}" class="btn btn-sm btn-outline">
+                                <i data-lucide="eye"></i>
+                                <span>View</span>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state py-8">
+                                <i data-lucide="check-square" class="empty-icon"></i>
+                                <h3>All Caught Up!</h3>
+                                <p>You have no pending action items or document review tasks.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% elif active_tab == 'activity' %}
+        <!-- Tab 4: Live Activity Feed -->
+        <div class="p-4 space-y-4">
+            {% for act in activity_feed %}
+            <div class="flex items-start gap-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors">
+                <div class="mt-0.5">
+                    <span class="badge {{ act.get_action_type_badge }}">{{ act.get_action_type_display }}</span>
+                </div>
+                <div class="flex-1">
+                    <p class="text-sm text-slate-900 font-medium">{{ act.summary }}</p>
+                    <div class="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                        <span>Document: <a href="{% url 'documents:document_detail' act.document.pk %}" class="text-blue-600 hover:underline">{{ act.document.title }}</a></span>
+                        <span>&bull;</span>
+                        <span>By {{ act.actor_display_name }}</span>
+                        <span>&bull;</span>
+                        <span>{{ act.created_at|date:"M d, H:i" }}</span>
+                    </div>
+                </div>
+                <div>
+                    <a href="{% url 'documents:document_activity_detail' act.pk %}" class="btn btn-sm btn-outline">
+                        <i data-lucide="eye"></i>
+                    </a>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state py-8">
+                <i data-lucide="activity" class="empty-icon"></i>
+                <h3>No Recent Activity</h3>
+                <p>Collaborator updates and document events will stream here.</p>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
