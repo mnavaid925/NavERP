@@ -484,7 +484,7 @@ def org_unit_a(db, tenant_a):
     return OrgUnit.objects.create(
         tenant=tenant_a,
         name="Engineering Dept",
-        code="ENG-DEPT",
+        kind="department",
     )
 
 
