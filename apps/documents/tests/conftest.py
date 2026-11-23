@@ -25,6 +25,11 @@ from apps.documents.models.SearchDiscovery.DocumentSavedSearches import Document
 from apps.documents.models.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlert
 from apps.documents.models.SearchDiscovery.DocumentSearchSynonyms import DocumentSearchSynonym
 from apps.documents.models.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLog
+from apps.documents.models.CollaborationSharing.DocumentShares import DocumentShare
+from apps.documents.models.CollaborationSharing.CoauthorSessions import CoauthorSession
+from apps.documents.models.CollaborationSharing.DocumentTasks import DocumentTask
+from apps.documents.models.CollaborationSharing.DocumentActivities import DocumentActivity
+from apps.core.models import OrgUnit
 
 
 
@@ -466,6 +471,98 @@ def document_search_query_log(db, tenant_a, admin_user):
         execution_time_ms=45.2,
         user=admin_user,
     )
+
+
+@pytest.fixture
+def org_unit_a(db, tenant_a):
+    """Fixture providing an OrgUnit in tenant_a."""
+    return OrgUnit.objects.create(
+        tenant=tenant_a,
+        name="Engineering Dept",
+        code="ENG-DEPT",
+    )
+
+
+@pytest.fixture
+def document_share(db, tenant_a, admin_user, member_user, document, document_version):
+    """Fixture providing an active internal DocumentShare in tenant_a."""
+    return DocumentShare.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        share_type="internal_user",
+        access_level="view",
+        shared_by=admin_user,
+        shared_with_user=member_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def public_document_share(db, tenant_a, admin_user, document, document_version):
+    """Fixture providing a public link DocumentShare in tenant_a."""
+    share = DocumentShare.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        share_type="public_link",
+        access_level="download",
+        shared_by=admin_user,
+        is_active=True,
+        require_password=True,
+        allow_download=True,
+    )
+    share.set_password("Secret123!")
+    share.save()
+    return share
+
+
+@pytest.fixture
+def coauthor_session(db, tenant_a, admin_user, document, document_version):
+    """Fixture providing an active CoauthorSession in tenant_a."""
+    return CoauthorSession.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        user=admin_user,
+        client_id="client-test-session-123",
+        status="active",
+        color_code="#3B82F6",
+        cursor_position_json={"line": 1, "column": 5},
+    )
+
+
+@pytest.fixture
+def document_task(db, tenant_a, admin_user, member_user, document, document_version):
+    """Fixture providing an assigned DocumentTask in tenant_a."""
+    return DocumentTask.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        title="Review Section 3 Technical Specs",
+        description="Verify compliance with ISO standard.",
+        task_type="review",
+        priority="high",
+        status="pending",
+        assigned_by=admin_user,
+        assigned_to=member_user,
+    )
+
+
+@pytest.fixture
+def document_activity(db, tenant_a, admin_user, member_user, document):
+    """Fixture providing a DocumentActivity notification in tenant_a."""
+    return DocumentActivity.objects.create(
+        tenant=tenant_a,
+        document=document,
+        actor=admin_user,
+        target_user=member_user,
+        action_type="task_assigned",
+        title="New Task Assigned",
+        description="Admin assigned task Review Section 3 to you.",
+        is_read=False,
+    )
+
 
 
 
