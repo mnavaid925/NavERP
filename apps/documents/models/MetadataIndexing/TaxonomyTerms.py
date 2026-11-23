@@ -1,8 +1,11 @@
 import json
+import logging
 from django.conf import settings
 from django.db import models
 
 from apps.documents.models._base import TenantNumbered
+
+logger = logging.getLogger(__name__)
 
 
 class TaxonomyTerm(TenantNumbered):
@@ -97,8 +100,11 @@ class TaxonomyTerm(TenantNumbered):
 
     @property
     def parsed_synonyms(self):
+        if not self.synonyms_json:
+            return []
         try:
             val = json.loads(self.synonyms_json)
             return val if isinstance(val, list) else []
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as exc:
+            logger.warning("Failed to parse synonyms_json for taxonomy term %s: %s", self.pk, exc)
             return []
