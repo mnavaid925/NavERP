@@ -100,6 +100,7 @@
                 <h2 class="text-base font-semibold text-slate-800">Security Officer Resolution</h2>
             </div>
             <div class="card-body">
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
                 <form method="post" action="{% url 'documents:dlp_incident_resolve' incident.pk %}" class="space-y-4">
                     {% csrf_token %}
                     <div class="form-group mb-0">
@@ -115,6 +116,9 @@
                         <span>Save Triage Determination</span>
                     </button>
                 </form>
+                {% else %}
+                <p class="text-sm text-slate-500">Administrator access required to resolve or triage security incidents.</p>
+                {% endif %}
 
                 {% if incident.resolved_by %}
                 <hr class="border-slate-200 my-4">
