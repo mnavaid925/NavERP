@@ -241,8 +241,9 @@ def permission_simulate(request):
             now = timezone.now()
 
             q_rule = Q(document=target_document)
-            if target_document.folder_id:
-                q_rule |= Q(folder_id=target_document.folder_id)
+            folder_id = getattr(target_document, "folder_id", None)
+            if folder_id:
+                q_rule |= Q(folder_id=folder_id)
 
             rules = DocumentAccessPermission.objects.filter(
                 tenant=request.tenant,
