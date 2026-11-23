@@ -29,6 +29,11 @@ from apps.documents.models.CollaborationSharing.DocumentShares import DocumentSh
 from apps.documents.models.CollaborationSharing.CoauthorSessions import CoauthorSession
 from apps.documents.models.CollaborationSharing.DocumentTasks import DocumentTask
 from apps.documents.models.CollaborationSharing.DocumentActivities import DocumentActivity
+from apps.documents.models.SecurityAccessControl.DocumentAccessPermissions import DocumentAccessPermission
+from apps.documents.models.SecurityAccessControl.WatermarkPolicies import WatermarkPolicy
+from apps.documents.models.SecurityAccessControl.DocumentDrmPolicies import DocumentDrmPolicy
+from apps.documents.models.SecurityAccessControl.DlpPolicies import DlpPolicy
+from apps.documents.models.SecurityAccessControl.DlpIncidents import DlpIncident
 from apps.core.models import OrgUnit
 
 
@@ -562,6 +567,112 @@ def document_activity(db, tenant_a, admin_user, member_user, document):
         description="Admin assigned task Review Section 3 to you.",
         is_read=False,
     )
+
+
+# --- Sub-module 13.7: Security & Access Control Fixtures ---
+
+@pytest.fixture
+def document_permission(db, tenant_a, admin_user, member_user, document):
+    """Fixture providing an active user DocumentAccessPermission in tenant_a."""
+    return DocumentAccessPermission.objects.create(
+        tenant=tenant_a,
+        document=document,
+        grantee_type="user",
+        user=member_user,
+        permission_level="editor",
+        can_read=True,
+        can_write=True,
+        can_delete=False,
+        can_download=True,
+        can_print=True,
+        can_share=False,
+        is_active=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def watermark_policy(db, tenant_a, admin_user):
+    """Fixture providing an active WatermarkPolicy in tenant_a."""
+    return WatermarkPolicy.objects.create(
+        tenant=tenant_a,
+        name="Confidential Overlay Policy",
+        slug="confidential-overlay-policy",
+        classification="confidential",
+        document_type="all",
+        watermark_text="{{classification}} | {{user_email}} | {{ip_address}}",
+        secondary_text="PROPRIETARY & CONFIDENTIAL",
+        position="diagonal",
+        rotation_angle=-45,
+        opacity_percent=25,
+        font_size=32,
+        font_color="#EF4444",
+        priority=10,
+        enforce_on_view=True,
+        enforce_on_download=True,
+        enforce_on_print=True,
+        is_active=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def drm_policy(db, tenant_a, admin_user, document):
+    """Fixture providing an active DocumentDrmPolicy in tenant_a."""
+    return DocumentDrmPolicy.objects.create(
+        tenant=tenant_a,
+        name="Executive NDA DRM Shield",
+        slug="executive-nda-drm-shield",
+        classification="restricted",
+        target_document=document,
+        allow_print=False,
+        allow_copy_paste=False,
+        screen_shield_enabled=True,
+        secure_viewer_required=True,
+        require_watermark=True,
+        expiry_days=30,
+        max_offline_hours=0,
+        encryption_standard="aes_256_gcm",
+        is_active=True,
+        is_revoked=False,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def dlp_policy(db, tenant_a, admin_user):
+    """Fixture providing an active DlpPolicy with built-in pattern in tenant_a."""
+    return DlpPolicy.objects.create(
+        tenant=tenant_a,
+        name="PCI-DSS Card Number Shield",
+        slug="pci-dss-card-number-shield",
+        rule_type="pci_credit_card",
+        action="block_and_alert",
+        severity="critical",
+        apply_to_all_types=True,
+        notify_security_officer=True,
+        notification_email="security@acme.com",
+        is_active=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def dlp_incident(db, tenant_a, member_user, document, dlp_policy):
+    """Fixture providing an open DlpIncident in tenant_a."""
+    return DlpIncident.objects.create(
+        tenant=tenant_a,
+        policy=dlp_policy,
+        document=document,
+        triggered_by=member_user,
+        incident_type="pci_violation",
+        action_taken="block_and_alert",
+        severity="critical",
+        snippet_masked="4111-****-****-1111",
+        context_notes="Detected unmasked Visa card in document draft upload.",
+        resolution_status="open",
+    )
+
 
 
 
