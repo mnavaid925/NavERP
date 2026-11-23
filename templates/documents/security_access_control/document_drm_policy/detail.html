@@ -30,6 +30,7 @@
             <i data-lucide="arrow-left"></i>
             <span>Back to Policies</span>
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         {% if not policy.is_revoked %}
         <button type="button" onclick="document.getElementById('kill_switch_modal').classList.remove('hidden')" class="btn btn-danger">
             <i data-lucide="alert-octagon"></i>
@@ -39,6 +40,7 @@
             <i data-lucide="pencil"></i>
             <span>Edit Policy</span>
         </a>
+        {% endif %}
         {% endif %}
     </div>
 </div>
@@ -204,6 +206,7 @@
 </div>
 
 <!-- Kill Switch Confirmation Modal -->
+{% if request.user.is_superuser or request.user.is_tenant_admin %}
 <div id="kill_switch_modal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-red-200">
         <div class="flex items-center gap-3 text-red-600 mb-3">
@@ -227,4 +230,5 @@
         </form>
     </div>
 </div>
+{% endif %}
 {% endblock %}
