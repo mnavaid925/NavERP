@@ -140,7 +140,11 @@ def document_ocr_job_process(request, pk):
     Execute heuristic OCR text extraction and AI classification on the target document.
     """
     tenant = request.tenant
-    job = get_object_or_404(DocumentOcrJob, pk=pk, tenant=tenant)
+    job = get_object_or_404(
+        DocumentOcrJob.objects.select_related("document", "version"),
+        pk=pk,
+        tenant=tenant,
+    )
 
     # Heuristic text extraction simulation based on document details
     doc = job.document
@@ -190,7 +194,11 @@ def document_ocr_job_apply(request, pk):
     Commit the extracted OCR text and suggested tags to the document master record.
     """
     tenant = request.tenant
-    job = get_object_or_404(DocumentOcrJob, pk=pk, tenant=tenant)
+    job = get_object_or_404(
+        DocumentOcrJob.objects.select_related("document__locked_by", "version"),
+        pk=pk,
+        tenant=tenant,
+    )
 
     if job.status != "completed":
         messages.error(request, f"Cannot apply OCR job {job.number} with status '{job.get_status_display()}'. Only completed jobs can be applied.")
