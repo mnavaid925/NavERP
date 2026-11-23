@@ -25,6 +25,21 @@ from apps.documents.urls.DocumentAuthoring.DraftCollaborations import (
 from apps.documents.urls.DocumentAuthoring.TemplateSections import (
     urlpatterns as template_sections_urls,
 )
+from apps.documents.urls.MetadataIndexing.DocumentMetadataValues import (
+    urlpatterns as metadata_values_urls,
+)
+from apps.documents.urls.MetadataIndexing.DocumentOcrJobs import (
+    urlpatterns as document_ocr_jobs_urls,
+)
+from apps.documents.urls.MetadataIndexing.MetadataIndexingDashboard import (
+    urlpatterns as metadata_indexing_dashboard_urls,
+)
+from apps.documents.urls.MetadataIndexing.MetadataSchemas import (
+    urlpatterns as metadata_schemas_urls,
+)
+from apps.documents.urls.MetadataIndexing.TaxonomyTerms import (
+    urlpatterns as taxonomy_terms_urls,
+)
 from apps.documents.urls.StorageRepository.DocumentBatchImports import (
     urlpatterns as document_batch_imports_urls,
 )
@@ -74,4 +89,9 @@ urlpatterns = (
     + storage_volumes_urls
     + document_relationships_urls
     + document_batch_imports_urls
+    + metadata_indexing_dashboard_urls
+    + metadata_schemas_urls
+    + metadata_values_urls
+    + taxonomy_terms_urls
+    + document_ocr_jobs_urls
 )
