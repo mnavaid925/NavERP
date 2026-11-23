@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}DLP Policy: {{ policy.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:dlp_policy_list' %}">DLP Policies</a>
+            <span>/</span>
+            <span>{{ policy.name }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ policy.name }}</h1>
+            <span class="badge {{ policy.severity_badge }}">{{ policy.get_severity_display }} Severity</span>
+            <span class="badge {{ policy.action_badge }}">{{ policy.get_action_display }}</span>
+            {% if policy.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-slate">Disabled</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:dlp_policy_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Policies</span>
+        </a>
+        <a href="{% url 'documents:dlp_policy_edit' policy.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Policy</span>
+        </a>
+        <form method="post" action="{% url 'documents:dlp_policy_delete' policy.pk %}" class="inline" onsubmit="return confirm('Delete DLP policy {{ policy.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Rule Specifications -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Inspection Pattern Specifications</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Rule Type</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.get_rule_type_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Built-in Pattern Target</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.get_built_in_pattern_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Custom Regular Expression</dt>
+                        <dd class="font-mono text-xs text-slate-800">
+                            {% if policy.custom_regex %}
+                            <code>{{ policy.custom_regex }}</code>
+                            {% else %}
+                            <span class="text-slate-400">None</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Sensitive Keywords</dt>
+                        <dd>
+                            {% if policy.sensitive_keywords %}
+                            <div class="flex flex-wrap gap-1">
+                                {% for kw in policy.sensitive_keywords %}
+                                <span class="px-2 py-0.5 bg-slate-100 rounded text-xs text-slate-700 font-medium">{{ kw }}</span>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="text-slate-400">None</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Match Threshold</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.match_threshold }} occurrence(s) required to trigger violation</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Automated Action</dt>
+                        <dd><span class="badge {{ policy.action_badge }}">{{ policy.get_action_display }}</span></dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Recent Incidents Triggered -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">Recent Triggered Incidents ({{ incidents|length }})</h2>
+                <a href="{% url 'documents:dlp_incident_list' %}?policy={{ policy.pk }}" class="text-xs text-primary-600 hover:underline">View All Incidents &rarr;</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Incident #</th>
+                            <th>Target Document</th>
+                            <th>Triggered By</th>
+                            <th>Action Taken</th>
+                            <th>Status</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inc in incidents %}
+                        <tr>
+                            <td class="font-medium text-slate-900">
+                                <a href="{% url 'documents:dlp_incident_detail' inc.pk %}" class="text-primary-600 hover:underline">
+                                    {{ inc.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{% url 'documents:document_detail' inc.document.pk %}" class="hover:underline text-slate-700 truncate max-w-xs block">
+                                    {{ inc.document.title }}
+                                </a>
+                            </td>
+                            <td class="text-xs text-slate-600">
+                                {{ inc.triggered_by.get_full_name|default:inc.triggered_by.username }}
+                            </td>
+                            <td>
+                                <span class="badge {{ inc.action_badge }}">{{ inc.get_action_taken_display }}</span>
+                            </td>
+                            <td>
+                                <span class="badge {{ inc.resolution_badge }}">{{ inc.get_resolution_status_display }}</span>
+                            </td>
+                            <td class="text-xs text-slate-500">
+                                {{ inc.created_at|date:"M d, Y H:i" }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-6 text-sm text-slate-400">
+                                No violations recorded for this policy yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Telemetry & Notification Sidebar -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Notifications & Alerting</h2>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-slate-500">Notify Security Officer</dt>
+                        <dd class="font-medium text-slate-900">{% if policy.notify_security_officer %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-slate">Disabled</span>{% endif %}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Alert Email</dt>
+                        <dd class="font-mono text-xs text-slate-800">{{ policy.notification_email|default:"Tenant Security Lead Default" }}</dd>
+                    </div>
+                    <hr class="border-slate-100">
+                    <div>
+                        <dt class="text-slate-500">Total Violations Detected</dt>
+                        <dd class="font-bold text-lg text-slate-900">{{ policy.incident_count }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Last Triggered</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.last_triggered_at|date:"M d, Y H:i"|default:"Never" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Created By</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.created_by.get_full_name|default:policy.created_by.username }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
