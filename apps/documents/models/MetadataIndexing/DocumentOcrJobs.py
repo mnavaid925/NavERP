@@ -98,6 +98,7 @@ class DocumentOcrJob(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status", "created_at"], name="doc_docr_tnt_sta_dt_idx"),
             models.Index(fields=["tenant", "document", "status"], name="doc_docr_tnt_doc_sta_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="doc_docr_tnt_crat_desc_idx"),
         ]
 
     def __str__(self):
