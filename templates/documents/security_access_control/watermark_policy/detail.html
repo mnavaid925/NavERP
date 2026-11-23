@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Policy {{ policy.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:watermark_list' %}">Watermark Policies</a>
+            <span>/</span>
+            <span>{{ policy.name }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ policy.name }}</h1>
+            <span class="badge {{ policy.classification_badge }}">{{ policy.get_classification_display }}</span>
+            {% if policy.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-slate">Disabled</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:watermark_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Policies</span>
+        </a>
+        <a href="{% url 'documents:watermark_preview' %}?policy_id={{ policy.pk }}" class="btn btn-outline">
+            <i data-lucide="sparkles"></i>
+            <span>Live Preview</span>
+        </a>
+        <a href="{% url 'documents:watermark_edit' policy.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'documents:watermark_delete' policy.pk %}" class="inline" onsubmit="return confirm('Delete watermark policy {{ policy.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Pattern & Visual Preview -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Dynamic Watermark Rendering</h2>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Pattern Template</div>
+                    <code class="px-2 py-1 bg-slate-100 rounded text-sm font-mono text-slate-800">{{ policy.watermark_text }}</code>
+                </div>
+
+                <!-- Live Document Simulation Box -->
+                <div class="relative w-full h-64 border border-slate-300 rounded-lg bg-white overflow-hidden shadow-inner p-6 select-none">
+                    <!-- Classification Banner -->
+                    {% if policy.show_classification_banner %}
+                    <div class="absolute top-0 left-0 right-0 py-1 bg-slate-800 text-white text-center text-xs font-bold uppercase tracking-widest">
+                        *** {{ policy.get_classification_display }} — PROPRIETARY NAVERP RECORD ***
+                    </div>
+                    {% endif %}
+
+                    <!-- Mock text content in background -->
+                    <div class="space-y-2 opacity-30 text-xs text-slate-500">
+                        <div class="h-3 bg-slate-400 rounded w-3/4"></div>
+                        <div class="h-3 bg-slate-300 rounded w-full"></div>
+                        <div class="h-3 bg-slate-300 rounded w-5/6"></div>
+                        <div class="h-3 bg-slate-300 rounded w-4/5"></div>
+                        <div class="h-3 bg-slate-300 rounded w-full"></div>
+                    </div>
+
+                    <!-- Watermark Overlay -->
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none" style="transform: rotate({{ policy.rotation_angle }}deg);">
+                        <div class="font-bold tracking-wider text-center" style="opacity: {{ policy.opacity_percent }}%; font-size: {{ policy.font_size }}px; color: {{ policy.font_color }};">
+                            {{ sample_watermark_text }}
+                        </div>
+                    </div>
+
+                    {% if policy.secondary_text %}
+                    <div class="absolute bottom-2 left-0 right-0 text-center text-[10px] text-slate-400">
+                        {{ policy.secondary_text }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Settings -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Visual & Layout Specifications</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Target Classification</dt>
+                        <dd><span class="badge {{ policy.classification_badge }}">{{ policy.get_classification_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Document Type Filter</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.document_type }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Layout Position</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.get_position_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Opacity & Font</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.opacity_percent }}% opacity, {{ policy.font_size }}pt ({{ policy.font_color }})</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Rotation Angle</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.rotation_angle }} degrees</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Classification Banner</dt>
+                        <dd>
+                            {% if policy.show_classification_banner %}
+                            <span class="badge badge-info">Banner Enabled ({{ policy.get_banner_position_display }})</span>
+                            {% else %}
+                            <span class="badge badge-slate">Disabled</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enforcement & Lifecycle -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Enforcement Gates</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <div class="flex items-center justify-between text-sm py-1 border-b border-slate-100">
+                    <span class="text-slate-600">Web Viewer Preview</span>
+                    {% if policy.enforce_on_view %}<span class="badge badge-green">Enforced</span>{% else %}<span class="badge badge-slate">Skipped</span>{% endif %}
+                </div>
+                <div class="flex items-center justify-between text-sm py-1 border-b border-slate-100">
+                    <span class="text-slate-600">Physical Download (PDF)</span>
+                    {% if policy.enforce_on_download %}<span class="badge badge-green">Enforced</span>{% else %}<span class="badge badge-slate">Skipped</span>{% endif %}
+                </div>
+                <div class="flex items-center justify-between text-sm py-1">
+                    <span class="text-slate-600">Print Renditions</span>
+                    {% if policy.enforce_on_print %}<span class="badge badge-green">Enforced</span>{% else %}<span class="badge badge-slate">Skipped</span>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Policy Metadata</h2>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-slate-500">Evaluation Priority</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.priority }} (Lower executes first)</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Created By</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.created_by.get_full_name|default:policy.created_by.username }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Created At</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Last Modified</dt>
+                        <dd class="font-medium text-slate-900">{{ policy.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
