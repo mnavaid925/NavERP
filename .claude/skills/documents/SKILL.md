@@ -1,6 +1,6 @@
 ---
 name: documents
-description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6), or invokes /documents.
+description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics) + 13.8 Collaboration & Sharing (DocumentShare[DSHR-], CoauthorSession[DCOA-], DocumentTask[DTSK-], DocumentActivity[DACT-], unified CollaborationHub, guest passcode challenge, presence telemetry & heartbeats, task action tracking, in-app notification inbox). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6/13.8), or invokes /documents.
 ---
 
 # Document Management System (DMS) (Module 13)
@@ -8,7 +8,7 @@ description: Work on the Document Management System (DMS) module (Module 13 — 
 App path: `apps/documents`. Templates: `templates/documents/`. URL prefix: `/documents/`, `app_name = "documents"`.
 Mirrors `NavERP.md` "## 13. Document Management System (DMS)" (Sub-modules 13.1–13.20).
 
-**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery.**
+**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery + 13.8 Collaboration & Sharing.**
 Build the next sub-module with `/next-module next` — see `apps/quality`/`apps/procurement` for reference package layout and the mandatory Module Creation Sequence.
 
 ---
@@ -22,6 +22,7 @@ Module 13 provides an enterprise document repository, authoring workspace, revis
 - **13.4 Document Storage & Repository**: Hierarchical taxonomic folder trees and smart virtual query filters (`DocumentFolder`), physical and cloud tiered storage targets with quota enforcement (`StorageVolume`), multi-type document dependency and reference network graphs (`DocumentRelationship`), streaming bulk zip ingestion with archive safety thresholds (`DocumentBatchImport`), and repository command center (`repository_dashboard.html`).
 - **13.5 Metadata & Indexing**: Flexible enterprise metadata schema definitions with inheritance cascade policies (`MetadataSchema`), polymorphic key-value document and revision property storage (`DocumentMetadataValue`), hierarchical controlled vocabularies and multilingual thesauri (`TaxonomyTerm`), automated OCR text extraction pipeline with confidence metrics and tag extraction (`DocumentOcrJob`), and metadata analytics command center (`metadata_indexing_dashboard.html`).
 - **13.6 Search & Discovery**: Multi-faceted omni-search console (`SearchHub`), natural language search filter chip parsing (`type:`, `status:`), synonym dictionary expansion (`DocumentSearchSynonym`), saved search queries and visibility scopes (`DocumentSavedSearch`), automated notification monitors (`DocumentSearchAlert`), and organization-wide search telemetry and query gap analytics (`DocumentSearchQueryLog`).
+- **13.8 Collaboration & Sharing**: Link-based and targeted document sharing (`DocumentShare`), real-time co-author presence telemetry and cursor positions (`CoauthorSession`), workflow action item assignment and completion tracking (`DocumentTask`), granular audit feeds and targeted notification inbox (`DocumentActivity`), unified multi-tab collaboration cockpit (`collaboration_hub.html`), and secure public guest preview portal (`public_share_preview.html`).
 
 ---
 
@@ -224,6 +225,45 @@ Shared base in `models/_base.py`:
   - Helper properties: `parsed_filters`, `parsed_filters_applied`, `get_filters_dict`.
   - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, is_zero_result, -created_at)`, `(tenant, user, -created_at)`, `(tenant, query_text)`.
 
+### 13.8 CollaborationSharing (`apps/documents/models/CollaborationSharing/`)
+
+- **`DocumentShares.py`** — `DocumentShare` (`NUMBER_PREFIX = "DSHR"`):
+  - `document` (FK `Document`), `folder` (FK `DocumentFolder`, nullable), `version` (FK `DocumentVersion`, nullable).
+  - `share_type`: internal_user, internal_dept, external_email, public_link.
+  - `access_level`: view, comment, edit, download.
+  - `shared_by` (FK `settings.AUTH_USER_MODEL`), `shared_with_user` (FK `settings.AUTH_USER_MODEL`, `related_name="dms_received_document_shares"`), `shared_with_email`, `shared_with_org_unit` (FK `core.OrgUnit`).
+  - `share_token` (cryptographic URL token), `require_password`, `password_hash` (PBKDF2/Argon2), `allow_download`.
+  - `expires_at`, `max_uses`, `access_count`, `last_accessed_at`, `is_active`, `revoked_at`, `revoked_by`.
+  - Properties & Helpers: `is_expired`, `is_exhausted`, `is_usable`, `status_label`, `status_badge`, `set_password()`, `check_password()`, `record_access()`, `revoke()`.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `share_token`, indexes on `(tenant, is_active)`, `(tenant, document)`, `(tenant, shared_by)`, `(tenant, shared_with_user)`.
+
+- **`CoauthorSessions.py`** — `CoauthorSession` (`NUMBER_PREFIX = "DCOA"`):
+  - `document` (FK `Document`), `version` (FK `DocumentVersion`, nullable), `draft` (FK `DocumentDraft`, nullable).
+  - `user` (FK `settings.AUTH_USER_MODEL`, nullable), `guest_name`, `client_id`, `session_token`.
+  - `status`: active, idle, disconnected.
+  - `color_code` (Hex color with RegexValidator `^#[0-9A-Fa-f]{6}$`), `cursor_position_json`, `current_section_anchor`, `is_typing`.
+  - `client_ip`, `user_agent`, `joined_at`, `last_heartbeat`, `disconnected_at`.
+  - Properties & Helpers: `display_name`, `is_stale`, `is_timed_out`, `status_badge`, `touch_heartbeat()`, `mark_disconnected()`.
+  - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, document, status)`, `(tenant, user)`, `(tenant, last_heartbeat)`, `(tenant, status)`.
+
+- **`DocumentTasks.py`** — `DocumentTask` (`NUMBER_PREFIX = "DTSK"`):
+  - `document` (FK `Document`), `version` (FK `DocumentVersion`, nullable), `review_comment` (FK `DocumentReviewComment`, nullable).
+  - `title`, `description`, `task_type` (review, revise, approve, sign, translate, verify, other), `priority` (low, medium, high, urgent).
+  - `status`: pending, in_progress, completed, cancelled, overdue.
+  - `assigned_to` (FK `settings.AUTH_USER_MODEL`, nullable), `assigned_org_unit` (FK `core.OrgUnit`, nullable), `assigned_by` (FK `settings.AUTH_USER_MODEL`).
+  - `due_date`, `reminder_date`, `reminder_sent`, `completed_at`, `completed_by`, `completion_notes`.
+  - Properties & Helpers: `is_overdue`, `effective_status`, `priority_badge`, `status_badge`, `complete()`, `reopen()`.
+  - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, status)`, `(tenant, assigned_to, status)`, `(tenant, document)`, `(tenant, due_date)`.
+
+- **`DocumentActivities.py`** — `DocumentActivity` (`NUMBER_PREFIX = "DACT"`):
+  - `document` (FK `Document`), `share` (FK `DocumentShare`, nullable), `task` (FK `DocumentTask`, nullable), `session` (FK `CoauthorSession`, nullable).
+  - `actor` (FK `settings.AUTH_USER_MODEL`, nullable), `guest_name`, `target_user` (FK `settings.AUTH_USER_MODEL`, nullable).
+  - `action_type`: document_shared, share_revoked, link_accessed, file_downloaded, coauthor_joined, coauthor_left, coauthor_edit, task_assigned, task_completed, task_reopened, comment_added.
+  - `title`, `description`, `details_json`, `notification_channel` (in_app, email_digest, none), `is_read`, `read_at`.
+  - Properties & Helpers: `actor_display_name`, `badge_class`, `mark_as_read()`.
+  - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, document, -created_at)`, `(tenant, target_user, is_read)`, `(tenant, created_at)`.
+
+
 
 ---
 
@@ -347,6 +387,24 @@ Registered under namespace `documents:`:
 - `/documents/search-query-logs/`: `document_search_query_log_list` (`@tenant_admin_required`), `<int:pk>/` (`@tenant_admin_required`), `<int:pk>/delete/` (POST-only, `@tenant_admin_required`)
 - `/documents/search-analytics/`: `document_search_analytics` (`@tenant_admin_required`)
 
+### 13.8 Collaboration & Sharing Routes
+- `/documents/collaboration/`: `collaboration_hub` (unified multi-tab cockpit with tabs: shared_with_me, shared_by_me, my_tasks, activity)
+- `/documents/shares/`: `document_share_list`, `document_share_create`
+- `/documents/shares/<int:pk>/`: `document_share_detail`, `document_share_edit`, `document_share_delete` (POST-only)
+- `/documents/shares/<int:pk>/revoke/`: `document_share_revoke` (POST-only)
+- `/documents/p/<str:share_token>/`: `public_share_preview` (guest portal with passcode challenge)
+- `/documents/p/<str:share_token>/download/`: `public_share_download` (gated attachment download)
+- `/documents/sessions/`: `coauthor_session_list`, `coauthor_session_create`
+- `/documents/sessions/<int:pk>/`: `coauthor_session_detail`, `coauthor_session_edit`, `coauthor_session_delete` (POST-only)
+- `/documents/sessions/<int:pk>/heartbeat/`: `coauthor_session_heartbeat` (AJAX POST heartbeat & presence API)
+- `/documents/tasks/`: `document_task_list`, `document_task_create`
+- `/documents/tasks/<int:pk>/`: `document_task_detail`, `document_task_edit`, `document_task_delete` (POST-only)
+- `/documents/tasks/<int:pk>/toggle-complete/`: `document_task_toggle_complete` (POST-only bidirectional toggle)
+- `/documents/activities/`: `document_activity_list`
+- `/documents/activities/mark-all-read/`: `document_activity_mark_all_read` (POST-only bulk mark read)
+- `/documents/activities/<int:pk>/`: `document_activity_detail` (auto-marks read)
+- `/documents/activities/<int:pk>/mark-read/`: `document_activity_mark_read` (POST-only)
+
 ---
 
 ## Templates
@@ -382,6 +440,13 @@ Located in:
   - `document_search_alert/`: `list.html`, `detail.html`, `form.html`
   - `document_search_synonym/`: `list.html`, `detail.html`, `form.html`
   - `document_search_query_log/`: `list.html`, `detail.html`, `analytics.html`
+- `templates/documents/collaboration_sharing/` (13.8 templates):
+  - `collaboration_hub.html`: Unified multi-tab collaboration workspace with live coauthor presence banner and KPI stats
+  - `document_share/`: `list.html`, `detail.html`, `form.html`
+  - `coauthor_session/`: `list.html`, `detail.html`, `form.html`
+  - `document_task/`: `list.html`, `detail.html`, `form.html`
+  - `document_activity/`: `list.html`, `detail.html`, `form.html`
+  - `public_share_preview.html`: Clean guest portal (`base_auth.html`), passcode challenge form, gated document preview & download
 
 
 ---
@@ -416,6 +481,10 @@ Supports `--flush` option to reset module data cleanly. Demo data seeds:
 21. Search Alerts (Daily, weekly, and instant email/in-app alert subscriptions).
 22. Search Synonyms (Bidirectional terms, domain expansions, acronym mappings).
 23. Search Query Logs (Telemetry logs, zero-result telemetry, click ranks).
+24. Document Shares (Internal user share with view access, Department share with download access, External email share, Public guest link with Argon2/PBKDF2 passcode challenge).
+25. Co-Authoring Sessions (Active session with presence color #3B82F6 and JSON cursor position, Idle session, Disconnected session with telemetry).
+26. Document Review & Action Tasks (Review clause compliance, Sign authorization, Revise security section, Translate SOP into French with due dates and priority badges).
+27. Collaborative Document Activities (Document shared, link accessed, guest download, coauthor joined, task assigned, task completed audit event stream).
 
 ---
 
@@ -462,6 +531,13 @@ LIVE_LINKS["13.6"] = {
     "Search Synonyms": "documents:document_search_synonym_list",
     "Search Query Logs": "documents:document_search_query_log_list",
 }
+LIVE_LINKS["13.8"] = {
+    "Collaboration Workspace": "documents:collaboration_hub",
+    "Shared Documents": "documents:document_share_list",
+    "Co-Authoring Sessions": "documents:coauthor_session_list",
+    "Document Tasks": "documents:document_task_list",
+    "Activity Feed & Alerts": "documents:document_activity_list",
+}
 ```
 
 ---
@@ -489,3 +565,8 @@ LIVE_LINKS["13.6"] = {
 19. **Search Telemetry & Session Token Pseudonymization**: Active Django session keys are never stored raw in `DocumentSearchQueryLog`. They are hashed via SHA-256 and redacted in detail views to prevent token harvesting.
 20. **Atomic Synonym Counter Increment**: Read-path searches matching active synonyms must not execute individual synchronous `.save()` calls in a loop. Matching synonym IDs are collected and bulk-updated atomically using `.update(hit_count=F("hit_count") + 1)`.
 21. **Distinct Facet Counting**: Aggregating document counts across facets (`doc_type`, `classification`, `status`) on querysets joined to `DocumentVersion` full-text layers MUST use `Count("id", distinct=True)` to prevent Cartesian product count multiplication.
+22. **Public Guest Preview Isolation**: `public_share_preview.html` strictly extends `"base_auth.html"` to provide a clean, isolated guest document viewer card without leaking internal ERP navigation (`partials/sidebar.html`, `partials/topbar.html`).
+23. **Public Token Gating & Post-Redirect-Get**: Access to public shares is gated by 32-byte cryptographic tokens (`share_token`). Passcode-protected shares authenticate via session tokens (`public_share_auth_<token>`) and use Post-Redirect-Get upon valid passcode submission to reliably record access telemetry without duplicate form submission risks.
+24. **Open Redirect Mitigation**: Quick-action toggles and read-mark handlers (`document_task_toggle_complete`, `document_activity_mark_read`) must validate any `HTTP_REFERER` against allowed request hosts using `django.utils.http.url_has_allowed_host_and_scheme()` before issuing redirects, safely falling back to canonical named routes.
+25. **Targeted Notification Privacy**: `document_activity_mark_read` strictly validates object ownership (`target_user=request.user`) to ensure tenant members cannot mark or manipulate private notifications intended for other users.
+26. **Cross-Record Foreign Key Integrity**: Form validation across `DocumentShareForm`, `CoauthorSessionForm`, and `DocumentTaskForm` verifies that child relations (`version`, `draft`, `review_comment`) strictly belong to the specified parent `Document`.
