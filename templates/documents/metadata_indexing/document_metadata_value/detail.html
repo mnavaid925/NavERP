@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ metadata_value.field_name }} — Property Detail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_indexing_dashboard' %}">Metadata & Indexing</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_value_list' %}">Properties</a>
+            <span>/</span>
+            <span>{{ metadata_value.field_name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ metadata_value.field_label|default:metadata_value.field_name }}</h1>
+            <span class="badge {{ metadata_value.data_type_badge }}">{{ metadata_value.get_data_type_display }}</span>
+            <span class="badge {{ metadata_value.validation_status_badge }}">{{ metadata_value.get_validation_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:metadata_value_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Values</span>
+        </a>
+        <form method="post" action="{% url 'documents:metadata_value_validate' metadata_value.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Re-run validation logic">
+                <i data-lucide="check-check"></i>
+                <span>Validate</span>
+            </button>
+        </form>
+        <a href="{% url 'documents:metadata_value_edit' metadata_value.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Value</span>
+        </a>
+        <form method="post" action="{% url 'documents:metadata_value_delete' metadata_value.pk %}" class="inline" onsubmit="return confirm('Delete this metadata property?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div class="card md:col-span-2">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title">Property Definition & Assignment</h2>
+            <span class="font-mono text-sm text-slate-500">{{ metadata_value.number }}</span>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Property Key</dt>
+                    <dd><span class="font-mono text-sm font-semibold bg-slate-100 text-slate-800 px-2.5 py-1 rounded">{{ metadata_value.field_name }}</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Associated Document</dt>
+                    <dd>
+                        <a href="{% url 'documents:document_detail' metadata_value.document.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ metadata_value.document.title }}
+                        </a>
+                        <span class="block text-xs text-slate-500 font-mono">{{ metadata_value.document.number }}</span>
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Version Scope</dt>
+                    <dd>
+                        {% if metadata_value.version %}
+                            <span class="font-mono text-xs text-slate-800 bg-slate-100 px-2 py-0.5 rounded">{{ metadata_value.version.number }} (v{{ metadata_value.version.version_string }})</span>
+                        {% else %}
+                            <span class="badge badge-info">Document-Level (All Versions)</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Metadata Schema</dt>
+                    <dd>
+                        {% if metadata_value.schema %}
+                            <a href="{% url 'documents:metadata_schema_detail' metadata_value.schema.pk %}" class="text-blue-600 hover:underline">
+                                {{ metadata_value.schema.name }}
+                            </a>
+                        {% else %}
+                            <span class="badge badge-slate">Ad-hoc Custom Field</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Provenance Source</dt>
+                    <dd>
+                        <span class="badge {{ metadata_value.source_badge }}">{{ metadata_value.get_source_display }}</span>
+                        {% if metadata_value.is_overridden %}
+                            <span class="badge badge-amber text-xs ml-1">Manual Override</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Data Type</dt>
+                    <dd><span class="badge {{ metadata_value.data_type_badge }}">{{ metadata_value.get_data_type_display }}</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Validation State</dt>
+                    <dd>
+                        <span class="badge {{ metadata_value.validation_status_badge }}">{{ metadata_value.get_validation_status_display }}</span>
+                        {% if metadata_value.last_validated_at %}
+                            <span class="text-xs text-slate-500 block mt-1">Checked on {{ metadata_value.last_validated_at|date:"Y-m-d H:i" }}</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Last Updated By</dt>
+                    <dd>
+                        {% if metadata_value.updated_by %}
+                            {{ metadata_value.updated_by.get_full_name|default:metadata_value.updated_by.username }}
+                        {% else %}
+                            System
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Current Stored Value Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Stored Value</h2>
+        </div>
+        <div class="card-body">
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 font-mono text-sm text-slate-900 break-words mb-4">
+                {{ metadata_value.display_value }}
+            </div>
+
+            {% if metadata_value.validation_error %}
+            <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700 mb-4">
+                <div class="font-semibold flex items-center gap-1 mb-1">
+                    <i data-lucide="alert-triangle"></i>
+                    <span>Validation Diagnostics</span>
+                </div>
+                <p>{{ metadata_value.validation_error }}</p>
+            </div>
+            {% endif %}
+
+            <div class="text-xs text-slate-500 space-y-1">
+                <p><strong>Created:</strong> {{ metadata_value.created_at|date:"Y-m-d H:i" }}</p>
+                <p><strong>Updated:</strong> {{ metadata_value.updated_at|date:"Y-m-d H:i" }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
