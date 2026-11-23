@@ -106,6 +106,7 @@ class CoauthorSession(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "session_token"], name="doc_dcoa_tnt_tok_idx"),
             models.Index(fields=["tenant", "last_heartbeat"], name="doc_dcoa_tnt_hbt_idx"),
+            models.Index(fields=["tenant", "status"], name="doc_dcoa_tnt_sts_idx"),
         ]
 
     def __str__(self):
