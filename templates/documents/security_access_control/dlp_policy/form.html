@@ -13,7 +13,7 @@
             <span>/</span>
             <span>{% if is_edit %}Edit Policy{% else %}New Policy{% endif %}</span>
         </div>
-        <h1 class="page-title">{% if is_edit %}Edit DLP Policy: {{ policy.name }}{% else %}Configure Data Loss Prevention Policy{% endif %}</h1>
+        <h1 class="page-title">{% if is_edit %}Edit DLP Policy: {{ policy.name }} ({{ policy.number }}){% else %}Configure Data Loss Prevention Policy{% endif %}</h1>
     </div>
     <div class="page-actions">
         <a href="{% if is_edit %}{% url 'documents:dlp_policy_detail' policy.pk %}{% else %}{% url 'documents:dlp_policy_list' %}{% endif %}" class="btn btn-outline">
