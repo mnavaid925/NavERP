@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
+from apps.core.models import Employment
 from apps.core.utils import write_audit_log
 from apps.documents.forms.SecurityAccessControl.DocumentAccessPermissions import DocumentAccessPermissionForm
 from apps.documents.models.SecurityAccessControl.DocumentAccessPermissions import DocumentAccessPermission
@@ -233,7 +234,13 @@ def permission_simulate(request):
             }
         else:
             # Evaluate ACLs
-            user_dept = getattr(target_user, "department", None)
+            target_party = getattr(target_user, "party", None)
+            emp = (
+                Employment.objects.filter(tenant=request.tenant, party=target_party).order_by("-id").first()
+                if target_party
+                else None
+            )
+            user_dept = emp.org_unit if emp else None
             now = timezone.now()
 
             q_rule = Q(document=target_document)
