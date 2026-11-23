@@ -84,7 +84,10 @@ def coauthor_session_create(request):
     if request.method == "POST":
         form = CoauthorSessionForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            session = form.save()
+            session = form.save(commit=False)
+            session.tenant = request.tenant
+            session.save()
+            form.save_m2m()
             write_audit_log(request.user, session, "create", tenant=request.tenant)
 
             DocumentActivity.objects.create(
