@@ -192,6 +192,16 @@ def document_ocr_job_apply(request, pk):
     tenant = request.tenant
     job = get_object_or_404(DocumentOcrJob, pk=pk, tenant=tenant)
 
+    if job.status != "completed":
+        messages.error(request, f"Cannot apply OCR job {job.number} with status '{job.get_status_display()}'. Only completed jobs can be applied.")
+        return redirect("documents:document_ocr_job_detail", pk=job.pk)
+
+    doc = job.document
+    if doc.is_locked and doc.locked_by != request.user and not request.user.is_superuser:
+        locked_by_str = getattr(doc.locked_by, "username", "another user")
+        messages.error(request, f"Document '{doc.number}' is currently checked out by {locked_by_str} and cannot be modified.")
+        return redirect("documents:document_ocr_job_detail", pk=job.pk)
+
     with transaction.atomic():
         if job.version and hasattr(job.version, "extracted_text"):
             job.version.extracted_text = job.extracted_full_text
