@@ -145,6 +145,12 @@ def metadata_schema_delete(request, pk):
     """
     tenant = request.tenant
     schema = get_object_or_404(MetadataSchema, pk=pk, tenant=tenant)
+
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    if not is_admin:
+        messages.error(request, f"Metadata Schema '{schema.name}' requires administrator authorization to delete.")
+        return redirect("documents:metadata_schema_detail", pk=schema.pk)
+
     name = schema.name
     with transaction.atomic():
         write_audit_log(request.user, schema, "delete", tenant=tenant)
