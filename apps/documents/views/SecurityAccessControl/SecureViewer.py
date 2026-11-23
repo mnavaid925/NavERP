@@ -66,8 +66,9 @@ def secure_viewer(request, pk=None):
 
             now = timezone.now()
             q_target = Q(document=document)
-            if document.folder_id:
-                q_target |= Q(folder_id=document.folder_id)
+            folder_id = getattr(document, "folder_id", None)
+            if folder_id:
+                q_target |= Q(folder_id=folder_id)
 
             has_read_permission = DocumentAccessPermission.objects.filter(
                 tenant=request.tenant,
