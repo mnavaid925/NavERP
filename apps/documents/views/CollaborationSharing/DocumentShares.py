@@ -153,9 +153,22 @@ def document_share_create(request):
     return render(request, "documents/collaboration_sharing/document_share/form.html", context)
 
 
+def _can_manage_share(user, share):
+    if getattr(user, "is_tenant_admin", False) or user.is_superuser:
+        return True
+    if share.shared_by_id == user.id:
+        return True
+    if share.document and getattr(share.document, "owner_id", None) == user.id:
+        return True
+    return False
+
+
 @login_required
 def document_share_edit(request, pk):
-    share = documents_object(request, DocumentShare, pk)
+    share = documents_object(request, DocumentShare, pk, select_related=["document"])
+    if not _can_manage_share(request.user, share):
+        messages.error(request, "You do not have permission to edit this document share.")
+        return redirect("documents:document_share_detail", pk=share.pk)
     if request.method == "POST":
         form = DocumentShareForm(request.POST, instance=share, tenant=request.tenant, user=request.user)
         if form.is_valid():
@@ -177,7 +190,10 @@ def document_share_edit(request, pk):
 @login_required
 @require_POST
 def document_share_delete(request, pk):
-    share = documents_object(request, DocumentShare, pk)
+    share = documents_object(request, DocumentShare, pk, select_related=["document"])
+    if not _can_manage_share(request.user, share):
+        messages.error(request, "You do not have permission to delete this document share.")
+        return redirect("documents:document_share_detail", pk=share.pk)
     share_number = share.number
     write_audit_log(request.user, share, "delete", tenant=request.tenant)
     share.delete()
@@ -188,7 +204,10 @@ def document_share_delete(request, pk):
 @login_required
 @require_POST
 def document_share_revoke(request, pk):
-    share = documents_object(request, DocumentShare, pk)
+    share = documents_object(request, DocumentShare, pk, select_related=["document"])
+    if not _can_manage_share(request.user, share):
+        messages.error(request, "You do not have permission to revoke this document share.")
+        return redirect("documents:document_share_detail", pk=share.pk)
     share.revoke(request.user)
     write_audit_log(request.user, share, "revoke", tenant=request.tenant)
 
