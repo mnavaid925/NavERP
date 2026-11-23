@@ -125,6 +125,7 @@ class DocumentSearchAlert(TenantNumbered):
         if not self.last_result_ids:
             return []
         try:
-            return json.loads(self.last_result_ids)
+            data = json.loads(self.last_result_ids)
+            return data if isinstance(data, list) else []
         except (ValueError, TypeError):
             return []
