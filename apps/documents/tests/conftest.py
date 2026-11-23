@@ -21,6 +21,10 @@ from apps.documents.models.MetadataIndexing.MetadataSchemas import MetadataSchem
 from apps.documents.models.MetadataIndexing.DocumentMetadataValues import DocumentMetadataValue
 from apps.documents.models.MetadataIndexing.TaxonomyTerms import TaxonomyTerm
 from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
+from apps.documents.models.SearchDiscovery.DocumentSavedSearches import DocumentSavedSearch
+from apps.documents.models.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlert
+from apps.documents.models.SearchDiscovery.DocumentSearchSynonyms import DocumentSearchSynonym
+from apps.documents.models.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLog
 
 
 
@@ -401,6 +405,66 @@ def document_ocr_job(db, tenant_a, admin_user, document, document_version):
         extracted_full_text="Agreement made between party A and party B for delivery of consulting services.",
         suggested_tags_json='["consulting", "agreement", "q4"]',
         created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def document_saved_search(db, tenant_a, admin_user):
+    """Fixture providing a baseline DocumentSavedSearch in tenant_a."""
+    return DocumentSavedSearch.objects.create(
+        tenant=tenant_a,
+        name="All Active Policies",
+        description="Filter for published policy documents",
+        query_text="policy",
+        filters_json={"document_type": "policy", "status": "published"},
+        facet_filters_json={"classification": ["internal"]},
+        sort_by="-updated_at",
+        visibility="public",
+        owner=admin_user,
+        is_pinned=True,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def document_search_alert(db, tenant_a, admin_user, document_saved_search):
+    """Fixture providing a baseline DocumentSearchAlert in tenant_a."""
+    return DocumentSearchAlert.objects.create(
+        tenant=tenant_a,
+        saved_search=document_saved_search,
+        subscriber=admin_user,
+        delivery_channel="in_app",
+        frequency="daily",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def document_search_synonym(db, tenant_a, admin_user):
+    """Fixture providing a baseline DocumentSearchSynonym in tenant_a."""
+    return DocumentSearchSynonym.objects.create(
+        tenant=tenant_a,
+        term="agreement",
+        synonyms_csv="contract, accord, deal",
+        category="domain_terms",
+        language="en",
+        is_bidirectional=True,
+        is_active=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def document_search_query_log(db, tenant_a, admin_user):
+    """Fixture providing a baseline DocumentSearchQueryLog in tenant_a."""
+    return DocumentSearchQueryLog.objects.create(
+        tenant=tenant_a,
+        query_text="safety procedures",
+        search_source="search_hub",
+        filters_applied_json={"status": "published"},
+        results_count=5,
+        execution_time_ms=45.2,
+        user=admin_user,
     )
 
 
