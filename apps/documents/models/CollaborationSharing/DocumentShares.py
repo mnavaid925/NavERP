@@ -163,6 +163,7 @@ class DocumentShare(TenantNumbered):
             models.Index(fields=["tenant", "share_token"], name="doc_dshr_tnt_tok_idx"),
             models.Index(fields=["tenant", "expires_at"], name="doc_dshr_tnt_exp_idx"),
             models.Index(fields=["tenant", "shared_by"], name="doc_dshr_tnt_usr_idx"),
+            models.Index(fields=["tenant", "shared_with_user"], name="doc_dshr_tnt_swu_idx"),
         ]
 
     def __str__(self):
