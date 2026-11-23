@@ -57,11 +57,27 @@ class DocumentMetadataValueForm(forms.ModelForm):
         cleaned_data = super().clean()
         doc = cleaned_data.get("document")
         if doc and self.tenant and doc.tenant != self.tenant:
-            raise ValidationError("Selected document does not belong to your organization.")
+            self.add_error("document", "Selected document does not belong to your organization.")
         ver = cleaned_data.get("version")
         if ver and doc and ver.document != doc:
-            raise ValidationError("Selected revision version does not belong to the selected document.")
+            self.add_error("version", "Selected revision version does not belong to the selected document.")
         schema = cleaned_data.get("schema")
         if schema and self.tenant and schema.tenant != self.tenant:
-            raise ValidationError("Selected metadata schema does not belong to your organization.")
+            self.add_error("schema", "Selected metadata schema does not belong to your organization.")
+
+        field_name = cleaned_data.get("field_name")
+        tenant = self.tenant or (self.instance.tenant if self.instance and hasattr(self.instance, "tenant") else None)
+        if doc and field_name and tenant:
+            qs = DocumentMetadataValue.objects.filter(
+                tenant=tenant,
+                document=doc,
+                version=ver,
+                field_name=field_name,
+            )
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                ver_str = f"revision '{ver}'" if ver else "document global level"
+                self.add_error("field_name", f"Metadata field '{field_name}' already exists for {ver_str}.")
+
         return cleaned_data
