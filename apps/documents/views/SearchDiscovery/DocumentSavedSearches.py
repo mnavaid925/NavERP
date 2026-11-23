@@ -5,6 +5,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -206,7 +207,7 @@ def document_saved_search_run(request, pk):
 
     query_params["saved_search_id"] = str(saved_search.pk)
     encoded = urllib.parse.urlencode(query_params)
-    return redirect(f"/documents/search/?{encoded}")
+    return redirect(f"{reverse('documents:search_hub')}?{encoded}")
 
 
 @login_required
