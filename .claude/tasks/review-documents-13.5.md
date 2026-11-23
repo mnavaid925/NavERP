@@ -177,5 +177,63 @@
   - *Detail*: Default ordering by `name` performs in-memory sort.
   - *Fix*: Add `models.Index(fields=["tenant", "name"], name="doc_dsch_tnt_name_idx")`.
 
+---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+- **`REV5-C1`**: Unhandled 500 error & sequence retry exhaustion on duplicate `(category, term_code)` (corroborates `REV1-C1`)
+  - *Location*: `apps/documents/forms/MetadataIndexing/TaxonomyTerms.py:51-63`, `models/MetadataIndexing/TaxonomyTerms.py:77`
+  - *Detail*: Field ordering causes `category` to be None during `clean_term_code()`, bypassing form validation. On `save()`, MySQL triggers `IntegrityError`, which `TenantNumbered.save()` misdiagnoses as a number allocation collision, retrying 5 times and crashing with 500.
+  - *Fix*: Move `(category, term_code)` uniqueness validation into `TaxonomyTermForm.clean()`.
+
+- **`REV5-C2`**: Unhandled 500 error on duplicate `(tenant, document, version, field_name)` when version is set (corroborates `REV1-I2`)
+  - *Location*: `apps/documents/forms/MetadataIndexing/DocumentMetadataValues.py:56-67`
+  - *Detail*: Submitting an existing field name for a document version triggers `doc_dmeta_tnt_doc_fld_uniq`. `TenantNumbered.save()` retries 5 times and crashes with 500.
+  - *Fix*: Add tenant-scoped uniqueness validation in `DocumentMetadataValueForm.clean()`.
+
+- **`REV5-C3`**: Silent data duplication and lack of unique constraint when version is NULL
+  - *Location*: `apps/documents/models/MetadataIndexing/DocumentMetadataValues.py:117`, `forms/MetadataIndexing/DocumentMetadataValues.py:56-67`
+  - *Detail*: SQL treats `NULL != NULL`. Because `version` is nullable, the existing unique constraint fails to prevent duplicate field names when `version` is None.
+  - *Fix*: Add conditional unique constraint for `version__isnull=True` and validate in `DocumentMetadataValueForm.clean()`.
+
+### Important
+- **`REV5-I1`**: `metadata_value_validate` falsely marks non-numeric strings as valid
+  - *Location*: `apps/documents/views/MetadataIndexing/DocumentMetadataValues.py:189-195`
+  - *Detail*: Condition `if val.data_type in ["integer", "decimal"] and val.value_number is None and not val.value_text:` fails to detect non-numeric strings in `value_text` (e.g. `"abc"`), falsely marking the property as valid.
+  - *Fix*: Parse `value_text` in a `try...except` block for numbers and dates.
+
+- **`REV5-I2`**: OCR text silently discarded when `job.version` is null, and tags never committed (corroborates `REV1-I4`, `REV2-I3`)
+  - *Location*: `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py:188-207`
+  - *Detail*: View fails to fall back to current document version when `job.version` is None, and completely ignores `job.suggested_tags_json`.
+  - *Fix*: Fall back to latest version and merge tags into `job.document.tags`.
+
+- **`REV5-I3`**: Missing JSON syntax validation in `DocumentMetadataValueForm` when `data_type="json"` (corroborates `REV1-I3`)
+  - *Location*: `apps/documents/forms/MetadataIndexing/DocumentMetadataValues.py:7-67`
+  - *Detail*: Malformed JSON in `value_json` passes validation and corrupts database values.
+  - *Fix*: Add `clean_value_json()` to validate with `json.loads`.
+
+- **`REV5-I4`**: Destructive cascade deletion on parent taxonomy terms and ignored governance
+  - *Location*: `apps/documents/models/MetadataIndexing/TaxonomyTerms.py:41-48`, `views/MetadataIndexing/TaxonomyTerms.py:180-192`
+  - *Detail*: Deleting a parent term permanently cascades and wipes all child terms without warning, and ignores `is_governed`.
+  - *Fix*: In `taxonomy_term_delete`, block deletion if term has children or is governed, or use `on_delete=models.PROTECT`.
+
+### Minor
+- **`REV5-M1`**: `TaxonomyTermForm.clean_synonyms_json` accepts JSON object instead of array
+  - *Location*: `apps/documents/forms/MetadataIndexing/TaxonomyTerms.py:65-80`
+  - *Detail*: `{"a": "b"}` falls through to comma splitting.
+  - *Fix*: Validate JSON type is `list`.
+
+- **`REV5-M2`**: Property helpers swallow JSON parse errors silently
+  - *Location*: `apps/documents/models/MetadataIndexing/MetadataSchemas.py:113-118`, `TaxonomyTerms.py:94-100`
+  - *Detail*: Returns `[]` without logging.
+  - *Fix*: Log warning or return empty list cleanly.
+
+- **`REV5-M3`**: Uppercase code normalization missing in `MetadataSchema.save()`
+  - *Location*: `apps/documents/models/MetadataIndexing/MetadataSchemas.py:46`
+  - *Detail*: `clean_code` uppercases, but model `save()` does not enforce it.
+  - *Fix*: Add uppercase normalization in model `save()`.
+
+
 
 
