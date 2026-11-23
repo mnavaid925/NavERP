@@ -16,6 +16,10 @@ from apps.documents.models.MetadataIndexing.DocumentMetadataValues import Docume
 from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
 from apps.documents.models.MetadataIndexing.MetadataSchemas import MetadataSchema
 from apps.documents.models.MetadataIndexing.TaxonomyTerms import TaxonomyTerm
+from apps.documents.models.SearchDiscovery.DocumentSavedSearches import DocumentSavedSearch
+from apps.documents.models.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlert
+from apps.documents.models.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLog
+from apps.documents.models.SearchDiscovery.DocumentSearchSynonyms import DocumentSearchSynonym
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
@@ -46,4 +50,8 @@ __all__ = [
     "DocumentMetadataValue",
     "TaxonomyTerm",
     "DocumentOcrJob",
+    "DocumentSavedSearch",
+    "DocumentSearchAlert",
+    "DocumentSearchSynonym",
+    "DocumentSearchQueryLog",
 ]
