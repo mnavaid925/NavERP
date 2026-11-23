@@ -1,9 +1,10 @@
 from django import forms
 
+from apps.core.forms import TenantModelForm
 from apps.documents.models.SecurityAccessControl.DlpIncidents import DlpIncident
 
 
-class DlpIncidentResolveForm(forms.ModelForm):
+class DlpIncidentResolveForm(TenantModelForm):
     class Meta:
         model = DlpIncident
         fields = [
