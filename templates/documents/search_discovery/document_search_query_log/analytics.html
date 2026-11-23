@@ -149,7 +149,7 @@
                         </td>
                         <td class="font-semibold text-blue-600">{{ item.count }}</td>
                         <td class="text-right table-actions">
-                            <a href="{% url 'documents:search_hub' %}?q={{ item.query_text }}" class="btn btn-icon text-blue-600 hover:text-blue-800" title="Execute query in hub">
+                            <a href="{% url 'documents:search_hub' %}?q={{ item.query_text }}" class="btn btn-icon text-blue-600 hover:text-blue-800" title="Execute query in hub" aria-label="Execute query in hub">
                                 <i data-lucide="play"></i>
                             </a>
                         </td>
