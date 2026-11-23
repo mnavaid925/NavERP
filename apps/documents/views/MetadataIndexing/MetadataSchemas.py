@@ -89,15 +89,21 @@ def metadata_schema_detail(request, pk):
     Detailed inspection of a metadata schema and its field definitions.
     """
     tenant = request.tenant
-    schema = get_object_or_404(MetadataSchema, pk=pk, tenant=tenant)
+    schema = get_object_or_404(
+        MetadataSchema.objects.select_related("created_by", "target_folder"),
+        pk=pk,
+        tenant=tenant,
+    )
 
     fields_list = schema.parsed_fields
-    values_count = schema.metadata_values.filter(tenant=tenant).count()
+    values = schema.metadata_values.filter(tenant=tenant).select_related("document", "version").order_by("-created_at")
+    values_count = values.count()
 
     context = {
         "schema": schema,
         "obj": schema,
         "fields_list": fields_list,
+        "values": values,
         "values_count": values_count,
         "target_type_badge": schema.target_type_badge,
         "status_badge": schema.status_badge,
