@@ -14,6 +14,10 @@ from apps.documents.models.DocumentAuthoring.DocumentDrafts import DocumentDraft
 from apps.documents.models.DocumentAuthoring.DocumentTemplates import DocumentTemplate
 from apps.documents.models.DocumentAuthoring.DraftCollaborations import DraftCollaboration
 from apps.documents.models.DocumentAuthoring.TemplateSections import TemplateSection
+from apps.documents.models.MetadataIndexing.DocumentMetadataValues import DocumentMetadataValue
+from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
+from apps.documents.models.MetadataIndexing.MetadataSchemas import MetadataSchema
+from apps.documents.models.MetadataIndexing.TaxonomyTerms import TaxonomyTerm
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
@@ -147,5 +151,37 @@ class DocumentBatchImportAdmin(admin.ModelAdmin):
     list_filter = ("source_type", "status", "tenant")
     search_fields = ("number", "batch_name", "log_summary")
     readonly_fields = ("number", "total_files_detected", "processed_files_count", "success_files_count", "failed_files_count", "started_at", "completed_at", "created_at", "updated_at")
+
+
+@admin.register(MetadataSchema)
+class MetadataSchemaAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "target_type", "inheritance_mode", "is_required", "is_active", "tenant")
+    list_filter = ("target_type", "inheritance_mode", "is_required", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentMetadataValue)
+class DocumentMetadataValueAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "field_name", "data_type", "source", "validation_status", "is_overridden", "tenant")
+    list_filter = ("data_type", "source", "validation_status", "is_overridden", "tenant")
+    search_fields = ("number", "field_name", "field_label", "value_text", "document__title")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(TaxonomyTerm)
+class TaxonomyTermAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "term_code", "category", "parent", "is_governed", "usage_count", "is_active", "tenant")
+    list_filter = ("category", "is_governed", "is_active", "tenant")
+    search_fields = ("number", "name", "term_code", "synonyms_json", "external_code")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentOcrJob)
+class DocumentOcrJobAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "status", "ocr_engine", "confidence_score", "page_count", "applied_to_document", "tenant")
+    list_filter = ("status", "ocr_engine", "applied_to_document", "tenant")
+    search_fields = ("number", "document__title", "extracted_full_text", "suggested_category")
+    readonly_fields = ("number", "created_at", "updated_at")
 
 
