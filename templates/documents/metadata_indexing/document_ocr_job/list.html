@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}OCR & Intelligent Indexing Jobs — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_indexing_dashboard' %}">Metadata & Indexing</a>
+            <span>/</span>
+            <span>OCR Jobs</span>
+        </div>
+        <h1 class="page-title">OCR & Full-Text Indexing Jobs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:metadata_indexing_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="{% url 'documents:document_ocr_job_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New OCR Job</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="scan-line"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ ocr_jobs|length }}</div>
+            <div class="stat-label">Jobs on Current Page</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="cpu"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-info">Multi-Engine</span></div>
+            <div class="stat-label">AI Entity Extraction</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-check"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-green">Indexed</span></div>
+            <div class="stat-label">Full-Text Search Layer</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+            <div class="form-group mb-0">
+                <label class="form-label" for="q">Search</label>
+                <input type="text" name="q" id="q" value="{{ q }}" class="form-input" placeholder="Document title, number, text, or category...">
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="status">Job Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                        <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label" for="ocr_engine">OCR Engine</label>
+                <select name="ocr_engine" id="ocr_engine" class="form-select">
+                    <option value="">All Engines</option>
+                    {% for val, label in ocr_engine_choices %}
+                        <option value="{{ val }}" {% if ocr_engine == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:document_ocr_job_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">Indexing & OCR Jobs</h2>
+        <span class="text-xs text-slate-500">Sub-module 13.5</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Document</th>
+                    <th>Status</th>
+                    <th>Engine</th>
+                    <th>Confidence</th>
+                    <th>Suggested Category</th>
+                    <th>Entities</th>
+                    <th>Created</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in ocr_jobs %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-blue-600">
+                        <a href="{% url 'documents:document_ocr_job_detail' item.pk %}">{{ item.number }}</a>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:document_detail' item.document.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                            {{ item.document.title }}
+                        </a>
+                        <span class="block text-xs text-slate-500 font-mono">{{ item.document.number }}</span>
+                    </td>
+                    <td><span class="badge {{ item.status_badge }}">{{ item.get_status_display }}</span></td>
+                    <td><span class="badge {{ item.engine_badge }} font-mono text-xs">{{ item.get_ocr_engine_display }}</span></td>
+                    <td>
+                        {% if item.confidence_score > 0 %}
+                            <span class="font-mono text-xs font-semibold {% if item.confidence_score >= 90 %}text-green-600{% else %}text-amber-600{% endif %}">
+                                {{ item.confidence_score }}%
+                            </span>
+                        {% else %}
+                            <span class="text-slate-400 text-xs">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.suggested_category %}
+                            <span class="badge badge-info">{{ item.suggested_category }}</span>
+                        {% else %}
+                            <span class="text-slate-400 text-xs">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate font-mono text-xs">{{ item.parsed_entities|length }} entities</span>
+                    </td>
+                    <td class="text-xs text-slate-500">{{ item.created_at|date:"Y-m-d H:i" }}</td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:document_ocr_job_detail' item.pk %}" class="btn btn-icon" title="View Job Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:document_ocr_job_viewer' item.pk %}" class="btn btn-icon" title="View Extracted Text">
+                            <i data-lucide="file-text"></i>
+                        </a>
+                        {% if item.status == "queued" or item.status == "failed" %}
+                        <form method="post" action="{% url 'documents:document_ocr_job_process' item.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-blue-600 hover:text-blue-800" title="Execute OCR">
+                                <i data-lucide="play"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        <form method="post" action="{% url 'documents:document_ocr_job_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete OCR job {{ item.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Job">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <i data-lucide="scan-line"></i>
+                            </div>
+                            <h3>No OCR Indexing Jobs Found</h3>
+                            <p>Queue documents for OCR full-text extraction, AI classification, and entity extraction.</p>
+                            <a href="{% url 'documents:document_ocr_job_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Queue OCR Job</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex justify-between items-center">
+        <div class="text-sm text-slate-500">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if ocr_engine %}&ocr_engine={{ ocr_engine }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+                <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if ocr_engine %}&ocr_engine={{ ocr_engine }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+                <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
