@@ -16,7 +16,7 @@
         <div class="flex items-center gap-3 mt-1">
             <h1 class="page-title">Sandboxed Zero-Download Secure Viewer</h1>
             {% if document %}
-            <span class="badge {{ document.classification_badge }}">{{ document.get_classification_display }}</span>
+            <span class="badge {{ document.classification_badge_class }}">{{ document.get_classification_display }}</span>
             {% endif %}
             {% if is_drm_revoked %}
             <span class="badge badge-red">REVOKED (KILL-SWITCH ENGAGED)</span>
@@ -47,7 +47,7 @@
                         <div class="text-xs font-semibold text-slate-500">{{ doc.number }}</div>
                         <div class="text-sm font-medium text-slate-900 truncate">{{ doc.title }}</div>
                         <div class="flex items-center gap-1.5 mt-1">
-                            <span class="badge {{ doc.classification_badge }} text-[10px]">{{ doc.get_classification_display }}</span>
+                            <span class="badge {{ doc.classification_badge_class }} text-[10px]">{{ doc.get_classification_display }}</span>
                             <span class="text-[10px] text-slate-400">{{ doc.get_document_type_display }}</span>
                         </div>
                     </a>
