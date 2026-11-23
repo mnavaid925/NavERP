@@ -234,6 +234,44 @@
   - *Detail*: `clean_code` uppercases, but model `save()` does not enforce it.
   - *Fix*: Add uppercase normalization in model `save()`.
 
+---
+
+## Pass 6: Security Reviewer (`security-reviewer`)
+
+### High
+- **`REV6-H1`**: Stored XSS / JavaScript Injection in Form Onsubmit Handlers
+  - *Location*: `templates/documents/metadata_indexing/metadata_schema/list.html:155`, `templates/documents/metadata_indexing/taxonomy_term/list.html:163`
+  - *Detail*: Unescaped `{{ item.name }}` inside `onsubmit="return confirm('... {{ item.name }} ...');"` allows JS execution if name contains quotes.
+  - *Fix*: Use `{{ item.name|escapejs }}` within JavaScript confirmation strings.
+
+- **`REV6-H2`**: Document Lock Bypass & State Guard Absence in `document_ocr_job_apply`
+  - *Location*: `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py:188-207`
+  - *Detail*: Does not verify if `job.document.is_locked` by another user; also allows applying non-completed jobs, overwriting document text with empty text.
+  - *Fix*: Check `job.status == "completed"` and verify document checkout lock before committing text.
+
+### Medium
+- **`REV6-M1`**: Missing Document Checkout Lock Enforcement in Metadata Value Mutations
+  - *Location*: `apps/documents/views/MetadataIndexing/DocumentMetadataValues.py:69-175`
+  - *Detail*: Users can create, update, or delete metadata values on a document locked by another user.
+  - *Fix*: Validate `document.is_locked` against `request.user` before creating, updating, or deleting metadata values.
+
+- **`REV6-M2`**: Unrestricted Deletion of Governed Taxonomy Terms and Enterprise Metadata Schemas
+  - *Location*: `apps/documents/views/MetadataIndexing/TaxonomyTerms.py:180-192`, `apps/documents/views/MetadataIndexing/MetadataSchemas.py:140-153`
+  - *Detail*: Standard staff users can delete governed taxonomy terms (`is_governed=True`) or company-wide metadata schemas without tenant administrator authorization.
+  - *Fix*: Require `@tenant_admin_required` for schema deletion and verify `is_governed` check in taxonomy term deletion.
+
+### Low
+- **`REV6-L1`**: Validation Status Tampering via Form Mass Assignment in `DocumentMetadataValueForm`
+  - *Location*: `apps/documents/forms/MetadataIndexing/DocumentMetadataValues.py:8-24`
+  - *Detail*: `validation_status` exposed in `Meta.fields` allows users to manually set `"valid"` without running validation logic.
+  - *Fix*: Exclude `validation_status` from `Meta.fields` and manage it exclusively in `metadata_value_validate`.
+
+- **`REV6-L2`**: Unrestricted Re-processing of Completed/Reviewed OCR Jobs
+  - *Location*: `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py:137-184`
+  - *Detail*: `document_ocr_job_process` does not check if job is already completed or reviewed, allowing re-running OCR and wiping historical metrics.
+  - *Fix*: Guard view to only allow execution when `job.status in ["queued", "failed"]`.
+
+
 
 
 
