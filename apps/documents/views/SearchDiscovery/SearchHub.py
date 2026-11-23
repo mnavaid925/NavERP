@@ -7,7 +7,7 @@ import time
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -67,15 +67,18 @@ def search_hub(request):
         )
 
         expansion_terms = set(query_words)
+        matched_syn_ids = []
         for syn in active_synonyms:
             syn_terms = [t.lower() for t in syn.get_all_terms()]
             for qw in query_words:
                 if qw in syn_terms:
                     expansion_terms.update(syn_terms)
                     synonyms_applied.append(f"{syn.term} ↔ {syn.synonyms}")
-                    syn.hit_count += 1
-                    syn.save(update_fields=["hit_count"])
+                    matched_syn_ids.append(syn.id)
                     break
+
+        if matched_syn_ids:
+            DocumentSearchSynonym.objects.filter(id__in=matched_syn_ids).update(hit_count=F("hit_count") + 1)
 
         # Build Q filter matching title, description, number, and version text
         text_q = Q()
