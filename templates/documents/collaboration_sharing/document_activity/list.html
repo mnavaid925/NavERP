@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Activity Feed & Notifications — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_hub' %}">Collaboration & Sharing</a>
+            <span>/</span>
+            <span>Activity Feed</span>
+        </div>
+        <h1 class="page-title">Collaboration Activity Feed & Notification Inbox</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:collaboration_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-grid"></i>
+            <span>Collaboration Hub</span>
+        </a>
+        {% if unread_count > 0 %}
+        <form method="post" action="{% url 'documents:document_activity_mark_all_read' %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-blue-600">
+                <i data-lucide="check-check"></i>
+                <span>Mark All Read ({{ unread_count }})</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Tabs & Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body space-y-4">
+        <!-- Filter Tabs -->
+        <div class="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+            <a href="?filter=all{% if q %}&q={{ q }}{% endif %}{% if current_action_type %}&action_type={{ current_action_type }}{% endif %}" class="btn btn-sm {% if current_filter == 'all' or not current_filter %}btn-primary{% else %}btn-outline{% endif %}">
+                All Activity ({{ total_count }})
+            </a>
+            <a href="?filter=unread{% if q %}&q={{ q }}{% endif %}{% if current_action_type %}&action_type={{ current_action_type }}{% endif %}" class="btn btn-sm {% if current_filter == 'unread' %}btn-primary{% else %}btn-outline{% endif %} flex items-center gap-1.5">
+                <span>Unread Notifications</span>
+                {% if unread_count > 0 %}
+                <span class="badge badge-amber text-xs px-1.5 py-0.2">{{ unread_count }}</span>
+                {% endif %}
+            </a>
+            <a href="?filter=targeted{% if q %}&q={{ q }}{% endif %}{% if current_action_type %}&action_type={{ current_action_type }}{% endif %}" class="btn btn-sm {% if current_filter == 'targeted' %}btn-primary{% else %}btn-outline{% endif %}">
+                Directed to Me
+            </a>
+            <a href="?filter=my_actions{% if q %}&q={{ q }}{% endif %}{% if current_action_type %}&action_type={{ current_action_type }}{% endif %}" class="btn btn-sm {% if current_filter == 'my_actions' %}btn-primary{% else %}btn-outline{% endif %}">
+                My Actions
+            </a>
+        </div>
+
+        <!-- Form Filters -->
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <input type="hidden" name="filter" value="{{ current_filter }}">
+            <div>
+                <label class="form-label" for="search-input">Search Events</label>
+                <input type="text" name="q" id="search-input" value="{{ q }}" placeholder="Search by summary, user, document..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="action-type-select">Action Type</label>
+                <select name="action_type" id="action-type-select" class="form-select">
+                    <option value="">All Action Types</option>
+                    {% for code, label in action_type_choices %}
+                    <option value="{{ code }}" {% if current_action_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or current_action_type or current_filter != 'all' %}
+                <a href="{% url 'documents:document_activity_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Activities Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Event ID</th>
+                    <th>Action Type</th>
+                    <th>Description & Document</th>
+                    <th>Initiator</th>
+                    <th>Target User</th>
+                    <th>Timestamp</th>
+                    <th>Read State</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for act in activities %}
+                <tr class="{% if not act.is_read and act.target_user == request.user %}bg-blue-50/40{% endif %}">
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'documents:document_activity_detail' act.pk %}" class="text-blue-600 hover:underline">
+                            {{ act.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.get_action_type_badge }}">
+                            {{ act.get_action_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'documents:document_activity_detail' act.pk %}" class="hover:underline">
+                                {{ act.summary }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                            <i data-lucide="file-text" class="w-3 h-3"></i>
+                            <a href="{% url 'documents:document_detail' act.document.pk %}" class="hover:underline">
+                                {{ act.document.title }}
+                            </a>
+                        </div>
+                    </td>
+                    <td class="text-sm">
+                        {{ act.actor_display_name }}
+                    </td>
+                    <td class="text-sm">
+                        {% if act.target_user %}
+                            {{ act.target_user.get_full_name|default:act.target_user.username }}
+                        {% else %}
+                            <span class="text-slate-400">All Collaborators</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        {{ act.created_at|date:"M d, H:i" }}
+                    </td>
+                    <td>
+                        {% if act.target_user == request.user %}
+                            {% if act.is_read %}
+                            <span class="badge badge-slate text-xs">Read</span>
+                            {% else %}
+                            <span class="badge badge-amber text-xs font-semibold">Unread</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge badge-slate text-xs">Logged</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:document_activity_detail' act.pk %}" class="btn btn-icon btn-outline" title="View Event">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if not act.is_read and act.target_user == request.user %}
+                        <form method="post" action="{% url 'documents:document_activity_mark_read' act.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-outline text-blue-600" title="Mark as Read">
+                                <i data-lucide="check"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="bell" class="empty-icon"></i>
+                            <h3>No Collaboration Activity Recorded</h3>
+                            <p>Document shares, collaborator joins, comments, and task assignments will stream here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} events
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if current_action_type %}&action_type={{ current_action_type }}{% endif %}{% if current_filter %}&filter={{ current_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if current_action_type %}&action_type={{ current_action_type }}{% endif %}{% if current_filter %}&filter={{ current_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
