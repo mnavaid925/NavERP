@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Share {{ share.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_hub' %}">Collaboration & Sharing</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_share_list' %}">Shares</a>
+            <span>/</span>
+            <span>{{ share.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ share.number }}</h1>
+            <span class="badge {{ share.get_status_badge }}">{{ share.status_label|title }}</span>
+            <span class="badge {{ share.get_share_type_badge }}">{{ share.get_share_type_display }}</span>
+            <span class="badge {{ share.get_access_level_badge }}">{{ share.get_access_level_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_share_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Shares</span>
+        </a>
+        {% if share.is_active %}
+        <a href="{% url 'documents:document_share_edit' share.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'documents:document_share_revoke' share.pk %}" class="inline" onsubmit="return confirm('Revoke this share immediately? Access will cease instantly.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600">
+                <i data-lucide="ban"></i>
+                <span>Revoke Link</span>
+            </button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'documents:document_share_delete' share.pk %}" class="inline" onsubmit="return confirm('Delete share record permanently?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Public Link Box -->
+<div class="card mb-6 border-l-4 border-l-blue-500">
+    <div class="card-body">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h3 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="link" class="w-4 h-4 text-blue-600"></i>
+                    <span>Shareable Guest Access URL</span>
+                </h3>
+                <p class="text-sm text-slate-500 mt-1">
+                    Anyone possessing this URL can access the document subject to configured security restrictions.
+                </p>
+                <div class="mt-2 font-mono text-sm bg-slate-50 p-2.5 rounded border border-slate-200 select-all break-all">
+                    {{ share_url }}
+                </div>
+            </div>
+            <div class="flex sm:flex-col gap-2 shrink-0">
+                <button type="button" class="btn btn-primary" onclick="navigator.clipboard.writeText('{{ share_url }}'); alert('Share link copied to clipboard!');">
+                    <i data-lucide="copy"></i>
+                    <span>Copy Link</span>
+                </button>
+                <a href="{{ share_url }}" target="_blank" class="btn btn-outline">
+                    <i data-lucide="external-link"></i>
+                    <span>Open Preview</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Details Column -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Share Configuration & Scope</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            {% if share.document %}
+                            <a href="{% url 'documents:document_detail' share.document.pk %}" class="text-blue-600 hover:underline font-semibold">
+                                {{ share.document.title }}
+                            </a>
+                            <span class="text-xs text-slate-500 block">Number: {{ share.document.number }}</span>
+                            {% else %}
+                            <span class="text-slate-400">None</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Folder</dt>
+                        <dd>
+                            {% if share.folder %}
+                            <a href="{% url 'documents:folder_detail' share.folder.pk %}" class="text-blue-600 hover:underline">
+                                {{ share.folder.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">Single Document Only</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Specific Version Lock</dt>
+                        <dd>
+                            {% if share.version %}
+                            <span class="font-mono text-sm font-semibold">{{ share.version.number }}</span>
+                            <span class="text-xs text-slate-500 block">Uploaded {{ share.version.created_at|date:"M d, Y" }}</span>
+                            {% else %}
+                            <span class="text-slate-600">Latest Active Version (Dynamic)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Share Target Scope</dt>
+                        <dd>
+                            <span class="badge {{ share.get_share_type_badge }}">{{ share.get_share_type_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Designated Recipient</dt>
+                        <dd>
+                            {% if share.share_type == "internal_user" and share.shared_with_user %}
+                                <div class="font-medium text-slate-900">{{ share.shared_with_user.get_full_name|default:share.shared_with_user.username }}</div>
+                                <div class="text-xs text-slate-500">{{ share.shared_with_user.email }}</div>
+                            {% elif share.share_type == "internal_dept" and share.shared_with_org_unit %}
+                                <div class="font-medium text-slate-900">{{ share.shared_with_org_unit.name }}</div>
+                            {% elif share.share_type == "external_email" and share.shared_with_email %}
+                                <div class="font-medium text-slate-900">{{ share.shared_with_email }}</div>
+                            {% else %}
+                                <span class="text-slate-600">Public Unguessable Token</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Permission Level</dt>
+                        <dd>
+                            <span class="badge {{ share.get_access_level_badge }}">{{ share.get_access_level_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Created By</dt>
+                        <dd>
+                            <div class="font-medium text-slate-900">{{ share.shared_by.get_full_name|default:share.shared_by.username }}</div>
+                            <div class="text-xs text-slate-500">{{ share.created_at|date:"M d, Y H:i" }}</div>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Accessed</dt>
+                        <dd>
+                            {% if share.last_accessed_at %}
+                                <div class="font-medium text-slate-900">{{ share.last_accessed_at|date:"M d, Y H:i" }}</div>
+                                <div class="text-xs text-slate-500">{{ share.access_count }} total accesses</div>
+                            {% else %}
+                                <span class="text-slate-400">Never accessed</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if share.share_message %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold uppercase text-slate-500 tracking-wider">Recipient Message</h4>
+                    <p class="text-sm text-slate-700 mt-1 whitespace-pre-line">{{ share.share_message }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Activity Stream for this Share -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Share Event History</h2>
+            </div>
+            <div class="card-body">
+                {% if activities %}
+                <div class="space-y-4">
+                    {% for act in activities %}
+                    <div class="flex items-start gap-3 pb-3 border-b border-slate-100 last:border-b-0">
+                        <div class="mt-0.5">
+                            <span class="badge {{ act.get_action_type_badge }}">{{ act.get_action_type_display }}</span>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm text-slate-900">{{ act.summary }}</p>
+                            <div class="text-xs text-slate-500 mt-0.5">
+                                By {{ act.actor.get_full_name|default:act.actor.username|default:"Guest" }} &bull; {{ act.created_at|date:"M d, Y H:i" }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-500 italic">No access or collaboration activity recorded yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Security & Expiration Sidebar Column -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Security & Access Policy</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Password Protection</div>
+                        <div class="text-xs text-slate-500">Requires passcode to view link</div>
+                    </div>
+                    <div>
+                        {% if share.has_password %}
+                        <span class="badge badge-green">Enforced</span>
+                        {% else %}
+                        <span class="badge badge-slate">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">File Download</div>
+                        <div class="text-xs text-slate-500">Permit binary file download</div>
+                    </div>
+                    <div>
+                        {% if share.allow_download %}
+                        <span class="badge badge-green">Allowed</span>
+                        {% else %}
+                        <span class="badge badge-amber">Blocked</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Browser Printing</div>
+                        <div class="text-xs text-slate-500">Permit browser print shortcut</div>
+                    </div>
+                    <div>
+                        {% if share.allow_print %}
+                        <span class="badge badge-green">Allowed</span>
+                        {% else %}
+                        <span class="badge badge-amber">Blocked</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Annotation Visibility</div>
+                        <div class="text-xs text-slate-500">Display review comments/pins</div>
+                    </div>
+                    <div>
+                        {% if share.include_annotations %}
+                        <span class="badge badge-info">Visible</span>
+                        {% else %}
+                        <span class="badge badge-slate">Hidden</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Expiration Date</div>
+                        <div class="text-xs text-slate-500">Automatic deactivation</div>
+                    </div>
+                    <div class="text-right">
+                        {% if share.expires_at %}
+                            <div class="text-sm font-semibold {% if share.is_expired %}text-red-600{% else %}text-slate-900{% endif %}">
+                                {{ share.expires_at|date:"M d, Y" }}
+                            </div>
+                            <div class="text-xs text-slate-500">{{ share.expires_at|time:"H:i" }}</div>
+                        {% else %}
+                            <span class="badge badge-slate">No Expiry</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Usage Limit Quota</div>
+                        <div class="text-xs text-slate-500">Max permitted clicks</div>
+                    </div>
+                    <div class="text-right">
+                        {% if share.max_uses %}
+                            <span class="font-semibold text-sm">{{ share.access_count }} / {{ share.max_uses }}</span>
+                        {% else %}
+                            <span class="badge badge-slate">Unlimited</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if not share.is_active %}
+        <div class="card bg-red-50 border-red-200">
+            <div class="card-body">
+                <h3 class="text-sm font-semibold text-red-900 flex items-center gap-2">
+                    <i data-lucide="ban" class="w-4 h-4 text-red-600"></i>
+                    <span>Share Revoked</span>
+                </h3>
+                <p class="text-xs text-red-700 mt-1">
+                    Revoked on {{ share.revoked_at|date:"M d, Y H:i" }}
+                    {% if share.revoked_by %}by {{ share.revoked_by.get_full_name|default:share.revoked_by.username }}{% endif %}.
+                    All incoming access attempts return 404 / 410.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
