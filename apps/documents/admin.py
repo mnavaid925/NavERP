@@ -283,7 +283,7 @@ class DocumentShareAdmin(admin.ModelAdmin):
     list_display = ("number", "document", "share_type", "access_level", "shared_by", "shared_with_user", "shared_with_email", "access_count", "expires_at", "is_active", "tenant")
     list_filter = ("share_type", "access_level", "is_active", "tenant")
     search_fields = ("number", "share_token", "shared_with_email", "document__title")
-    readonly_fields = ("number", "share_token", "access_count", "last_accessed_at", "revoked_at", "created_at", "updated_at")
+    readonly_fields = ("number", "share_token", "password_hash", "access_count", "last_accessed_at", "revoked_at", "created_at", "updated_at")
 
 
 @admin.register(CoauthorSession)
