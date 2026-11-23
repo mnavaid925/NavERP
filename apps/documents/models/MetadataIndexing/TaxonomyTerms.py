@@ -92,6 +92,10 @@ class TaxonomyTerm(TenantNumbered):
         return "badge-green" if self.is_active else "badge-slate"
 
     @property
+    def active_children(self):
+        return [c for c in self.children.all() if c.is_active]
+
+    @property
     def parsed_synonyms(self):
         try:
             val = json.loads(self.synonyms_json)
