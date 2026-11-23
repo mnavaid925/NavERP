@@ -55,6 +55,24 @@ from apps.documents.urls.SearchDiscovery.DocumentSearchSynonyms import (
 from apps.documents.urls.SearchDiscovery.SearchHub import (
     urlpatterns as search_hub_urls,
 )
+from apps.documents.urls.SecurityAccessControl.DlpIncidents import (
+    urlpatterns as dlp_incidents_urls,
+)
+from apps.documents.urls.SecurityAccessControl.DlpPolicies import (
+    urlpatterns as dlp_policies_urls,
+)
+from apps.documents.urls.SecurityAccessControl.DocumentAccessPermissions import (
+    urlpatterns as permissions_urls,
+)
+from apps.documents.urls.SecurityAccessControl.DocumentDrmPolicies import (
+    urlpatterns as drm_policies_urls,
+)
+from apps.documents.urls.SecurityAccessControl.SecureViewer import (
+    urlpatterns as secure_viewer_urls,
+)
+from apps.documents.urls.SecurityAccessControl.WatermarkPolicies import (
+    urlpatterns as watermark_policies_urls,
+)
 from apps.documents.urls.StorageRepository.DocumentBatchImports import (
     urlpatterns as document_batch_imports_urls,
 )
@@ -114,4 +132,10 @@ urlpatterns = (
     + document_search_alerts_urls
     + document_search_synonyms_urls
     + document_search_query_logs_urls
+    + permissions_urls
+    + watermark_policies_urls
+    + drm_policies_urls
+    + dlp_policies_urls
+    + dlp_incidents_urls
+    + secure_viewer_urls
 )
