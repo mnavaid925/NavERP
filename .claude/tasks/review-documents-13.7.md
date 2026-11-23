@@ -51,7 +51,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/DocumentDrmPolicies.py:150`
   - **Description**: The view does not check `if policy.is_revoked:` before calling `policy.revoke()`, so a direct POST can repeatedly re-revoke an already killed policy, overwriting audit timestamp and reason.
   - **Fix**: Add view-level guard: `if policy.is_revoked: messages.info(request, "This DRM policy has already been revoked."); return redirect("documents:drm_policy_detail", pk=policy.pk)`.
-- [ ] **I4: Departmental ACL rules fail to match in `permission_simulate`**
+- [x] **I4: Departmental ACL rules fail to match in `permission_simulate`**
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py:233-247`
   - **Description**: `user_dept = getattr(target_user, "department", None)` evaluates to `None` because `User` model has no `department` column in NavERP (mapped via `Employment.org_unit` on `target_user.party`).
   - **Fix**: Resolve `user_dept` via `Employment.objects.filter(tenant=request.tenant, party=getattr(target_user, "party", None)).order_by("-id").first()`.
