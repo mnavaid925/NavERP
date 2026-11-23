@@ -61,3 +61,30 @@
   - *Location*: `apps/documents/forms/MetadataIndexing/MetadataSchemas.py:69-88`
   - *Detail*: Validates JSON structure but allows multiple fields with identical `key` values in the schema JSON array.
   - *Fix*: Check for duplicate keys in `seen` set.
+
+---
+
+## Pass 2: Codebase Explorer (`explorer`)
+
+### Important
+- **`REV2-I1`**: Circularity protection missing in `TaxonomyTermForm` (corroborates `REV1-I1`)
+  - *Location*: `apps/documents/forms/MetadataIndexing/TaxonomyTerms.py:83-87`
+  - *Detail*: Excludes immediate self-parenting in `__init__`, but `clean()` does not detect multi-hop descendant cycles (A -> B -> A).
+  - *Fix*: Implement recursive ancestor traversal cycle check in `TaxonomyTermForm.clean()`.
+
+- **`REV2-I2`**: Uncaught duplicate `IntegrityError` on `DocumentMetadataValue` creation (corroborates `REV1-I2`)
+  - *Location*: `apps/documents/forms/MetadataIndexing/DocumentMetadataValues.py:56-67`
+  - *Detail*: Excluded tenant field causes Django's `validate_unique()` to skip `doc_dmeta_tnt_doc_fld_uniq`, crashing on duplicate field names.
+  - *Fix*: Explicitly check tenant-scoped uniqueness in `clean()`.
+
+- **`REV2-I3`**: Tags not committed to `Document.tags` and fallback version missing in `document_ocr_job_apply`
+  - *Location*: `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py:192-207`
+  - *Detail*: When applying OCR results, `job.suggested_tags_json` is not appended to `job.document.tags`, and if `job.version` is None (the default selection), no extracted text is persisted.
+  - *Fix*: Resolve `target_version = job.version or job.document.versions.order_by("-version_number").first()` and append suggested tags to `job.document.tags`.
+
+### Minor
+- **`REV2-M1`**: Inactive children rendered in taxonomy hierarchy tree (corroborates `REV1-I5`)
+  - *Location*: `apps/documents/views/MetadataIndexing/TaxonomyTerms.py:65` and `templates/documents/metadata_indexing/taxonomy_term/tree.html:86-108`
+  - *Detail*: `prefetch_related("children")` does not constrain child items by `is_active=True`.
+  - *Fix*: Prefetch with `TaxonomyTerm.objects.filter(tenant=tenant, is_active=True)`.
+
