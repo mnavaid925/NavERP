@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ policy.name }}{% else %}New Watermark Policy{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:watermark_list' %}">Watermark Policies</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Policy{% else %}New Policy{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Watermark Policy: {{ policy.name }}{% else %}Create Watermark Policy{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:watermark_detail' policy.pk %}{% else %}{% url 'documents:watermark_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body text-sm text-red-700">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Basic Information & Scope -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">1. Identification & Application Scope</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Policy Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.slug.id_for_label }}">Slug</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.classification.id_for_label }}">Classification Scope</label>
+                {{ form.classification }}
+                {% if form.classification.errors %}<div class="form-error">{{ form.classification.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.document_type.id_for_label }}">Document Type Filter</label>
+                {{ form.document_type }}
+                {% if form.document_type.errors %}<div class="form-error">{{ form.document_type.errors.0 }}</div>{% endif %}
+                <p class="text-xs text-slate-500 mt-1">Enter 'all' or a specific type like 'contract', 'sop', 'policy'.</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.department.id_for_label }}">Department / OrgUnit</label>
+                {{ form.department }}
+                {% if form.department.errors %}<div class="form-error">{{ form.department.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group flex items-center pt-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.apply_to_all }}
+                    <span class="text-sm font-medium text-slate-800">Apply to All Tenant Documents</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Text & Layout Configuration -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">2. Watermark Text & Visual Styling</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.watermark_text.id_for_label }}">Watermark Text Template <span class="text-red-500">*</span></label>
+                {{ form.watermark_text }}
+                {% if form.watermark_text.errors %}<div class="form-error">{{ form.watermark_text.errors.0 }}</div>{% endif %}
+                <p class="text-xs text-slate-500 mt-1">Available dynamic tokens: <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{user_name}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{user_email}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{classification}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{document_number}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{timestamp}}' }}</code>, <code class="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">{{ '{{ip_address}}' }}</code>.</p>
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.secondary_text.id_for_label }}">Secondary Footer / Disclaimer Text</label>
+                {{ form.secondary_text }}
+                {% if form.secondary_text.errors %}<div class="form-error">{{ form.secondary_text.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.position.id_for_label }}">Positioning</label>
+                {{ form.position }}
+                {% if form.position.errors %}<div class="form-error">{{ form.position.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rotation_angle.id_for_label }}">Rotation Angle (degrees)</label>
+                {{ form.rotation_angle }}
+                {% if form.rotation_angle.errors %}<div class="form-error">{{ form.rotation_angle.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.opacity_percent.id_for_label }}">Opacity Percentage (1 - 100%)</label>
+                {{ form.opacity_percent }}
+                {% if form.opacity_percent.errors %}<div class="form-error">{{ form.opacity_percent.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.font_size.id_for_label }}">Font Size (pt)</label>
+                {{ form.font_size }}
+                {% if form.font_size.errors %}<div class="form-error">{{ form.font_size.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.font_color.id_for_label }}">Font Color (Hex Code)</label>
+                {{ form.font_color }}
+                {% if form.font_color.errors %}<div class="form-error">{{ form.font_color.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.priority.id_for_label }}">Evaluation Priority</label>
+                {{ form.priority }}
+                {% if form.priority.errors %}<div class="form-error">{{ form.priority.errors.0 }}</div>{% endif %}
+                <p class="text-xs text-slate-500 mt-1">Lower values are evaluated first.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banner & Enforcement Gates -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">3. Banners & Enforcement Gates</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group flex items-center pt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.show_classification_banner }}
+                        <span class="text-sm font-medium text-slate-800">Display Classification Banner</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.banner_position.id_for_label }}">Banner Position</label>
+                    {{ form.banner_position }}
+                    {% if form.banner_position.errors %}<div class="form-error">{{ form.banner_position.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <div class="text-xs font-semibold uppercase text-slate-500 mb-2">Enforcement Touchpoints</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.enforce_on_view }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Web Viewer</div>
+                        <div class="text-xs text-slate-500">Inject on browser preview</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.enforce_on_download }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Downloaded PDF</div>
+                        <div class="text-xs text-slate-500">Burn into downloaded files</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.enforce_on_print }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Print Renditions</div>
+                        <div class="text-xs text-slate-500">Overlay on print stream</div>
+                    </div>
+                </label>
+            </div>
+
+            <div class="pt-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_active }}
+                    <span class="text-sm font-medium text-slate-800">Policy is Active</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'documents:watermark_detail' policy.pk %}{% else %}{% url 'documents:watermark_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Policy{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
