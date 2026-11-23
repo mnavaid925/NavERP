@@ -41,6 +41,13 @@
             <span>Edit Policy</span>
         </a>
         {% endif %}
+        <form method="post" action="{% url 'documents:drm_policy_delete' policy.pk %}" class="inline" onsubmit="return confirm('Delete DRM policy {{ policy.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
         {% endif %}
     </div>
 </div>
