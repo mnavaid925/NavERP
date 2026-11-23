@@ -157,8 +157,8 @@
                     <span class="font-medium text-slate-700 dark:text-slate-300">{{ query_log.created_at|date:"M d, Y H:i:s" }}</span>
                 </div>
                 <div class="flex justify-between">
-                    <span>Session Key:</span>
-                    <span class="font-mono truncate max-w-[140px]">{{ query_log.session_key|default:"None" }}</span>
+                    <span>Session:</span>
+                    <span class="font-mono truncate max-w-[140px]">{% if query_log.session_key %}[Redacted]{% else %}None{% endif %}</span>
                 </div>
                 <div class="flex justify-between">
                     <span>Tenant ID:</span>
