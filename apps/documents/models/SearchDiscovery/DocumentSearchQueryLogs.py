@@ -97,6 +97,7 @@ class DocumentSearchQueryLog(TenantNumbered):
         if not self.filters_applied_json:
             return {}
         try:
-            return json.loads(self.filters_applied_json)
+            data = json.loads(self.filters_applied_json)
+            return data if isinstance(data, dict) else {}
         except (ValueError, TypeError):
             return {}
