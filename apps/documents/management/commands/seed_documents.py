@@ -48,6 +48,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options.get("flush"):
             self.stdout.write("Flushing documents module data...")
+            DocumentSearchAlert.objects.all().delete()
+            DocumentSavedSearch.objects.all().delete()
+            DocumentSearchSynonym.objects.all().delete()
+            DocumentSearchQueryLog.objects.all().delete()
             DocumentOcrJob.objects.all().delete()
             DocumentMetadataValue.objects.all().delete()
             TaxonomyTerm.objects.all().delete()
