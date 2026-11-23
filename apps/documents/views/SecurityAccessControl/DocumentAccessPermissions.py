@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.SecurityAccessControl.DocumentAccessPermissions import DocumentAccessPermissionForm
 from apps.documents.models.SecurityAccessControl.DocumentAccessPermissions import DocumentAccessPermission
@@ -110,7 +111,7 @@ def permission_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 def permission_create(request):
     if request.method == "POST":
         form = DocumentAccessPermissionForm(request.POST, tenant=request.tenant)
@@ -141,7 +142,7 @@ def permission_create(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def permission_edit(request, pk):
     permission = documents_object(request, DocumentAccessPermission, pk)
     if request.method == "POST":
@@ -166,7 +167,7 @@ def permission_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def permission_delete(request, pk):
     permission = documents_object(request, DocumentAccessPermission, pk)
