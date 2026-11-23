@@ -329,7 +329,8 @@ def search_export_csv(request):
     writer = csv.writer(response)
     writer.writerow(["Number", "Title", "Document Type", "Classification", "Status", "Department", "Owner", "Created At"])
 
-    for doc in qs[:500]:
+    docs_list = list(qs[:500])
+    for doc in docs_list:
         writer.writerow([
             _csv_safe(doc.number),
             _csv_safe(doc.title),
@@ -341,5 +342,6 @@ def search_export_csv(request):
             _csv_safe(doc.created_at.strftime("%Y-%m-%d %H:%M")),
         ])
 
-    write_audit_log(request.user, qs.first() if qs.exists() else None, "export", tenant=request.tenant)
+    first_doc = docs_list[0] if docs_list else None
+    write_audit_log(request.user, first_doc, "export", tenant=request.tenant)
     return response
