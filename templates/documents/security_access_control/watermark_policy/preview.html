@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Visual Watermark Studio — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:watermark_list' %}">Watermark Policies</a>
+            <span>/</span>
+            <span>Visual Watermark Studio</span>
+        </div>
+        <h1 class="page-title">Visual Watermark Studio</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:watermark_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Policies</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- Controls Sidebar -->
+    <div class="lg:col-span-1 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Studio Controls</h2>
+            </div>
+            <div class="card-body">
+                <form method="get" class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label" for="policy_id">Select Existing Policy</label>
+                        <select name="policy_id" id="policy_id" class="form-select" onchange="this.form.submit()">
+                            <option value="">-- Generic Default --</option>
+                            {% for p in policies %}
+                            <option value="{{ p.pk }}" {% if policy and policy.pk == p.pk %}selected{% endif %}>
+                                {{ p.name }} ({{ p.get_classification_display }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="interactive_angle">Rotation: <span id="angle_val">{{ angle }}</span>°</label>
+                        <input type="range" id="interactive_angle" min="-90" max="90" value="{{ angle }}" class="w-full">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="interactive_opacity">Opacity: <span id="opacity_val">{{ opacity }}</span>%</label>
+                        <input type="range" id="interactive_opacity" min="5" max="95" value="{{ opacity }}" class="w-full">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="interactive_text">Watermark Text</label>
+                        <textarea id="interactive_text" rows="3" class="form-textarea text-xs">{{ preview_text }}</textarea>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview Canvas Area -->
+    <div class="lg:col-span-3">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-800">Simulated Document Rendering Canvas</h2>
+                <span class="badge badge-amber">{{ classification }}</span>
+            </div>
+            <div class="card-body bg-slate-100 p-8 flex justify-center">
+                <!-- A4 Simulated Document Sheet -->
+                <div class="relative w-full max-w-2xl bg-white shadow-xl rounded border border-slate-300 min-h-[500px] p-10 overflow-hidden select-none">
+                    <!-- Classification Banner Top -->
+                    <div class="absolute top-0 left-0 right-0 py-1.5 bg-red-800 text-white text-center text-xs font-bold uppercase tracking-widest shadow">
+                        *** {{ classification|upper }} — CONFIDENTIAL NAVERP INTELLECTUAL PROPERTY ***
+                    </div>
+
+                    <!-- Dummy Document Layout -->
+                    <div class="space-y-4 pt-6 opacity-35 text-slate-600">
+                        <div class="h-6 bg-slate-800 rounded w-1/2 mb-6"></div>
+                        <div class="h-3 bg-slate-400 rounded w-full"></div>
+                        <div class="h-3 bg-slate-300 rounded w-full"></div>
+                        <div class="h-3 bg-slate-300 rounded w-4/5"></div>
+                        <div class="h-3 bg-slate-300 rounded w-5/6"></div>
+                        <div class="h-3 bg-slate-400 rounded w-2/3 mt-6"></div>
+                        <div class="h-3 bg-slate-300 rounded w-full"></div>
+                        <div class="h-3 bg-slate-300 rounded w-full"></div>
+                        <div class="h-3 bg-slate-300 rounded w-3/4"></div>
+                        <div class="h-20 bg-slate-100 rounded border border-slate-200 mt-6"></div>
+                    </div>
+
+                    <!-- Dynamic Visual Watermark Layer -->
+                    <div id="watermark_layer" class="absolute inset-0 flex items-center justify-center pointer-events-none" style="transform: rotate({{ angle }}deg);">
+                        <div id="watermark_content" class="font-bold tracking-widest text-center max-w-lg leading-relaxed text-slate-500" style="opacity: {{ opacity }}%; font-size: 28px;">
+                            {{ preview_text }}
+                        </div>
+                    </div>
+
+                    <!-- Bottom Disclaimer Banner -->
+                    <div class="absolute bottom-0 left-0 right-0 py-1 bg-slate-100 border-t border-slate-200 text-slate-500 text-center text-[10px]">
+                        Unauthorized distribution, duplication or disclosure is strictly prohibited under applicable trade secret laws.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const angleSlider = document.getElementById("interactive_angle");
+    const opacitySlider = document.getElementById("interactive_opacity");
+    const textInput = document.getElementById("interactive_text");
+    const watermarkLayer = document.getElementById("watermark_layer");
+    const watermarkContent = document.getElementById("watermark_content");
+    const angleVal = document.getElementById("angle_val");
+    const opacityVal = document.getElementById("opacity_val");
+
+    if (angleSlider && watermarkLayer) {
+        angleSlider.addEventListener("input", function() {
+            watermarkLayer.style.transform = `rotate(${this.value}deg)`;
+            angleVal.textContent = this.value;
+        });
+    }
+
+    if (opacitySlider && watermarkContent) {
+        opacitySlider.addEventListener("input", function() {
+            watermarkContent.style.opacity = `${this.value}%`;
+            opacityVal.textContent = this.value;
+        });
+    }
+
+    if (textInput && watermarkContent) {
+        textInput.addEventListener("input", function() {
+            watermarkContent.textContent = this.value;
+        });
+    }
+});
+</script>
+{% endblock %}
