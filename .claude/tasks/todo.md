@@ -40225,3 +40225,303 @@ apps/quality/
 
 ## Review notes
 (To be filled in at Phase 7 close-out)
+
+---
+
+# Sub-module 13.8: Collaboration & Sharing (Module 13: Document Management System, `documents`) — plan from `research-documents-13.8.md` (2026-11-23)
+
+> **This plan EXTENDS existing app `apps/documents/`.** (13.1, 13.2, 13.3, 13.4, 13.5, 13.6 already built and verified; 13.7 planned).
+> **Free prefixes verified (0 collisions repo-wide):** **`DSHR`** (`DocumentShare`), **`DCOA`** (`CoauthorSession`), **`DTSK`** (`DocumentTask`), **`DACT`** (`DocumentActivity`).
+> **Plan written from:** `.claude/tasks/research-documents-13.8.md` (Phase 1) and `NavERP.md` (`### 13.8 Collaboration & Sharing`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/CollaborationSharing/<Entity>.py` (`DocumentShares.py`, `CoauthorSessions.py`, `DocumentTasks.py`, `DocumentActivities.py`, plus dedicated `CollaborationHub.py` and `PublicShare.py`)
+> **Template folder name:** `templates/documents/collaboration_sharing/{document_share,coauthor_session,document_task,document_activity}/{list,detail,form}.html` + `collaboration_hub.html` + `public_share_preview.html` (central collaboration hub with Shared by Me, Shared with Me, My Tasks, Activity Feed, and guest link viewer with password challenge)
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DSHR`** (`DocumentShare`), **`DCOA`** (`CoauthorSession`), **`DTSK`** (`DocumentTask`), and **`DACT`** (`DocumentActivity`), all 4 model classes, and URL stems verified unique across all 13 modules and contract files. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - `core.Tenant` (`apps/core/models/Tenant.py:class Tenant`): Multi-tenant isolation anchor.
+  - `accounts.User` (`settings.AUTH_USER_MODEL` / `apps/accounts/models.py`): Enterprise users, share creators, link recipients, coauthor collaborators, task assignees, and activity actors.
+  - `core.OrgUnit` (`apps/core/models/OrgUnit.py:class OrgUnit`): Organizational units for department-scoped sharing and team task routing.
+  - `documents.Document` (`apps/documents/models/VersionControl/Documents.py:8`): Target logical document master for sharing links, active co-authoring sessions, action tasks, and activity logging.
+  - `documents.DocumentVersion` (`apps/documents/models/VersionControl/DocumentVersions.py:9`): Target physical file revision for version-pinned shares, co-authoring sessions, and task assignments.
+  - `documents.DocumentFolder` (`apps/documents/models/StorageRepository/DocumentFolders.py:9`): Hierarchical folder tree for folder-level shares and inherited collaboration.
+  - `documents.DocumentDraft` (`apps/documents/models/DocumentAuthoring/DocumentDrafts.py:38`): Pre-publication drafts for live collaborative authoring sessions.
+  - `documents.DocumentReviewComment` (`apps/documents/models/ApprovalWorkflow/DocumentReviewComments.py:8`): Primary review annotations storage engine; FK anchor for annotation-to-task conversions.
+- **L65 Rule on CharField `max_length` vs Choice Values**: All `max_length` parameters strictly accommodate the longest choice value:
+  - `DocumentShare.share_type`: `max_length=20` (longest value: `internal_user` = 13 chars, `external_email` = 14 chars).
+  - `DocumentShare.access_level`: `max_length=20` (longest value: `view_only` = 9 chars).
+  - `CoauthorSession.status`: `max_length=20` (longest value: `disconnected` = 12 chars).
+  - `DocumentTask.task_type`: `max_length=30` (longest value: `revision_requested` = 18 chars, `approval_signoff` = 16 chars).
+  - `DocumentTask.priority`: `max_length=20` (longest value: `medium` = 6 chars, `urgent` = 6 chars).
+  - `DocumentTask.status`: `max_length=20` (longest value: `in_progress` = 11 chars).
+  - `DocumentActivity.action_type`: `max_length=30` (longest value: `coauthor_joined` = 15 chars, `version_created` = 15 chars).
+  - `DocumentActivity.notification_channel`: `max_length=20` (longest value: `email_digest` = 12 chars).
+- **L65 Rule on Index / Constraint Name Lengths (`<= 30` chars)**:
+  - `doc_dshr_ten_num_uniq` (21 chars), `doc_dshr_tnt_doc_act_idx` (24 chars), `doc_dshr_tnt_usr_act_idx` (24 chars), `doc_dshr_tnt_exp_act_idx` (24 chars).
+  - `doc_dcoa_ten_num_uniq` (21 chars), `doc_dcoa_tnt_doc_stat_idx` (25 chars), `doc_dcoa_tnt_stat_hb_idx` (24 chars), `doc_dcoa_tnt_usr_stat_idx` (25 chars).
+  - `doc_dtsk_ten_num_uniq` (21 chars), `doc_dtsk_tnt_usr_stat_idx` (25 chars), `doc_dtsk_tnt_doc_stat_idx` (25 chars), `doc_dtsk_tnt_due_stat_idx` (25 chars), `doc_dtsk_tnt_prio_stat_idx` (26 chars).
+  - `doc_dact_ten_num_uniq` (21 chars), `doc_dact_tnt_doc_crt_idx` (24 chars), `doc_dact_tnt_usr_read_idx` (25 chars), `doc_dact_tnt_act_crt_idx` (24 chars).
+- **L66 Audit Log Signature**: Every mutating view strictly calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L20/L22 Secrets & Timestamp Hygiene**:
+  - `password_hash` on `DocumentShare` is strictly hashed using Django's `make_password` / `check_password`; raw passwords are never stored in the database or rendered into form HTML.
+  - Password challenge view allows external guests to authenticate against the hashed password and store session-level token access.
+  - System timestamps (`created_at`, `updated_at`, `joined_at`, `last_heartbeat`, `completed_at`, `read_at`, `revoked_at`) have `editable=False` or are excluded from form `Meta.fields`.
+  - Computed flags (`is_expired`, `is_exhausted`, `is_valid`, `is_alive`, `is_overdue`) are implemented as `@property` methods on models, never stored editable fields.
+- **L33 / L40 / L42 / L57 Frontend & View Standards**:
+  - Color-named badges ONLY: `badge-green` (active, completed), `badge-red` (revoked, overdue, disconnected), `badge-amber` (idle, in_progress, medium priority), `badge-info` (view_only, low priority, in_app), `badge-muted` (cancelled, none), `badge-slate` (draft, internal_user).
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete and action views use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+  - List views implement full search, filtering with `.isdigit()` checks on FK query parameters (L11), and pagination.
+- **Real-Time Presence Heartbeat Engine**:
+  - HTMX periodic polling / ping endpoint triggers `coauthor_session_heartbeat`, updating `last_heartbeat`.
+  - Collaborator presence renders distinctive user color badges (`color_code`) and avatar tags.
+  - Stale sessions (>90 seconds without heartbeat) automatically transition to `idle` or `disconnected`.
+- **Annotation-to-Task Conversion**:
+  - Connects `DocumentTask.review_comment` to `DocumentReviewComment` (`DREV`) from Sub-module 13.3, allowing any reviewer or reader to convert inline review comments or drawing callouts directly into actionable team tasks.
+- **Central Collaboration Hub & Guest Access**:
+  - `collaboration_hub` provides a unified four-tab workspace: Shared by Me, Shared with Me, My Tasks, and Activity Feed.
+  - `public_share_preview` provides an external unguessable URL (`/documents/share/<share_token>/`) with password protection challenge, expiration verification, download/print capability gating, and access logging.
+
+---
+
+## Models (from research — 1–4)
+
+### 1. `DocumentShare` [PREFIX: `DSHR-`]
+- **Purpose**: Secure link generation, recipient targeting (internal user, department, external guest email, public link), granular permissions (view, comment, edit), password protection, download/print prevention, expiration deadlines, usage limits, and instant revocation.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DSHR"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="shares")`
+  - `folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.CASCADE, null=True, blank=True, related_name="shares", help_text="Optional folder-level share")`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="shares", help_text="Pin to specific version")`
+  - `share_token`: `CharField(max_length=64, unique=True, db_index=True, help_text="Cryptographically secure URL token")`
+  - `share_type`: `CharField(max_length=20, choices=SHARE_TYPE_CHOICES, default="public_link", db_index=True)` (`internal_user`, `internal_dept`, `external_email`, `public_link`)
+  - `access_level`: `CharField(max_length=20, choices=ACCESS_LEVEL_CHOICES, default="view_only", db_index=True)` (`view_only`, `comment`, `edit`)
+  - `allow_download`: `BooleanField(default=True, help_text="Permit downloading raw binary file")`
+  - `allow_print`: `BooleanField(default=True, help_text="Permit browser printing")`
+  - `include_annotations`: `BooleanField(default=False, help_text="Expose internal review comments/annotations to share recipients")`
+  - `password_hash`: `CharField(max_length=128, blank=True, help_text="Hashed password for access protection")`
+  - `expires_at`: `DateTimeField(null=True, blank=True, db_index=True, help_text="Automatic expiration timestamp")`
+  - `max_uses`: `PositiveIntegerField(null=True, blank=True, help_text="Maximum allowed access clicks/downloads")`
+  - `access_count`: `PositiveIntegerField(default=0, help_text="Number of times link was accessed")`
+  - `last_accessed_at`: `DateTimeField(null=True, blank=True)`
+  - `shared_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_document_shares")`
+  - `shared_with_user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="received_document_shares")`
+  - `shared_with_email`: `EmailField(blank=True, help_text="Recipient email for external shares")`
+  - `shared_with_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="document_shares")`
+  - `share_message`: `TextField(blank=True, help_text="Optional message or instructions for recipients")`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `revoked_at`: `DateTimeField(null=True, blank=True)`
+  - `revoked_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="revoked_document_shares")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dshr_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "document", "is_active"], name="doc_dshr_tnt_doc_act_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "shared_by", "is_active"], name="doc_dshr_tnt_usr_act_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "expires_at", "is_active"], name="doc_dshr_tnt_exp_act_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `share_token`, `access_count`, `last_accessed_at`, `password_hash` (handled via form's `raw_password`), `is_active`, `revoked_at`, `revoked_by`, `shared_by`, `created_by`, `updated_by`, `created_at`, `updated_at`.
+- **Drivers**: Internal & External Sharing, Link-Based Sharing, Password Protection, Expiration Controls, Download/Print Prevention, Revocation.
+
+### 2. `CoauthorSession` [PREFIX: `DCOA-`]
+- **Purpose**: Real-time collaborative session tracking, live collaborator presence indicators, color-coded avatar markers, active cursor/section focus, heartbeat pings, and section locks.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DCOA"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="coauthor_sessions", db_index=True)`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="coauthor_sessions")`
+  - `draft`: `ForeignKey("documents.DocumentDraft", on_delete=models.SET_NULL, null=True, blank=True, related_name="coauthor_sessions")`
+  - `session_token`: `CharField(max_length=64, unique=True, db_index=True)`
+  - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="coauthor_sessions")`
+  - `guest_name`: `CharField(max_length=100, blank=True, help_text="Display name for external guest collaborator")`
+  - `color_code`: `CharField(max_length=7, default="#3B82F6", help_text="Hex color for collaborator cursor presence")`
+  - `cursor_position`: `JSONField(default=dict, blank=True, help_text="Serialized cursor presence: page, section_anchor, offset")`
+  - `status`: `CharField(max_length=20, choices=SESSION_STATUS_CHOICES, default="active", db_index=True)` (`active`, `idle`, `disconnected`)
+  - `is_editing`: `BooleanField(default=False, help_text="True if user is actively typing / modifying section")`
+  - `current_section`: `CharField(max_length=100, blank=True, help_text="Section anchor or paragraph currently focused")`
+  - `client_ip`: `GenericIPAddressField(null=True, blank=True)`
+  - `user_agent`: `CharField(max_length=255, blank=True)`
+  - `joined_at`: `DateTimeField(auto_now_add=True)`
+  - `last_heartbeat`: `DateTimeField(auto_now=True, db_index=True)`
+  - `disconnected_at`: `DateTimeField(null=True, blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dcoa_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "document", "status"], name="doc_dcoa_tnt_doc_stat_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "status", "last_heartbeat"], name="doc_dcoa_tnt_stat_hb_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "user", "status"], name="doc_dcoa_tnt_usr_stat_idx")` (25 chars)
+- **Form exclusions**: `tenant`, `number`, `session_token`, `client_ip`, `user_agent`, `joined_at`, `last_heartbeat`, `disconnected_at`, `created_by`, `updated_by`, `created_at`, `updated_at`.
+- **Drivers**: Real-Time Co-Authoring, Live Presence Indicators, Cursor Presence, Session Heartbeat, Section Locking.
+
+### 3. `DocumentTask` [PREFIX: `DTSK-`]
+- **Purpose**: Action items, review assignments, formal and informal review tasks, due date scheduling, reminder alerts, comment-to-task conversions, individual and department routing, and completion tracking.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DTSK"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="tasks", db_index=True)`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="tasks")`
+  - `review_comment`: `ForeignKey("documents.DocumentReviewComment", on_delete=models.SET_NULL, null=True, blank=True, related_name="action_items", help_text="Originating comment or annotation if converted to task")`
+  - `title`: `CharField(max_length=255)`
+  - `description`: `TextField(blank=True)`
+  - `task_type`: `CharField(max_length=30, choices=TASK_TYPE_CHOICES, default="review", db_index=True)` (`review`, `approval_signoff`, `revision_requested`, `fact_check`, `redline_review`, `general_todo`)
+  - `priority`: `CharField(max_length=20, choices=PRIORITY_CHOICES, default="medium", db_index=True)` (`low`, `medium`, `high`, `urgent`)
+  - `status`: `CharField(max_length=20, choices=TASK_STATUS_CHOICES, default="pending", db_index=True)` (`pending`, `in_progress`, `completed`, `cancelled`, `overdue`)
+  - `assigned_to`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_document_tasks")`
+  - `assigned_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_document_tasks")`
+  - `assigned_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="document_tasks")`
+  - `due_date`: `DateField(null=True, blank=True, db_index=True)`
+  - `reminder_date`: `DateField(null=True, blank=True)`
+  - `reminder_sent`: `BooleanField(default=False)`
+  - `completed_at`: `DateTimeField(null=True, blank=True)`
+  - `completed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="completed_document_tasks")`
+  - `completion_notes`: `TextField(blank=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dtsk_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "assigned_to", "status"], name="doc_dtsk_tnt_usr_stat_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "document", "status"], name="doc_dtsk_tnt_doc_stat_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "due_date", "status"], name="doc_dtsk_tnt_due_stat_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "priority", "status"], name="doc_dtsk_tnt_prio_stat_idx")` (26 chars)
+- **Form exclusions**: `tenant`, `number`, `assigned_by`, `reminder_sent`, `completed_at`, `completed_by`, `created_by`, `updated_by`, `created_at`, `updated_at`.
+- **Drivers**: Task Assignment & Document Review, Action Items, Due Dates, Reminder Scheduling, Comment-to-Task Linkage, Department Routing.
+
+### 4. `DocumentActivity` [PREFIX: `DACT-`]
+- **Purpose**: Collaborative event ledger capturing document updates, link accesses, downloads, collaborator joins/leaves, review comments, task assignments, and user `@mentions`, with unread notification state tracking and channel routing.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DACT"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="collaboration_activities", db_index=True)`
+  - `actor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="document_activities", help_text="Null if anonymous guest or automated trigger")`
+  - `guest_name`: `CharField(max_length=100, blank=True, help_text="Guest display name if actor is external")`
+  - `target_user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="targeted_document_activities", help_text="User mentioned or assigned for notification feed")`
+  - `action_type`: `CharField(max_length=30, choices=ACTION_TYPE_CHOICES, default="document_shared", db_index=True)` (`document_shared`, `share_revoked`, `link_accessed`, `file_downloaded`, `coauthor_joined`, `coauthor_left`, `comment_added`, `task_assigned`, `task_completed`, `user_mentioned`, `version_created`)
+  - `summary`: `CharField(max_length=255, help_text="Human-readable event summary")`
+  - `details_json`: `JSONField(default=dict, blank=True, help_text="Structured event metadata (old/new values, IP, snippet)")`
+  - `is_read`: `BooleanField(default=False, db_index=True, help_text="Read state for target_user notification feed")`
+  - `read_at`: `DateTimeField(null=True, blank=True)`
+  - `notification_channel`: `CharField(max_length=20, choices=NOTIFICATION_CHANNEL_CHOICES, default="in_app")` (`in_app`, `email_digest`, `none`)
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dact_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "document", "created_at"], name="doc_dact_tnt_doc_crt_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "target_user", "is_read"], name="doc_dact_tnt_usr_read_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "action_type", "created_at"], name="doc_dact_tnt_act_crt_idx")` (24 chars)
+- **Form exclusions**: Telemetry model; populated dynamically by collaboration views and event signals; administrative filtering and viewing only.
+- **Drivers**: Activity Feed & Notifications, Document Updates, Collaborator Mentions, "Shared with Me" Feeds, Read State Tracking.
+
+---
+
+## Detailed Build Plan (Phases 3 to 7)
+
+### Phase 3.1: Spec Contract
+- [ ] Read `NavERP.md`, `research-documents-13.8.md`, and sibling modules to author `.claude/tasks/contract-documents-13.8.md`.
+- [ ] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
+- [ ] Commit contract: `git add .claude/tasks/contract-documents-13.8.md; git commit -m "docs(documents): freeze 13.8 contract specification"`
+
+### Phase 3.2: Build Entity by Entity (Strictly Serial)
+- [ ] **Entity 1: DocumentShare** (`DSHR-`)
+  - [ ] `apps/documents/models/CollaborationSharing/DocumentShares.py`
+  - [ ] `apps/documents/forms/CollaborationSharing/DocumentShares.py`
+  - [ ] `apps/documents/views/CollaborationSharing/DocumentShares.py` (`document_share_list`, `document_share_create`, `document_share_detail`, `document_share_edit`, `document_share_revoke`)
+  - [ ] `apps/documents/urls/CollaborationSharing/DocumentShares.py`
+  - [ ] `templates/documents/collaboration_sharing/document_share/list.html`
+  - [ ] `templates/documents/collaboration_sharing/document_share/detail.html`
+  - [ ] `templates/documents/collaboration_sharing/document_share/form.html`
+- [ ] **Entity 2: CoauthorSession** (`DCOA-`)
+  - [ ] `apps/documents/models/CollaborationSharing/CoauthorSessions.py`
+  - [ ] `apps/documents/forms/CollaborationSharing/CoauthorSessions.py`
+  - [ ] `apps/documents/views/CollaborationSharing/CoauthorSessions.py` (`coauthor_session_list`, `coauthor_session_detail`, `coauthor_session_heartbeat`, `coauthor_session_close`)
+  - [ ] `apps/documents/urls/CollaborationSharing/CoauthorSessions.py`
+  - [ ] `templates/documents/collaboration_sharing/coauthor_session/list.html`
+  - [ ] `templates/documents/collaboration_sharing/coauthor_session/detail.html`
+  - [ ] `templates/documents/collaboration_sharing/coauthor_session/form.html`
+- [ ] **Entity 3: DocumentTask** (`DTSK-`)
+  - [ ] `apps/documents/models/CollaborationSharing/DocumentTasks.py`
+  - [ ] `apps/documents/forms/CollaborationSharing/DocumentTasks.py`
+  - [ ] `apps/documents/views/CollaborationSharing/DocumentTasks.py` (`document_task_list`, `document_task_create`, `document_task_detail`, `document_task_edit`, `document_task_delete`, `document_task_toggle_complete`)
+  - [ ] `apps/documents/urls/CollaborationSharing/DocumentTasks.py`
+  - [ ] `templates/documents/collaboration_sharing/document_task/list.html`
+  - [ ] `templates/documents/collaboration_sharing/document_task/detail.html`
+  - [ ] `templates/documents/collaboration_sharing/document_task/form.html`
+- [ ] **Entity 4: DocumentActivity** (`DACT-`)
+  - [ ] `apps/documents/models/CollaborationSharing/DocumentActivities.py`
+  - [ ] `apps/documents/forms/CollaborationSharing/DocumentActivities.py`
+  - [ ] `apps/documents/views/CollaborationSharing/DocumentActivities.py` (`document_activity_list`, `document_activity_detail`, `document_activity_mark_read`, `document_activity_mark_all_read`)
+  - [ ] `apps/documents/urls/CollaborationSharing/DocumentActivities.py`
+  - [ ] `templates/documents/collaboration_sharing/document_activity/list.html`
+  - [ ] `templates/documents/collaboration_sharing/document_activity/detail.html`
+- [ ] **Dedicated Feature Views & Consoles: CollaborationHub & PublicShare**
+  - [ ] `apps/documents/views/CollaborationSharing/CollaborationHub.py` (`collaboration_hub`)
+  - [ ] `apps/documents/views/CollaborationSharing/PublicShare.py` (`public_share_preview`, `public_share_download`)
+  - [ ] `apps/documents/urls/CollaborationSharing/CollaborationHub.py`
+  - [ ] `apps/documents/urls/CollaborationSharing/PublicShare.py`
+  - [ ] `templates/documents/collaboration_sharing/collaboration_hub.html`
+  - [ ] `templates/documents/collaboration_sharing/public_share_preview.html`
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/__init__.py`
+- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
+- [ ] Register all 4 models in `apps/documents/admin.py`
+- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.8 seed data (shares, coauthor sessions, tasks, activities)
+- [ ] Wire `LIVE_LINKS["13.8"]` in `apps/core/navigation.py`:
+  - `Internal & External Sharing`: `documents:collaboration_hub`
+  - `Real-Time Co-Authoring`: `documents:coauthor_session_list`
+  - `Commenting & Annotation`: `documents:collaboration_hub`
+  - `Task Assignment & Document Review`: `documents:document_task_list`
+  - `Activity Feed & Notifications`: `documents:document_activity_list`
+  - Extra live leaves:
+    - `Collaboration Hub`: `documents:collaboration_hub`
+    - `Document Shares`: `documents:document_share_list`
+- [ ] Run `makemigrations documents`
+- [ ] Run `migrate`
+- [ ] Run `seed_documents` twice (idempotency check)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.8.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite (Unfiltered)
+- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [ ] Implement `apps/documents/tests/test_collaboration_sharing_models.py`
+- [ ] Implement `apps/documents/tests/test_collaboration_sharing_forms.py`
+- [ ] Implement `apps/documents/tests/test_collaboration_sharing_views.py`
+- [ ] Implement `apps/documents/tests/test_collaboration_sharing_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.8 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.8 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.8.md` and `.claude/tasks/gaps-documents-13.8.md`
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+
+---
+
+## Belongs to sibling sub-modules (parked, not scoped here)
+- **13.1 Document Creation & Authoring** — Template creation, rich text drafts, and authoring collaboration (retained in 13.1; `DraftCollaboration` for pre-pub draft inline suggestions).
+- **13.2 Version Control & Revision Management** — Physical binary file storage, version numbering, check-in / check-out exclusive locks, and branch forks.
+- **13.3 Document Approval & Review Workflow** — Multi-step approval workflows (`DocumentApprovalWorkflow`), formal approval requests, legal electronic signatures (`DocumentSignature`), and formal review annotations (`DocumentReviewComment`).
+- **13.4 Document Storage & Repository** — Physical storage volume tiering (`StorageVolume`), hierarchical folder tree (`DocumentFolder`), document-to-document relationships (`DocumentRelationship`), and zip batch imports (`DocumentBatchImport`).
+- **13.5 Metadata & Indexing** — Metadata schema definition (`MetadataSchema`), custom field values (`DocumentMetadataValue`), OCR extraction pipelines (`DocumentOcrJob`), and taxonomy controlled vocabulary (`TaxonomyTerm`).
+- **13.6 Search & Discovery** — Compound search engine, faceted navigation, saved queries (`DocumentSavedSearch`), search alerts (`DocumentSearchAlert`), and search query logs (`DocumentSearchQueryLog`).
+- **13.7 Document Security & Access Control** — Granular tenant-internal ACL permissions (`DocumentAccessPermission`), dynamic watermarking policies (`WatermarkPolicy`), DRM copy/download protection (`DocumentDrmPolicy`), and Data Loss Prevention inspection (`DlpPolicy`, `DlpIncident`).
+- **13.9 Records Management & Compliance** — Records retention schedules, legal hold freezes, destruction certificates, and regulatory disposition rules.
+- **13.10 Audit Trail & Reporting** — Universal tenant-wide immutable compliance audit logs, forensic chain of custody exports, and regulatory compliance reporting.
+
+## Later passes / deferred (from `research-documents-13.8.md`)
+- **WebSocket / ASGI Live Co-Authoring Synchronizer** — Real-time millisecond-level character insertion synchronization using Django Channels / Redis and Operational Transformation (OT) or CRDT algorithms. The `CoauthorSession` data model fully supports tracking active sessions and cursor coordinates; client-side synchronization runs via HTMX polling and heartbeat pings in this pass.
+- **Automated SMTP / Amazon SES Email Digest Dispatcher** — Periodic background cron task (e.g. daily/weekly summary emails) reading unread `DocumentActivity` records with `notification_channel="email_digest"`. The data model tracks read states, channels, and targets; automated email dispatchers are scheduled background workers.
+- **WebRTC In-Browser Audio/Video Collaboration Overlay** — Live voice or video chat overlay while co-authoring a document. Commercial leaders (Nextcloud Talk, Google Meet integration) integrate dedicated communications tools for this capability.
+- **Office 365 / Google Workspace WOPI Host Integration** — Dedicated WOPI protocol implementation to allow Microsoft Office Online or Google Docs web apps to edit NavERP documents directly in cloud frames. Deferred to third-party integration pass.
+
+## Review notes
+(To be filled in at Phase 7 close-out)
+
