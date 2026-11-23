@@ -17,6 +17,10 @@ from apps.documents.forms.ApprovalWorkflow.DocumentSignatures import (
     DocumentSignatureForm,
     SignatureVerificationForm,
 )
+from apps.documents.forms.CollaborationSharing.CoauthorSessions import CoauthorSessionForm
+from apps.documents.forms.CollaborationSharing.DocumentActivities import DocumentActivityForm
+from apps.documents.forms.CollaborationSharing.DocumentShares import DocumentShareForm
+from apps.documents.forms.CollaborationSharing.DocumentTasks import DocumentTaskForm
 from apps.documents.forms.DocumentAuthoring.DocumentDrafts import DocumentDraftForm
 from apps.documents.forms.DocumentAuthoring.DocumentTemplates import DocumentTemplateForm
 from apps.documents.forms.DocumentAuthoring.DraftCollaborations import DraftCollaborationForm
@@ -102,4 +106,8 @@ __all__ = [
     "DocumentDrmPolicyForm",
     "DlpPolicyForm",
     "DlpIncidentResolveForm",
+    "DocumentShareForm",
+    "CoauthorSessionForm",
+    "DocumentTaskForm",
+    "DocumentActivityForm",
 ]
