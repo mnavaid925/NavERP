@@ -2,6 +2,7 @@ import json
 import secrets
 from datetime import timedelta
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -69,6 +70,7 @@ class CoauthorSession(TenantNumbered):
     color_code = models.CharField(
         max_length=7,
         default="#3B82F6",
+        validators=[RegexValidator(regex=r"^#[0-9A-Fa-f]{6}$", message="Color code must be a valid 6-digit hex color, e.g. #3B82F6")],
         help_text="Hex color code used for collaborator cursor and presence indicator",
     )
     cursor_position = models.TextField(
