@@ -3585,6 +3585,16 @@ LIVE_LINKS = {
         "DLP Incidents": "documents:dlp_incident_list",
         "Secure Web Viewer": "documents:secure_viewer",
     },
+    # 13.8 Collaboration & Sharing
+    "13.8": {
+        "Internal & External Sharing": "documents:collaboration_hub",
+        "Real-Time Co-Authoring": "documents:coauthor_session_list",
+        "Commenting & Annotation": "documents:review_comment_list",
+        "Task Assignment & Document Review": "documents:document_task_list",
+        "Activity Feed & Notifications": "documents:document_activity_list",
+        # Extra live leaves:
+        "Document Shares": "documents:document_share_list",
+    },
 
 
 
