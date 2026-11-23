@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ schema.name }}{% else %}New Metadata Schema{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_indexing_dashboard' %}">Metadata & Indexing</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_schema_list' %}">Schemas</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ schema.code }}{% else %}New Schema{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Metadata Schema: {{ schema.name }}{% else %}Create Custom Metadata Schema{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:metadata_schema_detail' schema.pk %}{% else %}{% url 'documents:metadata_schema_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+{% if form.errors %}
+<div class="card mb-6 border-red-300 bg-red-50">
+    <div class="card-body">
+        <div class="flex items-center gap-2 text-red-700 font-semibold mb-2">
+            <i data-lucide="alert-circle"></i>
+            <span>Please correct the errors below:</span>
+        </div>
+        <ul class="list-disc list-inside text-sm text-red-600">
+            {% for field in form %}
+                {% for error in field.errors %}
+                    <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+    
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">General Schema Information</h2>
+            <p class="text-xs text-slate-500">Define the schema identity, target document type, and scope.</p>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Schema Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<p class="form-error">{{ form.name.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.code.id_for_label }}">Schema Code (Unique) <span class="text-red-500">*</span></label>
+                {{ form.code }}
+                <p class="text-xs text-slate-500 mt-1">Unique uppercase identifier (e.g. <code>NDA_SCHEMA</code>, <code>INVOICE_METADATA</code>).</p>
+                {% if form.code.errors %}<p class="form-error">{{ form.code.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_type.id_for_label }}">Target Document Type</label>
+                {{ form.target_type }}
+                {% if form.target_type.errors %}<p class="form-error">{{ form.target_type.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.inheritance_mode.id_for_label }}">Inheritance Mode</label>
+                {{ form.inheritance_mode }}
+                {% if form.inheritance_mode.errors %}<p class="form-error">{{ form.inheritance_mode.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.department.id_for_label }}">Department Binding (Optional)</label>
+                {{ form.department }}
+                <p class="text-xs text-slate-500 mt-1">Limit application of this schema to a specific organizational unit.</p>
+                {% if form.department.errors %}<p class="form-error">{{ form.department.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_folder.id_for_label }}">Target Root Folder (Optional)</label>
+                {{ form.target_folder }}
+                <p class="text-xs text-slate-500 mt-1">Automatically propagate to all documents created in or moved to this folder.</p>
+                {% if form.target_folder.errors %}<p class="form-error">{{ form.target_folder.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description & Purpose</label>
+                {{ form.description }}
+                {% if form.description.errors %}<p class="form-error">{{ form.description.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Field Specifications (JSON)</h2>
+            <p class="text-xs text-slate-500">Provide an array of property definition objects with <code>key</code>, <code>label</code>, <code>data_type</code>, <code>required</code>, and optional <code>choices</code>.</p>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.fields_definition_json.id_for_label }}">Fields Definition JSON <span class="text-red-500">*</span></label>
+                {{ form.fields_definition_json }}
+                <div class="mt-2 text-xs text-slate-500 bg-slate-50 p-3 rounded border border-slate-200">
+                    <p class="font-semibold mb-1">Example Structure:</p>
+                    <pre class="font-mono">[
+  {"key": "contract_value", "label": "Contract Value", "data_type": "decimal", "required": true},
+  {"key": "counterparty", "label": "Counterparty Name", "data_type": "text", "required": true},
+  {"key": "governing_law", "label": "Governing Law", "data_type": "dropdown", "choices": ["Delaware", "California", "New York", "England & Wales"]}
+]</pre>
+                </div>
+                {% if form.fields_definition_json.errors %}<p class="form-error">{{ form.fields_definition_json.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Governance & Flags</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="flex items-center gap-3">
+                {{ form.is_required }}
+                <label for="{{ form.is_required.id_for_label }}" class="text-sm font-medium text-slate-800">
+                    Mandatory Enforcement (Requires all mandatory fields completed before document sign-off / publish)
+                </label>
+            </div>
+            <div class="flex items-center gap-3">
+                {{ form.allow_custom_fields }}
+                <label for="{{ form.allow_custom_fields.id_for_label }}" class="text-sm font-medium text-slate-800">
+                    Allow Ad-hoc Custom Fields (Permits authors to append extra arbitrary key-value pairs)
+                </label>
+            </div>
+            <div class="flex items-center gap-3">
+                {{ form.is_active }}
+                <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800">
+                    Active Schema (Available for selection in document authoring and folder tagging)
+                </label>
+            </div>
+        </div>
+        <div class="card-footer flex justify-end gap-3">
+            <a href="{% if is_edit %}{% url 'documents:metadata_schema_detail' schema.pk %}{% else %}{% url 'documents:metadata_schema_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="save"></i>
+                <span>{% if is_edit %}Update Schema (Save v{{ schema.version_number|add:1 }}){% else %}Create Schema{% endif %}</span>
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}
