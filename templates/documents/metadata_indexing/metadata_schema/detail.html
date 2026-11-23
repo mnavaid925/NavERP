@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ schema.name }} — Metadata Schema — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_indexing_dashboard' %}">Metadata & Indexing</a>
+            <span>/</span>
+            <a href="{% url 'documents:metadata_schema_list' %}">Schemas</a>
+            <span>/</span>
+            <span>{{ schema.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ schema.name }}</h1>
+            <span class="badge {{ schema.target_type_badge }}">{{ schema.get_target_type_display }}</span>
+            <span class="badge {{ schema.status_badge }}">{{ schema.is_active|yesno:"Active,Inactive" }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:metadata_schema_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Schemas</span>
+        </a>
+        <a href="{% url 'documents:metadata_schema_edit' schema.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Schema</span>
+        </a>
+        <form method="post" action="{% url 'documents:metadata_schema_delete' schema.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this schema?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Header Summary Card -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">Schema Information</h2>
+        <span class="font-mono text-sm text-slate-500">{{ schema.number }} · Version {{ schema.version_number }}</span>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Schema Code</dt>
+                <dd><span class="font-mono text-sm font-semibold bg-slate-100 text-slate-800 px-2.5 py-1 rounded">{{ schema.code }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Target Document Type</dt>
+                <dd><span class="badge {{ schema.target_type_badge }}">{{ schema.get_target_type_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Inheritance Mode</dt>
+                <dd><span class="badge badge-info">{{ schema.get_inheritance_mode_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Mandatory Enforcement</dt>
+                <dd>
+                    {% if schema.is_required %}
+                        <span class="badge badge-amber">Mandatory on Publish</span>
+                    {% else %}
+                        <span class="badge badge-slate">Optional</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Associated Department</dt>
+                <dd>{{ schema.department.name|default:"— Global (All Departments) —" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Associated Folder</dt>
+                <dd>
+                    {% if schema.target_folder %}
+                        <span class="font-mono text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">{{ schema.target_folder.path }}</span>
+                    {% else %}
+                        <span class="text-slate-500">— Global / Root —</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Custom Ad-hoc Fields</dt>
+                <dd>{{ schema.allow_custom_fields|yesno:"Allowed,Restricted to Definition" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Created By</dt>
+                <dd>{{ schema.created_by.get_full_name|default:schema.created_by.username }} on {{ schema.created_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+        </dl>
+        {% if schema.description %}
+        <div class="mt-4 pt-4 border-t border-slate-200">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description</h3>
+            <p class="text-slate-700 text-sm leading-relaxed">{{ schema.description }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Field Definitions Table -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="card-title">Typed Field Definitions</h2>
+            <p class="text-xs text-slate-500">Configured properties extracted or validated against documents using this schema.</p>
+        </div>
+        <span class="badge badge-slate font-mono">{{ fields_list|length }} Defined Properties</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Property Key</th>
+                    <th>Display Label</th>
+                    <th>Data Type</th>
+                    <th>Required</th>
+                    <th>Default / Options</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fld in fields_list %}
+                <tr>
+                    <td class="text-slate-400 font-mono text-xs">{{ forloop.counter }}</td>
+                    <td class="font-mono text-xs font-bold text-slate-800">{{ fld.key }}</td>
+                    <td class="font-medium text-slate-900">{{ fld.label|default:fld.key }}</td>
+                    <td>
+                        <span class="badge badge-info font-mono">{{ fld.data_type|default:"text" }}</span>
+                    </td>
+                    <td>
+                        {% if fld.required %}
+                            <span class="badge badge-amber">Required</span>
+                        {% else %}
+                            <span class="badge badge-slate">Optional</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600 font-mono">
+                        {% if fld.choices %}
+                            <span class="text-slate-500">Choices:</span> {{ fld.choices|join:", " }}
+                        {% elif fld.default %}
+                            <span class="text-slate-500">Default:</span> {{ fld.default }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-6 text-slate-500">
+                        No properties defined yet. Edit this schema to add JSON field specifications.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Raw Definition Preview -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Raw JSON Schema Specification</h2>
+    </div>
+    <div class="card-body">
+        <pre class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-xs overflow-x-auto">{{ schema.fields_definition_json }}</pre>
+    </div>
+</div>
+{% endblock %}
