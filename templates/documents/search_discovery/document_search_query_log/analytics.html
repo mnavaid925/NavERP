@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Search Analytics & Query Optimization — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:search_hub' %}">Search & Discovery</a>
+            <span>/</span>
+            <span>Analytics</span>
+        </div>
+        <h1 class="page-title">Search Analytics & Query Optimization</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_search_synonym_list' %}" class="btn btn-outline">
+            <i data-lucide="book-open"></i>
+            <span>Synonyms Dictionary</span>
+        </a>
+        <a href="{% url 'documents:search_hub' %}" class="btn btn-primary">
+            <i data-lucide="search"></i>
+            <span>Search Hub</span>
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="search"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_searches }}</div>
+            <div class="stat-label">Total Volume Searches</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ zero_result_searches }}</div>
+            <div class="stat-label">Zero-Result Searches</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ zero_result_rate }}%</div>
+            <div class="stat-label">Content Gap Rate</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="gauge"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ avg_latency_ms }} ms</div>
+            <div class="stat-label">Average Query Latency</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Top Zero-Result Queries (Content Gaps) -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <div>
+                <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-4 h-4 text-red-500"></i>
+                    <span>Top Zero-Result Queries (Content Gaps)</span>
+                </h2>
+                <p class="text-xs text-slate-500">Search queries that returned 0 documents — opportunities to create documents or add synonyms.</p>
+            </div>
+            <a href="{% url 'documents:document_search_synonym_create' %}" class="btn btn-outline btn-sm">
+                <i data-lucide="plus"></i>
+                <span>Add Synonym</span>
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Missing Query Term</th>
+                        <th>Attempts</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in zero_result_queries %}
+                    <tr>
+                        <td class="font-mono text-sm text-red-600 font-medium">
+                            "{{ item.query_text }}"
+                        </td>
+                        <td class="font-semibold">{{ item.count }}</td>
+                        <td class="text-right table-actions">
+                            <a href="{% url 'documents:document_search_synonym_create' %}?term={{ item.query_text }}" class="btn btn-outline btn-sm" title="Bridge with synonym">
+                                <i data-lucide="shuffle"></i>
+                                <span>Synonym</span>
+                            </a>
+                            <a href="{% url 'documents:document_create' %}" class="btn btn-outline btn-sm" title="Create missing document">
+                                <i data-lucide="file-plus"></i>
+                                <span>Author</span>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center py-6 text-slate-400">
+                            <i data-lucide="check-circle" class="w-8 h-8 mx-auto text-green-500 mb-2"></i>
+                            <p>No zero-result search gaps detected. Query coverage is 100%!</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Top Popular Queries -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <i data-lucide="trending-up" class="w-4 h-4 text-blue-500"></i>
+                <span>Most Popular Search Queries</span>
+            </h2>
+            <p class="text-xs text-slate-500">High-frequency user queries with successful document matches.</p>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Query Term</th>
+                        <th>Executions</th>
+                        <th class="text-right">Search Hub</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in top_queries %}
+                    <tr>
+                        <td class="font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">
+                            "{{ item.query_text }}"
+                        </td>
+                        <td class="font-semibold text-blue-600">{{ item.count }}</td>
+                        <td class="text-right table-actions">
+                            <a href="{% url 'documents:search_hub' %}?q={{ item.query_text }}" class="btn btn-icon text-blue-600 hover:text-blue-800" title="Execute query in hub">
+                                <i data-lucide="play"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center py-6 text-slate-400">
+                            No query telemetry recorded yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Interface Source Breakdown -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">Search Traffic Origin Breakdown</h2>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {% for src in source_breakdown %}
+            <div class="p-4 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                <div class="text-xs text-slate-500 uppercase font-mono">{{ src.search_source }}</div>
+                <div class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ src.count }}</div>
+                <div class="text-xs text-slate-400 mt-1">Queries logged</div>
+            </div>
+            {% empty %}
+            <div class="col-span-4 text-center py-4 text-slate-400">No source breakdown telemetry available.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
