@@ -21,7 +21,9 @@ def document_share_list(request):
     )
 
     total_count = base_qs.count()
-    active_count = base_qs.filter(is_active=True, expires_at__gt=timezone.now()).count()
+    active_count = base_qs.filter(is_active=True).filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+    ).count()
     expired_count = base_qs.filter(expires_at__lte=timezone.now()).count()
     revoked_count = base_qs.filter(is_active=False).count()
 
