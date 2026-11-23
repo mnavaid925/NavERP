@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Search & Discovery Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Search & Discovery</span>
+        </div>
+        <h1 class="page-title">Enterprise Search & Discovery Hub</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_saved_search_list' %}" class="btn btn-outline">
+            <i data-lucide="bookmark"></i>
+            <span>Saved Searches</span>
+        </a>
+        <a href="{% url 'documents:document_search_synonym_list' %}" class="btn btn-outline">
+            <i data-lucide="book-open"></i>
+            <span>Synonyms</span>
+        </a>
+        <a href="{% url 'documents:document_search_analytics' %}" class="btn btn-outline">
+            <i data-lucide="bar-chart-2"></i>
+            <span>Analytics</span>
+        </a>
+    </div>
+</div>
+
+<!-- Omni Search Input Box -->
+<div class="card mb-6 shadow-sm border-blue-200 dark:border-blue-900">
+    <div class="card-body p-6">
+        <form method="get" action="{% url 'documents:search_hub' %}" id="search-form">
+            <div class="relative flex items-center">
+                <i data-lucide="search" class="absolute left-4 w-5 h-5 text-blue-500"></i>
+                <input 
+                    type="text" 
+                    name="q" 
+                    id="search-input"
+                    value="{{ query_text }}" 
+                    placeholder="Search documents by keywords, text, or try natural syntax: type:contract status:approved author:admin..." 
+                    class="form-input pl-12 pr-28 py-3 text-base w-full rounded-xl border-2 border-slate-200 focus:border-blue-500"
+                    autofocus
+                >
+                {% if query_text %}
+                <a href="{% url 'documents:search_hub' %}" class="absolute right-20 text-slate-400 hover:text-slate-600" title="Clear query">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+                <button type="submit" class="absolute right-2 btn btn-primary py-2 px-4 rounded-lg">
+                    <span>Search</span>
+                </button>
+            </div>
+
+            <!-- Preserve Active Facet Selections in Query Form -->
+            {% for k, v in active_filters.items %}
+                {% if v %}
+                <input type="hidden" name="{{ k }}" value="{{ v }}">
+                {% endif %}
+            {% endfor %}
+            {% if sort_by %}
+            <input type="hidden" name="sort_by" value="{{ sort_by }}">
+            {% endif %}
+        </form>
+
+        <!-- NLP Detected Intent Chips -->
+        {% if intent_chips %}
+        <div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <span class="text-xs font-semibold text-purple-600 uppercase flex items-center gap-1">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                <span>Detected Intents:</span>
+            </span>
+            <div class="flex flex-wrap gap-1.5">
+                {% for chip in intent_chips %}
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                    {{ chip.label }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Synonyms Expansion Notice -->
+        {% if synonyms_applied %}
+        <div class="flex items-center gap-2 mt-2">
+            <span class="text-xs font-semibold text-blue-600 uppercase flex items-center gap-1">
+                <i data-lucide="shuffle" class="w-3.5 h-3.5"></i>
+                <span>Synonym Expansion:</span>
+            </span>
+            <div class="flex flex-wrap gap-1.5">
+                {% for syn in synonyms_applied %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 font-mono">
+                    {{ syn }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Quick Launch Saved Searches -->
+        {% if saved_searches %}
+        <div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 overflow-x-auto pb-1">
+            <span class="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1 whitespace-nowrap">
+                <i data-lucide="bookmark" class="w-3.5 h-3.5"></i>
+                <span>Saved Presets:</span>
+            </span>
+            <div class="flex gap-2">
+                {% for svd in saved_searches %}
+                <a href="{% url 'documents:document_saved_search_run' svd.pk %}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 whitespace-nowrap">
+                    {% if svd.is_pinned %}<i data-lucide="pin" class="w-3 h-3 text-amber-500"></i>{% endif %}
+                    <span>{{ svd.name }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Popular Searches Cloud -->
+        {% if popular_searches %}
+        <div class="flex items-center gap-2 mt-2">
+            <span class="text-xs text-slate-400 uppercase">Popular:</span>
+            <div class="flex flex-wrap gap-2 text-xs">
+                {% for item in popular_searches %}
+                <a href="?q={{ item.query_text }}" class="text-slate-500 hover:text-blue-600 hover:underline">
+                    {{ item.query_text }}
+                </a>
+                {% if not forloop.last %}<span class="text-slate-300">•</span>{% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- Left Column: Faceted Filter Refinements -->
+    <div class="lg:col-span-1 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold flex items-center gap-2">
+                    <i data-lucide="filter" class="w-4 h-4"></i>
+                    <span>Faceted Filters</span>
+                </h2>
+                {% if active_filters.doc_type or active_filters.classification or active_filters.status or active_filters.folder or active_filters.author or active_filters.date_from or active_filters.date_to %}
+                <a href="{% url 'documents:search_hub' %}{% if query_text %}?q={{ query_text }}{% endif %}" class="text-xs text-blue-600 hover:underline">
+                    Clear Facets
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body space-y-5 text-sm">
+                <!-- Document Types Facet -->
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Document Type</h3>
+                    <div class="space-y-1">
+                        {% for item in facets.document_types %}
+                        <a href="?{% if query_text %}q={{ query_text }}&{% endif %}doc_type={% if item.selected %}{% else %}{{ item.value }}{% endif %}{% if active_filters.classification %}&classification={{ active_filters.classification }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}" 
+                           class="flex justify-between items-center py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800 {% if item.selected %}bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/30 dark:text-blue-200{% endif %}">
+                            <span class="truncate">{{ item.label }}</span>
+                            <span class="text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">{{ item.count }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Classification Facet -->
+                <div class="border-t border-slate-100 dark:border-slate-800 pt-4">
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Classification</h3>
+                    <div class="space-y-1">
+                        {% for item in facets.classifications %}
+                        <a href="?{% if query_text %}q={{ query_text }}&{% endif %}{% if active_filters.doc_type %}doc_type={{ active_filters.doc_type }}&{% endif %}classification={% if item.selected %}{% else %}{{ item.value }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}" 
+                           class="flex justify-between items-center py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800 {% if item.selected %}bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/30 dark:text-blue-200{% endif %}">
+                            <span>{{ item.label }}</span>
+                            <span class="text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">{{ item.count }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Status Facet -->
+                <div class="border-t border-slate-100 dark:border-slate-800 pt-4">
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Status</h3>
+                    <div class="space-y-1">
+                        {% for item in facets.statuses %}
+                        <a href="?{% if query_text %}q={{ query_text }}&{% endif %}{% if active_filters.doc_type %}doc_type={{ active_filters.doc_type }}&{% endif %}{% if active_filters.classification %}classification={{ active_filters.classification }}&{% endif %}status={% if item.selected %}{% else %}{{ item.value }}{% endif %}" 
+                           class="flex justify-between items-center py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800 {% if item.selected %}bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/30 dark:text-blue-200{% endif %}">
+                            <span>{{ item.label }}</span>
+                            <span class="text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">{{ item.count }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Folder Filter -->
+                <div class="border-t border-slate-100 dark:border-slate-800 pt-4">
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Target Folder</h3>
+                    <select onchange="window.location.href=this.value" class="form-select text-xs w-full">
+                        <option value="?{% if query_text %}q={{ query_text }}&{% endif %}folder=">All Folders</option>
+                        {% for fld in folders %}
+                        <option value="?{% if query_text %}q={{ query_text }}&{% endif %}folder={{ fld.pk }}" {% if active_filters.folder == fld.pk|stringformat:"d" %}selected{% endif %}>
+                            {{ fld.path|default:fld.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Results Stream -->
+    <div class="lg:col-span-3 space-y-4">
+        <!-- Result Header & Sort Bar -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+            <div class="text-sm text-slate-600 dark:text-slate-300">
+                Found <span class="font-bold text-slate-900 dark:text-slate-100">{{ total_count }}</span> documents 
+                <span class="text-xs text-slate-400">({{ execution_time_ms }} ms)</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <form method="get" class="flex items-center gap-2">
+                    {% if query_text %}<input type="hidden" name="q" value="{{ query_text }}">{% endif %}
+                    {% for k, v in active_filters.items %}
+                        {% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}
+                    {% endfor %}
+                    <label class="text-xs text-slate-500" for="hub-sort">Sort by:</label>
+                    <select id="hub-sort" name="sort_by" onchange="this.form.submit()" class="form-select text-xs py-1">
+                        <option value="relevance" {% if sort_by == "relevance" %}selected{% endif %}>Best Match</option>
+                        <option value="updated_at_desc" {% if sort_by == "updated_at_desc" %}selected{% endif %}>Recently Updated</option>
+                        <option value="created_at_desc" {% if sort_by == "created_at_desc" %}selected{% endif %}>Recently Created</option>
+                        <option value="title_asc" {% if sort_by == "title_asc" %}selected{% endif %}>Title (A-Z)</option>
+                    </select>
+                </form>
+                <a href="{% url 'documents:search_export_csv' %}?{% if query_text %}q={{ query_text }}{% endif %}{% if active_filters.doc_type %}&doc_type={{ active_filters.doc_type }}{% endif %}{% if active_filters.classification %}&classification={{ active_filters.classification }}{% endif %}{% if active_filters.status %}&status={{ active_filters.status }}{% endif %}" class="btn btn-outline btn-sm">
+                    <i data-lucide="download"></i>
+                    <span>CSV</span>
+                </a>
+                <a href="{% url 'documents:document_saved_search_create' %}?query_text={{ query_text }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="bookmark"></i>
+                    <span>Save Search</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Document Result Cards -->
+        <div class="space-y-3">
+            {% for doc in results %}
+            <div class="card p-4 hover:border-blue-300 dark:hover:border-blue-700 transition">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-mono text-xs text-slate-500">{{ doc.number }}</span>
+                            <span class="badge {{ doc.classification_badge_class }}">{{ doc.get_classification_display }}</span>
+                            <span class="badge {{ doc.status_badge_class }}">{{ doc.get_status_display }}</span>
+                            <span class="badge badge-slate">{{ doc.get_document_type_display }}</span>
+                        </div>
+                        <h3 class="text-base font-semibold">
+                            <a href="{% url 'documents:search_click_track' doc.pk %}?rank={{ forloop.counter }}" class="text-blue-600 dark:text-blue-400 hover:underline">
+                                {{ doc.title }}
+                            </a>
+                        </h3>
+                        {% if doc.description %}
+                        <p class="text-sm text-slate-600 dark:text-slate-300 mt-1 line-clamp-2">
+                            {{ doc.description }}
+                        </p>
+                        {% endif %}
+                        <div class="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                            {% if doc.folder %}
+                            <span class="flex items-center gap-1">
+                                <i data-lucide="folder" class="w-3.5 h-3.5"></i>
+                                <span>{{ doc.folder.path|default:doc.folder.name }}</span>
+                            </span>
+                            {% endif %}
+                            <span class="flex items-center gap-1">
+                                <i data-lucide="user" class="w-3.5 h-3.5"></i>
+                                <span>{{ doc.owner.username }}</span>
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+                                <span>{{ doc.updated_at|date:"M d, Y" }}</span>
+                            </span>
+                            {% if doc.current_version %}
+                            <span class="flex items-center gap-1 font-mono text-slate-500">
+                                <span>v{{ doc.current_version.version_number }}</span>
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1 shrink-0">
+                        <a href="{% url 'documents:document_detail' doc.pk %}" class="btn btn-outline btn-sm">
+                            <i data-lucide="eye"></i>
+                            <span>View</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="card p-8">
+                <div class="empty-state">
+                    <i data-lucide="search-x" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
+                    <h3 class="text-lg font-semibold">No Documents Match Your Search</h3>
+                    <p class="text-slate-500 max-w-md mx-auto mt-1 text-sm">
+                        {% if query_text %}
+                        We couldn't find any documents matching "<strong>{{ query_text }}</strong>".
+                        {% else %}
+                        No documents matched the active facet filter combinations.
+                        {% endif %}
+                    </p>
+                    {% if zero_result_suggestions %}
+                    <div class="mt-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg text-left max-w-md mx-auto text-xs space-y-1">
+                        <div class="font-semibold text-slate-700 dark:text-slate-300 uppercase mb-2">Discovery Recommendations:</div>
+                        {% for sugg in zero_result_suggestions %}
+                        <div class="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                            <i data-lucide="arrow-right" class="w-3 h-3 text-blue-500"></i>
+                            <span>{{ sugg }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="mt-6 flex justify-center gap-3">
+                        <a href="{% url 'documents:search_hub' %}" class="btn btn-outline">
+                            <i data-lucide="rotate-ccw"></i>
+                            <span>Reset Search</span>
+                        </a>
+                        <a href="{% url 'documents:document_create' %}" class="btn btn-primary">
+                            <i data-lucide="plus"></i>
+                            <span>Author New Document</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="card p-3 pagination flex justify-between items-center">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query_text %}&q={{ query_text }}{% endif %}{% for k, v in active_filters.items %}{% if v %}&{{ k }}={{ v }}{% endif %}{% endfor %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <div></div>
+            {% endif %}
+            <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query_text %}&q={{ query_text }}{% endif %}{% for k, v in active_filters.items %}{% if v %}&{{ k }}={{ v }}{% endif %}{% endfor %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <div></div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
