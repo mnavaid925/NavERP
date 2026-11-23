@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Document Tasks & Action Items — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_hub' %}">Collaboration & Sharing</a>
+            <span>/</span>
+            <span>Document Tasks</span>
+        </div>
+        <h1 class="page-title">Document Tasks & Action Items</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:collaboration_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-grid"></i>
+            <span>Collaboration Hub</span>
+        </a>
+        <a href="{% url 'documents:document_task_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Document Task</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Strip -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="check-square"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Tasks</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ pending_count }}</div>
+            <div class="stat-label">Pending</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="play"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ in_progress_count }}</div>
+            <div class="stat-label">In Progress</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ completed_count }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="stat-value {% if overdue_count > 0 %}text-red-600{% endif %}">{{ overdue_count }}</div>
+            <div class="stat-label">Overdue Tasks</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div>
+                <label class="form-label" for="search-input">Search Tasks</label>
+                <input type="text" name="q" id="search-input" value="{{ q }}" placeholder="Title, doc, assignee..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="type-select">Task Type</label>
+                <select name="task_type" id="type-select" class="form-select">
+                    <option value="">All Types</option>
+                    {% for code, label in task_type_choices %}
+                    <option value="{{ code }}" {% if current_task_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="priority-select">Priority</label>
+                <select name="priority" id="priority-select" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for code, label in priority_choices %}
+                    <option value="{{ code }}" {% if current_priority == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status-select">Status</label>
+                <select name="status" id="status-select" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="overdue" {% if current_status == "overdue" %}selected{% endif %}>Overdue</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if current_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="assigned-select">Assignee</label>
+                <select name="assigned_to" id="assigned-select" class="form-select">
+                    <option value="">All Assignees</option>
+                    <option value="me" {% if assigned_to_filter == "me" %}selected{% endif %}>Assigned to Me</option>
+                    {% for u in users %}
+                    <option value="{{ u.pk }}" {% if assigned_to_filter == u.pk|stringformat:"d" %}selected{% endif %}>
+                        {{ u.get_full_name|default:u.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or current_task_type or current_priority or current_status or assigned_to_filter %}
+                <a href="{% url 'documents:document_task_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width: 48px;">Done</th>
+                    <th>Task Number</th>
+                    <th>Title & Context</th>
+                    <th>Type</th>
+                    <th>Priority</th>
+                    <th>Assignee</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr class="{% if task.status == 'completed' %}opacity-70 bg-slate-50/50{% endif %}">
+                    <td class="text-center">
+                        <form method="post" action="{% url 'documents:document_task_toggle_complete' task.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="w-6 h-6 rounded border flex items-center justify-center transition-colors {% if task.status == 'completed' %}bg-green-600 border-green-600 text-white{% else %}border-slate-300 hover:border-blue-500 text-transparent hover:text-slate-300{% endif %}" title="{% if task.status == 'completed' %}Reopen Task{% else %}Mark as Done{% endif %}">
+                                <i data-lucide="check" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </td>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'documents:document_task_detail' task.pk %}" class="text-blue-600 hover:underline">
+                            {{ task.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 {% if task.status == 'completed' %}line-through text-slate-500{% endif %}">
+                            <a href="{% url 'documents:document_task_detail' task.pk %}" class="hover:underline">
+                                {{ task.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                            <i data-lucide="file-text" class="w-3 h-3"></i>
+                            <a href="{% url 'documents:document_detail' task.document.pk %}" class="hover:underline">
+                                {{ task.document.title }}
+                            </a>
+                            {% if task.review_comment %}
+                            <span class="badge badge-slate text-[10px] ml-1">From Comment</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ task.get_task_type_badge }}">
+                            {{ task.get_task_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ task.get_priority_badge }}">
+                            {{ task.get_priority_display }}
+                        </span>
+                    </td>
+                    <td class="text-sm">
+                        {% if task.assigned_to %}
+                            <span class="font-medium text-slate-800">{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</span>
+                        {% elif task.assigned_org_unit %}
+                            <span class="font-medium text-slate-800">{{ task.assigned_org_unit.name }}</span>
+                        {% else %}
+                            <span class="text-slate-400 italic">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        {% if task.due_date %}
+                            <span class="{% if task.is_overdue %}text-red-600 font-semibold{% else %}text-slate-700{% endif %}">
+                                {{ task.due_date|date:"M d, Y" }}
+                            </span>
+                        {% else %}
+                            <span class="text-slate-400">No deadline</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ task.get_status_badge }}">
+                            {{ task.effective_status|title }}
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:document_task_detail' task.pk %}" class="btn btn-icon btn-outline" title="View Task Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:document_task_edit' task.pk %}" class="btn btn-icon btn-outline" title="Edit Task">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:document_task_delete' task.pk %}" class="inline" onsubmit="return confirm('Delete task permanently?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Task">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="check-square" class="empty-icon"></i>
+                            <h3>No Document Tasks Found</h3>
+                            <p>Assign action items, content reviews, and approvals tied directly to documents.</p>
+                            <a href="{% url 'documents:document_task_create' %}" class="btn btn-primary mt-3">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Document Task</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} tasks
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if current_task_type %}&task_type={{ current_task_type }}{% endif %}{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if assigned_to_filter %}&assigned_to={{ assigned_to_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if current_task_type %}&task_type={{ current_task_type }}{% endif %}{% if current_priority %}&priority={{ current_priority }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if assigned_to_filter %}&assigned_to={{ assigned_to_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
