@@ -144,6 +144,12 @@
                     <td class="text-sm font-medium">{{ item.hit_count }}</td>
                     <td><span class="badge {{ item.status_badge_class }}">{% if item.is_active %}Active{% else %}Inactive{% endif %}</span></td>
                     <td class="text-right table-actions">
+                        <form method="post" action="{% url 'documents:document_search_synonym_toggle_active' item.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-amber-500 hover:text-amber-600" title="{% if item.is_active %}Deactivate Rule{% else %}Activate Rule{% endif %}" aria-label="{% if item.is_active %}Deactivate rule{% else %}Activate rule{% endif %}">
+                                <i data-lucide="{% if item.is_active %}pause{% else %}play{% endif %}"></i>
+                            </button>
+                        </form>
                         <a href="{% url 'documents:document_search_synonym_detail' item.pk %}" class="btn btn-icon" title="View Details" aria-label="View details">
                             <i data-lucide="eye"></i>
                         </a>
