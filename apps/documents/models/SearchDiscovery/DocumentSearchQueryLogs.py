@@ -73,6 +73,10 @@ class DocumentSearchQueryLog(TenantNumbered):
                 name="doc_dqry_tnt_zero_crt_idx",
             ),
             models.Index(
+                fields=["tenant", "user", "-created_at"],
+                name="doc_dqry_tnt_usr_crt_idx",
+            ),
+            models.Index(
                 fields=["tenant", "query_text"],
                 name="doc_dqry_tnt_qry_idx",
             ),
