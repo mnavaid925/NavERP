@@ -281,7 +281,7 @@
                         <td class="text-center">
                             <form method="post" action="{% url 'documents:document_task_toggle_complete' task.pk %}">
                                 {% csrf_token %}
-                                <button type="submit" class="w-6 h-6 rounded border flex items-center justify-center transition-colors {% if task.status == 'completed' %}bg-green-600 border-green-600 text-white{% else %}border-slate-300 hover:border-blue-500 text-transparent hover:text-slate-300{% endif %}" title="Toggle Complete">
+                                <button type="submit" class="w-6 h-6 rounded border flex items-center justify-center transition-colors {% if task.status == 'completed' %}bg-green-600 border-green-600 text-white{% else %}border-slate-300 hover:border-blue-500 text-transparent hover:text-slate-300{% endif %}" title="Toggle Complete" aria-label="Toggle Complete">
                                     <i data-lucide="check" class="w-4 h-4"></i>
                                 </button>
                             </form>
@@ -360,7 +360,7 @@
                     </div>
                 </div>
                 <div>
-                    <a href="{% url 'documents:document_activity_detail' act.pk %}" class="btn btn-sm btn-outline">
+                    <a href="{% url 'documents:document_activity_detail' act.pk %}" class="btn btn-sm btn-outline" aria-label="View activity details" title="View Details">
                         <i data-lucide="eye"></i>
                     </a>
                 </div>
