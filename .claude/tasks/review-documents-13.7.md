@@ -63,7 +63,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `templates/documents/security_access_control/secure_viewer.html:19,48`
   - **Description**: Lines 19 and 48 call `document.classification_badge`, but on `Document` model the property is `classification_badge_class`, resulting in unstyled badge pills `<span class="badge ">`.
   - **Fix**: Use `{{ document.classification_badge_class }}` and `{{ doc.classification_badge_class }}`.
-- [ ] **I7: Wasted database queries in `permission_list`**
+- [x] **I7: Wasted database queries in `permission_list`**
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py:67-68`
   - **Description**: `documents` and `folders` are queried (`[:100]`) and passed to context, but not rendered in template filters.
   - **Fix**: Remove unused queries and context variables.
