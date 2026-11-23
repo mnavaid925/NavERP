@@ -51,7 +51,7 @@ class DocumentShareForm(TenantModelForm):
             
             user_model = get_user_model()
             self.fields["shared_with_user"].queryset = user_model.objects.filter(tenant=self.tenant, is_active=True).order_by("first_name", "username")
-            self.fields["shared_with_org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant, is_active=True).order_by("name")
+            self.fields["shared_with_org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
 
     def clean(self):
         cleaned_data = super().clean()
