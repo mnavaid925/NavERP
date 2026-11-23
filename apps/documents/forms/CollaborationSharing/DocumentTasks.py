@@ -57,6 +57,16 @@ class DocumentTaskForm(TenantModelForm):
             ["document", "version", "review_comment", "assigned_to", "assigned_org_unit"],
         )
 
+        document = cleaned_data.get("document")
+        version = cleaned_data.get("version")
+        review_comment = cleaned_data.get("review_comment")
+
+        if document and version and version.document_id != document.id:
+            self.add_error("version", "The selected version does not belong to the selected document.")
+
+        if document and review_comment and review_comment.document_id != document.id:
+            self.add_error("review_comment", "The selected review comment does not belong to the selected document.")
+
         due_date = cleaned_data.get("due_date")
         reminder_date = cleaned_data.get("reminder_date")
         if due_date and reminder_date and reminder_date > due_date:
