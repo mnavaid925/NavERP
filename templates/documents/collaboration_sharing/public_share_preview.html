@@ -1,7 +1,7 @@
 {% extends "base_auth.html" %}
 {% load static %}
 
-{% block title %}Shared: {{ document.title }} — NavERP Secure Share{% endblock %}
+{% block title %}{% if password_required %}Protected Document — NavERP Secure Share{% else %}Shared: {{ document.title }} — NavERP Secure Share{% endif %}{% endblock %}
 
 {% block content %}
 <style>.auth-card { max-width: 960px; }</style>
