@@ -59,7 +59,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `templates/documents/security_access_control/document_drm_policy/detail.html:28-44`
   - **Description**: `drm_policy_delete` view and URL pattern exist, but `detail.html` omits the standard POST-only delete button with CSRF token and `confirm(...)` dialog.
   - **Fix**: Add the standard POST-only Delete form button to `page-actions`.
-- [ ] **I6: Invalid badge property on `Document` in `secure_viewer.html`**
+- [x] **I6: Invalid badge property on `Document` in `secure_viewer.html`**
   - **Files & Lines**: `templates/documents/security_access_control/secure_viewer.html:19,48`
   - **Description**: Lines 19 and 48 call `document.classification_badge`, but on `Document` model the property is `classification_badge_class`, resulting in unstyled badge pills `<span class="badge ">`.
   - **Fix**: Use `{{ document.classification_badge_class }}` and `{{ doc.classification_badge_class }}`.
