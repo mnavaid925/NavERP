@@ -19,7 +19,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
 ## Actionable Findings Checklist
 
 ### Critical (Must Fix Before Merge)
-- [ ] **C1: Missing administrative authorization (`@tenant_admin_required`) on privileged actions and policy mutations**
+- [x] **C1: Missing administrative authorization (`@tenant_admin_required`) on privileged actions and policy mutations**
   - **Files & Lines**:
     - `apps/documents/views/SecurityAccessControl/DocumentDrmPolicies.py:147` (`drm_kill_switch`)
     - `apps/documents/views/SecurityAccessControl/DlpIncidents.py:90` (`dlp_incident_resolve`)
