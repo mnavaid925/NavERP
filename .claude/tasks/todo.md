@@ -39378,3 +39378,247 @@ apps/quality/
 
 ## Review notes
 (to be filled in at Phase 7 close-out)
+
+
+---
+
+# Sub-module 13.5: Metadata & Indexing (Module 13: Document Management System, `documents`) — plan from `research-documents-13.5.md` (2026-11-23)
+
+> **This plan EXTENDS existing app `apps/documents/`.** (13.1, 13.2, 13.3, 13.4 already built and verified).
+> **Free prefixes verified (0 collisions repo-wide):** **`DSCH`** (`MetadataSchema`), **`DMETA`** (`DocumentMetadataValue`), **`DTAX`** (`TaxonomyTerm`), **`DOCR`** (`DocumentOcrJob`).
+> **Plan written from:** `.claude/tasks/research-documents-13.5.md` (Phase 1) and `NavERP.md` (`### 13.5 Metadata & Indexing`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/MetadataIndexing/<Entity>.py` (`MetadataSchemas.py`, `DocumentMetadataValues.py`, `TaxonomyTerms.py`, `DocumentOcrJobs.py`, plus indexing command center / OCR runner `MetadataIndexingDashboard.py`)
+> **Template folder name:** `templates/documents/metadata_indexing/{metadata_schema,document_metadata_value,taxonomy_term,document_ocr_job}/{list,detail,form}.html` + `tree.html` (thesaurus tree), `extract_viewer.html` (OCR reviewer), `metadata_indexing_dashboard.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DSCH`** (`MetadataSchema`), **`DMETA`** (`DocumentMetadataValue`), **`DTAX`** (`TaxonomyTerm`), **`DOCR`** (`DocumentOcrJob`), all 4 model classes, and URL stems verified unique across all 12 modules and contract files. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - External spine (all tenant-scoped): `core.Tenant` (`apps/core/models/Tenant.py`), `core.OrgUnit` (`apps/core/models/OrgUnit.py`), `accounts.User` (`settings.AUTH_USER_MODEL`, filtered by `tenant=self.tenant`).
+  - Sibling DMS models (13.1, 13.2, 13.4): `documents.Document` (`apps/documents/models/VersionControl/Documents.py`, `DOC`), `documents.DocumentVersion` (`apps/documents/models/VersionControl/DocumentVersions.py`, `DVER`), `documents.DocumentFolder` (`apps/documents/models/StorageRepository/DocumentFolders.py`, `DFLD`), `documents.DocumentTemplate` (`apps/documents/models/DocumentAuthoring/DocumentTemplates.py`, `DTMPL`).
+  - Internal 13.5 relationships: `MetadataSchema.target_folder` -> `DocumentFolder`, `MetadataSchema.department` -> `OrgUnit`; `DocumentMetadataValue.document` -> `Document`, `DocumentMetadataValue.schema` -> `MetadataSchema`, `DocumentMetadataValue.version` -> `DocumentVersion`; `TaxonomyTerm.parent` -> `self`; `DocumentOcrJob.document` -> `Document`, `DocumentOcrJob.version` -> `DocumentVersion`.
+- **Global vs Tenant FK scoping in forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `core.OrgUnit`, `Document`, `DocumentVersion`, `DocumentFolder`, `MetadataSchema`) are TENANT-SCOPED.
+  - All tenant-scoped FKs MUST be populated in form `__init__` with full `Model.objects.filter(tenant=self.tenant)` querysets and guarded in `clean()` via `reject_foreign(...)`.
+  - List view FK query param parsing MUST check `.isdigit()` (L11) before filtering.
+- **Enterprise Commercial Standards Alignment (M-Files, Microsoft SharePoint & Azure AI Document Intelligence, Alfresco, Laserfiche, OpenText Documentum, Box, ABBYY Vantage, Hyland OnBase)**:
+  - **Custom Metadata Schema & Field Validation Rules**: Dynamic typed schema builder (`text`, `textarea`, `integer`, `decimal`, `date`, `datetime`, `boolean`, `dropdown`, `multi_select`, `currency`, `url`), schema versioning (`version`), regex constraints, target document types, and mandatory enforcement.
+  - **Metadata Inheritance & Cascade Policies**: Folder-level cascade policies (`target_folder`, `inherit_to_children`) that automatically bind schemas to files in folder branches, template inheritance, source provenance tracking (`manual_entry`, `folder_inherited`, `template_inherited`, `ai_extracted`, `bulk_updated`), and override tracking (`is_overridden`).
+  - **Controlled Vocabulary & Thesauri**: Centralized taxonomy repository, hierarchical multi-level classification trees (`parent`), synonyms lists for search expansion and auto-normalization, external cross-reference codes (ISO/NAICS/GL), and open vs governed vocabularies.
+  - **Asynchronous OCR & AI Classification Pipeline**: Pluggable engine abstraction (`internal_heuristic`, `tesseract`, `azure_document_intelligence`, `aws_textract`, `google_vision`), full-text extraction synced to `DocumentVersion.extracted_text`, AI category suggestion with confidence scoring, automatic entity extraction (dates, amounts, counterparties, reference codes), handwriting (ICR) and barcode flags, and one-click suggestion acceptance.
+  - **Validation & Compliance Status**: Instance validation tracking (`valid`, `invalid`, `pending_validation`) with error logs ensuring documents cannot proceed through governance if mandatory schema fields are missing.
+- **Workflow state, secrets & read-only timestamp hygiene (L20, L22, L25)**:
+  - System timestamps (`created_at`, `updated_at`, `started_at`, `completed_at`), auto-numbers (`number`), and system-computed validation/extraction results (`extracted_text`, `confidence_score`, `validation_status`, `validation_errors`, `error_message`, `is_applied_to_document`) MUST have `editable=False` or be excluded from `Meta.fields` in ModelForms.
+  - Computed properties (`is_valid`, `field_count`, `has_errors`, `has_confidence_warning`) MUST be `@property` / helper methods — NEVER stored editable columns (L22).
+- **L65 Choice `max_length` & Index/Constraint naming (`<= 30` chars)**: Every `CharField(choices=...)` has `max_length >= len(longest_choice_value) + 5` headroom; every `models.Index.name` and `UniqueConstraint.name` is strictly `<= 30` characters.
+- **L66 Audit log signature**: Every mutating view calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+
+---
+
+## Models (from research — 1–4)
+
+### 1. `MetadataSchema` [PREFIX: `DSCH-`]
+- **Purpose**: Reusable custom metadata schema / content type definition with typed fields, regex validation rules, target document types, and folder cascade policies.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DSCH"`)
+  - `name`: `CharField(max_length=150)`
+  - `code`: `CharField(max_length=60, db_index=True)` (e.g. `SCH-CONTRACT-01`, `SCH-SOP-01`)
+  - `description`: `TextField(blank=True)`
+  - `target_document_type`: `CharField(max_length=40, choices=TARGET_DOCUMENT_TYPE_CHOICES, default="all", db_index=True)` (`all`, `general`, `contract`, `policy`, `sop`, `report`, `specification`, `proposal`, `technical`)
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="metadata_schemas")`
+  - `target_folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.SET_NULL, null=True, blank=True, related_name="metadata_schemas")`
+  - `inherit_to_children`: `BooleanField(default=True, help_text="Cascade schema to child folders and documents")`
+  - `fields_definition`: `JSONField(default=list, blank=True, help_text="List of field specs: key, label, type, required, default, choices, regex_pattern, help_text")`
+  - `allow_custom_fields`: `BooleanField(default=False, help_text="Allow authors to attach ad-hoc metadata fields")`
+  - `version`: `CharField(max_length=20, default="1.0")`
+  - `is_mandatory`: `BooleanField(default=False, help_text="Document cannot be approved/published without filling this schema")`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_metadata_schemas")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dsch_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "code"], name="doc_dsch_tnt_code_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "target_document_type", "is_active"], name="doc_dsch_tnt_type_act_idx")` (26 chars)
+  - `models.Index(fields=["tenant", "target_folder"], name="doc_dsch_tnt_fld_idx")` (20 chars)
+- **Form exclusions**: `tenant`, `number`, `created_by`, `created_at`, `updated_at`.
+
+### 2. `DocumentMetadataValue` [PREFIX: `DMETA-`]
+- **Purpose**: Concrete metadata instance values assigned to a document, recording field values, provenance source, and validation status.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DMETA"`)
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="metadata_values")`
+  - `schema`: `ForeignKey("documents.MetadataSchema", on_delete=models.PROTECT, related_name="document_values")`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="metadata_values")`
+  - `values_json`: `JSONField(default=dict, blank=True, help_text="Dictionary of key-value pairs matching schema fields")`
+  - `source`: `CharField(max_length=30, choices=SOURCE_CHOICES, default="manual_entry", db_index=True)` (`manual_entry`, `folder_inherited`, `template_inherited`, `ai_extracted`, `bulk_updated`)
+  - `is_overridden`: `BooleanField(default=False, help_text="True if inherited or extracted value was manually overridden")`
+  - `validation_status`: `CharField(max_length=25, choices=VALIDATION_STATUS_CHOICES, default="pending_validation", db_index=True)` (`valid`, `invalid`, `pending_validation`)
+  - `validation_errors`: `TextField(blank=True, help_text="Detailed error messages if validation failed")`
+  - `last_updated_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="updated_metadata_values")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dmeta_ten_num_uniq")` (22 chars)
+  - `UniqueConstraint(fields=["tenant", "document", "schema"], name="doc_dmeta_tnt_doc_sch_uniq")` (26 chars)
+  - `models.Index(fields=["tenant", "document", "validation_status"], name="doc_dmeta_tnt_doc_stat_idx")` (27 chars)
+  - `models.Index(fields=["tenant", "schema", "source"], name="doc_dmeta_tnt_sch_src_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `is_overridden`, `validation_status`, `validation_errors`, `last_updated_by`, `created_at`, `updated_at`. Dedicated validation method executes against the schema rules.
+
+### 3. `TaxonomyTerm` [PREFIX: `DTAX-`]
+- **Purpose**: Controlled vocabulary repository and hierarchical thesaurus with synonym mapping, code normalization, and external cross-reference standards.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DTAX"`)
+  - `vocabulary_name`: `CharField(max_length=100, db_index=True, help_text="Controlled vocabulary set e.g. Document Categories, Jurisdictions, Compliance Frameworks")`
+  - `term_code`: `CharField(max_length=60, db_index=True, help_text="Standardized code e.g. JUR-US-NY, ISO-27001")`
+  - `label`: `CharField(max_length=150, help_text="Preferred official term label")`
+  - `slug`: `SlugField(max_length=160, blank=True)`
+  - `parent`: `ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", db_index=True)`
+  - `description`: `TextField(blank=True)`
+  - `synonyms`: `JSONField(default=list, blank=True, help_text="List of alternate labels / synonyms for normalization & search expansion")`
+  - `cross_reference_code`: `CharField(max_length=100, blank=True, help_text="External standard mapping e.g. ISO, NAICS, GL code")`
+  - `is_governed`: `BooleanField(default=True, help_text="Closed vocabulary (only custodians can add terms)")`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `sort_order`: `PositiveIntegerField(default=0)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_taxonomy_terms")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dtax_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "vocabulary_name", "term_code"], name="doc_dtax_tnt_voc_code_uniq")` (26 chars)
+  - `models.Index(fields=["tenant", "vocabulary_name", "is_active"], name="doc_dtax_tnt_voc_act_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "parent", "sort_order"], name="doc_dtax_tnt_par_sort_idx")` (25 chars)
+- **Form exclusions**: `tenant`, `number`, `created_by`, `created_at`, `updated_at`.
+
+### 4. `DocumentOcrJob` [PREFIX: `DOCR-`]
+- **Purpose**: Optical character recognition (OCR) execution pipeline, full-text layer indexing, AI classification, tag recommendation, and entity extraction.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DOCR"`)
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="ocr_jobs")`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="ocr_jobs")`
+  - `status`: `CharField(max_length=25, choices=STATUS_CHOICES, default="queued", db_index=True)` (`queued`, `processing`, `completed`, `failed`, `needs_review`)
+  - `ocr_engine`: `CharField(max_length=35, choices=OCR_ENGINE_CHOICES, default="internal_heuristic", db_index=True)` (`internal_heuristic`, `tesseract`, `azure_document_intelligence`, `aws_textract`, `google_vision`)
+  - `language`: `CharField(max_length=10, default="eng")`
+  - `extracted_text`: `TextField(blank=True, help_text="Full text content extracted from document/version")`
+  - `confidence_score`: `DecimalField(max_digits=5, decimal_places=2, default=0.00, help_text="Overall OCR confidence percentage 0.00 - 100.00%")`
+  - `word_count`: `PositiveIntegerField(default=0)`
+  - `page_count`: `PositiveIntegerField(default=1)`
+  - `has_handwriting`: `BooleanField(default=False, help_text="Flag indicating presence of handwritten ICR content")`
+  - `detected_barcodes`: `JSONField(default=list, blank=True, help_text="List of barcode / QR code values detected")`
+  - `detected_category`: `CharField(max_length=40, blank=True, help_text="AI-suggested document classification / type")`
+  - `category_confidence`: `DecimalField(max_digits=5, decimal_places=2, default=0.00)`
+  - `suggested_tags`: `JSONField(default=list, blank=True, help_text="AI-extracted keyword tag recommendations")`
+  - `extracted_entities`: `JSONField(default=dict, blank=True, help_text="Structured entity dictionary: dates, organizations, amounts, reference numbers")`
+  - `is_applied_to_document`: `BooleanField(default=False, help_text="Whether suggested tags and text have been synced to Document master")`
+  - `error_message`: `TextField(blank=True, help_text="Diagnostic failure logs if extraction encountered issues")`
+  - `started_at`: `DateTimeField(null=True, blank=True)`
+  - `completed_at`: `DateTimeField(null=True, blank=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_ocr_jobs")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_docr_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "status", "created_at"], name="doc_docr_tnt_stat_dt_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "document", "status"], name="doc_docr_tnt_doc_stat_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `extracted_text`, `confidence_score`, `word_count`, `page_count`, `has_handwriting`, `detected_barcodes`, `detected_category`, `category_confidence`, `suggested_tags`, `extracted_entities`, `is_applied_to_document`, `error_message`, `started_at`, `completed_at`, `created_by`, `created_at`, `updated_at`. Dedicated action view for running OCR extraction and applying suggestions to Document (`apply_suggestions`).
+
+---
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-documents-13.5.md` with every field, choice, URL name, and view context key.
+
+### Phase 3.2: Entity by Entity Implementation
+- [ ] **Entity 1: MetadataSchema** (`DSCH-`)
+  - [ ] `apps/documents/models/MetadataIndexing/MetadataSchemas.py`
+  - [ ] `apps/documents/forms/MetadataIndexing/MetadataSchemas.py`
+  - [ ] `apps/documents/views/MetadataIndexing/MetadataSchemas.py`
+  - [ ] `apps/documents/urls/MetadataIndexing/MetadataSchemas.py`
+  - [ ] `templates/documents/metadata_indexing/metadata_schema/list.html`
+  - [ ] `templates/documents/metadata_indexing/metadata_schema/detail.html`
+  - [ ] `templates/documents/metadata_indexing/metadata_schema/form.html`
+- [ ] **Entity 2: DocumentMetadataValue** (`DMETA-`)
+  - [ ] `apps/documents/models/MetadataIndexing/DocumentMetadataValues.py`
+  - [ ] `apps/documents/forms/MetadataIndexing/DocumentMetadataValues.py`
+  - [ ] `apps/documents/views/MetadataIndexing/DocumentMetadataValues.py`
+  - [ ] `apps/documents/urls/MetadataIndexing/DocumentMetadataValues.py`
+  - [ ] `templates/documents/metadata_indexing/document_metadata_value/list.html`
+  - [ ] `templates/documents/metadata_indexing/document_metadata_value/detail.html`
+  - [ ] `templates/documents/metadata_indexing/document_metadata_value/form.html`
+- [ ] **Entity 3: TaxonomyTerm** (`DTAX-`)
+  - [ ] `apps/documents/models/MetadataIndexing/TaxonomyTerms.py`
+  - [ ] `apps/documents/forms/MetadataIndexing/TaxonomyTerms.py`
+  - [ ] `apps/documents/views/MetadataIndexing/TaxonomyTerms.py`
+  - [ ] `apps/documents/urls/MetadataIndexing/TaxonomyTerms.py`
+  - [ ] `templates/documents/metadata_indexing/taxonomy_term/list.html`
+  - [ ] `templates/documents/metadata_indexing/taxonomy_term/detail.html`
+  - [ ] `templates/documents/metadata_indexing/taxonomy_term/form.html`
+  - [ ] `templates/documents/metadata_indexing/taxonomy_term/tree.html`
+- [ ] **Entity 4: DocumentOcrJob** (`DOCR-`)
+  - [ ] `apps/documents/models/MetadataIndexing/DocumentOcrJobs.py`
+  - [ ] `apps/documents/forms/MetadataIndexing/DocumentOcrJobs.py`
+  - [ ] `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py`
+  - [ ] `apps/documents/urls/MetadataIndexing/DocumentOcrJobs.py`
+  - [ ] `templates/documents/metadata_indexing/document_ocr_job/list.html`
+  - [ ] `templates/documents/metadata_indexing/document_ocr_job/detail.html`
+  - [ ] `templates/documents/metadata_indexing/document_ocr_job/form.html`
+  - [ ] `templates/documents/metadata_indexing/document_ocr_job/extract_viewer.html`
+- [ ] **Dedicated Metadata & Indexing Command Center Dashboard**
+  - [ ] `apps/documents/views/MetadataIndexing/MetadataIndexingDashboard.py`
+  - [ ] `apps/documents/urls/MetadataIndexing/MetadataIndexingDashboard.py`
+  - [ ] `templates/documents/metadata_indexing/metadata_indexing_dashboard.html`
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/__init__.py`
+- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
+- [ ] Register all 4 models in `apps/documents/admin.py`
+- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.5 seed data
+- [ ] Wire `LIVE_LINKS["13.5"]` in `apps/core/navigation.py`:
+  - `Custom Metadata Schema`: `documents:metadata_schema_list`
+  - `Auto-Tagging & AI Classification`: `documents:document_ocr_job_list`
+  - `Full-Text Indexing & OCR`: `documents:document_ocr_job_list`
+  - `Controlled Vocabulary & Thesauri`: `documents:taxonomy_term_list`
+  - `Metadata Inheritance & Propagation`: `documents:metadata_value_list`
+- [ ] Run `makemigrations documents`
+- [ ] Run `migrate`
+- [ ] Run `seed_documents` twice (idempotency check)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.5.md`
+- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.5.md`
+
+### Phase 5: Code Fixer Burn-down
+- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+
+### Phase 6: Automated Test Suite (Unfiltered)
+- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [ ] Implement `apps/documents/tests/test_metadata_indexing_models.py`
+- [ ] Implement `apps/documents/tests/test_metadata_indexing_forms.py`
+- [ ] Implement `apps/documents/tests/test_metadata_indexing_views.py`
+- [ ] Implement `apps/documents/tests/test_metadata_indexing_security.py`
+- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.5 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.5 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.5.md` and `.claude/tasks/gaps-documents-13.5.md`
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+
+---
+
+## Belongs to sibling sub-modules (parked, not scoped here)
+- **13.6 Search & Discovery** — Faceted search filters, vector/hybrid semantic search, saved search queries, search analytics, and query optimization.
+- **13.7 Document Security & Access Control** — Granular field-level metadata access permissions (e.g. restricting access to confidential metadata fields based on user role).
+- **13.9 Records Management & Compliance** — Retention schedule rules triggered by metadata date fields (e.g. disposing documents 7 years after `contract_end_date`).
+- **13.15 Electronic Forms & Data Capture** — Web-based interactive form designer, external portal submissions, and dynamic e-form schemas.
+
+## Later passes / deferred (from research-documents-13.5.md)
+- **Live Third-Party Cloud OCR SDK Credentials (Azure AI Document Intelligence, AWS Textract, Google Vision live API calls)** — The `DocumentOcrJob` model abstracts multiple engines; live execution pipeline uses internal heuristic and Tesseract fallback with clean error handling.
+- **Live Machine Learning Classification Models & Vector Embeddings (FAISS/pgvector)** — Classification in 13.5 uses regex, keyword density, and structured entity parsers, deferring vector embeddings to 13.6 (Search & Discovery).
+- **Background Asynchronous Worker Cluster (Celery/Redis)** — Jobs transition through states (`queued`, `processing`, `completed`, `failed`, `needs_review`) with synchronous fallback for tests and development.
+
+## Review notes
+(to be filled in at Phase 7 close-out)
