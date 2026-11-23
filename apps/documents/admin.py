@@ -18,6 +18,10 @@ from apps.documents.models.MetadataIndexing.DocumentMetadataValues import Docume
 from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
 from apps.documents.models.MetadataIndexing.MetadataSchemas import MetadataSchema
 from apps.documents.models.MetadataIndexing.TaxonomyTerms import TaxonomyTerm
+from apps.documents.models.SearchDiscovery.DocumentSavedSearches import DocumentSavedSearch
+from apps.documents.models.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlert
+from apps.documents.models.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLog
+from apps.documents.models.SearchDiscovery.DocumentSearchSynonyms import DocumentSearchSynonym
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
@@ -183,5 +187,38 @@ class DocumentOcrJobAdmin(admin.ModelAdmin):
     list_filter = ("status", "ocr_engine", "applied_to_document", "tenant")
     search_fields = ("number", "document__title", "extracted_full_text", "suggested_category")
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentSavedSearch)
+class DocumentSavedSearchAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "owner", "visibility", "query_text", "sort_by", "is_pinned", "run_count", "is_active", "tenant")
+    list_filter = ("visibility", "is_pinned", "is_active", "tenant")
+    search_fields = ("number", "name", "description", "query_text", "owner__username")
+    readonly_fields = ("number", "run_count", "last_run_at", "total_results_last_run", "created_at", "updated_at")
+
+
+@admin.register(DocumentSearchAlert)
+class DocumentSearchAlertAdmin(admin.ModelAdmin):
+    list_display = ("number", "saved_search", "subscriber", "frequency", "delivery_channel", "status", "new_matches_count", "is_active", "tenant")
+    list_filter = ("frequency", "delivery_channel", "status", "is_active", "tenant")
+    search_fields = ("number", "saved_search__name", "subscriber__username", "notes")
+    readonly_fields = ("number", "last_notified_at", "last_checked_at", "new_matches_count", "created_at", "updated_at")
+
+
+@admin.register(DocumentSearchSynonym)
+class DocumentSearchSynonymAdmin(admin.ModelAdmin):
+    list_display = ("number", "term", "category", "is_bidirectional", "hit_count", "is_active", "tenant")
+    list_filter = ("category", "is_bidirectional", "is_active", "tenant")
+    search_fields = ("number", "term", "synonyms")
+    readonly_fields = ("number", "hit_count", "created_at", "updated_at")
+
+
+@admin.register(DocumentSearchQueryLog)
+class DocumentSearchQueryLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "query_text", "user", "search_source", "results_count", "is_zero_result", "execution_time_ms", "created_at", "tenant")
+    list_filter = ("search_source", "is_zero_result", "tenant")
+    search_fields = ("number", "query_text", "user__username")
+    readonly_fields = ("number", "created_at", "updated_at")
+
 
 
