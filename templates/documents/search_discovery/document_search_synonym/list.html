@@ -144,15 +144,15 @@
                     <td class="text-sm font-medium">{{ item.hit_count }}</td>
                     <td><span class="badge {{ item.status_badge_class }}">{% if item.is_active %}Active{% else %}Inactive{% endif %}</span></td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'documents:document_search_synonym_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                        <a href="{% url 'documents:document_search_synonym_detail' item.pk %}" class="btn btn-icon" title="View Details" aria-label="View details">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'documents:document_search_synonym_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                        <a href="{% url 'documents:document_search_synonym_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit synonym">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'documents:document_search_synonym_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete synonym rule {{ item.term|escapejs }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete" aria-label="Delete synonym rule">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
