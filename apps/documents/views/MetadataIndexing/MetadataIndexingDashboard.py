@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.shortcuts import render
 
 from apps.documents.models.MetadataIndexing.DocumentMetadataValues import DocumentMetadataValue
@@ -18,8 +19,12 @@ def metadata_indexing_dashboard(request):
     total_schemas = MetadataSchema.objects.filter(tenant=tenant).count()
     total_values = DocumentMetadataValue.objects.filter(tenant=tenant).count()
     total_terms = TaxonomyTerm.objects.filter(tenant=tenant).count()
-    total_ocr_jobs = DocumentOcrJob.objects.filter(tenant=tenant).count()
-    pending_ocr_count = DocumentOcrJob.objects.filter(tenant=tenant, status__in=["queued", "processing"]).count()
+    ocr_stats = DocumentOcrJob.objects.filter(tenant=tenant).aggregate(
+        total=Count("id"),
+        pending=Count("id", filter=Q(status__in=["queued", "processing"])),
+    )
+    total_ocr_jobs = ocr_stats["total"] or 0
+    pending_ocr_count = ocr_stats["pending"] or 0
 
     recent_schemas = MetadataSchema.objects.filter(tenant=tenant).order_by("-created_at")[:5]
     recent_jobs = DocumentOcrJob.objects.filter(tenant=tenant).select_related("document").order_by("-created_at")[:5]
