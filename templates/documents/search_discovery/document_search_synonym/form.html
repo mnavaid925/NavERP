@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Synonym {{ search_synonym.term }}{% else %}New Synonym Rule{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:search_hub' %}">Search & Discovery</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_search_synonym_list' %}">Synonyms</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ search_synonym.term }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Synonym Rule{% else %}New Search Synonym & Expansion Rule{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-3xl">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Synonym Configuration</h2>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.term.id_for_label }}">Trigger / Base Term *</label>
+                            {{ form.term }}
+                            <div class="text-xs text-slate-500 mt-1">Single keyword or acronym e.g. <code>SOP</code> or <code>NDA</code></div>
+                            {% if form.term.errors %}<div class="form-error">{{ form.term.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.category.id_for_label }}">Vocabulary Category *</label>
+                            {{ form.category }}
+                            {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.synonyms.id_for_label }}">Synonyms & Equivalent Expressions *</label>
+                        {{ form.synonyms }}
+                        <div class="text-xs text-slate-500 mt-1">Comma-separated equivalent phrases e.g. <code>standard operating procedure, work instruction, procedure</code></div>
+                        {% if form.synonyms.errors %}<div class="form-error">{{ form.synonyms.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.language.id_for_label }}">Language Code</label>
+                            {{ form.language }}
+                            {% if form.language.errors %}<div class="form-error">{{ form.language.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group flex flex-col justify-center pt-5">
+                            <label class="flex items-center gap-2 cursor-pointer mb-2">
+                                {{ form.is_bidirectional }}
+                                <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Bidirectional equivalence (2-way expansion)</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.is_active }}
+                                <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Active status</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
+                    <a href="{% if is_edit %}{% url 'documents:document_search_synonym_detail' search_synonym.pk %}{% else %}{% url 'documents:document_search_synonym_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Synonym Rule{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
