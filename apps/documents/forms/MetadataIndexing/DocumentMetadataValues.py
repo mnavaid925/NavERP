@@ -21,7 +21,6 @@ class DocumentMetadataValueForm(forms.ModelForm):
             "value_boolean",
             "value_json",
             "source",
-            "validation_status",
         ]
         widgets = {
             "document": forms.Select(attrs={"class": "form-select"}),
@@ -36,7 +35,6 @@ class DocumentMetadataValueForm(forms.ModelForm):
             "value_boolean": forms.Select(attrs={"class": "form-select"}, choices=[(None, "— Not Set —"), (True, "Yes / True"), (False, "No / False")]),
             "value_json": forms.Textarea(attrs={"class": "form-textarea font-mono text-sm", "rows": 3, "placeholder": '{"key": "value"}'}),
             "source": forms.Select(attrs={"class": "form-select"}),
-            "validation_status": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, tenant=None, **kwargs):
