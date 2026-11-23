@@ -139,6 +139,43 @@ from apps.documents.views.SearchDiscovery.SearchHub import (
     search_export_csv,
     search_hub,
 )
+from apps.documents.views.SecurityAccessControl.DlpIncidents import (
+    dlp_incident_detail,
+    dlp_incident_list,
+    dlp_incident_resolve,
+)
+from apps.documents.views.SecurityAccessControl.DlpPolicies import (
+    dlp_policy_create,
+    dlp_policy_delete,
+    dlp_policy_detail,
+    dlp_policy_edit,
+    dlp_policy_list,
+)
+from apps.documents.views.SecurityAccessControl.DocumentAccessPermissions import (
+    permission_create,
+    permission_delete,
+    permission_detail,
+    permission_edit,
+    permission_list,
+    permission_simulate,
+)
+from apps.documents.views.SecurityAccessControl.DocumentDrmPolicies import (
+    drm_kill_switch,
+    drm_policy_create,
+    drm_policy_delete,
+    drm_policy_detail,
+    drm_policy_edit,
+    drm_policy_list,
+)
+from apps.documents.views.SecurityAccessControl.SecureViewer import secure_viewer
+from apps.documents.views.SecurityAccessControl.WatermarkPolicies import (
+    watermark_create,
+    watermark_delete,
+    watermark_detail,
+    watermark_edit,
+    watermark_list,
+    watermark_preview,
+)
 from apps.documents.views.MetadataIndexing.TaxonomyTerms import (
     taxonomy_term_create,
     taxonomy_term_delete,
@@ -385,4 +422,32 @@ __all__ = [
     "document_search_query_log_detail",
     "document_search_query_log_delete",
     "document_search_analytics",
+    # SecurityAccessControl
+    "permission_list",
+    "permission_create",
+    "permission_detail",
+    "permission_edit",
+    "permission_delete",
+    "permission_simulate",
+    "watermark_list",
+    "watermark_create",
+    "watermark_detail",
+    "watermark_edit",
+    "watermark_delete",
+    "watermark_preview",
+    "drm_policy_list",
+    "drm_policy_create",
+    "drm_policy_detail",
+    "drm_policy_edit",
+    "drm_policy_delete",
+    "drm_kill_switch",
+    "dlp_policy_list",
+    "dlp_policy_create",
+    "dlp_policy_detail",
+    "dlp_policy_edit",
+    "dlp_policy_delete",
+    "dlp_incident_list",
+    "dlp_incident_detail",
+    "dlp_incident_resolve",
+    "secure_viewer",
 ]
