@@ -81,12 +81,25 @@ class DocumentAccessPermissionForm(TenantUniqueMixin, TenantModelForm):
             raise ValidationError("You must specify either a target Document or a target Folder.")
 
         grantee_type = cleaned_data.get("grantee_type")
-        if grantee_type == "user" and not cleaned_data.get("user"):
-            self.add_error("user", "User must be selected when Grantee Type is 'Specific User'.")
-        elif grantee_type == "org_unit" and not cleaned_data.get("org_unit"):
-            self.add_error("org_unit", "Organizational Unit must be selected when Grantee Type is 'Org Unit'.")
-        elif grantee_type == "role" and not cleaned_data.get("role_name"):
-            self.add_error("role_name", "Role Name is required when Grantee Type is 'Role'.")
+        if grantee_type == "user":
+            if not cleaned_data.get("user"):
+                self.add_error("user", "User must be selected when Grantee Type is 'Specific User'.")
+            cleaned_data["org_unit"] = None
+            cleaned_data["role_name"] = ""
+        elif grantee_type == "org_unit":
+            if not cleaned_data.get("org_unit"):
+                self.add_error("org_unit", "Organizational Unit must be selected when Grantee Type is 'Org Unit'.")
+            cleaned_data["user"] = None
+            cleaned_data["role_name"] = ""
+        elif grantee_type == "role":
+            if not cleaned_data.get("role_name"):
+                self.add_error("role_name", "Role Name is required when Grantee Type is 'Role'.")
+            cleaned_data["user"] = None
+            cleaned_data["org_unit"] = None
+        elif grantee_type == "tenant_wide":
+            cleaned_data["user"] = None
+            cleaned_data["org_unit"] = None
+            cleaned_data["role_name"] = ""
 
         v_from = cleaned_data.get("valid_from")
         v_until = cleaned_data.get("valid_until")
