@@ -17,6 +17,10 @@ from apps.documents.models import (
     DocumentOcrJob,
     DocumentRelationship,
     DocumentReviewComment,
+    DocumentSavedSearch,
+    DocumentSearchAlert,
+    DocumentSearchQueryLog,
+    DocumentSearchSynonym,
     DocumentSignature,
     DocumentTemplate,
     DocumentVersion,
@@ -1206,6 +1210,132 @@ class Command(BaseCommand):
                             page_count=2,
                             confidence_score=0.00,
                             created_by=user,
+                        )
+
+                # --- 13.6 Search & Discovery Seeding ---
+                if not DocumentSavedSearch.objects.filter(tenant=tenant).exists():
+                    self.stdout.write(f"Seeding Search & Discovery for '{tenant.slug}'...")
+                    svd1 = DocumentSavedSearch.objects.create(
+                        tenant=tenant,
+                        name="Active Confidential Contracts",
+                        description="Monitors all active confidential contracts in legal and procurement",
+                        owner=user,
+                        visibility="public",
+                        query_text="agreement contract liability",
+                        filters_json=json.dumps({"document_type": "contract", "classification": "confidential", "status": "approved"}),
+                        facet_filters_json=json.dumps({"status": ["approved"]}),
+                        sort_by="relevance",
+                        sort_order="desc",
+                        is_pinned=True,
+                        is_favorite=True,
+                        is_active=True,
+                        run_count=18,
+                        total_results_last_run=4,
+                        last_run_at=timezone.now(),
+                    )
+                    svd2 = DocumentSavedSearch.objects.create(
+                        tenant=tenant,
+                        name="Technical SOPs & Engineering Guides",
+                        description="Standard operating procedures for IT, security, and quality",
+                        owner=user,
+                        visibility="shared_department",
+                        query_text="sop procedure specification",
+                        filters_json=json.dumps({"document_type": "sop", "status": "approved"}),
+                        facet_filters_json=json.dumps({}),
+                        sort_by="updated_at_desc",
+                        sort_order="desc",
+                        is_pinned=True,
+                        is_favorite=False,
+                        is_active=True,
+                        run_count=9,
+                        total_results_last_run=6,
+                        last_run_at=timezone.now(),
+                    )
+                    svd3 = DocumentSavedSearch.objects.create(
+                        tenant=tenant,
+                        name="Draft Policies Pending Approval",
+                        description="Corporate policies currently in draft review state",
+                        owner=user,
+                        visibility="private",
+                        query_text="",
+                        filters_json=json.dumps({"document_type": "policy", "status": "draft"}),
+                        facet_filters_json=json.dumps({"status": ["draft"]}),
+                        sort_by="created_at_desc",
+                        sort_order="desc",
+                        is_pinned=False,
+                        is_favorite=False,
+                        is_active=True,
+                        run_count=3,
+                        total_results_last_run=2,
+                        last_run_at=timezone.now(),
+                    )
+
+                    DocumentSearchAlert.objects.create(
+                        tenant=tenant,
+                        saved_search=svd1,
+                        subscriber=user,
+                        frequency="daily",
+                        delivery_channel="in_app",
+                        is_active=True,
+                        status="active",
+                        notes="Daily digest of newly uploaded or revised confidential agreements",
+                        new_matches_count=1,
+                        last_notified_at=timezone.now(),
+                        last_checked_at=timezone.now(),
+                    )
+                    DocumentSearchAlert.objects.create(
+                        tenant=tenant,
+                        saved_search=svd2,
+                        subscriber=user,
+                        frequency="weekly",
+                        delivery_channel="email",
+                        is_active=True,
+                        status="active",
+                        notes="Weekly summary of newly ratified engineering SOPs",
+                        new_matches_count=0,
+                        last_checked_at=timezone.now(),
+                    )
+
+                    synonyms_data = [
+                        ("SOP", "standard operating procedure, procedure, work instruction, guidelines", "acronym", True),
+                        ("NDA", "non-disclosure agreement, confidentiality agreement, secrecy agreement", "acronym", True),
+                        ("PO", "purchase order, procurement order, vendor requisition", "acronym", True),
+                        ("MSA", "master services agreement, master contract, framework agreement", "acronym", True),
+                        ("Policy", "governance, regulation, standard, compliance rule", "domain", True),
+                        ("Specs", "specifications, technical requirements, blueprint", "general", True),
+                    ]
+                    for term, syns, cat, bidir in synonyms_data:
+                        DocumentSearchSynonym.objects.create(
+                            tenant=tenant,
+                            term=term,
+                            synonyms=syns,
+                            category=cat,
+                            is_bidirectional=bidir,
+                            language="en",
+                            is_active=True,
+                            created_by=user,
+                            hit_count=5,
+                        )
+
+                    log_data = [
+                        ("confidential vendor agreement", 4, 12, False, "search_hub"),
+                        ("engineering sop calibration", 3, 18, False, "search_hub"),
+                        ("q3 financial statements", 0, 8, True, "search_hub"),
+                        ("cloud security posture policy", 2, 14, False, "quick_search"),
+                        ("unknown supplier certificate xyz", 0, 6, True, "search_hub"),
+                        ("iso 9001 quality audit procedure", 5, 22, False, "saved_search"),
+                    ]
+                    for qtext, count, ms, is_zero, source in log_data:
+                        DocumentSearchQueryLog.objects.create(
+                            tenant=tenant,
+                            query_text=qtext,
+                            user=user,
+                            results_count=count,
+                            is_zero_result=is_zero,
+                            execution_time_ms=ms,
+                            search_source=source,
+                            filters_applied_json="{}",
+                            session_key=f"demo_sess_{tenant.slug}",
                         )
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
