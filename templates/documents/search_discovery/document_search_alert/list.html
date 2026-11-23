@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Search Alerts & Notifications — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:search_hub' %}">Search & Discovery</a>
+            <span>/</span>
+            <span>Search Alerts</span>
+        </div>
+        <h1 class="page-title">Automated Search Alerts & Subscriptions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_saved_search_list' %}" class="btn btn-outline">
+            <i data-lucide="bookmark"></i>
+            <span>Saved Searches</span>
+        </a>
+        <a href="{% url 'documents:document_search_alert_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Search Alert</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="bell"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Active Alert Subscriptions</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ search_alerts|length }}</div>
+            <div class="stat-label">Alerts Displayed</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="send"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-green font-normal">Automated Monitoring</span></div>
+            <div class="stat-label">Delivery Channel Dispatch</div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="form-label" for="filter-q">Search</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Alert number, search query..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="filter-frequency">Frequency</label>
+                <select id="filter-frequency" name="frequency" class="form-select">
+                    <option value="">All Frequencies</option>
+                    {% for val, label in frequency_choices %}
+                    <option value="{{ val }}" {% if request.GET.frequency == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="filter-delivery">Channel</label>
+                <select id="filter-delivery" name="delivery_channel" class="form-select">
+                    <option value="">All Channels</option>
+                    {% for val, label in delivery_choices %}
+                    <option value="{{ val }}" {% if request.GET.delivery_channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:document_search_alert_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Alert #</th>
+                    <th>Saved Search</th>
+                    <th>Subscriber</th>
+                    <th>Frequency</th>
+                    <th>Channel</th>
+                    <th>New Matches</th>
+                    <th>Last Notified</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in search_alerts %}
+                <tr>
+                    <td class="font-mono text-xs">
+                        <a href="{% url 'documents:document_search_alert_detail' item.pk %}" class="text-blue-600 hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:document_saved_search_detail' item.saved_search.pk %}" class="font-medium text-slate-800 dark:text-slate-100 hover:text-blue-600">
+                            {{ item.saved_search.name }}
+                        </a>
+                    </td>
+                    <td>{{ item.subscriber.username }}</td>
+                    <td><span class="badge {{ item.frequency_badge_class }}">{{ item.get_frequency_display }}</span></td>
+                    <td><span class="badge {{ item.delivery_badge_class }}">{{ item.get_delivery_channel_display }}</span></td>
+                    <td>
+                        {% if item.new_matches_count > 0 %}
+                        <span class="badge badge-amber font-semibold">+{{ item.new_matches_count }} new</span>
+                        {% else %}
+                        <span class="text-slate-400 text-xs">0 pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-500">
+                        {{ item.last_notified_at|date:"M d, Y H:i"|default:"Never" }}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_badge_class }}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <form method="post" action="{% url 'documents:document_search_alert_run_check' item.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-green-600 hover:text-green-700" title="Check New Matches Now">
+                                <i data-lucide="refresh-cw"></i>
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'documents:document_search_alert_toggle_active' item.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-amber-500 hover:text-amber-600" title="{% if item.is_active %}Pause Alert{% else %}Resume Alert{% endif %}">
+                                <i data-lucide="{% if item.is_active %}pause{% else %}play{% endif %}"></i>
+                            </button>
+                        </form>
+                        <a href="{% url 'documents:document_search_alert_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:document_search_alert_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:document_search_alert_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete search alert {{ item.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="bell-off"></i>
+                            <h3>No Search Alerts Configured</h3>
+                            <p>Subscribe to saved searches to receive automated match notifications.</p>
+                            <a href="{% url 'documents:document_search_alert_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Alert</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.frequency %}&frequency={{ request.GET.frequency }}{% endif %}{% if request.GET.delivery_channel %}&delivery_channel={{ request.GET.delivery_channel }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+        {% endif %}
+        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.frequency %}&frequency={{ request.GET.frequency }}{% endif %}{% if request.GET.delivery_channel %}&delivery_channel={{ request.GET.delivery_channel }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
