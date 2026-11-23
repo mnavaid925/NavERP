@@ -98,7 +98,7 @@
                 </div>
                 <div class="detail-item">
                     <dt>Created By</dt>
-                    <dd>{{ taxonomy_term.created_by.get_full_name|default:taxonomy_term.created_by.username }} on {{ taxonomy_term.created_at|date:"Y-m-d H:i" }}</dd>
+                    <dd>{% if taxonomy_term.created_by %}{{ taxonomy_term.created_by.get_full_name|default:taxonomy_term.created_by.username }}{% else %}—{% endif %} on {{ taxonomy_term.created_at|date:"Y-m-d H:i" }}</dd>
                 </div>
             </dl>
 
