@@ -41,7 +41,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/SecureViewer.py:22-27`
   - **Description**: `pk = request.GET.get("doc_id")` passes unvalidated input to `get_object_or_404(docs_qs, pk=pk)`, raising `ValueError` on non-numeric input (e.g. `?doc_id=abc`), violating L11.
   - **Fix**: Guard with `if not pk and request.GET.get("doc_id", "").strip().isdigit(): pk = int(request.GET.get("doc_id", "").strip())`.
-- [ ] **I2: Unenforced permissions and revocation bypass in Secure Web Viewer**
+- [x] **I2: Unenforced permissions and revocation bypass in Secure Web Viewer**
   - **Files & Lines**: `apps/documents/views/SecurityAccessControl/SecureViewer.py:20-86`
   - **Description**:
     1. `secure_viewer` retrieves documents without checking if user is document owner, tenant admin, or has `can_read` grant in `DocumentAccessPermission`.
