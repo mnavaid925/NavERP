@@ -48,3 +48,29 @@ None. Multi-tenant isolation is strictly enforced across models, querysets, and 
 - performance-reviewer: Review `DlpPolicy.incidents` feed in `dlp_policy_detail` to verify index coverage on `(tenant, policy, resolution_status)`.
 - security-reviewer: Verify that the client-side sandboxing controls in `secure_viewer.html` (clipboard, print, and context menu blockers) are documented as visual deterrents and backed by server-side payload access controls.
 - frontend-reviewer: Review `kill_switch_modal` in `document_drm_policy/detail.html` to ensure Escape key event listeners close the modal cleanly.
+
+
+---
+
+## 2. Explorer Reviewer Pass (`explorer`)
+
+### Verdict
+PASS WITH MINOR FINDINGS. Architectural layout adheres cleanly to the 1-to-1 entity-by-entity package structure, complete tenant isolation is maintained, and all pre-build contract obligations are satisfied.
+
+### Critical
+None.
+
+### Important
+1. `apps/documents/views/SecurityAccessControl/SecureViewer.py:22-27` — Unchecked `doc_id` query param causes HTTP 500: `pk = request.GET.get("doc_id")` passes unvalidated user input into `get_object_or_404(docs_qs, pk=pk)`, raising `ValueError` on non-numeric input (e.g. `?doc_id=abc`), violating L11. Fix: guard with `.isdigit()` before setting `pk`.
+
+### Minor
+1. `apps/documents/{models,forms,views,urls}/SecurityAccessControl/` — Missing package `__init__.py` markers: Add empty `__init__.py` files in each of the 4 `SecurityAccessControl` subdirectories for consistency with sibling modules.
+2. `apps/documents/forms/SecurityAccessControl/DlpPolicies.py:25` — Form omits `target_document_types` and `target_classifications` JSON fields: Contract section 2.4 specifies these in `Meta.fields`.
+3. `apps/documents/models/SecurityAccessControl/DocumentAccessPermissions.py:34,43` — CSS badge substitution: Mapped `badge-purple` to `badge-slate` and `badge-amber` to maintain strict compliance with `static/css/theme.css` (L33).
+
+### Done well
+- Strict 1-to-1 backend layer alignment across models, forms, views, and urls.
+- All models, forms, and views re-exported in package `__init__.py` and included in `__all__`.
+- Literal URL routes strictly precede parameterized routes.
+- Full contract compliance across all 5 models and their view context dictionaries.
+- Multi-tenancy and audit logging enforced across all mutation operations.
