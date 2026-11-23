@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ policy.name }}{% else %}New DRM Policy{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:drm_policy_list' %}">DRM Policies</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Policy{% else %}New Policy{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit DRM Policy: {{ policy.name }}{% else %}Configure Digital Rights Management Policy{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:drm_policy_detail' policy.pk %}{% else %}{% url 'documents:drm_policy_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body text-sm text-red-700">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Identification & Scope -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">1. Policy Identification & Target Scope</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Policy Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.slug.id_for_label }}">Slug</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.classification.id_for_label }}">Classification Level</label>
+                {{ form.classification }}
+                {% if form.classification.errors %}<div class="form-error">{{ form.classification.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.document_type.id_for_label }}">Document Type Filter</label>
+                {{ form.document_type }}
+                {% if form.document_type.errors %}<div class="form-error">{{ form.document_type.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_document.id_for_label }}">Target Specific Document</label>
+                {{ form.target_document }}
+                {% if form.target_document.errors %}<div class="form-error">{{ form.target_document.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_folder.id_for_label }}">Target Specific Folder</label>
+                {{ form.target_folder }}
+                {% if form.target_folder.errors %}<div class="form-error">{{ form.target_folder.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Protection Gates -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">2. Anti-Exfiltration & Content Restrictions</h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.allow_download }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Allow Raw Download</div>
+                        <div class="text-xs text-slate-500">Uncheck to enforce zero-download</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.allow_print }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Allow Printing</div>
+                        <div class="text-xs text-slate-500">Permit browser & OS printing</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.allow_copy_paste }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Allow Copy/Paste</div>
+                        <div class="text-xs text-slate-500">Permit text selection & clipboard</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.screen_shield_enabled }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Screen Shield Defense</div>
+                        <div class="text-xs text-slate-500">Blur on focus loss / window blur</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.secure_viewer_required }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Secure Viewer Required</div>
+                        <div class="text-xs text-slate-500">Force canvas/SVG sandboxing</div>
+                    </div>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    {{ form.require_watermark }}
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">Require Watermark</div>
+                        <div class="text-xs text-slate-500">Enforce dynamic user overlay</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Perimeter & Cryptography -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">3. Perimeter Controls & Encryption</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.expiry_days.id_for_label }}">Access Expiry (Days)</label>
+                {{ form.expiry_days }}
+                {% if form.expiry_days.errors %}<div class="form-error">{{ form.expiry_days.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.max_offline_hours.id_for_label }}">Max Offline Cache Hours</label>
+                {{ form.max_offline_hours }}
+                {% if form.max_offline_hours.errors %}<div class="form-error">{{ form.max_offline_hours.errors.0 }}</div>{% endif %}
+                <p class="text-xs text-slate-500 mt-1">0 = Offline caching strictly prohibited.</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.encryption_standard.id_for_label }}">Encryption Cipher</label>
+                {{ form.encryption_standard }}
+                {% if form.encryption_standard.errors %}<div class="form-error">{{ form.encryption_standard.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.geo_fencing_countries.id_for_label }}">Country Geofencing</label>
+                {{ form.geo_fencing_countries }}
+                {% if form.geo_fencing_countries.errors %}<div class="form-error">{{ form.geo_fencing_countries.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.ip_allowlist.id_for_label }}">IP Allowlist (Comma / Newline separated)</label>
+                {{ form.ip_allowlist }}
+                {% if form.ip_allowlist.errors %}<div class="form-error">{{ form.ip_allowlist.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_active }}
+                    <span class="text-sm font-medium text-slate-800">Policy is Active</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'documents:drm_policy_detail' policy.pk %}{% else %}{% url 'documents:drm_policy_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create DRM Policy{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
