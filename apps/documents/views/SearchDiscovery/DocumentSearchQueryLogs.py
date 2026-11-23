@@ -12,6 +12,7 @@ from apps.documents.views._common import documents_object, documents_scope
 
 
 @login_required
+@tenant_admin_required
 def document_search_query_log_list(request):
     qs = documents_scope(DocumentSearchQueryLog.objects.all(), request).select_related(
         "user", "clicked_document"
@@ -56,6 +57,7 @@ def document_search_query_log_list(request):
 
 
 @login_required
+@tenant_admin_required
 def document_search_query_log_detail(request, pk):
     query_log = documents_object(
         request,
@@ -88,6 +90,7 @@ def document_search_query_log_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def document_search_analytics(request):
     base_qs = documents_scope(DocumentSearchQueryLog.objects.all(), request)
 
