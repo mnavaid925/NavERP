@@ -156,7 +156,7 @@
 
         {% if task.review_comment %}
         <!-- Originating Comment Card -->
-        <div class="card border-l-4 border-l-amber-500">
+        <div class="card border-s-4 border-amber-500">
             <div class="card-header">
                 <h3 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
                     <i data-lucide="message-square" class="w-4 h-4 text-amber-600"></i>
@@ -164,7 +164,7 @@
                 </h3>
             </div>
             <div class="card-body">
-                <blockquote class="text-sm text-slate-700 italic border-l-2 border-slate-300 pl-3 py-1">
+                <blockquote class="text-sm text-slate-700 italic border-s-2 border-slate-300 ps-3 py-1">
                     "{{ task.review_comment.comment_text }}"
                 </blockquote>
                 <div class="text-xs text-slate-500 mt-2 flex items-center gap-2">
@@ -172,7 +172,7 @@
                     {% if task.review_comment.page_number %}
                     <span>&bull; Page {{ task.review_comment.page_number }}</span>
                     {% endif %}
-                    <a href="{% url 'documents:review_comment_detail' task.review_comment.pk %}" class="text-blue-600 hover:underline ml-2">
+                    <a href="{% url 'documents:review_comment_detail' task.review_comment.pk %}" class="text-blue-600 hover:underline ms-2">
                         View Annotation &rarr;
                     </a>
                 </div>
