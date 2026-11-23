@@ -330,11 +330,9 @@ def metadata_schema(db, tenant_a, admin_user):
         tenant=tenant_a,
         name="Contract Metadata Schema",
         code="CONTRACT_V1",
-        schema_type="document_type",
-        target_document_type="contract",
-        fields_json='[{"name": "effective_date", "type": "date", "required": true}, {"name": "contract_value", "type": "decimal", "required": false}]',
+        target_type="document_type",
+        fields_definition_json='[{"name": "effective_date", "type": "date", "required": true}, {"name": "contract_value", "type": "decimal", "required": false}]',
         is_active=True,
-        is_mandatory=False,
         created_by=admin_user,
     )
 
@@ -347,7 +345,7 @@ def taxonomy_term(db, tenant_a, admin_user):
         name="Financial Services",
         term_code="FIN-SERV",
         category="industry",
-        definition="Banking, securities, insurance, and asset management institutions.",
+        description="Banking, securities, insurance, and asset management institutions.",
         synonyms_json='["banking", "wealth management", "fintech"]',
         is_governed=True,
         is_active=True,
@@ -364,7 +362,7 @@ def child_taxonomy_term(db, tenant_a, admin_user, taxonomy_term):
         term_code="FIN-INV",
         category="industry",
         parent=taxonomy_term,
-        definition="Underwriting, mergers, acquisitions, and advisory services.",
+        description="Underwriting, mergers, acquisitions, and advisory services.",
         synonyms_json='["m&a", "capital markets"]',
         is_governed=False,
         is_active=True,
@@ -384,7 +382,7 @@ def document_metadata_value(db, tenant_a, document, document_version, metadata_s
         field_label="Contract Total Value",
         data_type="decimal",
         value_number=150000.00,
-        source="manual",
+        source="manual_entry",
         validation_status="valid",
     )
 
@@ -396,15 +394,15 @@ def document_ocr_job(db, tenant_a, admin_user, document, document_version):
         tenant=tenant_a,
         document=document,
         version=document_version,
-        ocr_engine="tesseract",
+        ocr_engine="tesseract_ocr",
         status="completed",
-        language="eng",
         confidence_score=94.50,
-        pages_processed=3,
+        page_count=3,
         extracted_full_text="Agreement made between party A and party B for delivery of consulting services.",
         suggested_tags_json='["consulting", "agreement", "q4"]',
-        requested_by=admin_user,
+        created_by=admin_user,
     )
+
 
 
 
