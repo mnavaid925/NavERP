@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Session {{ session.number }}{% else %}Register Coauthor Session{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_hub' %}">Collaboration & Sharing</a>
+            <span>/</span>
+            <a href="{% url 'documents:coauthor_session_list' %}">Sessions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ session.number }}{% else %}Register Session{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Co-Authoring Session: {{ session.number }}{% else %}Register Co-Authoring Session{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:coauthor_session_detail' session.pk %}{% else %}{% url 'documents:coauthor_session_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl">
+    <form method="post" class="card">
+        {% csrf_token %}
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Collaborator Session Scope & Presence Configuration</h2>
+        </div>
+        <div class="card-body space-y-6">
+            {% if form.non_field_errors %}
+            <div class="p-4 rounded bg-red-50 text-red-700 text-sm border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.document.id_for_label }}">Document <span class="text-red-500">*</span></label>
+                    {{ form.document }}
+                    {% if form.document.errors %}
+                    <div class="form-error">{{ form.document.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">Document Version (Optional)</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}
+                    <div class="form-error">{{ form.version.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.draft.id_for_label }}">Document Draft (Optional)</label>
+                    {{ form.draft }}
+                    {% if form.draft.errors %}
+                    <div class="form-error">{{ form.draft.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.user.id_for_label }}">Internal User</label>
+                    {{ form.user }}
+                    <div class="text-xs text-slate-500 mt-1">Select internal user or leave blank for guest collaborator</div>
+                    {% if form.user.errors %}
+                    <div class="form-error">{{ form.user.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.guest_name.id_for_label }}">External Guest Display Name</label>
+                    {{ form.guest_name }}
+                    <div class="text-xs text-slate-500 mt-1">Used if internal user is not selected</div>
+                    {% if form.guest_name.errors %}
+                    <div class="form-error">{{ form.guest_name.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.color_code.id_for_label }}">Presence Color (Hex)</label>
+                    <div class="flex items-center gap-3">
+                        {{ form.color_code }}
+                        <span class="text-xs text-slate-500">Pick a distinctive color for this user's cursor</span>
+                    </div>
+                    {% if form.color_code.errors %}
+                    <div class="form-error">{{ form.color_code.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Session Status <span class="text-red-500">*</span></label>
+                    {{ form.status }}
+                    {% if form.status.errors %}
+                    <div class="form-error">{{ form.status.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.current_section.id_for_label }}">Current Section Anchor</label>
+                    {{ form.current_section }}
+                    <div class="text-xs text-slate-500 mt-1">Identifier of section, paragraph, or clause currently focused</div>
+                    {% if form.current_section.errors %}
+                    <div class="form-error">{{ form.current_section.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <div class="flex items-center gap-2">
+                        {{ form.is_editing }}
+                        <label for="{{ form.is_editing.id_for_label }}" class="text-sm font-medium text-slate-800">
+                            Holding Section Lock (Actively Typing)
+                        </label>
+                    </div>
+                    {% if form.is_editing.errors %}
+                    <div class="form-error">{{ form.is_editing.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card-footer flex justify-end gap-3">
+            <a href="{% if is_edit %}{% url 'documents:coauthor_session_detail' session.pk %}{% else %}{% url 'documents:coauthor_session_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check"></i>
+                <span>{% if is_edit %}Save Changes{% else %}Register Session{% endif %}</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
