@@ -146,6 +146,13 @@ def document_ocr_job_process(request, pk):
         tenant=tenant,
     )
 
+    if job.status not in ["queued", "failed"]:
+        messages.error(
+            request,
+            f"Cannot process OCR job {job.number} with status '{job.get_status_display()}'. Only queued or failed jobs can be processed.",
+        )
+        return redirect("documents:document_ocr_job_detail", pk=job.pk)
+
     # Heuristic text extraction simulation based on document details
     doc = job.document
     extracted_text = (
