@@ -125,4 +125,57 @@
   - *Detail*: Ad-hoc `text-green-600` / `text-amber-600` instead of `.text-ok` / `.text-warn`.
   - *Fix*: Use theme CSS classes.
 
+---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Critical
+- **`REV4-C1`**: Unindexed hot filters on EAV table `DocumentMetadataValue.data_type` & unusable composite index for `validation_status`
+  - *Location*: `apps/documents/models/MetadataIndexing/DocumentMetadataValues.py:92-123`, `views/MetadataIndexing/DocumentMetadataValues.py:33-44`
+  - *Detail*: `data_type` has no index, forcing full table scan. The composite index `doc_dmeta_tnt_doc_val_idx` has `document` before `validation_status`, making it unusable when filtering by status alone.
+  - *Fix*: Add composite indexes on `(tenant, data_type)`, `(tenant, validation_status)`, and `(tenant, source)`.
+
+### Important
+- **`REV4-I1`**: N+1 foreign key lookups in `metadata_schema_detail`
+  - *Location*: `apps/documents/views/MetadataIndexing/MetadataSchemas.py:92`
+  - *Detail*: Detail view accesses `schema.department.name`, `schema.target_folder.path`, and `schema.created_by.get_full_name` triggering 3 extra queries per request.
+  - *Fix*: Add `select_related("department", "target_folder", "created_by")`.
+
+- **`REV4-I2`**: Prefetch cache bypass in `taxonomy_term_detail`
+  - *Location*: `apps/documents/views/MetadataIndexing/TaxonomyTerms.py:130-136`
+  - *Detail*: Prefetches `children` then calls `.filter(tenant=tenant)`, throwing away the prefetch cache and running 2 queries.
+  - *Fix*: Use `Prefetch("children", queryset=TaxonomyTerm.objects.filter(tenant=tenant))` and call `term.children.all()`.
+
+- **`REV4-I3`**: Missing composite index for default ordering and engine filter in `DocumentOcrJob`
+  - *Location*: `apps/documents/models/MetadataIndexing/DocumentOcrJobs.py:62-101`
+  - *Detail*: `ordering = ["-created_at"]` lacks a `(tenant, -created_at)` index, causing filesort. `ocr_engine` has no index.
+  - *Fix*: Add indexes for `(tenant, -created_at)` and `(tenant, ocr_engine)`.
+
+- **`REV4-I4`**: Extra queries in OCR action views (`process` and `apply`)
+  - *Location*: `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py:143-158, 193-205`
+  - *Detail*: Accesses `job.document.owner` and `job.document.title` without `select_related`.
+  - *Fix*: Add `select_related("document__owner")` in process and `select_related("document", "version")` in apply.
+
+### Minor
+- **`REV4-M1`**: Inefficient retrieval of heavy `extracted_full_text` `TextField` on list and dashboard views
+  - *Location*: `apps/documents/views/MetadataIndexing/DocumentOcrJobs.py:23`, `MetadataIndexingDashboard.py:25`
+  - *Detail*: Full text OCR dump is loaded into memory in list queries where it is not displayed.
+  - *Fix*: Add `.defer("extracted_full_text")`.
+
+- **`REV4-M2`**: Dead query for `recent_terms` in `metadata_indexing_dashboard`
+  - *Location*: `apps/documents/views/MetadataIndexing/MetadataIndexingDashboard.py:26`
+  - *Detail*: `recent_terms` is queried and passed to context but not rendered.
+  - *Fix*: Render recent terms card in dashboard or remove unused query.
+
+- **`REV4-M3`**: Uncombined count queries on `DocumentOcrJob` in dashboard
+  - *Location*: `apps/documents/views/MetadataIndexing/MetadataIndexingDashboard.py:21-22`
+  - *Detail*: Triggers two separate count queries for total and pending.
+  - *Fix*: Combine using `.aggregate(total=Count("id"), pending=Count("id", filter=...))`.
+
+- **`REV4-M4`**: Missing index on `MetadataSchema(tenant, name)` for default sorting
+  - *Location*: `apps/documents/models/MetadataIndexing/MetadataSchemas.py:90-99`
+  - *Detail*: Default ordering by `name` performs in-memory sort.
+  - *Fix*: Add `models.Index(fields=["tenant", "name"], name="doc_dsch_tnt_name_idx")`.
+
+
 
