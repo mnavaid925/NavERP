@@ -115,6 +115,11 @@ class DocumentMetadataValue(TenantNumbered):
         constraints = [
             models.UniqueConstraint(fields=["tenant", "number"], name="doc_dmeta_ten_num_uniq"),
             models.UniqueConstraint(fields=["tenant", "document", "version", "field_name"], name="doc_dmeta_tnt_doc_fld_uniq"),
+            models.UniqueConstraint(
+                fields=["tenant", "document", "field_name"],
+                condition=models.Q(version__isnull=True),
+                name="doc_dmeta_tnt_doc_fld_nullver_uniq",
+            ),
         ]
         indexes = [
             models.Index(fields=["tenant", "document", "validation_status"], name="doc_dmeta_tnt_doc_val_idx"),
