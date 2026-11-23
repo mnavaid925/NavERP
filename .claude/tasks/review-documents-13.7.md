@@ -105,7 +105,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `templates/documents/security_access_control/watermark_policy/preview.html:71`
   - **Description**: Line 71 hardcodes `badge-amber`.
   - **Fix**: Use `{{ policy.classification_badge|default:'badge-amber' }}`.
-- [ ] **M6: Unconditional `Ctrl+P` blocking in `secure_viewer.html`**
+- [x] **M6: Unconditional `Ctrl+P` blocking in `secure_viewer.html`**
   - **Files & Lines**: `templates/documents/security_access_control/secure_viewer.html:215-219`
   - **Description**: Intercepts `Ctrl+P` even when `allow_print` is True.
   - **Fix**: Check `allowPrint` before blocking.
