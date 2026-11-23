@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Search Query Telemetry & Logs — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:search_hub' %}">Search & Discovery</a>
+            <span>/</span>
+            <span>Query Logs</span>
+        </div>
+        <h1 class="page-title">Search Telemetry & Audit Logs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:document_search_analytics' %}" class="btn btn-outline">
+            <i data-lucide="bar-chart-2"></i>
+            <span>Search Analytics</span>
+        </a>
+        <a href="{% url 'documents:search_hub' %}" class="btn btn-primary">
+            <i data-lucide="search"></i>
+            <span>Search Hub</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Logged Searches</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ zero_result_count }}</div>
+            <div class="stat-label">Zero-Result Queries</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="zap"></i>
+        </div>
+        <div>
+            <div class="stat-value"><span class="badge badge-green font-normal">Real-time Telemetry</span></div>
+            <div class="stat-label">Observability Stream</div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label" for="filter-q">Search Query Text</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Query string or log #..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label" for="filter-source">Search Source</label>
+                <select id="filter-source" name="search_source" class="form-select">
+                    <option value="">All Sources</option>
+                    {% for val, label in source_choices %}
+                    <option value="{{ val }}" {% if request.GET.search_source == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="filter-zero">Result Status</label>
+                <select id="filter-zero" name="zero_result" class="form-select">
+                    <option value="">All Outcomes</option>
+                    <option value="1" {% if request.GET.zero_result == "1" %}selected{% endif %}>Zero Results Only</option>
+                    <option value="0" {% if request.GET.zero_result == "0" %}selected{% endif %}>Successful Matches Only</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:document_search_query_log_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Log #</th>
+                    <th>Query Term</th>
+                    <th>User</th>
+                    <th>Source</th>
+                    <th>Matches</th>
+                    <th>Latency</th>
+                    <th>Outcome</th>
+                    <th>Timestamp</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in query_logs %}
+                <tr>
+                    <td class="font-mono text-xs">
+                        <a href="{% url 'documents:document_search_query_log_detail' item.pk %}" class="text-blue-600 hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td class="font-mono text-xs font-semibold text-slate-800 dark:text-slate-100">
+                        {{ item.query_text }}
+                    </td>
+                    <td>{{ item.user.username|default:"Anonymous" }}</td>
+                    <td><span class="badge {{ item.source_badge_class }}">{{ item.get_search_source_display }}</span></td>
+                    <td class="font-medium">{{ item.results_count }}</td>
+                    <td class="text-xs text-slate-500 font-mono">{{ item.execution_time_ms }} ms</td>
+                    <td>
+                        <span class="badge {{ item.zero_result_badge_class }}">
+                            {% if item.is_zero_result %}0 Matches{% else %}Matched{% endif %}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-500">{{ item.created_at|date:"M d, Y H:i:s" }}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'documents:document_search_query_log_detail' item.pk %}" class="btn btn-icon" title="View Telemetry">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if request.user.is_tenant_admin %}
+                        <form method="post" action="{% url 'documents:document_search_query_log_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete log entry {{ item.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="activity"></i>
+                            <h3>No Search Query Logs Found</h3>
+                            <p>Search activity is automatically captured when users execute queries in the Search Hub.</p>
+                            <a href="{% url 'documents:search_hub' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="search"></i>
+                                <span>Go to Search Hub</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.search_source %}&search_source={{ request.GET.search_source }}{% endif %}{% if request.GET.zero_result %}&zero_result={{ request.GET.zero_result }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+        {% endif %}
+        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.search_source %}&search_source={{ request.GET.search_source }}{% endif %}{% if request.GET.zero_result %}&zero_result={{ request.GET.zero_result }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
