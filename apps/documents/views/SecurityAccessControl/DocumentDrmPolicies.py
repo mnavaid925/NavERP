@@ -148,6 +148,10 @@ def drm_policy_delete(request, pk):
 def drm_kill_switch(request, pk):
     """Emergency kill switch: instantly invalidates policy and revokes all active document access."""
     policy = documents_object(request, DocumentDrmPolicy, pk)
+    if policy.is_revoked:
+        messages.info(request, "This DRM policy has already been revoked.")
+        return redirect(reverse("documents:drm_policy_detail", kwargs={"pk": policy.pk}))
+
     reason = request.POST.get("reason", "").strip() or "Emergency administrative revocation"
     policy.revoke(user=request.user, reason=reason)
     write_audit_log(request.user, policy, "revoke", tenant=request.tenant)
