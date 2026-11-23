@@ -2,7 +2,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -22,10 +22,16 @@ def coauthor_session_list(request):
         "document", "user", "draft", "version"
     )
 
-    total_count = base_qs.count()
-    active_count = base_qs.filter(status="active").count()
-    idle_count = base_qs.filter(status="idle").count()
-    disconnected_count = base_qs.filter(status="disconnected").count()
+    counts = base_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+        idle=Count("id", filter=Q(status="idle")),
+        disconnected=Count("id", filter=Q(status="disconnected")),
+    )
+    total_count = counts["total"]
+    active_count = counts["active"]
+    idle_count = counts["idle"]
+    disconnected_count = counts["disconnected"]
 
     qs = base_qs
     q = request.GET.get("q", "").strip()
