@@ -22,11 +22,10 @@ def taxonomy_term_list(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(name__icontains(q)) |
-            Q(term_code__icontains(q)) |
-            Q(description__icontains(q)) |
-            Q(synonyms_json__icontains(q)) |
-            Q(external_code__icontains(q))
+            Q(name__icontains=q) |
+            Q(term_code__icontains=q) |
+            Q(category__icontains=q) |
+            Q(external_code__icontains=q)
         )
 
     category = request.GET.get("category", "").strip()
