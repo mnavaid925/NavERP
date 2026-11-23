@@ -36,8 +36,12 @@ def document_search_query_log_list(request):
     if user_id and user_id.isdigit():
         qs = qs.filter(user_id=int(user_id))
 
-    total_count = qs.count()
-    zero_result_count = qs.filter(is_zero_result=True).count()
+    counts = qs.aggregate(
+        total=Count("id"),
+        zero_result=Count("id", filter=Q(is_zero_result=True)),
+    )
+    total_count = counts["total"] or 0
+    zero_result_count = counts["zero_result"] or 0
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
