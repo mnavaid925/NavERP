@@ -7,12 +7,16 @@ from django.utils import timezone
 
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.documents.models import (
+    DlpIncident,
+    DlpPolicy,
     Document,
+    DocumentAccessPermission,
     DocumentApprovalRequest,
     DocumentApprovalWorkflow,
     DocumentBatchImport,
     DocumentBranch,
     DocumentDraft,
+    DocumentDrmPolicy,
     DocumentFolder,
     DocumentLock,
     DocumentMetadataValue,
@@ -31,6 +35,7 @@ from apps.documents.models import (
     StorageVolume,
     TaxonomyTerm,
     TemplateSection,
+    WatermarkPolicy,
 )
 from apps.documents.views._helpers import count_words
 
@@ -48,6 +53,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options.get("flush"):
             self.stdout.write("Flushing documents module data...")
+            DlpIncident.objects.all().delete()
+            DlpPolicy.objects.all().delete()
+            DocumentDrmPolicy.objects.all().delete()
+            WatermarkPolicy.objects.all().delete()
+            DocumentAccessPermission.objects.all().delete()
             DocumentSearchAlert.objects.all().delete()
             DocumentSavedSearch.objects.all().delete()
             DocumentSearchSynonym.objects.all().delete()
@@ -1341,6 +1351,222 @@ class Command(BaseCommand):
                             search_source=source,
                             filters_applied_json="{}",
                             session_key=f"demo_sess_{tenant.slug}",
+                        )
+
+                # --- 13.7 Document Security & Access Control Seeding ---
+                if not DocumentAccessPermission.objects.filter(tenant=tenant).exists():
+                    self.stdout.write(f"Seeding Document Security & Access Control for '{tenant.slug}'...")
+
+                    doc_target = Document.objects.filter(tenant=tenant).first()
+                    fld_target = DocumentFolder.objects.filter(tenant=tenant).first()
+                    org_target = OrgUnit.objects.filter(tenant=tenant).first()
+
+                    # 1. Access Permissions
+                    if doc_target:
+                        DocumentAccessPermission.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            grantee_type="user",
+                            user=user,
+                            permission_level="owner",
+                            can_read=True,
+                            can_write=True,
+                            can_delete=True,
+                            can_download=True,
+                            can_print=True,
+                            can_share=True,
+                            is_active=True,
+                            access_count=12,
+                            last_accessed_at=timezone.now(),
+                            notes="Primary document owner administrative grant",
+                            created_by=user,
+                        )
+                        DocumentAccessPermission.objects.create(
+                            tenant=tenant,
+                            document=doc_target,
+                            grantee_type="tenant_wide",
+                            permission_level="viewer",
+                            can_read=True,
+                            can_write=False,
+                            can_delete=False,
+                            can_download=True,
+                            can_print=True,
+                            can_share=False,
+                            is_active=True,
+                            access_count=45,
+                            last_accessed_at=timezone.now(),
+                            notes="All-staff read access",
+                            created_by=user,
+                        )
+
+                    if fld_target:
+                        DocumentAccessPermission.objects.create(
+                            tenant=tenant,
+                            folder=fld_target,
+                            grantee_type="org_unit" if org_target else "tenant_wide",
+                            org_unit=org_target,
+                            permission_level="editor",
+                            can_read=True,
+                            can_write=True,
+                            can_delete=False,
+                            can_download=True,
+                            can_print=True,
+                            can_share=False,
+                            is_active=True,
+                            access_count=8,
+                            last_accessed_at=timezone.now(),
+                            notes="Departmental collaboration folder grant",
+                            created_by=user,
+                        )
+
+                    # 2. Watermark Policies
+                    wtr1 = WatermarkPolicy.objects.create(
+                        tenant=tenant,
+                        name="Confidential Records Watermark",
+                        description="Enforces diagonal user and timestamp watermark across all confidential documents",
+                        classification="confidential",
+                        document_type="all",
+                        apply_to_all=False,
+                        watermark_text="{{classification}} | {{user_name}} | {{timestamp}}",
+                        secondary_text="Unauthorized Copying Prohibited — Trade Secret",
+                        position="diagonal_center",
+                        opacity_percent=25,
+                        font_size=32,
+                        font_color="#94a3b8",
+                        rotation_angle=-45,
+                        show_classification_banner=True,
+                        banner_position="top",
+                        enforce_on_view=True,
+                        enforce_on_download=True,
+                        enforce_on_print=True,
+                        priority=10,
+                        is_active=True,
+                        created_by=user,
+                    )
+                    wtr2 = WatermarkPolicy.objects.create(
+                        tenant=tenant,
+                        name="Strictly Restricted Executive Watermark",
+                        description="High-contrast forensic watermark for strictly restricted board documents",
+                        classification="restricted",
+                        document_type="all",
+                        apply_to_all=False,
+                        watermark_text="RESTRICTED | {{user_email}} | IP: {{ip_address}}",
+                        secondary_text="Strictly Confidential — Personal Copy",
+                        position="diagonal_center",
+                        opacity_percent=40,
+                        font_size=36,
+                        font_color="#dc2626",
+                        rotation_angle=-45,
+                        show_classification_banner=True,
+                        banner_position="both",
+                        enforce_on_view=True,
+                        enforce_on_download=True,
+                        enforce_on_print=True,
+                        priority=5,
+                        is_active=True,
+                        created_by=user,
+                    )
+
+                    # 3. DRM Policies
+                    drm1 = DocumentDrmPolicy.objects.create(
+                        tenant=tenant,
+                        name="Confidential Contracts Anti-Exfiltration DRM",
+                        description="Prohibits raw binary download and clipboard copy for confidential contracts",
+                        classification="confidential",
+                        document_type="contract",
+                        target_document=doc_target,
+                        allow_download=False,
+                        allow_print=False,
+                        allow_copy_paste=False,
+                        screen_shield_enabled=True,
+                        secure_viewer_required=True,
+                        require_watermark=True,
+                        max_offline_hours=0,
+                        expiry_days=30,
+                        ip_allowlist="10.0.0.0/8, 192.168.1.0/24",
+                        geo_fencing_countries="US, CA, GB",
+                        encryption_standard="AES_256_GCM",
+                        is_active=True,
+                        created_by=user,
+                    )
+
+                    # 4. DLP Policies
+                    dlp1 = DlpPolicy.objects.create(
+                        tenant=tenant,
+                        name="Payment Card (PCI-DSS) Exfiltration Guard",
+                        description="Detects credit card numbers in document uploads and blocks saving",
+                        rule_type="built_in_pattern",
+                        built_in_pattern="credit_card_pci",
+                        match_threshold=1,
+                        action="block_save",
+                        severity="critical",
+                        notify_security_officer=True,
+                        notification_email="security@company.com",
+                        apply_to_all_types=True,
+                        incident_count=3,
+                        last_triggered_at=timezone.now(),
+                        is_active=True,
+                        created_by=user,
+                    )
+                    dlp2 = DlpPolicy.objects.create(
+                        tenant=tenant,
+                        name="Confidential M&A Keywords Monitor",
+                        description="Warns authors when saving documents containing sensitive M&A trade secret terms",
+                        rule_type="sensitive_keywords",
+                        sensitive_keywords=["Acquisition", "Project Titan", "Merger Agreement", "Target Valuation"],
+                        match_threshold=1,
+                        action="warn_author",
+                        severity="high",
+                        notify_security_officer=True,
+                        notification_email="compliance@company.com",
+                        apply_to_all_types=True,
+                        incident_count=1,
+                        last_triggered_at=timezone.now(),
+                        is_active=True,
+                        created_by=user,
+                    )
+                    dlp3 = DlpPolicy.objects.create(
+                        tenant=tenant,
+                        name="US SSN & Identity Protection Rule",
+                        description="Quarantines documents containing unmasked social security numbers",
+                        rule_type="built_in_pattern",
+                        built_in_pattern="us_ssn",
+                        match_threshold=1,
+                        action="quarantine",
+                        severity="high",
+                        notify_security_officer=True,
+                        apply_to_all_types=True,
+                        incident_count=1,
+                        last_triggered_at=timezone.now(),
+                        is_active=True,
+                        created_by=user,
+                    )
+
+                    # 5. DLP Incidents
+                    if doc_target:
+                        DlpIncident.objects.create(
+                            tenant=tenant,
+                            policy=dlp1,
+                            document=doc_target,
+                            triggered_by=user,
+                            severity="critical",
+                            action_taken="blocked",
+                            matches_detected_count=2,
+                            snippet_redacted="Payment card sequence detected: 4111-****-****-1111",
+                            resolution_status="open",
+                        )
+                        DlpIncident.objects.create(
+                            tenant=tenant,
+                            policy=dlp2,
+                            document=doc_target,
+                            triggered_by=user,
+                            severity="high",
+                            action_taken="warned",
+                            matches_detected_count=1,
+                            snippet_redacted="Detected keyword 'Project Titan' in clause 3.2",
+                            resolution_status="resolved_justified",
+                            resolved_by=user,
+                            resolution_notes="Authorized M&A corporate development team review.",
                         )
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
