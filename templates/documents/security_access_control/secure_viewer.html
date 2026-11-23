@@ -18,7 +18,9 @@
             {% if document %}
             <span class="badge {{ document.classification_badge }}">{{ document.get_classification_display }}</span>
             {% endif %}
-            {% if drm_policy %}
+            {% if is_drm_revoked %}
+            <span class="badge badge-red">REVOKED (KILL-SWITCH ENGAGED)</span>
+            {% elif drm_policy %}
             <span class="badge badge-info">DRM Protected ({{ drm_policy.number }})</span>
             {% endif %}
         </div>
@@ -97,6 +99,24 @@
     <!-- Viewer Canvas Panel -->
     <div class="lg:col-span-3">
         {% if document %}
+        {% if is_drm_revoked %}
+        <div class="card p-8 text-center border-red-300 bg-red-50">
+            <i data-lucide="alert-octagon" class="w-16 h-16 text-red-600 mx-auto mb-4"></i>
+            <h2 class="text-xl font-bold text-red-900 mb-2">Access Terminated by Emergency Kill-Switch</h2>
+            <p class="text-sm text-red-700 max-w-lg mx-auto">
+                The DRM Policy <strong>{{ drm_policy.name }}</strong> governing this document was revoked on {{ drm_policy.revoked_at|date:"M d, Y H:i" }} by security administration.
+                {% if drm_policy.revocation_reason %}<br><span class="italic font-medium">"{{ drm_policy.revocation_reason }}"</span>{% endif %}
+            </p>
+        </div>
+        {% elif not has_read_permission %}
+        <div class="card p-8 text-center border-amber-300 bg-amber-50">
+            <i data-lucide="shield-alert" class="w-16 h-16 text-amber-600 mx-auto mb-4"></i>
+            <h2 class="text-xl font-bold text-amber-900 mb-2">Access Restricted</h2>
+            <p class="text-sm text-amber-700 max-w-lg mx-auto">
+                You do not have active read authorization for this document. Contact your tenant administrator or document author to request access.
+            </p>
+        </div>
+        {% else %}
         <div class="card shadow-lg">
             <div class="card-header bg-slate-900 text-white flex justify-between items-center py-2.5 px-4 rounded-t-xl">
                 <div class="flex items-center gap-2">
@@ -177,6 +197,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
         {% else %}
         <div class="card">
             <div class="card-body">
