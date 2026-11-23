@@ -75,7 +75,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/admin.py:242-246,273-278`
   - **Description**: `DocumentAccessPermissionAdmin` and `DlpIncidentAdmin` render foreign key columns without `list_select_related`, triggering `1 + 4N` queries.
   - **Fix**: Add `list_select_related` to both admin classes.
-- [ ] **I10: ReDoS protection in Custom DLP Rules**
+- [x] **I10: ReDoS protection in Custom DLP Rules**
   - **Files & Lines**: `apps/documents/forms/SecurityAccessControl/DlpPolicies.py:66-73`
   - **Description**: `DlpPolicyForm.clean_custom_regex` does not prevent catastrophic backtracking regexes.
   - **Fix**: Reject nested quantifiers (e.g. `(a+)+`) or excessively complex patterns during form validation.
