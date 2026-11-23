@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -20,12 +20,16 @@ def document_share_list(request):
         "document", "version", "shared_by", "shared_with_user", "shared_with_org_unit"
     )
 
-    total_count = base_qs.count()
-    active_count = base_qs.filter(is_active=True).filter(
-        Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
-    ).count()
-    expired_count = base_qs.filter(expires_at__lte=timezone.now()).count()
-    revoked_count = base_qs.filter(is_active=False).count()
+    counts = base_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True) & (Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))),
+        expired=Count("id", filter=Q(expires_at__lte=timezone.now())),
+        revoked=Count("id", filter=Q(is_active=False)),
+    )
+    total_count = counts["total"]
+    active_count = counts["active"]
+    expired_count = counts["expired"]
+    revoked_count = counts["revoked"]
 
     qs = base_qs
     q = request.GET.get("q", "").strip()
