@@ -43,4 +43,11 @@ class CoauthorSessionForm(TenantModelForm):
             cleaned_data,
             ["document", "version", "draft", "user"],
         )
+
+        document = cleaned_data.get("document")
+        version = cleaned_data.get("version")
+
+        if document and version and version.document_id != document.id:
+            self.add_error("version", "The selected version does not belong to the selected document.")
+
         return cleaned_data
