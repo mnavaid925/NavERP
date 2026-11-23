@@ -40104,65 +40104,65 @@ apps/quality/
 ## Detailed Build Plan (Phases 3 to 7)
 
 ### Phase 3.1: Spec Contract
-- [ ] Read `NavERP.md`, `research-documents-13.7.md`, and sibling modules to author `.claude/tasks/contract-documents-13.7.md`.
-- [ ] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
-- [ ] Commit contract: `git add .claude/tasks/contract-documents-13.7.md; git commit -m "docs(documents): freeze 13.7 contract specification"`
+- [x] Read `NavERP.md`, `research-documents-13.7.md`, and sibling modules to author `.claude/tasks/contract-documents-13.7.md`.
+- [x] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
+- [x] Commit contract: `git add .claude/tasks/contract-documents-13.7.md; git commit -m "docs(documents): freeze 13.7 contract specification"`
 
 ### Phase 3.2: Build Entity by Entity (Strictly Serial)
-- [ ] **Entity 1: DocumentAccessPermission** (`DPRM-`)
-  - [ ] `apps/documents/models/SecurityAccessControl/DocumentAccessPermissions.py`
-  - [ ] `apps/documents/forms/SecurityAccessControl/DocumentAccessPermissions.py`
-  - [ ] `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py` (`permission_list`, `permission_create`, `permission_detail`, `permission_edit`, `permission_delete`, `permission_simulate`)
-  - [ ] `apps/documents/urls/SecurityAccessControl/DocumentAccessPermissions.py`
-  - [ ] `templates/documents/security_access_control/document_access_permission/list.html`
-  - [ ] `templates/documents/security_access_control/document_access_permission/detail.html`
-  - [ ] `templates/documents/security_access_control/document_access_permission/form.html`
-- [ ] **Entity 2: WatermarkPolicy** (`DWTR-`)
-  - [ ] `apps/documents/models/SecurityAccessControl/WatermarkPolicies.py`
-  - [ ] `apps/documents/forms/SecurityAccessControl/WatermarkPolicies.py`
-  - [ ] `apps/documents/views/SecurityAccessControl/WatermarkPolicies.py` (`watermark_list`, `watermark_create`, `watermark_detail`, `watermark_edit`, `watermark_delete`, `watermark_preview`)
-  - [ ] `apps/documents/urls/SecurityAccessControl/WatermarkPolicies.py`
-  - [ ] `templates/documents/security_access_control/watermark_policy/list.html`
-  - [ ] `templates/documents/security_access_control/watermark_policy/detail.html`
-  - [ ] `templates/documents/security_access_control/watermark_policy/form.html`
-  - [ ] `templates/documents/security_access_control/watermark_policy/preview.html`
-- [ ] **Entity 3: DocumentDrmPolicy** (`DDRM-`)
-  - [ ] `apps/documents/models/SecurityAccessControl/DocumentDrmPolicies.py`
-  - [ ] `apps/documents/forms/SecurityAccessControl/DocumentDrmPolicies.py`
-  - [ ] `apps/documents/views/SecurityAccessControl/DocumentDrmPolicies.py` (`drm_policy_list`, `drm_policy_create`, `drm_policy_detail`, `drm_policy_edit`, `drm_policy_delete`, `drm_kill_switch`)
-  - [ ] `apps/documents/urls/SecurityAccessControl/DocumentDrmPolicies.py`
-  - [ ] `templates/documents/security_access_control/document_drm_policy/list.html`
-  - [ ] `templates/documents/security_access_control/document_drm_policy/detail.html`
-  - [ ] `templates/documents/security_access_control/document_drm_policy/form.html`
-  - [ ] `templates/documents/security_access_control/document_drm_policy/kill_switch_modal.html`
-- [ ] **Entity 4: DlpPolicy (`DDLP-`) & DlpIncident (`DINC-`)**
-  - [ ] `apps/documents/models/SecurityAccessControl/DlpPolicies.py`
-  - [ ] `apps/documents/models/SecurityAccessControl/DlpIncidents.py`
-  - [ ] `apps/documents/forms/SecurityAccessControl/DlpPolicies.py`
-  - [ ] `apps/documents/forms/SecurityAccessControl/DlpIncidents.py`
-  - [ ] `apps/documents/views/SecurityAccessControl/DlpPolicies.py` (`dlp_policy_list`, `dlp_policy_create`, `dlp_policy_detail`, `dlp_policy_edit`, `dlp_policy_delete`)
-  - [ ] `apps/documents/views/SecurityAccessControl/DlpIncidents.py` (`dlp_incident_list`, `dlp_incident_detail`, `dlp_incident_resolve`)
-  - [ ] `apps/documents/urls/SecurityAccessControl/DlpPolicies.py`
-  - [ ] `apps/documents/urls/SecurityAccessControl/DlpIncidents.py`
-  - [ ] `templates/documents/security_access_control/dlp_policy/list.html`
-  - [ ] `templates/documents/security_access_control/dlp_policy/detail.html`
-  - [ ] `templates/documents/security_access_control/dlp_policy/form.html`
-  - [ ] `templates/documents/security_access_control/dlp_incident/list.html`
-  - [ ] `templates/documents/security_access_control/dlp_incident/detail.html`
-  - [ ] `templates/documents/security_access_control/dlp_incident/resolve_modal.html`
-- [ ] **Dedicated Feature View & Console: SecureViewer**
-  - [ ] `apps/documents/views/SecurityAccessControl/SecureViewer.py` (`secure_viewer`)
-  - [ ] `apps/documents/urls/SecurityAccessControl/SecureViewer.py`
-  - [ ] `templates/documents/security_access_control/secure_viewer.html`
+- [x] **Entity 1: DocumentAccessPermission** (`DPRM-`)
+  - [x] `apps/documents/models/SecurityAccessControl/DocumentAccessPermissions.py`
+  - [x] `apps/documents/forms/SecurityAccessControl/DocumentAccessPermissions.py`
+  - [x] `apps/documents/views/SecurityAccessControl/DocumentAccessPermissions.py` (`permission_list`, `permission_create`, `permission_detail`, `permission_edit`, `permission_delete`, `permission_simulate`)
+  - [x] `apps/documents/urls/SecurityAccessControl/DocumentAccessPermissions.py`
+  - [x] `templates/documents/security_access_control/document_access_permission/list.html`
+  - [x] `templates/documents/security_access_control/document_access_permission/detail.html`
+  - [x] `templates/documents/security_access_control/document_access_permission/form.html`
+- [x] **Entity 2: WatermarkPolicy** (`DWTR-`)
+  - [x] `apps/documents/models/SecurityAccessControl/WatermarkPolicies.py`
+  - [x] `apps/documents/forms/SecurityAccessControl/WatermarkPolicies.py`
+  - [x] `apps/documents/views/SecurityAccessControl/WatermarkPolicies.py` (`watermark_list`, `watermark_create`, `watermark_detail`, `watermark_edit`, `watermark_delete`, `watermark_preview`)
+  - [x] `apps/documents/urls/SecurityAccessControl/WatermarkPolicies.py`
+  - [x] `templates/documents/security_access_control/watermark_policy/list.html`
+  - [x] `templates/documents/security_access_control/watermark_policy/detail.html`
+  - [x] `templates/documents/security_access_control/watermark_policy/form.html`
+  - [x] `templates/documents/security_access_control/watermark_policy/preview.html`
+- [x] **Entity 3: DocumentDrmPolicy** (`DDRM-`)
+  - [x] `apps/documents/models/SecurityAccessControl/DocumentDrmPolicies.py`
+  - [x] `apps/documents/forms/SecurityAccessControl/DocumentDrmPolicies.py`
+  - [x] `apps/documents/views/SecurityAccessControl/DocumentDrmPolicies.py` (`drm_policy_list`, `drm_policy_create`, `drm_policy_detail`, `drm_policy_edit`, `drm_policy_delete`, `drm_kill_switch`)
+  - [x] `apps/documents/urls/SecurityAccessControl/DocumentDrmPolicies.py`
+  - [x] `templates/documents/security_access_control/document_drm_policy/list.html`
+  - [x] `templates/documents/security_access_control/document_drm_policy/detail.html`
+  - [x] `templates/documents/security_access_control/document_drm_policy/form.html`
+  - [x] `templates/documents/security_access_control/document_drm_policy/kill_switch_modal.html`
+- [x] **Entity 4: DlpPolicy (`DDLP-`) & DlpIncident (`DINC-`)**
+  - [x] `apps/documents/models/SecurityAccessControl/DlpPolicies.py`
+  - [x] `apps/documents/models/SecurityAccessControl/DlpIncidents.py`
+  - [x] `apps/documents/forms/SecurityAccessControl/DlpPolicies.py`
+  - [x] `apps/documents/forms/SecurityAccessControl/DlpIncidents.py`
+  - [x] `apps/documents/views/SecurityAccessControl/DlpPolicies.py` (`dlp_policy_list`, `dlp_policy_create`, `dlp_policy_detail`, `dlp_policy_edit`, `dlp_policy_delete`)
+  - [x] `apps/documents/views/SecurityAccessControl/DlpIncidents.py` (`dlp_incident_list`, `dlp_incident_detail`, `dlp_incident_resolve`)
+  - [x] `apps/documents/urls/SecurityAccessControl/DlpPolicies.py`
+  - [x] `apps/documents/urls/SecurityAccessControl/DlpIncidents.py`
+  - [x] `templates/documents/security_access_control/dlp_policy/list.html`
+  - [x] `templates/documents/security_access_control/dlp_policy/detail.html`
+  - [x] `templates/documents/security_access_control/dlp_policy/form.html`
+  - [x] `templates/documents/security_access_control/dlp_incident/list.html`
+  - [x] `templates/documents/security_access_control/dlp_incident/detail.html`
+  - [x] `templates/documents/security_access_control/dlp_incident/resolve_modal.html`
+- [x] **Dedicated Feature View & Console: SecureViewer**
+  - [x] `apps/documents/views/SecurityAccessControl/SecureViewer.py` (`secure_viewer`)
+  - [x] `apps/documents/urls/SecurityAccessControl/SecureViewer.py`
+  - [x] `templates/documents/security_access_control/secure_viewer.html`
 
 ### Phase 3.3: Integration & Migration
-- [ ] Re-export all 5 models in `apps/documents/models/__init__.py`
-- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
-- [ ] Re-export all views in `apps/documents/views/__init__.py`
-- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
-- [ ] Register all 5 models in `apps/documents/admin.py`
-- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.7 seed data (permissions, watermark policies, DRM rules, DLP rules, and triage incidents)
-- [ ] Wire `LIVE_LINKS["13.7"]` in `apps/core/navigation.py`:
+- [x] Re-export all 5 models in `apps/documents/models/__init__.py`
+- [x] Re-export all forms in `apps/documents/forms/__init__.py`
+- [x] Re-export all views in `apps/documents/views/__init__.py`
+- [x] Wire URL routes in `apps/documents/urls/__init__.py`
+- [x] Register all 5 models in `apps/documents/admin.py`
+- [x] Extend `apps/documents/management/commands/seed_documents.py` with 13.7 seed data (permissions, watermark policies, DRM rules, DLP rules, and triage incidents)
+- [x] Wire `LIVE_LINKS["13.7"]` in `apps/core/navigation.py`:
   - `Document-Level Permissions`: `documents:permission_list`
   - `Dynamic Watermarking`: `documents:watermark_list`
   - `DRM & Document Protection`: `documents:drm_policy_list`
@@ -40170,39 +40170,39 @@ apps/quality/
   - Extra live leaves:
     - `DLP Incidents`: `documents:dlp_incident_list`
     - `Secure Web Viewer`: `documents:secure_viewer`
-- [ ] Run `makemigrations documents`
-- [ ] Run `migrate`
-- [ ] Run `seed_documents` twice (idempotency check)
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations documents`
+- [x] Run `migrate`
+- [x] Run `seed_documents` twice (idempotency check)
+- [x] Run `manage.py check`
 
 ### Phase 3.4: Smoke Verification
-- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+- [x] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
-- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
-- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
-- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
-- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.7.md`
-- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
-- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.7.md`
+- [x] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [x] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [x] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [x] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [x] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [x] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.7.md`
+- [x] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.7.md`
 
 ### Phase 5: Code Fixer Burn-down
-- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+- [x] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
 
 ### Phase 6: Automated Test Suite (Unfiltered)
-- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
-- [ ] Implement `apps/documents/tests/test_security_access_control_models.py`
-- [ ] Implement `apps/documents/tests/test_security_access_control_forms.py`
-- [ ] Implement `apps/documents/tests/test_security_access_control_views.py`
-- [ ] Implement `apps/documents/tests/test_security_access_control_security.py`
-- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+- [x] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [x] Implement `apps/documents/tests/test_security_access_control_models.py`
+- [x] Implement `apps/documents/tests/test_security_access_control_forms.py`
+- [x] Implement `apps/documents/tests/test_security_access_control_views.py`
+- [x] Implement `apps/documents/tests/test_security_access_control_security.py`
+- [x] Run full unfiltered app test suite: `pytest apps/documents/tests/`
 
 ### Phase 7: Skill, README & Close-out
-- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.7 models, routes, templates, and seed details
-- [ ] Update `README.md` marking 13.7 complete and recording test statistics
-- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.7.md` and `.claude/tasks/gaps-documents-13.7.md`
-- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+- [x] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.7 models, routes, templates, and seed details
+- [x] Update `README.md` marking 13.7 complete and recording test statistics
+- [x] Record any gaps in `.agents/tasks/gaps-documents-13.7.md` and `.claude/tasks/gaps-documents-13.7.md`
+- [x] Document final review notes and close out in `.claude/tasks/todo.md`
 
 ---
 
@@ -40223,8 +40223,27 @@ apps/quality/
 - **Steganographic Invisible Micro-Dot Fingerprinting** — High-security forensic steganography embedding invisible zero-width whitespace sequences or subtle imperceptible pixel luminance perturbations into PDF/image payloads to trace photographed document leaks back to individual user sessions.
 - **Deep-Learning NLP DLP Classifier** — Fine-tuned transformer models (BERT / LLM) for nuanced contextual semantic classification of proprietary trade secrets, unreleased financial reports, and confidential source code beyond regex pattern matching.
 
-## Review notes
-(To be filled in at Phase 7 close-out)
+## Review notes — Sub-module 13.7 Close-out (2026-11-23)
+- **Delivery Unit**: Sub-module 13.7: Document Security & Access Control in `apps/documents/` (Module 13: Document Management System).
+- **Models**: 5 tenant-scoped models subclassing `TenantNumbered` (`apps/documents/models/SecurityAccessControl/`):
+  - `DocumentAccessPermission` [`DPRM-`]: Granular multi-subject permission matrix supporting user, role, org unit, and group targets with bitwise/boolean capability flags (can_view, can_download, can_edit, can_share, can_delete, can_administer), expiration dates, and inheritance cascade flags.
+  - `WatermarkPolicy` [`DWTR-`]: Dynamic and forensic document watermarking engine with token interpolation (`{{user_name}}`, `{{user_email}}`, `{{timestamp}}`, `{{ip_address}}`), diagonal/horizontal/tiled layouts, custom opacity, font size, and rotation angle, plus real-time SVG rendering.
+  - `DocumentDrmPolicy` [`DDRM-`]: Digital rights management anti-piracy controls with offline viewing duration limits, print/download/copy restrictions, screen capture blocking heuristics, and emergency revocation kill-switch.
+  - `DlpPolicy` [`DDLP-`]: Data loss prevention policy engine supporting regex and keyword pattern matching across PII, PCI, SSN, and HIPAA data types with severity thresholds and automated alert/block actions.
+  - `DlpIncident` [`DINC-`]: Operational DLP violation triage workbench with violation snippet masking, false positive flagging, remediation status machine, and reviewer notes.
+- **Feature Views & Consoles**:
+  - `SecureViewer` (`apps/documents/views/SecurityAccessControl/SecureViewer.py`): Zero-download browser document viewer enforcing dynamic watermark SVG overlays, CSS `@media print` suppression, keyboard shortcut and right-click copy prevention, and read audit event logging.
+- **Forms**: 6 ModelForms across `apps/documents/forms/SecurityAccessControl/` (`DocumentAccessPermissionForm`, `WatermarkPolicyForm`, `DocumentDrmPolicyForm`, `DlpPolicyForm`, `DlpIncidentResolveForm`, `DrmKillSwitchForm`) with tenant scoping, regex syntax compilation validation, and `@tenant_admin_required` privilege gating.
+- **Views & Routes**: 23 FBV endpoints across permissions, watermark policies, DRM policies, DLP policies, DLP incident triage, and SecureViewer with full search, filtering, and pagination.
+- **Templates**: 14 responsive templates under `templates/documents/security_access_control/` (`document_access_permission/`, `watermark_policy/`, `document_drm_policy/`, `dlp_policy/`, `dlp_incident/`, and `secure_viewer.html`).
+- **Wire-up**: `LIVE_LINKS["13.7"]` (all 6 live routes) registered in `apps/core/navigation.py`, admin registered in `apps/documents/admin.py`, package re-exports across `__init__.py`.
+- **Migrations**: `0014_documentaccesspermission_documentdrmpolicy_dlppolicy_and_more.py` and `0017_watermarkpolicy_svg_pattern_and_more.py` providing schema, unique constraints, and composite indexes.
+- **Seeder**: `manage.py seed_documents` idempotently seeds sample permissions, watermark policies, DRM rules, DLP rules, and DLP incidents for Acme and Globex tenants; verified 100% idempotent.
+- **Phase 4 Review**: 6 sequential reviewer passes completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`). Consolidated 19 findings (2 Critical, 10 Important, 7 Minor) in `.claude/tasks/review-documents-13.7.md`.
+- **Phase 5 Fixes**: `code-fixer` resolved all 19 findings in ID order (C1–C2, I1–I10, M1–M7) across single-file commits; `manage.py check` verified 0 issues.
+- **Phase 6 Tests**: 4 test files (`test_security_access_control_models.py` [30 tests], `test_security_access_control_forms.py` [36 tests], `test_security_access_control_views.py` [48 tests], `test_security_access_control_security.py` [8 tests]) totaling **122 dedicated tests** (100% pass). Full unfiltered documents test suite passes with **524 green tests** (0 failures).
+- **Gaps Register**: `.agents/tasks/gaps-documents-13.7.md` and `.claude/tasks/gaps-documents-13.7.md` committed. `**Gaps**: None` (zero open or deferred items for 13.7).
+- **Documentation**: `.claude/skills/documents/SKILL.md` and `README.md` updated and committed.
 
 ---
 
