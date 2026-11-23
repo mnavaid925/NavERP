@@ -157,25 +157,25 @@
                     <td class="text-right table-actions">
                         <form method="post" action="{% url 'documents:document_search_alert_run_check' item.pk %}" class="inline">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-green-600 hover:text-green-700" title="Check New Matches Now">
+                            <button type="submit" class="btn btn-icon text-green-600 hover:text-green-700" title="Check New Matches Now" aria-label="Check new matches now">
                                 <i data-lucide="refresh-cw"></i>
                             </button>
                         </form>
                         <form method="post" action="{% url 'documents:document_search_alert_toggle_active' item.pk %}" class="inline">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-amber-500 hover:text-amber-600" title="{% if item.is_active %}Pause Alert{% else %}Resume Alert{% endif %}">
+                            <button type="submit" class="btn btn-icon text-amber-500 hover:text-amber-600" title="{% if item.is_active %}Pause Alert{% else %}Resume Alert{% endif %}" aria-label="{% if item.is_active %}Pause alert{% else %}Resume alert{% endif %}">
                                 <i data-lucide="{% if item.is_active %}pause{% else %}play{% endif %}"></i>
                             </button>
                         </form>
-                        <a href="{% url 'documents:document_search_alert_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                        <a href="{% url 'documents:document_search_alert_detail' item.pk %}" class="btn btn-icon" title="View Details" aria-label="View details">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'documents:document_search_alert_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                        <a href="{% url 'documents:document_search_alert_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit search alert">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'documents:document_search_alert_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete search alert {{ item.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete" aria-label="Delete search alert">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
