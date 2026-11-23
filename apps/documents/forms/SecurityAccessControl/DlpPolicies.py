@@ -66,6 +66,22 @@ class DlpPolicyForm(TenantUniqueMixin, TenantModelForm):
     def clean_custom_regex(self):
         val = self.cleaned_data.get("custom_regex")
         if val and val.strip():
+            val = val.strip()
+            # Catastrophic backtracking / ReDoS guards (nested quantifiers or overlapping repetition)
+            redos_patterns = [
+                r"\([^\)]*[\+\*]\s*\)[\+\*]",  # (x+)+ or (x*)*
+                r"\([^\)]*[\+\*]\s*\{[0-9,]+\}",  # (x+){2,}
+                r"\([^\)]*\|[^\)]*[\+\*]\s*\)[\+\*]",  # (a|b+)+
+                r"\[[^\]]*\][\+\*]\s*[\+\*]",  # [a-z]++
+            ]
+            for pattern in redos_patterns:
+                if re.search(pattern, val):
+                    raise ValidationError(
+                        "Potential ReDoS (regular expression denial of service) pattern detected: "
+                        "nested quantifiers or overlapping repetition groups are prohibited."
+                    )
+            if len(val) > 250:
+                raise ValidationError("Custom regular expression pattern is too long (maximum 250 characters).")
             try:
                 re.compile(val)
             except re.error as e:
