@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Session {{ session.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_hub' %}">Collaboration & Sharing</a>
+            <span>/</span>
+            <a href="{% url 'documents:coauthor_session_list' %}">Sessions</a>
+            <span>/</span>
+            <span>{{ session.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ session.number }}</h1>
+            <span class="badge {{ session.get_status_badge }}">{{ session.get_status_display }}</span>
+            {% if session.is_editing %}
+            <span class="badge badge-amber">Holding Section Lock</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:coauthor_session_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Sessions</span>
+        </a>
+        <a href="{% url 'documents:coauthor_session_edit' session.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'documents:coauthor_session_delete' session.pk %}" class="inline" onsubmit="return confirm('Disconnect and remove session?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Disconnect</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Presence Banner Card -->
+<div class="card mb-6" style="border-left: 6px solid {{ session.color_code }};">
+    <div class="card-body">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-sm" style="background-color: {{ session.color_code }};">
+                    {{ session.display_name|slice:":1"|upper }}
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-900">{{ session.display_name }}</h3>
+                    <p class="text-sm text-slate-500">
+                        {% if session.user %}System User ({{ session.user.email }}){% else %}External Guest Collaborator{% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="text-right">
+                    <div class="text-xs uppercase text-slate-500 font-semibold tracking-wider">Assigned Presence Color</div>
+                    <div class="font-mono text-sm font-semibold text-slate-900">{{ session.color_code }}</div>
+                </div>
+                <div class="w-8 h-8 rounded border border-slate-300" style="background-color: {{ session.color_code }};"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Session Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Session Scope & Context</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Active Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' session.document.pk %}" class="text-blue-600 hover:underline font-semibold">
+                                {{ session.document.title }}
+                            </a>
+                            <span class="text-xs text-slate-500 block">Number: {{ session.document.number }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Document Version</dt>
+                        <dd>
+                            {% if session.version %}
+                            <span class="font-mono text-sm font-semibold">{{ session.version.number }}</span>
+                            {% else %}
+                            <span class="text-slate-500">Live Active Document</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Active Draft</dt>
+                        <dd>
+                            {% if session.draft %}
+                            <a href="{% url 'documents:draft_detail' session.draft.pk %}" class="text-blue-600 hover:underline">
+                                {{ session.draft.title }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">Not tied to draft</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Current Section Anchor</dt>
+                        <dd>
+                            {% if session.current_section %}
+                            <span class="font-medium text-slate-900">{{ session.current_section }}</span>
+                            {% if session.is_editing %}
+                            <span class="badge badge-amber text-xs ml-1">Actively Editing</span>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-slate-400">Whole Document (No Section Lock)</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Joined Timestamp</dt>
+                        <dd>
+                            <span class="text-sm text-slate-900">{{ session.joined_at|date:"M d, Y H:i:s" }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Heartbeat Received</dt>
+                        <dd>
+                            <span class="text-sm font-semibold text-slate-900">{{ session.last_heartbeat|date:"M d, Y H:i:s" }}</span>
+                            {% if session.is_timed_out and session.status != "disconnected" %}
+                            <span class="badge badge-amber text-xs ml-1">Heartbeat Stale</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% if session.disconnected_at %}
+                    <div class="detail-item">
+                        <dt>Disconnected At</dt>
+                        <dd>
+                            <span class="text-sm text-slate-700">{{ session.disconnected_at|date:"M d, Y H:i:s" }}</span>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    <div class="detail-item">
+                        <dt>Client IP Address</dt>
+                        <dd>
+                            <span class="font-mono text-xs text-slate-700">{{ session.client_ip|default:"Internal / Unknown" }}</span>
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Serialized Cursor Coordinates Box -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Live Cursor Telemetry Payload</h2>
+            </div>
+            <div class="card-body">
+                <pre class="bg-slate-900 text-slate-100 p-4 rounded text-xs font-mono overflow-x-auto">{{ session.cursor_position }}</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token & Actions Sidebar -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Session Token & Telemetry</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <label class="text-xs uppercase text-slate-500 font-semibold tracking-wider">Client Session Token</label>
+                    <div class="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200 mt-1 break-all select-all">
+                        {{ session.session_token }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs uppercase text-slate-500 font-semibold tracking-wider">Browser User Agent</label>
+                    <div class="text-xs text-slate-600 mt-1 break-words">
+                        {{ session.user_agent|default:"Standard Webview Browser" }}
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-200">
+                    <form method="post" action="{% url 'documents:coauthor_session_heartbeat' session.session_token %}" class="space-y-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="current_section" value="{{ session.current_section }}">
+                        <button type="submit" class="btn btn-outline w-full text-xs">
+                            <i data-lucide="refresh-cw"></i>
+                            <span>Send Heartbeat Ping</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
