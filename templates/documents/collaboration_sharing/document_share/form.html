@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Share {{ share.number }}{% else %}New Document Share Link{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:collaboration_hub' %}">Collaboration & Sharing</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_share_list' %}">Shares</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ share.number }}{% else %}New Share Link{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Document Share: {{ share.number }}{% else %}Create Document Share Link{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:document_share_detail' share.pk %}{% else %}{% url 'documents:document_share_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <form method="post" class="card">
+        {% csrf_token %}
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Share Settings & Recipient Configuration</h2>
+        </div>
+        <div class="card-body space-y-6">
+            {% if form.non_field_errors %}
+            <div class="p-4 rounded bg-red-50 text-red-700 text-sm border border-red-200">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Target Selection Section -->
+            <div class="border-b border-slate-200 pb-5">
+                <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+                    <span>Document or Repository Target</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.document.id_for_label }}">Document <span class="text-red-500">*</span></label>
+                        {{ form.document }}
+                        {% if form.document.errors %}
+                        <div class="form-error">{{ form.document.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.folder.id_for_label }}">Folder (Optional)</label>
+                        {{ form.folder }}
+                        <div class="text-xs text-slate-500 mt-1">Leave blank unless sharing the entire folder structure</div>
+                        {% if form.folder.errors %}
+                        <div class="form-error">{{ form.folder.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label" for="{{ form.version.id_for_label }}">Version Lock (Optional)</label>
+                        {{ form.version }}
+                        <div class="text-xs text-slate-500 mt-1">Lock to a specific physical revision, or leave blank to automatically serve the latest version</div>
+                        {% if form.version.errors %}
+                        <div class="form-error">{{ form.version.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Share Scope & Permissions -->
+            <div class="border-b border-slate-200 pb-5">
+                <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <i data-lucide="users" class="w-4 h-4 text-blue-600"></i>
+                    <span>Sharing Scope & Permissions</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.share_type.id_for_label }}">Sharing Type <span class="text-red-500">*</span></label>
+                        {{ form.share_type }}
+                        {% if form.share_type.errors %}
+                        <div class="form-error">{{ form.share_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.access_level.id_for_label }}">Access Level / Permissions <span class="text-red-500">*</span></label>
+                        {{ form.access_level }}
+                        {% if form.access_level.errors %}
+                        <div class="form-error">{{ form.access_level.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.shared_with_user.id_for_label }}">Internal User</label>
+                        {{ form.shared_with_user }}
+                        <div class="text-xs text-slate-500 mt-1">Required if share type is "Specific Internal User"</div>
+                        {% if form.shared_with_user.errors %}
+                        <div class="form-error">{{ form.shared_with_user.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.shared_with_org_unit.id_for_label }}">Internal Department</label>
+                        {{ form.shared_with_org_unit }}
+                        <div class="text-xs text-slate-500 mt-1">Required if share type is "Internal Department"</div>
+                        {% if form.shared_with_org_unit.errors %}
+                        <div class="form-error">{{ form.shared_with_org_unit.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label" for="{{ form.shared_with_email.id_for_label }}">External Guest Email</label>
+                        {{ form.shared_with_email }}
+                        <div class="text-xs text-slate-500 mt-1">Required if share type is "Named External Guest"</div>
+                        {% if form.shared_with_email.errors %}
+                        <div class="form-error">{{ form.shared_with_email.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security Controls & Restrictions -->
+            <div class="border-b border-slate-200 pb-5">
+                <h3 class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <i data-lucide="shield" class="w-4 h-4 text-blue-600"></i>
+                    <span>Security Controls & Restrictions</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.raw_password.id_for_label }}">Password Protection</label>
+                        {{ form.raw_password }}
+                        <div class="text-xs text-slate-500 mt-1">Leave blank to allow link access without a password</div>
+                        {% if form.raw_password.errors %}
+                        <div class="form-error">{{ form.raw_password.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.expires_at.id_for_label }}">Expiration Date & Time</label>
+                        {{ form.expires_at }}
+                        <div class="text-xs text-slate-500 mt-1">Link will automatically deactivate after this date</div>
+                        {% if form.expires_at.errors %}
+                        <div class="form-error">{{ form.expires_at.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.max_uses.id_for_label }}">Usage Limit Quota</label>
+                        {{ form.max_uses }}
+                        <div class="text-xs text-slate-500 mt-1">Maximum allowed accesses/clicks before expiration</div>
+                        {% if form.max_uses.errors %}
+                        <div class="form-error">{{ form.max_uses.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group space-y-3 pt-6">
+                        <div class="flex items-center gap-2">
+                            {{ form.allow_download }}
+                            <label for="{{ form.allow_download.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Allow Binary Download
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {{ form.allow_print }}
+                            <label for="{{ form.allow_print.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Allow Browser Printing
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {{ form.include_annotations }}
+                            <label for="{{ form.include_annotations.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Expose Internal Annotations & Sticky Notes
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes & Message -->
+            <div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.share_message.id_for_label }}">Message or Instructions for Recipient</label>
+                    {{ form.share_message }}
+                    {% if form.share_message.errors %}
+                    <div class="form-error">{{ form.share_message.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card-footer flex justify-end gap-3">
+            <a href="{% if is_edit %}{% url 'documents:document_share_detail' share.pk %}{% else %}{% url 'documents:document_share_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check"></i>
+                <span>{% if is_edit %}Save Changes{% else %}Generate Share Link{% endif %}</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
