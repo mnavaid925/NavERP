@@ -1,3 +1,4 @@
+import json
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -53,8 +54,21 @@ class DocumentMetadataValueForm(forms.ModelForm):
         self.fields["version"].empty_label = "— Global Document Level (All Versions) —"
         self.fields["schema"].empty_label = "— Ad-hoc / Standalone (No Schema) —"
 
+    def clean_value_json(self):
+        val = self.cleaned_data.get("value_json", "").strip()
+        if val:
+            try:
+                json.loads(val)
+            except (ValueError, json.JSONDecodeError) as exc:
+                raise ValidationError(f"Invalid JSON syntax: {exc}")
+        return val
+
     def clean(self):
         cleaned_data = super().clean()
+        data_type = cleaned_data.get("data_type")
+        val_json = cleaned_data.get("value_json", "").strip()
+        if data_type == "json" and not val_json:
+            self.add_error("value_json", "JSON payload is required when data type is 'json'.")
         doc = cleaned_data.get("document")
         if doc and self.tenant and doc.tenant != self.tenant:
             self.add_error("document", "Selected document does not belong to your organization.")
