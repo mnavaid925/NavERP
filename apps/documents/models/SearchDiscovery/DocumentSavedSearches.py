@@ -123,7 +123,8 @@ class DocumentSavedSearch(TenantNumbered):
         if not self.filters_json:
             return {}
         try:
-            return json.loads(self.filters_json)
+            data = json.loads(self.filters_json)
+            return data if isinstance(data, dict) else {}
         except (ValueError, TypeError):
             return {}
 
@@ -131,6 +132,7 @@ class DocumentSavedSearch(TenantNumbered):
         if not self.facet_filters_json:
             return {}
         try:
-            return json.loads(self.facet_filters_json)
+            data = json.loads(self.facet_filters_json)
+            return data if isinstance(data, dict) else {}
         except (ValueError, TypeError):
             return {}
