@@ -181,8 +181,10 @@ def permission_delete(request, pk):
 @login_required
 def permission_simulate(request):
     """Interactive simulator to evaluate effective document capabilities for a specific user."""
-    documents = Document.objects.filter(tenant=request.tenant).order_by("title")
-    users = User.objects.filter(tenant=request.tenant).order_by("username")
+    docs_qs = Document.objects.filter(tenant=request.tenant)
+    users_qs = User.objects.filter(tenant=request.tenant)
+    documents = docs_qs.only("id", "number", "title", "classification").order_by("title")[:200]
+    users = users_qs.only("id", "username", "first_name", "last_name").order_by("username")[:200]
 
     target_document = None
     target_user = None
@@ -203,8 +205,8 @@ def permission_simulate(request):
 
     if doc_id.isdigit() and user_id.isdigit():
         simulated = True
-        target_document = get_object_or_404(documents, pk=int(doc_id))
-        target_user = get_object_or_404(users, pk=int(user_id))
+        target_document = get_object_or_404(docs_qs, pk=int(doc_id))
+        target_user = get_object_or_404(users_qs, pk=int(user_id))
 
         # Check tenant admin or superuser
         if getattr(target_user, "is_tenant_admin", False) or getattr(target_user, "is_superuser", False):
