@@ -1,9 +1,10 @@
-{% extends "base.html" %}
+{% extends "base_auth.html" %}
 {% load static %}
 
 {% block title %}Shared: {{ document.title }} — NavERP Secure Share{% endblock %}
 
 {% block content %}
+<style>.auth-card { max-width: 960px; }</style>
 <div class="max-w-5xl mx-auto py-6">
     {% if password_required %}
     <!-- Password Challenge Dialog -->
