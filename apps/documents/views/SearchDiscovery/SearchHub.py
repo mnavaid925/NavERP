@@ -53,8 +53,8 @@ def search_hub(request):
     intent_chips, search_term = _parse_nlp_intents(raw_query)
 
     # Base queryset for current tenant
-    qs = Document.objects.filter(tenant=request.tenant, is_active=True).select_related(
-        "owner", "folder", "current_version"
+    qs = Document.objects.filter(tenant=request.tenant).select_related(
+        "owner", "department"
     )
 
     synonyms_applied = []
@@ -114,7 +114,12 @@ def search_hub(request):
 
     selected_folder_id = request.GET.get("folder", "").strip()
     if selected_folder_id and selected_folder_id.isdigit():
-        qs = qs.filter(folder_id=int(selected_folder_id))
+        folder_obj = DocumentFolder.objects.filter(tenant=request.tenant, pk=int(selected_folder_id)).first()
+        if folder_obj:
+            if folder_obj.department_id:
+                qs = qs.filter(department_id=folder_obj.department_id)
+            else:
+                qs = qs.filter(Q(tags__icontains=folder_obj.slug) | Q(description__icontains=folder_obj.name))
 
     selected_author_id = request.GET.get("author", "").strip()
     if selected_author_id and selected_author_id.isdigit():
@@ -176,7 +181,7 @@ def search_hub(request):
     page_obj = paginator.get_page(page_number)
 
     # Facet aggregations across tenant
-    base_facets_qs = Document.objects.filter(tenant=request.tenant, is_active=True)
+    base_facets_qs = Document.objects.filter(tenant=request.tenant)
     if search_term:
         base_facets_qs = base_facets_qs.filter(text_q).distinct()
 
@@ -283,8 +288,8 @@ def search_click_track(request, pk):
 @login_required
 def search_export_csv(request):
     raw_query = request.GET.get("q", "").strip()
-    qs = Document.objects.filter(tenant=request.tenant, is_active=True).select_related(
-        "owner", "folder"
+    qs = Document.objects.filter(tenant=request.tenant).select_related(
+        "owner", "department"
     )
 
     if raw_query:
@@ -309,7 +314,7 @@ def search_export_csv(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="search_results.csv"'
     writer = csv.writer(response)
-    writer.writerow(["Number", "Title", "Document Type", "Classification", "Status", "Folder", "Owner", "Created At"])
+    writer.writerow(["Number", "Title", "Document Type", "Classification", "Status", "Department", "Owner", "Created At"])
 
     for doc in qs[:500]:
         writer.writerow([
@@ -318,7 +323,7 @@ def search_export_csv(request):
             _csv_safe(doc.get_document_type_display()),
             _csv_safe(doc.get_classification_display()),
             _csv_safe(doc.get_status_display()),
-            _csv_safe(doc.folder.name if doc.folder else "Root"),
+            _csv_safe(doc.department.name if doc.department else "General"),
             _csv_safe(doc.owner.username if doc.owner else ""),
             _csv_safe(doc.created_at.strftime("%Y-%m-%d %H:%M")),
         ])
