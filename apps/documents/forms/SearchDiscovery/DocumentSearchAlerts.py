@@ -27,6 +27,7 @@ class DocumentSearchAlertForm(TenantUniqueMixin, TenantModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["saved_search"].queryset = DocumentSavedSearch.objects.filter(
@@ -38,4 +39,16 @@ class DocumentSearchAlertForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["saved_search"])
+        saved_search = cleaned_data.get("saved_search")
+        subscriber = getattr(self.instance, "subscriber", None) or getattr(self, "user", None)
+        if self.tenant and saved_search and subscriber:
+            dup_qs = DocumentSearchAlert.objects.filter(
+                tenant=self.tenant,
+                saved_search=saved_search,
+                subscriber=subscriber,
+            )
+            if self.instance.pk:
+                dup_qs = dup_qs.exclude(pk=self.instance.pk)
+            if dup_qs.exists():
+                self.add_error("saved_search", "You already have an active alert subscription for this saved search.")
         return cleaned_data
