@@ -116,9 +116,22 @@ def coauthor_session_create(request):
     return render(request, "documents/collaboration_sharing/coauthor_session/form.html", context)
 
 
+def _can_manage_coauthor_session(user, session):
+    if getattr(user, "is_tenant_admin", False) or user.is_superuser:
+        return True
+    if session.user_id == user.id:
+        return True
+    if session.document and getattr(session.document, "owner_id", None) == user.id:
+        return True
+    return False
+
+
 @login_required
 def coauthor_session_edit(request, pk):
-    session = documents_object(request, CoauthorSession, pk)
+    session = documents_object(request, CoauthorSession, pk, select_related=["document"])
+    if not _can_manage_coauthor_session(request.user, session):
+        messages.error(request, "You do not have permission to edit this co-authoring session.")
+        return redirect("documents:coauthor_session_detail", pk=session.pk)
     if request.method == "POST":
         form = CoauthorSessionForm(request.POST, instance=session, tenant=request.tenant)
         if form.is_valid():
@@ -140,7 +153,10 @@ def coauthor_session_edit(request, pk):
 @login_required
 @require_POST
 def coauthor_session_delete(request, pk):
-    session = documents_object(request, CoauthorSession, pk)
+    session = documents_object(request, CoauthorSession, pk, select_related=["document"])
+    if not _can_manage_coauthor_session(request.user, session):
+        messages.error(request, "You do not have permission to delete this co-authoring session.")
+        return redirect("documents:coauthor_session_detail", pk=session.pk)
     session_num = session.number
     write_audit_log(request.user, session, "delete", tenant=request.tenant)
     session.delete()
