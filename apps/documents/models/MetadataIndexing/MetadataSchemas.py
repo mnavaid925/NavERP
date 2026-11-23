@@ -1,8 +1,11 @@
 import json
+import logging
 from django.conf import settings
 from django.db import models
 
 from apps.documents.models._base import TenantNumbered
+
+logger = logging.getLogger(__name__)
 
 
 class MetadataSchema(TenantNumbered):
@@ -117,8 +120,11 @@ class MetadataSchema(TenantNumbered):
 
     @property
     def parsed_fields(self):
+        if not self.fields_definition_json:
+            return []
         try:
             val = json.loads(self.fields_definition_json)
             return val if isinstance(val, list) else []
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as exc:
+            logger.warning("Failed to parse fields_definition_json for schema %s: %s", self.pk, exc)
             return []
