@@ -127,11 +127,6 @@
                 {{ form.value_json }}
                 {% if form.value_json.errors %}<p class="form-error">{{ form.value_json.errors.0 }}</p>{% endif %}
             </div>
-            <div class="form-group">
-                <label class="form-label" for="{{ form.validation_status.id_for_label }}">Validation Status</label>
-                {{ form.validation_status }}
-                {% if form.validation_status.errors %}<p class="form-error">{{ form.validation_status.errors.0 }}</p>{% endif %}
-            </div>
         </div>
         <div class="card-footer flex justify-end gap-3">
             <a href="{% if is_edit %}{% url 'documents:metadata_value_detail' metadata_value.pk %}{% else %}{% url 'documents:metadata_value_list' %}{% endif %}" class="btn btn-outline">
