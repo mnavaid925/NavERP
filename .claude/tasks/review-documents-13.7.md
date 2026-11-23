@@ -101,7 +101,7 @@ Six serial reviewer passes were executed in accordance with project guidelines:
   - **Files & Lines**: `apps/documents/{models,forms,views,urls}/SecurityAccessControl/`
   - **Description**: Add empty `__init__.py` files for consistency with sibling packages.
   - **Fix**: Create empty `__init__.py` in each.
-- [ ] **M5: Hardcoded badge in visual studio preview**
+- [x] **M5: Hardcoded badge in visual studio preview**
   - **Files & Lines**: `templates/documents/security_access_control/watermark_policy/preview.html:71`
   - **Description**: Line 71 hardcodes `badge-amber`.
   - **Fix**: Use `{{ policy.classification_badge|default:'badge-amber' }}`.
