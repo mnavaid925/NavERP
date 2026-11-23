@@ -1,6 +1,6 @@
 ---
 name: documents
-description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4), or invokes /documents.
+description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5), or invokes /documents.
 ---
 
 # Document Management System (DMS) (Module 13)
@@ -8,7 +8,7 @@ description: Work on the Document Management System (DMS) module (Module 13 — 
 App path: `apps/documents`. Templates: `templates/documents/`. URL prefix: `/documents/`, `app_name = "documents"`.
 Mirrors `NavERP.md` "## 13. Document Management System (DMS)" (Sub-modules 13.1–13.20).
 
-**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository.**
+**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing.**
 Build the next sub-module with `/next-module next` — see `apps/quality`/`apps/procurement` for reference package layout and the mandatory Module Creation Sequence.
 
 ---
@@ -20,6 +20,7 @@ Module 13 provides an enterprise document repository, authoring workspace, revis
 - **13.2 Version Control & Revision Management**: Automatic multi-scheme version numbering (`Document`, `DocumentVersion`), exclusive check-in/check-out concurrency locking (`DocumentLock`), side-by-side visual redline diff comparison (`compare.html`), parallel scenario branching and merge-back (`DocumentBranch`), and point-in-time version restoration/rollback.
 - **13.3 Document Approval & Review Workflow**: Multi-stage approval pipelines (`DocumentApprovalWorkflow`), granular participant routing with sequential/parallel/first-responder rules (`DocumentApprovalRequest`), 21 CFR Part 11 cryptographic electronic signatures and certificate manifests (`DocumentSignature`), threaded critique and blocking annotations (`DocumentReviewComment`), visual stage layout designer (`designer.html`), and bottleneck analytics cockpit (`approval_dashboard.html`).
 - **13.4 Document Storage & Repository**: Hierarchical taxonomic folder trees and smart virtual query filters (`DocumentFolder`), physical and cloud tiered storage targets with quota enforcement (`StorageVolume`), multi-type document dependency and reference network graphs (`DocumentRelationship`), streaming bulk zip ingestion with archive safety thresholds (`DocumentBatchImport`), and repository command center (`repository_dashboard.html`).
+- **13.5 Metadata & Indexing**: Flexible enterprise metadata schema definitions with inheritance cascade policies (`MetadataSchema`), polymorphic key-value document and revision property storage (`DocumentMetadataValue`), hierarchical controlled vocabularies and multilingual thesauri (`TaxonomyTerm`), automated OCR text extraction pipeline with confidence metrics and tag extraction (`DocumentOcrJob`), and metadata analytics command center (`metadata_indexing_dashboard.html`).
 
 ---
 
@@ -156,6 +157,41 @@ Shared base in `models/_base.py`:
   - `error_log`, `import_summary` (JSONField), `started_at`, `completed_at`, `created_by` (FK `settings.AUTH_USER_MODEL`).
   - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, status)`, `(tenant, storage_volume)`.
 
+### 13.5 MetadataIndexing (`apps/documents/models/MetadataIndexing/`)
+
+- **`MetadataSchemas.py`** — `MetadataSchema` (`NUMBER_PREFIX = "DSCH"`):
+  - `name`, `code` (uppercase-normalized), `description`, `target_type` (all, contract, policy, sop, financial, technical, hr, procurement).
+  - `department` (FK `core.OrgUnit`, nullable), `target_folder` (FK `DocumentFolder`, nullable).
+  - `fields_definition_json`: JSON array of field definitions (`key`, `label`, `data_type`, `required`).
+  - `inheritance_mode` (none, folder_default, folder_strict, template).
+  - `is_required`, `allow_custom_fields`, `version_number`, `is_active`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, code)`, indexes on `(tenant, target_type, is_active)`, `(tenant, name)`.
+
+- **`TaxonomyTerms.py`** — `TaxonomyTerm` (`NUMBER_PREFIX = "DTAX"`):
+  - `name`, `term_code`, `category` (general, legal, finance, compliance, technical, hr, procurement, industry).
+  - `parent` (FK self, nullable, `related_name="children"`), `description`, `synonyms_json`, `external_code`.
+  - `is_governed`, `is_active`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Helper properties: `active_children`, `parsed_synonyms`.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, category, term_code)`, indexes on `(tenant, category, is_active)`.
+
+- **`DocumentMetadataValues.py`** — `DocumentMetadataValue` (`NUMBER_PREFIX = "DMETA"`):
+  - `document` (FK `Document`), `version` (FK `DocumentVersion`, nullable), `schema` (FK `MetadataSchema`, nullable).
+  - `field_name`, `field_label`, `data_type` (text, textarea, integer, decimal, date, datetime, boolean, dropdown, multi_select, json).
+  - Polymorphic storage columns: `value_text`, `value_number`, `value_date`, `value_boolean`, `value_json`.
+  - `source` (manual_entry, folder_inherited, template_inherited, ai_extracted, bulk_updated), `is_overridden`.
+  - `validation_status` (valid, invalid, pending_validation), `validation_error`, `last_validated_at`, `updated_by` (FK `settings.AUTH_USER_MODEL`).
+  - Helper properties: `display_value`.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, document, version, field_name)`, conditional unique `(tenant, document, field_name)` when `version__isnull=True`, indexes on `(tenant, data_type)`, `(tenant, validation_status)`, `(tenant, source)`, `(tenant, document, field_name)`.
+
+- **`DocumentOcrJobs.py`** — `DocumentOcrJob` (`NUMBER_PREFIX = "DOCR"`):
+  - `document` (FK `Document`), `version` (FK `DocumentVersion`, nullable), `status` (queued, processing, completed, failed, reviewed).
+  - `ocr_engine` (internal_heuristic, tesseract_ocr, azure_document_intelligence, aws_textract, google_vision_ocr).
+  - `extracted_full_text`, `confidence_score`, `page_count`, `suggested_category`, `suggested_tags_json`, `extracted_entities_json`.
+  - `has_handwriting`, `has_barcode`, `processing_duration_ms`, `error_message`, `applied_to_document`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Helper properties: `parsed_tags`, `parsed_entities`.
+  - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, status, created_at)`, `(tenant, document, status)`, `(tenant, -created_at)`.
+
+
 ---
 
 ## URLs & Routes (`apps/documents/urls/`)
@@ -243,6 +279,23 @@ Registered under namespace `documents:`:
 - `/documents/storage/batch-imports/<int:pk>/`: `batch_import_detail`, `batch_import_edit`, `batch_import_delete` (POST-only)
 - `/documents/storage/batch-imports/<int:pk>/process/`: `batch_import_process` (POST-only streaming extraction & document ingestion)
 
+### 13.5 Metadata & Indexing Routes
+- `/documents/metadata/`: `metadata_indexing_dashboard` (KPI command center, schemas count, OCR metrics)
+- `/documents/schemas/`: `metadata_schema_list`, `metadata_schema_create`
+- `/documents/schemas/<int:pk>/`: `metadata_schema_detail`, `metadata_schema_edit`, `metadata_schema_delete` (POST-only, `@tenant_admin_required`)
+- `/documents/taxonomies/`: `taxonomy_term_list`, `taxonomy_term_create`
+- `/documents/taxonomies/tree/`: `taxonomy_term_tree` (hierarchical taxonomy tree view)
+- `/documents/taxonomies/<int:pk>/`: `taxonomy_term_detail`, `taxonomy_term_edit`, `taxonomy_term_delete` (POST-only, guarded against child cascade)
+- `/documents/metadata-values/`: `metadata_value_list`, `metadata_value_create`
+- `/documents/metadata-values/<int:pk>/`: `metadata_value_detail`, `metadata_value_edit`, `metadata_value_delete` (POST-only)
+- `/documents/metadata-values/<int:pk>/validate/`: `metadata_value_validate` (POST-only schema conformance check)
+- `/documents/ocr-jobs/`: `document_ocr_job_list`, `document_ocr_job_create`
+- `/documents/ocr-jobs/<int:pk>/`: `document_ocr_job_detail`
+- `/documents/ocr-jobs/<int:pk>/viewer/`: `document_ocr_job_viewer` (split-screen OCR extraction inspector)
+- `/documents/ocr-jobs/<int:pk>/process/`: `document_ocr_job_process` (POST-only extraction engine pipeline)
+- `/documents/ocr-jobs/<int:pk>/apply/`: `document_ocr_job_apply` (POST-only commit OCR text & tags to document)
+- `/documents/ocr-jobs/<int:pk>/delete/`: `document_ocr_job_delete` (POST-only)
+
 ---
 
 ## Templates
@@ -266,6 +319,13 @@ Located in:
   - `storage_volume/`: `list.html`, `detail.html`, `form.html`
   - `document_relationship/`: `list.html`, `detail.html`, `form.html`, `graph.html`
   - `document_batch_import/`: `list.html`, `detail.html`, `form.html`
+- `templates/documents/metadata_indexing/` (13.5 templates):
+  - `metadata_indexing_dashboard.html`: Command center, schema distribution, OCR pipeline metrics
+  - `metadata_schema/`: `list.html`, `detail.html`, `form.html`
+  - `taxonomy_term/`: `list.html`, `detail.html`, `form.html`, `tree.html`
+  - `document_metadata_value/`: `list.html`, `detail.html`, `form.html`
+  - `document_ocr_job/`: `list.html`, `detail.html`, `form.html`, `extract_viewer.html`
+
 
 ---
 
@@ -291,6 +351,10 @@ Supports `--flush` option to reset module data cleanly. Demo data seeds:
 13. Tiered Storage Volumes (NVMe SSD hot tier, S3 object storage warm tier, Deep Glacier cold archive).
 14. Document Relationships (Cross-document citations, superseding links, annex attachments).
 15. Batch Import Ingestion Jobs (Completed bulk zip packages, processing audit logs).
+16. Enterprise Metadata Schemas (NDA schema, Vendor Contract spec, Quality ISO manual schema).
+17. Controlled Taxonomies & Thesauri (Legal & Contract terms, Regulatory Compliance codes, Financial terms, Industry classifications).
+18. Document Metadata Values (Heterogeneous decimal amounts, dates, booleans, and JSON structured payloads).
+19. Document OCR Extraction Jobs (Completed, processing, and queued OCR jobs with confidence scores, full text layers, and entity tags).
 
 ---
 
@@ -319,6 +383,14 @@ LIVE_LINKS["13.4"] = {
     "Document Linking & Relationships": "documents:relationship_list",
     "Bulk Upload & Import": "documents:batch_import_list",
 }
+LIVE_LINKS["13.5"] = {
+    "Metadata Command Center": "documents:metadata_indexing_dashboard",
+    "Document Metadata Schemas": "documents:metadata_schema_list",
+    "Taxonomy & Controlled Vocabularies": "documents:taxonomy_term_list",
+    "Taxonomy Hierarchy Tree": "documents:taxonomy_term_tree",
+    "Document Metadata Values": "documents:metadata_value_list",
+    "Full-Text OCR Extraction Jobs": "documents:document_ocr_job_list",
+}
 ```
 
 ---
@@ -339,3 +411,7 @@ LIVE_LINKS["13.4"] = {
 12. **Streaming Archive Processing**: Batch import extraction MUST stream archives via `batch.archive_file.open("rb")` instead of accessing `.path` to remain fully compatible with S3/Azure/GCS cloud storage backends. Enforce safety thresholds: `MAX_BATCH_FILES = 500`, `MAX_BATCH_BYTES = 100MB`, `MAX_BATCH_UPLOAD_BYTES = 50MB`, and filter against `ALLOWED_DOC_EXTENSIONS`.
 13. **Hierarchical Folder Performance**: `folder_tree` builds taxonomy hierarchies in Python memory using an adjacency list (`defaultdict(list)`) from a single query rather than issuing recursive database queries.
 14. **Single Default Storage Volume**: `StorageVolume.save()` guarantees exactly one default storage volume per tenant by unsetting `is_default` on sibling volumes within an atomic transaction block.
+15. **EAV Metadata Indexing & Polymorphic Values**: `DocumentMetadataValue` enforces strict composite unique constraints on `(tenant, document, version, field_name)` with conditional uniqueness when `version` is NULL. High-cardinality queries are indexed via compound keys `(tenant, data_type)`, `(tenant, validation_status)`, `(tenant, source)`.
+16. **Checkout Lock Enforcement on Metadata Mutations**: Metadata values and OCR job text cannot be created, modified, deleted, or committed if the target `Document` is currently checked out / locked by another custodian.
+17. **Taxonomy Term Governance & Anti-Cycle Traversal**: Governed taxonomy terms (`is_governed=True`) require administrator privileges to delete. Deleting a parent term with active child terms is blocked to prevent accidental destructive cascade. Ancestor traversal in `TaxonomyTermForm.clean()` detects and rejects circular parent assignments.
+18. **OCR Completion Verification & Revision Fallback**: `document_ocr_job_apply` strictly verifies `job.status == 'completed'`. When `job.version` is NULL, text is committed to the document's latest revision (`doc.versions.order_by("-created_at").first()`), and suggested tags are merged cleanly into `doc.tags`.
