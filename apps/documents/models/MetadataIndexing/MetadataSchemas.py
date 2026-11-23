@@ -96,6 +96,7 @@ class MetadataSchema(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "target_type", "is_active"], name="doc_dsch_tnt_tgt_act_idx"),
+            models.Index(fields=["tenant", "name"], name="doc_dsch_tnt_name_idx"),
         ]
 
     def __str__(self):
