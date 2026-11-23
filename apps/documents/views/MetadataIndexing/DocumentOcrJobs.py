@@ -203,9 +203,19 @@ def document_ocr_job_apply(request, pk):
         return redirect("documents:document_ocr_job_detail", pk=job.pk)
 
     with transaction.atomic():
-        if job.version and hasattr(job.version, "extracted_text"):
-            job.version.extracted_text = job.extracted_full_text
-            job.version.save()
+        target_version = job.version or doc.versions.order_by("-created_at").first()
+        if target_version and hasattr(target_version, "extracted_text"):
+            target_version.extracted_text = job.extracted_full_text
+            target_version.save(update_fields=["extracted_text"])
+
+        # Merge suggested tags into doc.tags
+        if job.parsed_tags:
+            existing_tags = [t.strip() for t in doc.tags.split(",") if t.strip()] if doc.tags else []
+            for tag in job.parsed_tags:
+                if tag and tag not in existing_tags:
+                    existing_tags.append(tag)
+            doc.tags = ", ".join(existing_tags)[:500]
+            doc.save(update_fields=["tags"])
 
         job.applied_to_document = True
         job.status = "reviewed"
