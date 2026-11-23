@@ -199,9 +199,9 @@ def search_hub(request):
     if search_term:
         base_facets_qs = base_facets_qs.filter(text_q).distinct()
 
-    doc_type_counts = dict(base_facets_qs.values("document_type").annotate(c=Count("id")).values_list("document_type", "c"))
-    classification_counts = dict(base_facets_qs.values("classification").annotate(c=Count("id")).values_list("classification", "c"))
-    status_counts = dict(base_facets_qs.values("status").annotate(c=Count("id")).values_list("status", "c"))
+    doc_type_counts = dict(base_facets_qs.values("document_type").annotate(c=Count("id", distinct=True)).values_list("document_type", "c"))
+    classification_counts = dict(base_facets_qs.values("classification").annotate(c=Count("id", distinct=True)).values_list("classification", "c"))
+    status_counts = dict(base_facets_qs.values("status").annotate(c=Count("id", distinct=True)).values_list("status", "c"))
 
     facets = {
         "document_types": [
