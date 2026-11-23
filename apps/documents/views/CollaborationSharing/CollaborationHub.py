@@ -3,6 +3,7 @@ from django.db.models import Q
 from django.shortcuts import render
 from django.utils import timezone
 
+from apps.core.models import Employment
 from apps.documents.models.CollaborationSharing.CoauthorSessions import CoauthorSession
 from apps.documents.models.CollaborationSharing.DocumentActivities import DocumentActivity
 from apps.documents.models.CollaborationSharing.DocumentShares import DocumentShare
@@ -18,7 +19,13 @@ def collaboration_hub(request):
     now = timezone.now()
     now_date = now.date()
 
-    user_org_unit = getattr(user, "department", None)
+    user_party = getattr(user, "party", None)
+    employment = (
+        Employment.objects.filter(tenant=tenant, party=user_party).order_by("-id").first()
+        if user_party
+        else None
+    )
+    user_org_unit = employment.org_unit if employment else None
 
     # 1. Shares targeting the current user
     shared_with_me_filter = Q(shared_with_user=user)
@@ -41,10 +48,12 @@ def collaboration_hub(request):
     ).select_related("document", "folder", "shared_with_user", "shared_with_org_unit").order_by("-created_at")
 
     # 3. Tasks assigned to current user
+    my_tasks_filter = Q(assigned_to=user)
+    if user_org_unit:
+        my_tasks_filter |= Q(assigned_org_unit=user_org_unit)
     my_tasks = DocumentTask.objects.filter(
         tenant=tenant,
-        assigned_to=user,
-    ).exclude(status="cancelled").select_related("document", "assigned_by").order_by("due_date", "-created_at")
+    ).filter(my_tasks_filter).exclude(status="cancelled").select_related("document", "assigned_by", "assigned_org_unit").order_by("due_date", "-created_at")
 
     # 4. Activity feed
     activity_feed = DocumentActivity.objects.filter(
