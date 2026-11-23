@@ -124,6 +124,9 @@ class DocumentMetadataValue(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "document", "validation_status"], name="doc_dmeta_tnt_doc_val_idx"),
             models.Index(fields=["tenant", "field_name"], name="doc_dmeta_tnt_fld_idx"),
+            models.Index(fields=["tenant", "data_type"], name="doc_dmeta_tnt_dtype_idx"),
+            models.Index(fields=["tenant", "validation_status"], name="doc_dmeta_tnt_vstat_idx"),
+            models.Index(fields=["tenant", "source"], name="doc_dmeta_tnt_src_idx"),
         ]
 
     def __str__(self):
