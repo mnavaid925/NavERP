@@ -3555,6 +3555,14 @@ LIVE_LINKS = {
         "Document Linking & Relationships": "documents:relationship_list",
         "Bulk Upload & Import": "documents:batch_import_list",
     },
+    # 13.5 Metadata & Indexing
+    "13.5": {
+        "Custom Metadata Schema": "documents:metadata_schema_list",
+        "Auto-Tagging & AI Classification": "documents:document_ocr_job_list",
+        "Full-Text Indexing & OCR": "documents:document_ocr_job_list",
+        "Controlled Vocabulary & Thesauri": "documents:taxonomy_term_list",
+        "Metadata Inheritance & Propagation": "documents:metadata_value_list",
+    },
 
 
 
