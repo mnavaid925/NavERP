@@ -40409,58 +40409,58 @@ apps/quality/
 ## Detailed Build Plan (Phases 3 to 7)
 
 ### Phase 3.1: Spec Contract
-- [ ] Read `NavERP.md`, `research-documents-13.8.md`, and sibling modules to author `.claude/tasks/contract-documents-13.8.md`.
-- [ ] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
-- [ ] Commit contract: `git add .claude/tasks/contract-documents-13.8.md; git commit -m "docs(documents): freeze 13.8 contract specification"`
+- [x] Read `NavERP.md`, `research-documents-13.8.md`, and sibling modules to author `.claude/tasks/contract-documents-13.8.md`.
+- [x] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
+- [x] Commit contract: `git add .claude/tasks/contract-documents-13.8.md; git commit -m "docs(documents): freeze 13.8 contract specification"`
 
 ### Phase 3.2: Build Entity by Entity (Strictly Serial)
-- [ ] **Entity 1: DocumentShare** (`DSHR-`)
-  - [ ] `apps/documents/models/CollaborationSharing/DocumentShares.py`
-  - [ ] `apps/documents/forms/CollaborationSharing/DocumentShares.py`
-  - [ ] `apps/documents/views/CollaborationSharing/DocumentShares.py` (`document_share_list`, `document_share_create`, `document_share_detail`, `document_share_edit`, `document_share_revoke`)
-  - [ ] `apps/documents/urls/CollaborationSharing/DocumentShares.py`
-  - [ ] `templates/documents/collaboration_sharing/document_share/list.html`
-  - [ ] `templates/documents/collaboration_sharing/document_share/detail.html`
-  - [ ] `templates/documents/collaboration_sharing/document_share/form.html`
-- [ ] **Entity 2: CoauthorSession** (`DCOA-`)
-  - [ ] `apps/documents/models/CollaborationSharing/CoauthorSessions.py`
-  - [ ] `apps/documents/forms/CollaborationSharing/CoauthorSessions.py`
-  - [ ] `apps/documents/views/CollaborationSharing/CoauthorSessions.py` (`coauthor_session_list`, `coauthor_session_detail`, `coauthor_session_heartbeat`, `coauthor_session_close`)
-  - [ ] `apps/documents/urls/CollaborationSharing/CoauthorSessions.py`
-  - [ ] `templates/documents/collaboration_sharing/coauthor_session/list.html`
-  - [ ] `templates/documents/collaboration_sharing/coauthor_session/detail.html`
-  - [ ] `templates/documents/collaboration_sharing/coauthor_session/form.html`
-- [ ] **Entity 3: DocumentTask** (`DTSK-`)
-  - [ ] `apps/documents/models/CollaborationSharing/DocumentTasks.py`
-  - [ ] `apps/documents/forms/CollaborationSharing/DocumentTasks.py`
-  - [ ] `apps/documents/views/CollaborationSharing/DocumentTasks.py` (`document_task_list`, `document_task_create`, `document_task_detail`, `document_task_edit`, `document_task_delete`, `document_task_toggle_complete`)
-  - [ ] `apps/documents/urls/CollaborationSharing/DocumentTasks.py`
-  - [ ] `templates/documents/collaboration_sharing/document_task/list.html`
-  - [ ] `templates/documents/collaboration_sharing/document_task/detail.html`
-  - [ ] `templates/documents/collaboration_sharing/document_task/form.html`
-- [ ] **Entity 4: DocumentActivity** (`DACT-`)
-  - [ ] `apps/documents/models/CollaborationSharing/DocumentActivities.py`
-  - [ ] `apps/documents/forms/CollaborationSharing/DocumentActivities.py`
-  - [ ] `apps/documents/views/CollaborationSharing/DocumentActivities.py` (`document_activity_list`, `document_activity_detail`, `document_activity_mark_read`, `document_activity_mark_all_read`)
-  - [ ] `apps/documents/urls/CollaborationSharing/DocumentActivities.py`
-  - [ ] `templates/documents/collaboration_sharing/document_activity/list.html`
-  - [ ] `templates/documents/collaboration_sharing/document_activity/detail.html`
-- [ ] **Dedicated Feature Views & Consoles: CollaborationHub & PublicShare**
-  - [ ] `apps/documents/views/CollaborationSharing/CollaborationHub.py` (`collaboration_hub`)
-  - [ ] `apps/documents/views/CollaborationSharing/PublicShare.py` (`public_share_preview`, `public_share_download`)
-  - [ ] `apps/documents/urls/CollaborationSharing/CollaborationHub.py`
-  - [ ] `apps/documents/urls/CollaborationSharing/PublicShare.py`
-  - [ ] `templates/documents/collaboration_sharing/collaboration_hub.html`
-  - [ ] `templates/documents/collaboration_sharing/public_share_preview.html`
+- [x] **Entity 1: DocumentShare** (`DSHR-`)
+  - [x] `apps/documents/models/CollaborationSharing/DocumentShares.py`
+  - [x] `apps/documents/forms/CollaborationSharing/DocumentShares.py`
+  - [x] `apps/documents/views/CollaborationSharing/DocumentShares.py` (`document_share_list`, `document_share_create`, `document_share_detail`, `document_share_edit`, `document_share_revoke`)
+  - [x] `apps/documents/urls/CollaborationSharing/DocumentShares.py`
+  - [x] `templates/documents/collaboration_sharing/document_share/list.html`
+  - [x] `templates/documents/collaboration_sharing/document_share/detail.html`
+  - [x] `templates/documents/collaboration_sharing/document_share/form.html`
+- [x] **Entity 2: CoauthorSession** (`DCOA-`)
+  - [x] `apps/documents/models/CollaborationSharing/CoauthorSessions.py`
+  - [x] `apps/documents/forms/CollaborationSharing/CoauthorSessions.py`
+  - [x] `apps/documents/views/CollaborationSharing/CoauthorSessions.py` (`coauthor_session_list`, `coauthor_session_detail`, `coauthor_session_heartbeat`, `coauthor_session_close`)
+  - [x] `apps/documents/urls/CollaborationSharing/CoauthorSessions.py`
+  - [x] `templates/documents/collaboration_sharing/coauthor_session/list.html`
+  - [x] `templates/documents/collaboration_sharing/coauthor_session/detail.html`
+  - [x] `templates/documents/collaboration_sharing/coauthor_session/form.html`
+- [x] **Entity 3: DocumentTask** (`DTSK-`)
+  - [x] `apps/documents/models/CollaborationSharing/DocumentTasks.py`
+  - [x] `apps/documents/forms/CollaborationSharing/DocumentTasks.py`
+  - [x] `apps/documents/views/CollaborationSharing/DocumentTasks.py` (`document_task_list`, `document_task_create`, `document_task_detail`, `document_task_edit`, `document_task_delete`, `document_task_toggle_complete`)
+  - [x] `apps/documents/urls/CollaborationSharing/DocumentTasks.py`
+  - [x] `templates/documents/collaboration_sharing/document_task/list.html`
+  - [x] `templates/documents/collaboration_sharing/document_task/detail.html`
+  - [x] `templates/documents/collaboration_sharing/document_task/form.html`
+- [x] **Entity 4: DocumentActivity** (`DACT-`)
+  - [x] `apps/documents/models/CollaborationSharing/DocumentActivities.py`
+  - [x] `apps/documents/forms/CollaborationSharing/DocumentActivities.py`
+  - [x] `apps/documents/views/CollaborationSharing/DocumentActivities.py` (`document_activity_list`, `document_activity_detail`, `document_activity_mark_read`, `document_activity_mark_all_read`)
+  - [x] `apps/documents/urls/CollaborationSharing/DocumentActivities.py`
+  - [x] `templates/documents/collaboration_sharing/document_activity/list.html`
+  - [x] `templates/documents/collaboration_sharing/document_activity/detail.html`
+- [x] **Dedicated Feature Views & Consoles: CollaborationHub & PublicShare**
+  - [x] `apps/documents/views/CollaborationSharing/CollaborationHub.py` (`collaboration_hub`)
+  - [x] `apps/documents/views/CollaborationSharing/PublicShare.py` (`public_share_preview`, `public_share_download`)
+  - [x] `apps/documents/urls/CollaborationSharing/CollaborationHub.py`
+  - [x] `apps/documents/urls/CollaborationSharing/PublicShare.py`
+  - [x] `templates/documents/collaboration_sharing/collaboration_hub.html`
+  - [x] `templates/documents/collaboration_sharing/public_share_preview.html`
 
 ### Phase 3.3: Integration & Migration
-- [ ] Re-export all 4 models in `apps/documents/models/__init__.py`
-- [ ] Re-export all forms in `apps/documents/forms/__init__.py`
-- [ ] Re-export all views in `apps/documents/views/__init__.py`
-- [ ] Wire URL routes in `apps/documents/urls/__init__.py`
-- [ ] Register all 4 models in `apps/documents/admin.py`
-- [ ] Extend `apps/documents/management/commands/seed_documents.py` with 13.8 seed data (shares, coauthor sessions, tasks, activities)
-- [ ] Wire `LIVE_LINKS["13.8"]` in `apps/core/navigation.py`:
+- [x] Re-export all 4 models in `apps/documents/models/__init__.py`
+- [x] Re-export all forms in `apps/documents/forms/__init__.py`
+- [x] Re-export all views in `apps/documents/views/__init__.py`
+- [x] Wire URL routes in `apps/documents/urls/__init__.py`
+- [x] Register all 4 models in `apps/documents/admin.py`
+- [x] Extend `apps/documents/management/commands/seed_documents.py` with 13.8 seed data (shares, coauthor sessions, tasks, activities)
+- [x] Wire `LIVE_LINKS["13.8"]` in `apps/core/navigation.py`:
   - `Internal & External Sharing`: `documents:collaboration_hub`
   - `Real-Time Co-Authoring`: `documents:coauthor_session_list`
   - `Commenting & Annotation`: `documents:collaboration_hub`
@@ -40469,39 +40469,39 @@ apps/quality/
   - Extra live leaves:
     - `Collaboration Hub`: `documents:collaboration_hub`
     - `Document Shares`: `documents:document_share_list`
-- [ ] Run `makemigrations documents`
-- [ ] Run `migrate`
-- [ ] Run `seed_documents` twice (idempotency check)
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations documents`
+- [x] Run `migrate`
+- [x] Run `seed_documents` twice (idempotency check)
+- [x] Run `manage.py check`
 
 ### Phase 3.4: Smoke Verification
-- [ ] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
+- [x] Run `qa-smoke-tester` agent: verify all new URLs return 200/302, content assertions pass, and cross-tenant IDOR returns 404.
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
-- [ ] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
-- [ ] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
-- [ ] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
-- [ ] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.8.md`
-- [ ] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
-- [ ] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.8.md`
+- [x] Run `code-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [x] Run `explorer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [x] Run `frontend-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [x] Run `performance-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [x] Run `qa-smoke-tester` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [x] Run `security-reviewer` agent -> findings in `.claude/tasks/review-documents-13.8.md`
+- [x] Consolidate, deduplicate, and sort findings into C/I/M in `.claude/tasks/review-documents-13.8.md`
 
 ### Phase 5: Code Fixer Burn-down
-- [ ] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
+- [x] Run `code-fixer` agent to resolve all findings in ID order (one file per commit)
 
 ### Phase 6: Automated Test Suite (Unfiltered)
-- [ ] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
-- [ ] Implement `apps/documents/tests/test_collaboration_sharing_models.py`
-- [ ] Implement `apps/documents/tests/test_collaboration_sharing_forms.py`
-- [ ] Implement `apps/documents/tests/test_collaboration_sharing_views.py`
-- [ ] Implement `apps/documents/tests/test_collaboration_sharing_security.py`
-- [ ] Run full unfiltered app test suite: `pytest apps/documents/tests/`
+- [x] Pin test fixtures and setup in `apps/documents/tests/__init__.py` and `apps/documents/tests/conftest.py`
+- [x] Implement `apps/documents/tests/test_collaboration_sharing_models.py`
+- [x] Implement `apps/documents/tests/test_collaboration_sharing_forms.py`
+- [x] Implement `apps/documents/tests/test_collaboration_sharing_views.py`
+- [x] Implement `apps/documents/tests/test_collaboration_sharing_security.py`
+- [x] Run full unfiltered app test suite: `pytest apps/documents/tests/`
 
 ### Phase 7: Skill, README & Close-out
-- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.8 models, routes, templates, and seed details
-- [ ] Update `README.md` marking 13.8 complete and recording test statistics
-- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.8.md` and `.claude/tasks/gaps-documents-13.8.md`
-- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+- [x] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.8 models, routes, templates, and seed details
+- [x] Update `README.md` marking 13.8 complete and recording test statistics
+- [x] Record any gaps in `.agents/tasks/gaps-documents-13.8.md` and `.claude/tasks/gaps-documents-13.8.md`
+- [x] Document final review notes and close out in `.claude/tasks/todo.md`
 
 ---
 
@@ -40522,6 +40522,17 @@ apps/quality/
 - **WebRTC In-Browser Audio/Video Collaboration Overlay** — Live voice or video chat overlay while co-authoring a document. Commercial leaders (Nextcloud Talk, Google Meet integration) integrate dedicated communications tools for this capability.
 - **Office 365 / Google Workspace WOPI Host Integration** — Dedicated WOPI protocol implementation to allow Microsoft Office Online or Google Docs web apps to edit NavERP documents directly in cloud frames. Deferred to third-party integration pass.
 
-## Review notes
-(To be filled in at Phase 7 close-out)
+## Review notes — Sub-module 13.8 Close-out (2026-11-23)
+- **Delivery Unit**: Sub-module 13.8: Collaboration & Sharing in `apps.documents` (Module 13: Document Management System).
+- **Models**: 4 tenant-scoped models subclassing `TenantNumbered` (`DocumentShare` [`DSHR-`], `CoauthorSession` [`DCOA-`], `DocumentTask` [`DTSK-`], `DocumentActivity` [`DACT-`]).
+- **Forms**: 4 specialized `TenantModelForm` classes with tenant isolation, foreign key scoping, and cross-record document verification (`DocumentShareForm`, `CoauthorSessionForm`, `DocumentTaskForm`, `DocumentActivityForm`).
+- **Views & Routes**: 24 function-based views plus the unified multi-tab collaboration hub (`collaboration_hub`) and secure public guest preview portal (`public_share_preview`, `public_share_download`).
+- **Templates**: 14 Tailwind CSS templates under `templates/documents/collaboration_sharing/` (`collaboration_hub.html`, `public_share_preview.html`, plus list/detail/form per entity).
+- **Sidebar Wiring**: `apps/core/navigation.py` wired with `LIVE_LINKS["13.8"]` pointing to live routes.
+- **Reviews**: 6 serial review passes completed (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) in `.claude/tasks/review-documents-13.8.md`. 21/21 findings resolved and committed by `code-fixer`.
+- **Testing**: 142 new dedicated tests authored across 4 test modules (`test_collaboration_sharing_models.py`, `_forms.py`, `_views.py`, `_security.py`). Full unfiltered app suite passes 100% green: 516 passed, 0 failed in 135s.
+- **Gaps**: None. Recorded in `.claude/tasks/gaps-documents-13.8.md` and `.agents/tasks/gaps-documents-13.8.md`.
+- **Skill Documentation**: Fully updated in `.claude/skills/documents/SKILL.md`.
+- **System Check**: Clean (`manage.py check` reports 0 issues).
+
 
