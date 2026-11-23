@@ -132,6 +132,7 @@ from apps.documents.views.SearchDiscovery.DocumentSearchSynonyms import (
     document_search_synonym_detail,
     document_search_synonym_edit,
     document_search_synonym_list,
+    document_search_synonym_toggle_active,
 )
 from apps.documents.views.SearchDiscovery.SearchHub import (
     search_click_track,
@@ -379,6 +380,7 @@ __all__ = [
     "document_search_synonym_detail",
     "document_search_synonym_edit",
     "document_search_synonym_delete",
+    "document_search_synonym_toggle_active",
     "document_search_query_log_list",
     "document_search_query_log_detail",
     "document_search_query_log_delete",
