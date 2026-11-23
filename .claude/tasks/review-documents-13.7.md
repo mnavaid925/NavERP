@@ -132,3 +132,28 @@ Strong adherence to core database performance hygiene in primary list views (all
 - Denormalized `incident_count` counter on `DlpPolicy` avoids subquery performance degradation.
 - Paginator count caching properly utilized.
 - In-memory sliced length used in `dlp_policy_detail`.
+
+
+---
+
+## 5. QA Smoke Tester Pass (`qa-smoke-tester`)
+
+### Verdict
+PASS — All 75 runtime verification tests for Sub-module 13.7 (Document Security & Access Control) passed cleanly. 0 Critical, 0 Important, 0 Minor defects identified.
+
+### Critical
+None.
+
+### Important
+None.
+
+### Minor
+None.
+
+### Done well
+- Rigorous Multi-Tenant Isolation (Anti-IDOR): All cross-tenant access attempts by `admin_acme` targeting `globex` entities returned strict `404 Not Found` across detail, edit, delete (POST), custom action (kill-switch, resolve), and viewer routes.
+- Interactive ACL Simulator: The permission simulation tool (`documents:permission_simulate`) dynamically aggregates active document and folder permissions, accounts for role inheritance, and accurately diagnoses owner/admin bypasses.
+- Zero-Download Secure Web Viewer: DOM sandbox correctly renders forensic watermarking, screen-shield blur overlays, and right-click interceptors linked directly to the document's effective DRM policy.
+- Dynamic Watermarking Engine: Runtime token interpolation (`{{user_email}}`, `{{ip_address}}`, etc.) functions seamlessly on both the policy detail view and the interactive visual watermark studio.
+- Resilient Query & Filter Handling: List views gracefully handle garbage filter values and invalid/far pagination (`?page=abc`, `?page=999999`) without raising HTTP 500 errors.
+- Navigation & Authentication Guard: All 6 `LIVE_LINKS["13.7"]` entries resolve to active routes and enforce `@login_required` redirects (`302`) for unauthenticated requests.
