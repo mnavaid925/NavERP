@@ -58,15 +58,17 @@ class TaxonomyTermForm(forms.ModelForm):
         raw = self.cleaned_data.get("synonyms_json", "").strip()
         if not raw:
             return "[]"
+        if raw.startswith("{"):
+            raise ValidationError("Synonyms must be a JSON array of strings, not a JSON object.")
         if raw.startswith("["):
             try:
                 parsed = json.loads(raw)
-                if not isinstance(parsed, list):
-                    raise ValidationError("Synonyms must be a JSON array of strings.")
-                clean_list = [str(x).strip() for x in parsed if str(x).strip()]
-                return json.dumps(clean_list)
             except json.JSONDecodeError as exc:
                 raise ValidationError(f"Invalid JSON: {exc}")
+            if not isinstance(parsed, list):
+                raise ValidationError("Synonyms must be a JSON array of strings.")
+            clean_list = [str(x).strip() for x in parsed if str(x).strip()]
+            return json.dumps(clean_list)
         else:
             items = [x.strip() for x in raw.split(",") if x.strip()]
             return json.dumps(items)
