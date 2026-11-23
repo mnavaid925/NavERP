@@ -77,7 +77,7 @@ All 4 models inherit `apps.documents.models._base.TenantNumbered` (`tenant` FK `
   - `access_count`: `PositiveIntegerField(default=0)`
   - `last_accessed_at`: `DateTimeField(null=True, blank=True)`
   - `shared_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_document_shares")`
-  - `shared_with_user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="received_document_shares")`
+  - `shared_with_user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_received_document_shares")`
   - `shared_with_email`: `EmailField(blank=True)`
   - `shared_with_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="document_shares")`
   - `share_message`: `TextField(blank=True)`
