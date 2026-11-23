@@ -17,6 +17,11 @@ from apps.documents.models.StorageRepository.DocumentFolders import DocumentFold
 from apps.documents.models.StorageRepository.StorageVolumes import StorageVolume
 from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
+from apps.documents.models.MetadataIndexing.MetadataSchemas import MetadataSchema
+from apps.documents.models.MetadataIndexing.DocumentMetadataValues import DocumentMetadataValue
+from apps.documents.models.MetadataIndexing.TaxonomyTerms import TaxonomyTerm
+from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
+
 
 
 @pytest.fixture
@@ -316,5 +321,90 @@ def document_batch_import(db, tenant_a, admin_user, storage_volume):
         total_bytes_processed=1024 * 1024,
         created_by=admin_user,
     )
+
+
+@pytest.fixture
+def metadata_schema(db, tenant_a, admin_user):
+    """Fixture providing an active MetadataSchema in tenant_a."""
+    return MetadataSchema.objects.create(
+        tenant=tenant_a,
+        name="Contract Metadata Schema",
+        code="CONTRACT_V1",
+        schema_type="document_type",
+        target_document_type="contract",
+        fields_json='[{"name": "effective_date", "type": "date", "required": true}, {"name": "contract_value", "type": "decimal", "required": false}]',
+        is_active=True,
+        is_mandatory=False,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def taxonomy_term(db, tenant_a, admin_user):
+    """Fixture providing a baseline TaxonomyTerm in tenant_a."""
+    return TaxonomyTerm.objects.create(
+        tenant=tenant_a,
+        name="Financial Services",
+        term_code="FIN-SERV",
+        category="industry",
+        definition="Banking, securities, insurance, and asset management institutions.",
+        synonyms_json='["banking", "wealth management", "fintech"]',
+        is_governed=True,
+        is_active=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def child_taxonomy_term(db, tenant_a, admin_user, taxonomy_term):
+    """Fixture providing a child TaxonomyTerm in tenant_a."""
+    return TaxonomyTerm.objects.create(
+        tenant=tenant_a,
+        name="Investment Banking",
+        term_code="FIN-INV",
+        category="industry",
+        parent=taxonomy_term,
+        definition="Underwriting, mergers, acquisitions, and advisory services.",
+        synonyms_json='["m&a", "capital markets"]',
+        is_governed=False,
+        is_active=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def document_metadata_value(db, tenant_a, document, document_version, metadata_schema):
+    """Fixture providing an active DocumentMetadataValue in tenant_a."""
+    return DocumentMetadataValue.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        schema=metadata_schema,
+        field_name="contract_value",
+        field_label="Contract Total Value",
+        data_type="decimal",
+        value_number=150000.00,
+        source="manual",
+        validation_status="valid",
+    )
+
+
+@pytest.fixture
+def document_ocr_job(db, tenant_a, admin_user, document, document_version):
+    """Fixture providing an OCR job in tenant_a."""
+    return DocumentOcrJob.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        ocr_engine="tesseract",
+        status="completed",
+        language="eng",
+        confidence_score=94.50,
+        pages_processed=3,
+        extracted_full_text="Agreement made between party A and party B for delivery of consulting services.",
+        suggested_tags_json='["consulting", "agreement", "q4"]',
+        requested_by=admin_user,
+    )
+
 
 
