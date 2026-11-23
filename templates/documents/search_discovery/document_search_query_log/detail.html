@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Search Telemetry {{ query_log.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:search_hub' %}">Search & Discovery</a>
+            <span>/</span>
+            <a href="{% url 'documents:document_search_query_log_list' %}">Query Logs</a>
+            <span>/</span>
+            <span>{{ query_log.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Query: "{{ query_log.query_text }}"</h1>
+            <span class="badge {{ query_log.source_badge_class }}">{{ query_log.get_search_source_display }}</span>
+            <span class="badge {{ query_log.zero_result_badge_class }}">
+                {% if query_log.is_zero_result %}0 Results (Content Gap){% else %}{{ query_log.results_count }} Results{% endif %}
+            </span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:search_hub' %}?q={{ query_log.query_text }}" class="btn btn-primary">
+            <i data-lucide="search"></i>
+            <span>Re-run in Hub</span>
+        </a>
+        {% if request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'documents:document_search_query_log_delete' query_log.pk %}" class="inline" onsubmit="return confirm('Delete this log record?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Search Execution Metrics</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Log Identifier</dt>
+                        <dd class="font-mono text-sm font-semibold">{{ query_log.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Executing User</dt>
+                        <dd>{{ query_log.user.username|default:"Unauthenticated / Anonymous" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Search Origin / Interface</dt>
+                        <dd><span class="badge {{ query_log.source_badge_class }}">{{ query_log.get_search_source_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Query Latency</dt>
+                        <dd class="font-mono text-sm font-medium">{{ query_log.execution_time_ms }} milliseconds</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Total Results Found</dt>
+                        <dd class="text-sm font-semibold">{{ query_log.results_count }} documents</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Zero-Result Flag</dt>
+                        <dd>
+                            {% if query_log.is_zero_result %}
+                            <span class="badge badge-red font-medium">Zero-Result (Content Gap)</span>
+                            {% else %}
+                            <span class="badge badge-green font-medium">Successful Search</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Clicked Target Document</dt>
+                        <dd>
+                            {% if query_log.clicked_document %}
+                            <a href="{% url 'documents:document_detail' query_log.clicked_document.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ query_log.clicked_document.number }} — {{ query_log.clicked_document.title }}
+                            </a>
+                            {% if query_log.click_rank %}
+                            <span class="text-xs text-slate-500 ml-1">(Rank #{{ query_log.click_rank }})</span>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-slate-400 italic">No document click recorded</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Client IP Address</dt>
+                        <dd class="font-mono text-xs">{{ query_log.ip_address|default:"Not recorded" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Filter Context Payload -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Applied Filters JSON Payload</h2>
+            </div>
+            <div class="card-body">
+                {% if parsed_filters %}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    {% for key, val in parsed_filters.items %}
+                    <div class="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                        <div class="text-xs text-slate-500 font-mono uppercase">{{ key }}</div>
+                        <div class="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-1">{{ val }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <div class="font-mono text-xs bg-slate-900 text-slate-100 p-4 rounded overflow-x-auto">
+                    {{ query_log.filters_applied_json|default:"{}" }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Meta & Navigation -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Navigation</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <a href="{% url 'documents:search_hub' %}?q={{ query_log.query_text }}" class="btn btn-primary w-full justify-center">
+                    <i data-lucide="search"></i>
+                    <span>Execute in Search Hub</span>
+                </a>
+                <a href="{% url 'documents:document_search_query_log_list' %}" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to Logs</span>
+                </a>
+                <a href="{% url 'documents:document_search_analytics' %}" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="bar-chart-2"></i>
+                    <span>Search Analytics</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Log Session Metadata</h2>
+            </div>
+            <div class="card-body text-xs space-y-2 text-slate-500">
+                <div class="flex justify-between">
+                    <span>Logged At:</span>
+                    <span class="font-medium text-slate-700 dark:text-slate-300">{{ query_log.created_at|date:"M d, Y H:i:s" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Session Key:</span>
+                    <span class="font-mono truncate max-w-[140px]">{{ query_log.session_key|default:"None" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Tenant ID:</span>
+                    <span class="font-mono">{{ query_log.tenant_id }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
