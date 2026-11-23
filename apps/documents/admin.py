@@ -22,6 +22,15 @@ from apps.documents.models.SearchDiscovery.DocumentSavedSearches import Document
 from apps.documents.models.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlert
 from apps.documents.models.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLog
 from apps.documents.models.SearchDiscovery.DocumentSearchSynonyms import DocumentSearchSynonym
+from apps.documents.models.SecurityAccessControl.DlpIncidents import DlpIncident
+from apps.documents.models.SecurityAccessControl.DlpPolicies import DlpPolicy
+from apps.documents.models.SecurityAccessControl.DocumentAccessPermissions import (
+    DocumentAccessPermission,
+)
+from apps.documents.models.SecurityAccessControl.DocumentDrmPolicies import (
+    DocumentDrmPolicy,
+)
+from apps.documents.models.SecurityAccessControl.WatermarkPolicies import WatermarkPolicy
 from apps.documents.models.StorageRepository.DocumentBatchImports import DocumentBatchImport
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.StorageRepository.DocumentRelationships import DocumentRelationship
@@ -223,6 +232,47 @@ class DocumentSearchQueryLogAdmin(admin.ModelAdmin):
     list_select_related = ("user", "tenant")
     search_fields = ("number", "query_text", "user__username")
     readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentAccessPermission)
+class DocumentAccessPermissionAdmin(admin.ModelAdmin):
+    list_display = ("number", "grantee_type", "permission_level", "document", "folder", "user", "is_active", "access_count", "tenant")
+    list_filter = ("grantee_type", "permission_level", "is_active", "tenant")
+    search_fields = ("number", "role_name", "notes", "user__username", "document__title")
+    readonly_fields = ("number", "access_count", "last_accessed_at", "created_at", "updated_at")
+
+
+@admin.register(WatermarkPolicy)
+class WatermarkPolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "classification", "position", "opacity_percent", "priority", "is_active", "tenant")
+    list_filter = ("classification", "position", "is_active", "tenant")
+    search_fields = ("number", "name", "watermark_text")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DocumentDrmPolicy)
+class DocumentDrmPolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "classification", "allow_download", "allow_print", "is_revoked", "is_active", "tenant")
+    list_filter = ("classification", "allow_download", "allow_print", "is_revoked", "is_active", "tenant")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("number", "revoked_at", "created_at", "updated_at")
+
+
+@admin.register(DlpPolicy)
+class DlpPolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "rule_type", "built_in_pattern", "action", "severity", "incident_count", "is_active", "tenant")
+    list_filter = ("rule_type", "severity", "action", "is_active", "tenant")
+    search_fields = ("number", "name", "description", "custom_regex")
+    readonly_fields = ("number", "incident_count", "last_triggered_at", "created_at", "updated_at")
+
+
+@admin.register(DlpIncident)
+class DlpIncidentAdmin(admin.ModelAdmin):
+    list_display = ("number", "policy", "document", "triggered_by", "severity", "action_taken", "resolution_status", "created_at", "tenant")
+    list_filter = ("severity", "action_taken", "resolution_status", "tenant")
+    search_fields = ("number", "snippet_redacted", "resolution_notes", "policy__name", "document__title")
+    readonly_fields = ("number", "created_at", "updated_at")
+
 
 
 
