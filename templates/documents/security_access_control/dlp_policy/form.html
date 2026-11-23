@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ policy.name }}{% else %}New DLP Policy{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:dlp_policy_list' %}">DLP Policies</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Policy{% else %}New Policy{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit DLP Policy: {{ policy.name }}{% else %}Configure Data Loss Prevention Policy{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:dlp_policy_detail' policy.pk %}{% else %}{% url 'documents:dlp_policy_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body text-sm text-red-700">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Identification -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">1. Identification & Mandatory Mandate</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Policy Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.slug.id_for_label }}">Slug</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description & Compliance Mandate</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Rule Pattern Definition -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">2. Sensitive Information Type (SIT) Pattern</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rule_type.id_for_label }}">Inspection Rule Type <span class="text-red-500">*</span></label>
+                {{ form.rule_type }}
+                {% if form.rule_type.errors %}<div class="form-error">{{ form.rule_type.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.built_in_pattern.id_for_label }}">Built-in Pattern Target</label>
+                {{ form.built_in_pattern }}
+                {% if form.built_in_pattern.errors %}<div class="form-error">{{ form.built_in_pattern.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.custom_regex.id_for_label }}">Custom Python Regular Expression</label>
+                {{ form.custom_regex }}
+                {% if form.custom_regex.errors %}<div class="form-error">{{ form.custom_regex.errors.0 }}</div>{% endif %}
+                <p class="text-xs text-slate-500 mt-1">Required if Rule Type is 'Custom Regular Expression'. Validated at save time.</p>
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.keywords_raw.id_for_label }}">Sensitive Keywords (Comma-separated)</label>
+                {{ form.keywords_raw }}
+                {% if form.keywords_raw.errors %}<div class="form-error">{{ form.keywords_raw.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.match_threshold.id_for_label }}">Match Occurrence Threshold</label>
+                {{ form.match_threshold }}
+                {% if form.match_threshold.errors %}<div class="form-error">{{ form.match_threshold.errors.0 }}</div>{% endif %}
+                <p class="text-xs text-slate-500 mt-1">Minimum occurrences required before triggering violation.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions & Notifications -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">3. Enforcement Action & Alerting</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.action.id_for_label }}">Automated Security Action <span class="text-red-500">*</span></label>
+                {{ form.action }}
+                {% if form.action.errors %}<div class="form-error">{{ form.action.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.severity.id_for_label }}">Violation Severity</label>
+                {{ form.severity }}
+                {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.notification_email.id_for_label }}">Security Officer Notification Email</label>
+                {{ form.notification_email }}
+                {% if form.notification_email.errors %}<div class="form-error">{{ form.notification_email.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group flex items-center pt-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.notify_security_officer }}
+                    <span class="text-sm font-medium text-slate-800">Dispatch Instant Alert Notification</span>
+                </label>
+            </div>
+
+            <div class="form-group flex items-center pt-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.apply_to_all_types }}
+                    <span class="text-sm font-medium text-slate-800">Inspect All Document Formats</span>
+                </label>
+            </div>
+            <div class="form-group flex items-center pt-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_active }}
+                    <span class="text-sm font-medium text-slate-800">Policy is Active</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'documents:dlp_policy_detail' policy.pk %}{% else %}{% url 'documents:dlp_policy_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Policy{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
