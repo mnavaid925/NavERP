@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.core.utils import write_audit_log
@@ -144,4 +145,24 @@ def document_search_synonym_delete(request, pk):
     write_audit_log(request.user, search_synonym, "delete", tenant=request.tenant)
     search_synonym.delete()
     messages.success(request, f"Search synonym rule '{term}' deleted.")
+    return redirect("documents:document_search_synonym_list")
+
+
+@login_required
+@require_POST
+def document_search_synonym_toggle_active(request, pk):
+    search_synonym = documents_object(request, DocumentSearchSynonym, pk)
+
+    if search_synonym.created_by != request.user and not getattr(request.user, "is_tenant_admin", False):
+        return HttpResponseForbidden("You do not have permission to modify this search synonym.")
+
+    search_synonym.is_active = not search_synonym.is_active
+    search_synonym.save(update_fields=["is_active"])
+    write_audit_log(request.user, search_synonym, "toggle", tenant=request.tenant)
+
+    status_str = "activated" if search_synonym.is_active else "deactivated"
+    messages.success(request, f"Search synonym '{search_synonym.term}' {status_str}.")
+    referer = request.META.get("HTTP_REFERER")
+    if referer and url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}):
+        return redirect(referer)
     return redirect("documents:document_search_synonym_list")
