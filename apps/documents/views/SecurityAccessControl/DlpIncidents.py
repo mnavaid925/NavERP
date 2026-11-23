@@ -56,6 +56,7 @@ def dlp_incident_list(request):
         "search_query": q,
         "severity": severity,
         "resolution_status": resolution_status,
+        "policy": policy_id,
         "severity_choices": DlpIncident.SEVERITY_CHOICES,
         "resolution_choices": DlpIncident.RESOLUTION_CHOICES,
     }
