@@ -19,8 +19,9 @@ def secure_viewer(request, pk=None):
     """
     docs_qs = documents_scope(Document.objects.all(), request).order_by("-updated_at")
 
-    if not pk and request.GET.get("doc_id"):
-        pk = request.GET.get("doc_id")
+    doc_id_param = request.GET.get("doc_id", "").strip()
+    if not pk and doc_id_param.isdigit():
+        pk = int(doc_id_param)
 
     document = None
     if pk:
