@@ -68,7 +68,7 @@
         <div class="card">
             <div class="card-header flex justify-between items-center">
                 <h2 class="text-base font-semibold text-slate-800">Simulated Document Rendering Canvas</h2>
-                <span class="badge badge-amber">{{ classification }}</span>
+                <span class="badge {{ policy.classification_badge|default:'badge-amber' }}">{{ classification }}</span>
             </div>
             <div class="card-body bg-slate-100 p-8 flex justify-center">
                 <!-- A4 Simulated Document Sheet -->
