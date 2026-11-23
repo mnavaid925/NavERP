@@ -87,7 +87,10 @@ def document_activity_detail(request, pk):
 @login_required
 @require_POST
 def document_activity_mark_read(request, pk):
-    activity = documents_object(request, DocumentActivity, pk)
+    activity = get_object_or_404(
+        DocumentActivity.objects.filter(tenant=request.tenant, target_user=request.user),
+        pk=pk,
+    )
     activity.mark_as_read()
     messages.success(request, f"Activity {activity.number} marked as read.")
     referer = request.META.get("HTTP_REFERER")
