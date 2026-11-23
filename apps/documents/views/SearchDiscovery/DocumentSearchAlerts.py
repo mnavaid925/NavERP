@@ -76,7 +76,7 @@ def document_search_alert_detail(request, pk):
     matched_documents = Document.objects.filter(
         tenant=request.tenant,
         pk__in=matched_ids,
-    ).select_related("owner", "folder")[:10] if matched_ids else []
+    ).select_related("owner", "department")[:10] if matched_ids else []
 
     return render(
         request,
@@ -200,7 +200,7 @@ def document_search_alert_run_check(request, pk):
 
     saved_search = search_alert.saved_search
     # Run matched document query
-    docs_qs = Document.objects.filter(tenant=request.tenant, is_active=True)
+    docs_qs = Document.objects.filter(tenant=request.tenant)
     if saved_search.query_text:
         docs_qs = docs_qs.filter(
             Q(title__icontains=saved_search.query_text) |
