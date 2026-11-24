@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}DMS Integration Triggers &amp; Webhooks — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Workflow Automation &amp; BPM</span>
+            <span>/</span>
+            <span>Integration Triggers &amp; Webhooks</span>
+        </div>
+        <h1 class="page-title">DMS Integration Triggers &amp; Webhooks</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:process_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="git-branch"></i>
+            <span>Process Blueprints</span>
+        </a>
+        <a href="{% url 'documents:webhook_trigger_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Webhook Trigger</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="webhook"></i></div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Registered Triggers</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div>
+            <div class="stat-value">{{ active_count }}</div>
+            <div class="stat-label">Active Subscriptions</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="radio"></i></div>
+        <div>
+            <div class="stat-value">{{ simulated_count }}</div>
+            <div class="stat-label">Simulated Local Mode</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="send"></i></div>
+        <div>
+            <div class="stat-value">{{ total_fires }}</div>
+            <div class="stat-label">Total Recorded Fires</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_q">Search</label>
+                <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="Name, DWHK-, endpoint URL..." class="form-input w-full">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_direction">Direction</label>
+                <select id="id_direction" name="direction" class="form-select w-full">
+                    <option value="">All Directions</option>
+                    {% for val, label in direction_choices %}
+                    <option value="{{ val }}" {% if direction == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_trigger_event">DMS Event</label>
+                <select id="id_trigger_event" name="trigger_event" class="form-select w-full">
+                    <option value="">All Events</option>
+                    {% for val, label in trigger_choices %}
+                    <option value="{{ val }}" {% if trigger_event == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_last_status">Last Delivery</label>
+                <select id="id_last_status" name="last_status" class="form-select w-full">
+                    <option value="">All Delivery States</option>
+                    {% for val, label in last_status_choices %}
+                    <option value="{{ val }}" {% if last_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_status">Enabled</label>
+                <select id="id_status" name="status" class="form-select w-full">
+                    <option value="">All</option>
+                    <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:webhook_trigger_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Trigger</th>
+                    <th>Direction</th>
+                    <th>DMS Event</th>
+                    <th>Target URL / Format</th>
+                    <th>Fires</th>
+                    <th>Last Delivery</th>
+                    <th>Enabled</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wh in webhooks %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="font-semibold text-blue-600 hover:underline">{{ wh.name }}</a>
+                        <div class="text-xs text-slate-500 font-mono">{{ wh.number }} · {{ wh.masked_secret }}</div>
+                    </td>
+                    <td><span class="badge {{ wh.direction_badge }}">{{ wh.get_direction_display }}</span></td>
+                    <td class="font-mono text-xs text-slate-700">{{ wh.trigger_event }}</td>
+                    <td class="text-xs text-slate-600">
+                        <div class="font-mono">{{ wh.target_url|default:"Inbound Callback Listener"|truncatechars:42 }}</div>
+                        <div class="text-slate-400">{{ wh.get_http_method_display }} · {{ wh.get_payload_format_display }}</div>
+                    </td>
+                    <td class="text-xs font-mono">{{ wh.fire_count }}</td>
+                    <td><span class="badge {{ wh.last_status_badge }}">{{ wh.get_last_status_display }}</span></td>
+                    <td><span class="badge {{ wh.active_badge }}">{% if wh.is_active %}Active{% else %}Paused{% endif %}</span></td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="btn btn-icon btn-outline" title="Inspect Webhook" aria-label="View {{ wh.number }}">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:webhook_trigger_edit' wh.pk %}" class="btn btn-icon btn-outline" title="Edit Webhook" aria-label="Edit {{ wh.number }}">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% if user.is_superuser or user.is_tenant_admin %}
+                        <form method="post" action="{% url 'documents:webhook_trigger_delete' wh.pk %}" class="inline" onsubmit="return confirm('Delete webhook trigger {{ wh.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Webhook" aria-label="Delete {{ wh.number }}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="webhook" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                            <p class="font-medium text-slate-700">No webhook triggers configured</p>
+                            <p class="text-xs text-slate-500 mb-3">Register SSRF-hardened DMS webhook triggers with HMAC-SHA256 signing and local simulated diagnostics.</p>
+                            <a href="{% url 'documents:webhook_trigger_create' %}" class="btn btn-primary btn-sm">New Webhook Trigger</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&direction={{ direction|urlencode }}&trigger_event={{ trigger_event|urlencode }}&last_status={{ last_status|urlencode }}&status={{ status|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ q|urlencode }}&direction={{ direction|urlencode }}&trigger_event={{ trigger_event|urlencode }}&last_status={{ last_status|urlencode }}&status={{ status|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
