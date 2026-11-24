@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ rule.number }}{% else %}New Routing Rule{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:routing_rule_list' %}">Routing Rules</a>
+            <span>/</span>
+            <span>{% if is_edit %}{{ rule.number }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Routing Rule: {{ rule.number }}{% else %}Create Document Routing Rule{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:routing_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Conditional Logic, Validation &amp; Distribution</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">Rule Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.priority.id_for_label }}">Priority (1 = First) *</label>
+                        {{ form.priority }}
+                        {% if form.priority.errors %}<div class="form-error">{{ form.priority.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.rule_type.id_for_label }}">Rule Type *</label>
+                        {{ form.rule_type }}
+                        {% if form.rule_type.errors %}<div class="form-error">{{ form.rule_type.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.trigger_event.id_for_label }}">Trigger Event *</label>
+                        {{ form.trigger_event }}
+                        {% if form.trigger_event.errors %}<div class="form-error">{{ form.trigger_event.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.condition_logic_mode.id_for_label }}">Logic Mode *</label>
+                        {{ form.condition_logic_mode }}
+                        {% if form.condition_logic_mode.errors %}<div class="form-error">{{ form.condition_logic_mode.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.target_document_type.id_for_label }}">Document Type Scope</label>
+                        {{ form.target_document_type }}
+                        {% if form.target_document_type.errors %}<div class="form-error">{{ form.target_document_type.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.target_classification.id_for_label }}">Classification Scope</label>
+                        {{ form.target_classification }}
+                        {% if form.target_classification.errors %}<div class="form-error">{{ form.target_classification.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.source_folder.id_for_label }}">Source Folder Scope</label>
+                        {{ form.source_folder }}
+                        {% if form.source_folder.errors %}<div class="form-error">{{ form.source_folder.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.route_action.id_for_label }}">Route Action *</label>
+                        {{ form.route_action }}
+                        {% if form.route_action.errors %}<div class="form-error">{{ form.route_action.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.destination_folder.id_for_label }}">Destination Folder</label>
+                        {{ form.destination_folder }}
+                        {% if form.destination_folder.errors %}<div class="form-error">{{ form.destination_folder.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.process_definition.id_for_label }}">BPM Process Definition</label>
+                        {{ form.process_definition }}
+                        {% if form.process_definition.errors %}<div class="form-error">{{ form.process_definition.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.route_to_org_unit.id_for_label }}">Target Org Unit</label>
+                        {{ form.route_to_org_unit }}
+                        {% if form.route_to_org_unit.errors %}<div class="form-error">{{ form.route_to_org_unit.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.route_to_role.id_for_label }}">Target Role Pool</label>
+                        {{ form.route_to_role }}
+                        {% if form.route_to_role.errors %}<div class="form-error">{{ form.route_to_role.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.route_to_user.id_for_label }}">Target User</label>
+                        {{ form.route_to_user }}
+                        {% if form.route_to_user.errors %}<div class="form-error">{{ form.route_to_user.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.core_rule_ref.id_for_label }}">Core Business Rule Registry</label>
+                        {{ form.core_rule_ref }}
+                        {% if form.core_rule_ref.errors %}<div class="form-error">{{ form.core_rule_ref.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group flex items-center gap-6 pt-6">
+                        <label class="flex items-center gap-2 text-sm text-slate-700">
+                            {{ form.is_active }}
+                            <span>Active</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-slate-700">
+                            {{ form.else_branch_enabled }}
+                            <span>Enable Else Fallback</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.conditions_json.id_for_label }}">Conditions (JSON Array)</label>
+                    {{ form.conditions_json }}
+                    {% if form.conditions_json.errors %}<div class="form-error">{{ form.conditions_json.errors }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.validation_rules_json.id_for_label }}">Validation Rules (JSON Array)</label>
+                        {{ form.validation_rules_json }}
+                        {% if form.validation_rules_json.errors %}<div class="form-error">{{ form.validation_rules_json.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.auto_populate_json.id_for_label }}">Auto-Populate (JSON Object)</label>
+                        {{ form.auto_populate_json }}
+                        {% if form.auto_populate_json.errors %}<div class="form-error">{{ form.auto_populate_json.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.else_action_json.id_for_label }}">Else Fallback Action (JSON Object)</label>
+                    {{ form.else_action_json }}
+                    {% if form.else_action_json.errors %}<div class="form-error">{{ form.else_action_json.errors }}</div>{% endif %}
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <a href="{% url 'documents:routing_rule_list' %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Routing Rule{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
