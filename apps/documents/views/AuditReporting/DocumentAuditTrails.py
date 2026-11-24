@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.AuditReporting.DocumentAuditTrails import DocumentAuditTrailFilterForm
 from apps.documents.models.AuditReporting.DocumentAuditTrails import DocumentAuditTrail
@@ -113,8 +114,8 @@ def audit_trail_detail(request, pk):
     return render(request, "documents/audit_reporting/audit_trail/detail.html", context)
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def audit_trail_verify_chain(request):
     """Walk through tenant audit entries sequentially to verify cryptographic chain integrity."""
     entries = DocumentAuditTrail.objects.filter(tenant=request.tenant).order_by("id")
