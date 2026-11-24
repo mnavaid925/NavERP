@@ -40,7 +40,7 @@ class RecordDeclarationForm(TenantUniqueMixin, TenantModelForm):
             if self.instance and self.instance.pk and self.instance.document_id:
                 self.fields["version"].queryset = DocumentVersion.objects.filter(
                     tenant=self.tenant, document_id=self.instance.document_id
-                ).order_by("-version_number")
+                ).order_by("-major_number", "-minor_number", "-patch_number")
             else:
                 self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant).order_by("-created_at")
         else:
