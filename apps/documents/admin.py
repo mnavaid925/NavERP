@@ -10,6 +10,10 @@ from apps.documents.models.ApprovalWorkflow.DocumentReviewComments import (
     DocumentReviewComment,
 )
 from apps.documents.models.ApprovalWorkflow.DocumentSignatures import DocumentSignature
+from apps.documents.models.AuditReporting.AuditReportDefinitions import AuditReportDefinition
+from apps.documents.models.AuditReporting.ChainOfCustodyExports import ChainOfCustodyExport
+from apps.documents.models.AuditReporting.DocumentAuditTrails import DocumentAuditTrail
+from apps.documents.models.AuditReporting.DocumentSecurityAlerts import DocumentSecurityAlert
 from apps.documents.models.CollaborationSharing.CoauthorSessions import CoauthorSession
 from apps.documents.models.CollaborationSharing.DocumentActivities import DocumentActivity
 from apps.documents.models.CollaborationSharing.DocumentShares import DocumentShare
@@ -346,6 +350,39 @@ class DestructionCertificateAdmin(admin.ModelAdmin):
     list_filter = ("disposition_type", "destruction_method", "status", "legal_hold_verified_clear", "tenant")
     search_fields = ("number", "document_title_snapshot", "document_number_snapshot", "schedule_name_snapshot", "content_verification_hash")
     readonly_fields = ("number", "content_verification_hash", "hold_verification_date", "authorized_at", "executed_at", "created_at", "updated_at")
+
+
+@admin.register(DocumentAuditTrail)
+class DocumentAuditTrailAdmin(admin.ModelAdmin):
+    list_display = ("number", "action_type", "document_number_snapshot", "actor_email_snapshot", "is_success", "event_timestamp", "ip_address", "tenant")
+    list_filter = ("action_type", "is_success", "tenant")
+    search_fields = ("number", "document_number_snapshot", "document_title_snapshot", "actor_email_snapshot", "chain_hash")
+    readonly_fields = ("number", "chain_hash", "prev_hash", "event_timestamp", "created_at", "updated_at")
+
+
+@admin.register(AuditReportDefinition)
+class AuditReportDefinitionAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "report_type", "is_system_preset", "status", "date_range_preset", "total_runs", "tenant")
+    list_filter = ("report_type", "is_system_preset", "status", "tenant")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("number", "total_runs", "last_run_at", "created_at", "updated_at")
+
+
+@admin.register(DocumentSecurityAlert)
+class DocumentSecurityAlertAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "alert_type", "severity", "risk_score", "status", "target_user", "tenant")
+    list_filter = ("alert_type", "severity", "status", "tenant")
+    search_fields = ("number", "title", "description", "triage_notes")
+    readonly_fields = ("number", "detected_at", "resolved_at", "created_at", "updated_at")
+
+
+@admin.register(ChainOfCustodyExport)
+class ChainOfCustodyExportAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "regulatory_framework", "scope", "auditor_name", "is_portal_active", "expires_at", "tenant")
+    list_filter = ("regulatory_framework", "scope", "is_portal_active", "tenant")
+    search_fields = ("number", "title", "auditor_name", "auditor_email", "package_hash")
+    readonly_fields = ("number", "access_token", "package_hash", "sealed_at", "created_at", "updated_at")
+
 
 
 
