@@ -30,11 +30,11 @@
 <!-- Quick Stats Strip -->
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
     <div class="stat-card">
-        <div class="stat-icon red">
+        <div class="stat-icon orange">
             <i data-lucide="clock"></i>
         </div>
         <div>
-            <div class="stat-value">{{ due_records.count }}</div>
+            <div class="stat-value">{{ due_count }}</div>
             <div class="stat-label">Records Due for Disposition</div>
         </div>
     </div>
@@ -43,7 +43,7 @@
             <i data-lucide="shield-alert"></i>
         </div>
         <div>
-            <div class="stat-value">{{ held_records.count }}</div>
+            <div class="stat-value">{{ held_count }}</div>
             <div class="stat-label">Records Frozen Under Hold</div>
         </div>
     </div>
@@ -52,7 +52,7 @@
             <i data-lucide="file-check"></i>
         </div>
         <div>
-            <div class="stat-value">{{ pending_certificates.count }}</div>
+            <div class="stat-value">{{ pending_count }}</div>
             <div class="stat-label">Pending Approval Certificates</div>
         </div>
     </div>
@@ -64,7 +64,7 @@
         <div>
             <h2 class="card-title text-red-900 flex items-center gap-2">
                 <i data-lucide="alert-circle" class="w-5 h-5 text-red-600"></i>
-                Records Expired & Eligible for Disposition ({{ due_records.count }})
+                Records Expired & Eligible for Disposition ({{ due_count }})
             </h2>
             <p class="text-xs text-slate-500 mt-0.5">Records that have officially reached retention expiration without active litigation hold blockers.</p>
         </div>
@@ -129,7 +129,7 @@
         <div>
             <h2 class="card-title text-slate-900 flex items-center gap-2">
                 <i data-lucide="lock" class="w-5 h-5 text-red-600"></i>
-                Records Frozen Under Active Legal Holds ({{ held_records.count }})
+                Records Frozen Under Active Legal Holds ({{ held_count }})
             </h2>
             <p class="text-xs text-slate-500 mt-0.5">Disposition and destruction actions are suspended by active litigation preservation orders.</p>
         </div>
@@ -197,7 +197,7 @@
         <div>
             <h2 class="card-title text-slate-900 flex items-center gap-2">
                 <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i>
-                Destruction Certificates Awaiting Authorization / Execution ({{ pending_certificates.count }})
+                Destruction Certificates Awaiting Authorization / Execution ({{ pending_count }})
             </h2>
             <p class="text-xs text-slate-500 mt-0.5">Certificates drafted requiring compliance officer sign-off or physical/cryptographic sanitization execution.</p>
         </div>
