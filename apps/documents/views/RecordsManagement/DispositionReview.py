@@ -37,9 +37,16 @@ def disposition_review_board(request):
         request,
     ).select_related("record_declaration", "authorized_by")
 
+    due_count = due_records.count()
+    held_count = held_records.count()
+    pending_count = pending_certificates.count()
+
     context = {
         "due_records": due_records,
         "held_records": held_records,
         "pending_certificates": pending_certificates,
+        "due_count": due_count,
+        "held_count": held_count,
+        "pending_count": pending_count,
     }
     return render(request, "documents/records_management/disposition_review/board.html", context)
