@@ -15,6 +15,7 @@ from apps.documents.forms.AuditReporting.DocumentSecurityAlerts import (
 )
 from apps.documents.models.AuditReporting.DocumentAuditTrails import DocumentAuditTrail
 from apps.documents.models.AuditReporting.DocumentSecurityAlerts import DocumentSecurityAlert
+from apps.documents.services.audit import run_heuristic_anomaly_scan
 
 PAGE_SIZE = 15
 
@@ -139,85 +140,7 @@ def security_alert_triage(request, pk):
 @tenant_admin_required
 def security_alert_scan(request):
     """Run an on-demand heuristic anomaly detection scan over recent audit activity."""
-    now = timezone.now()
-    since = now - timedelta(hours=24)
-    tenant = request.tenant
-
-    created_alerts = 0
-
-    # Rule 1: Mass downloads (>10 downloads by same actor in 24h)
-    download_spikes = (
-        DocumentAuditTrail.objects.filter(
-            tenant=tenant,
-            event_timestamp__gte=since,
-            action_type="downloaded",
-            actor__isnull=False,
-        )
-        .values("actor")
-        .annotate(cnt=Count("id"))
-        .filter(cnt__gte=10)
-    )
-
-    for item in download_spikes:
-        actor_id = item["actor"]
-        cnt = item["cnt"]
-        # Check if an open alert already exists for this actor in last 24h
-        exists = DocumentSecurityAlert.objects.filter(
-            tenant=tenant,
-            target_user_id=actor_id,
-            alert_type="mass_download",
-            detected_at__gte=since,
-        ).exists()
-        if not exists:
-            DocumentSecurityAlert.objects.create(
-                tenant=tenant,
-                alert_type="mass_download",
-                severity="high" if cnt < 25 else "critical",
-                risk_score=min(95, 60 + cnt),
-                title=f"Mass document download burst detected ({cnt} files)",
-                description=f"User initiated {cnt} file downloads within the last 24 hours, exceeding normal operational baseline.",
-                target_user_id=actor_id,
-                event_count=cnt,
-                status="new",
-            )
-            created_alerts += 1
-
-    # Rule 2: Excessive permission denials / 403 probing (>5 failed events)
-    probing = (
-        DocumentAuditTrail.objects.filter(
-            tenant=tenant,
-            event_timestamp__gte=since,
-            is_success=False,
-            actor__isnull=False,
-        )
-        .values("actor")
-        .annotate(cnt=Count("id"))
-        .filter(cnt__gte=5)
-    )
-
-    for item in probing:
-        actor_id = item["actor"]
-        cnt = item["cnt"]
-        exists = DocumentSecurityAlert.objects.filter(
-            tenant=tenant,
-            target_user_id=actor_id,
-            alert_type="excessive_denials",
-            detected_at__gte=since,
-        ).exists()
-        if not exists:
-            DocumentSecurityAlert.objects.create(
-                tenant=tenant,
-                alert_type="excessive_denials",
-                severity="medium" if cnt < 10 else "high",
-                risk_score=min(85, 45 + (cnt * 3)),
-                title=f"Excessive access denial sequence ({cnt} events)",
-                description=f"User encountered {cnt} consecutive authorization denials or blocked attempts, suggesting directory enumeration or probing.",
-                target_user_id=actor_id,
-                event_count=cnt,
-                status="new",
-            )
-            created_alerts += 1
-
+    created_alerts = run_heuristic_anomaly_scan(request.tenant, hours=24)
     write_audit_log(request.user, None, "scan", tenant=request.tenant)
 
     if created_alerts > 0:
