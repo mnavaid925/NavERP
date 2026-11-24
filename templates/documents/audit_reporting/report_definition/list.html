@@ -70,7 +70,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div class="form-group lg:col-span-2">
                 <label class="form-label" for="id_q">Search Report Definitions</label>
                 <input type="text" name="q" id="id_q" value="{{ request.GET.q }}" placeholder="Search by name, description, or code..." class="form-input w-full">
@@ -81,6 +81,15 @@
                     <option value="">All Types</option>
                     {% for val, label in report_type_choices %}
                     <option value="{{ val }}" {% if request.GET.report_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_status">Status</label>
+                <select name="status" id="id_status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
