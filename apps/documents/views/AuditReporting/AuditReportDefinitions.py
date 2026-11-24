@@ -67,6 +67,7 @@ def audit_report_create(request):
 
     context = {
         "form": form,
+        "report_def": None,
         "is_edit": False,
     }
     return render(request, "documents/audit_reporting/report_definition/form.html", context)
