@@ -100,11 +100,16 @@ def audit_report_detail(request, pk):
     elif rtype == "version_churn":
         events_qs = events_qs.filter(action_type="version_uploaded")
 
-    total_events = events_qs.count()
-    failed_events = events_qs.filter(is_success=False).count()
+    agg = events_qs.aggregate(
+        total_events=Count("id"),
+        failed_events=Count("id", filter=Q(is_success=False)),
+        unique_actors=Count("actor", distinct=True),
+    )
+    total_events = agg["total_events"] or 0
+    failed_events = agg["failed_events"] or 0
     success_events = total_events - failed_events
     success_rate = round((success_events / total_events * 100), 1) if total_events > 0 else 100.0
-    unique_actors = events_qs.values("actor").distinct().count()
+    unique_actors = agg["unique_actors"] or 0
 
     summary_kpis = {
         "total_events": total_events,
