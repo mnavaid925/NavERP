@@ -56,8 +56,6 @@ def audit_trail_list(request):
     if doc_id and doc_id.isdigit():
         qs = qs.filter(document_id=int(doc_id))
 
-    total_count = qs.count()
-
     # Simple sample chain verification on latest records
     chain_status = "intact"
     latest_entries = list(qs[:10])
@@ -69,6 +67,7 @@ def audit_trail_list(request):
     paginator = Paginator(qs, PAGE_SIZE)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    total_count = page_obj.paginator.count
 
     context = {
         "audit_trails": page_obj.object_list,
