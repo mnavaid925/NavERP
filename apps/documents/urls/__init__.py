@@ -13,6 +13,9 @@ from apps.documents.urls.ApprovalWorkflow.DocumentReviewComments import (
 from apps.documents.urls.ApprovalWorkflow.DocumentSignatures import (
     urlpatterns as signatures_urls,
 )
+from apps.documents.urls.AuditReporting import (
+    urlpatterns as audit_reporting_urls,
+)
 from apps.documents.urls.CollaborationSharing import (
     urlpatterns as collaboration_sharing_urls,
 )
@@ -146,4 +149,5 @@ urlpatterns = (
     + secure_viewer_urls
     + collaboration_sharing_urls
     + records_management_urls
+    + audit_reporting_urls
 )
