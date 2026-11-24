@@ -95,21 +95,21 @@ def document_lifecycle_dashboard(request):
     )
 
     # Approval bottlenecks
-    bottleneck_stages = []
-    if DocumentApprovalRequest.objects.filter(tenant=tenant).exists():
-        bottleneck_stages = list(
-            DocumentApprovalRequest.objects.filter(tenant=tenant)
-            .values("status")
-            .annotate(count=Count("id"))
-            .order_by("-count")
-        )
+    bottleneck_stages = list(
+        DocumentApprovalRequest.objects.filter(tenant=tenant)
+        .values("status")
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+
+    total_managed_docs = sum(item["count"] for item in status_distribution)
 
     lifecycle_kpis = {
         "status_distribution": status_distribution,
         "high_churn_docs": high_churn_docs,
         "bottleneck_stages": bottleneck_stages,
         "avg_approval_hours": 18.4,
-        "total_managed_docs": Document.objects.filter(tenant=tenant).count(),
+        "total_managed_docs": total_managed_docs,
     }
 
     context = {
