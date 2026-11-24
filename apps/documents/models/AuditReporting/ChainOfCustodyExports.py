@@ -177,6 +177,8 @@ class ChainOfCustodyExport(TenantNumbered):
             models.Index(fields=["tenant", "access_token"], name="doc_dcoc_tnt_tok_idx"),
             models.Index(fields=["tenant", "is_portal_active"], name="doc_dcoc_tnt_act_idx"),
             models.Index(fields=["tenant", "expires_at"], name="doc_dcoc_tnt_exp_idx"),
+            models.Index(fields=["tenant", "regulatory_framework", "-created_at"], name="doc_dcoc_tnt_rf_cr_idx"),
+            models.Index(fields=["tenant", "is_portal_active", "expires_at"], name="doc_dcoc_tnt_act_exp_idx"),
         ]
 
     def __str__(self):
