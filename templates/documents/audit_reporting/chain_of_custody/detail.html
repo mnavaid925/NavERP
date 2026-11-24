@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Evidence Package {{ export_pkg.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <a href="{% url 'documents:custody_export_list' %}">Chain of Custody</a>
+            <span>/</span>
+            <span>{{ export_pkg.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ export_pkg.title }}</h1>
+            <span class="badge {{ export_pkg.get_regulatory_framework_badge }} text-sm">
+                {{ export_pkg.get_regulatory_framework_display }}
+            </span>
+            <span class="badge {{ export_pkg.get_status_badge }} text-sm">
+                {{ export_pkg.status_key|title }}
+            </span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:custody_export_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Packages</span>
+        </a>
+        <a href="{% url 'documents:custody_export_certificate' export_pkg.pk %}" target="_blank" class="btn btn-outline">
+            <i data-lucide="printer"></i>
+            <span>Print Certificate</span>
+        </a>
+        {% if export_pkg.is_portal_active %}
+        <form method="post" action="{% url 'documents:custody_export_revoke' export_pkg.pk %}" class="inline" onsubmit="return confirm('Revoke auditor access pass immediately?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="shield-off"></i>
+                <span>Revoke Access</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Evidence Scope & Manifest Inspector -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Package Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Evidence Package Overview</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Package Number</dt>
+                        <dd class="font-mono font-semibold">{{ export_pkg.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Sealing Date (UTC)</dt>
+                        <dd class="font-mono text-sm">{{ export_pkg.sealed_at|date:"Y-m-d H:i:s T" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Regulatory Standard</dt>
+                        <dd>
+                            <span class="badge {{ export_pkg.get_regulatory_framework_badge }}">
+                                {{ export_pkg.get_regulatory_framework_display }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Package Scope</dt>
+                        <dd class="font-medium text-slate-800">{{ export_pkg.get_scope_display }}</dd>
+                    </div>
+                    <div class="detail-item sm:col-span-2">
+                        <dt>Target Document Master</dt>
+                        <dd>
+                            {% if export_pkg.document %}
+                            <a href="{% url 'documents:document_detail' export_pkg.document.pk %}" class="text-blue-600 hover:underline font-medium text-base">
+                                {{ export_pkg.document.title }}
+                            </a>
+                            <div class="text-xs text-slate-500 font-mono mt-0.5">
+                                Ref: {{ export_pkg.document.number }} &bull; Status: {{ export_pkg.document.get_status_display }}
+                            </div>
+                            {% else %}
+                            <span class="text-slate-500 italic">Multi-document / Repository Scope</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Designated Auditor</dt>
+                        <dd>
+                            <div class="font-medium text-slate-800">{{ export_pkg.auditor_name }}</div>
+                            <div class="text-xs text-slate-500">{{ export_pkg.auditor_email }}</div>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Auditing Organization</dt>
+                        <dd class="text-slate-700 font-medium">{{ export_pkg.auditor_organization|default:"Independent Regulatory Body" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Total Auditor Visits</dt>
+                        <dd class="font-semibold">{{ export_pkg.access_count }} session(s)</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Portal Access</dt>
+                        <dd class="text-xs font-mono text-slate-600">{{ export_pkg.last_accessed_at|date:"Y-m-d H:i"|default:"Never" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Manifest JSON Viewer -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-800">Digital Evidence Manifest</h2>
+                    <p class="text-xs text-slate-500">Cryptographically bound JSON payload detailing certified records</p>
+                </div>
+                <span class="badge badge-purple font-mono text-xs">SHA-256 Digest</span>
+            </div>
+            <div class="card-body">
+                <pre class="bg-slate-900 text-slate-100 p-4 rounded-lg text-xs font-mono overflow-x-auto leading-relaxed">{{ manifest_data|pprint }}</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Auditor Portal Link & Cryptographic Seal -->
+    <div class="space-y-6">
+        <!-- Live Auditor Portal Link Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">External Auditor Access Pass</h2>
+            </div>
+            <div class="card-body space-y-4">
+                {% if export_pkg.is_portal_active and not export_pkg.is_expired %}
+                <div class="p-3 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+                    <i data-lucide="check-circle" class="w-4 h-4 inline-block mr-1 -mt-0.5"></i>
+                    <strong>Portal Live:</strong> Accredited auditor can inspect certified documents and audit records via this link.
+                </div>
+
+                <div>
+                    <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Auditor Portal URL</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="portalUrlInput" readonly value="{{ portal_url }}" class="form-input text-xs font-mono select-all bg-slate-50">
+                        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('portalUrlInput').value); alert('Auditor portal URL copied to clipboard!');" class="btn btn-outline btn-icon" title="Copy URL">
+                            <i data-lucide="copy"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-xs text-slate-600 space-y-1">
+                    <div><strong>Passcode Gate:</strong> {% if export_pkg.passcode_hash %}<span class="badge badge-green">Protected</span>{% else %}<span class="badge badge-slate">Token Only</span>{% endif %}</div>
+                    <div><strong>Valid Until:</strong> {{ export_pkg.expires_at|date:"Y-m-d H:i T" }}</div>
+                </div>
+
+                <a href="{{ portal_url }}" target="_blank" class="btn btn-outline w-full text-xs">
+                    <i data-lucide="external-link"></i>
+                    <span>Preview Auditor Portal</span>
+                </a>
+                {% else %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                    <strong>Pass Inactive:</strong> This auditor access pass is {% if not export_pkg.is_portal_active %}revoked{% else %}expired{% endif %}. The portal URL will deny access.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Master Cryptographic Package Seal -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Package Seal</h2>
+                <span class="badge badge-green flex items-center gap-1">
+                    <i data-lucide="shield-check" class="w-3 h-3"></i>
+                    <span>Sealed</span>
+                </span>
+            </div>
+            <div class="card-body space-y-3">
+                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block">Master SHA-256 Digest</label>
+                <div class="bg-slate-50 p-2.5 rounded font-mono text-xs font-semibold text-slate-800 break-all border border-slate-200">
+                    {{ export_pkg.package_hash }}
+                </div>
+                <div class="text-xs text-slate-500 pt-2 border-t border-slate-100">
+                    This cryptographic seal mathematically guarantees that the exported document revisions, author signatures, and audit entries have not been tampered with since package generation.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
