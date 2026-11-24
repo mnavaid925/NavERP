@@ -71,7 +71,6 @@ def custody_export_create(request):
             passcode = form.cleaned_data.get("portal_passcode")
             if passcode:
                 pkg.set_passcode(passcode)
-            pkg.generate_manifest()
             pkg.save()
 
             write_audit_log(request.user, pkg, "create", tenant=request.tenant)
