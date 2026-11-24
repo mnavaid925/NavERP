@@ -147,7 +147,7 @@
                             <tr class="hover:bg-slate-750">
                                 <td class="py-2.5 px-3 font-bold text-blue-400">{{ ver.version_label|default:ver.number }}</td>
                                 <td class="py-2.5 px-3 text-slate-400">{{ ver.created_at|date:"Y-m-d H:i" }}</td>
-                                <td class="py-2.5 px-3 font-sans text-white">{{ ver.created_by.get_full_name|default:ver.created_by.email }}</td>
+                                <td class="py-2.5 px-3 font-sans text-white">{{ ver.author.get_full_name|default:ver.author.email }}</td>
                                 <td class="py-2.5 px-3 font-sans text-slate-300">{{ ver.change_summary|default:"Standard Revision" }}</td>
                                 <td class="py-2.5 px-3 text-xs text-slate-400" title="{{ ver.checksum }}">{{ ver.checksum|default:ver.file_hash|slice:":24" }}…</td>
                             </tr>
