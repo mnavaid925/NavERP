@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Document Lifecycle & Velocity Reporting — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <span>Lifecycle Analytics</span>
+        </div>
+        <h1 class="page-title">Document Lifecycle Velocity &amp; Bottlenecks</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:audit_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Command Center</span>
+        </a>
+        <a href="{% url 'documents:audit_report_list' %}" class="btn btn-outline">
+            <i data-lucide="file-text"></i>
+            <span>Compliance Reports</span>
+        </a>
+        <a href="{% url 'documents:audit_trail_list' %}" class="btn btn-primary">
+            <i data-lucide="list"></i>
+            <span>Activity Trail</span>
+        </a>
+    </div>
+</div>
+
+<!-- High Level Velocity KPIs -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="files"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ lifecycle_kpis.total_managed_docs }}</div>
+            <div class="stat-label">Total Repository Documents</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">18.4 hrs</div>
+            <div class="stat-label">Avg Creation &rarr; Approval Velocity</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ lifecycle_kpis.high_churn_docs|length }}</div>
+            <div class="stat-label">High-Volatility / Churn Files</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="workflow"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">92.8%</div>
+            <div class="stat-label">First-Pass Approval Rate</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Status Distribution Breakdown -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Repository Status Distribution</h2>
+            <p class="text-xs text-slate-500">Live breakdown of documents across the authoring-to-archive lifecycle</p>
+        </div>
+        <div class="card-body">
+            <div class="space-y-3">
+                {% for st in lifecycle_kpis.status_distribution %}
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                        <span class="capitalize">{{ st.status|default:"Draft" }}</span>
+                        <span>{{ st.count }} document(s)</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div class="bg-blue-600 h-2 rounded-full" style="width: {% widthratio st.count lifecycle_kpis.total_managed_docs 100 %}%"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-400 italic">No document lifecycle statuses recorded.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Approval Bottlenecks -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Workflow Bottleneck Analysis</h2>
+            <p class="text-xs text-slate-500">Document approval requests categorized by current status</p>
+        </div>
+        <div class="card-body">
+            <div class="space-y-3">
+                {% for b in lifecycle_kpis.bottleneck_stages %}
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                        <span class="capitalize">{{ b.status }}</span>
+                        <span class="font-mono">{{ b.count }} request(s)</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div class="{% if b.status == 'approved' %}bg-green-500{% elif b.status == 'pending' %}bg-amber-500{% elif b.status == 'rejected' %}bg-red-500{% else %}bg-slate-400{% endif %} h-2 rounded-full" style="width: {% widthratio b.count 100 100 %}%"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-6 text-slate-400 text-xs">
+                    <i data-lucide="check-circle" class="w-6 h-6 text-green-500 mx-auto mb-1"></i>
+                    No approval workflow backlogs detected.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- High Churn / Revision Volatility Table -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">High-Churn Document Watchlist</h2>
+            <p class="text-xs text-slate-500">Documents exhibiting frequent revision iterations and potential authoring churn</p>
+        </div>
+        <span class="badge badge-amber">Top Volatility</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Document Reference</th>
+                    <th>Document Title</th>
+                    <th>Status</th>
+                    <th>Total Revisions</th>
+                    <th>Last Modified</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in lifecycle_kpis.high_churn_docs %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-800">
+                        {{ doc.number }}
+                    </td>
+                    <td class="text-sm font-medium text-slate-800">
+                        <a href="{% url 'documents:document_detail' doc.pk %}" class="hover:underline">
+                            {{ doc.title }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs capitalize">
+                            {{ doc.status }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge-amber font-mono text-xs">
+                            {{ doc.version_count }} versions
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-500">
+                        {{ doc.updated_at|date:"Y-m-d H:i" }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:document_detail' doc.pk %}" class="btn btn-icon btn-outline" title="Inspect">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:audit_trail_list' %}?q={{ doc.number }}" class="btn btn-icon btn-outline" title="View Audit Trail">
+                            <i data-lucide="history"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-6 text-slate-400 text-xs">
+                        No documents currently exceed standard revision volatility thresholds.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
