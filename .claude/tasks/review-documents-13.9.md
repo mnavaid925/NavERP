@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 1 | 8 | 0 |
+| **Important** | 9 | 0 | 9 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 5 | 13 | 0 |
+| **Total** | 18 | 4 | 14 | 0 |
 
 ---
 
@@ -165,7 +165,7 @@
   - `DestructionCertificate`: `(tenant, status)`.
   Create and apply migration.
 
-### [ ] `I9`: Admin Tenant-Consistency and Read-Only Compliance Fields
+### [x] `I9`: Admin Tenant-Consistency and Read-Only Compliance Fields
 - **Found by**: `security-reviewer`
 - **Location**: `apps/documents/admin.py`
 - **Issue**: `DestructionCertificateAdmin` allows manual editing of audit timestamps and approval statuses.
