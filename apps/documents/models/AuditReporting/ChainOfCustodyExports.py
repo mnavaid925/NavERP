@@ -225,6 +225,16 @@ class ChainOfCustodyExport(TenantNumbered):
         self.revoked_by = user
         self.save(update_fields=["is_portal_active", "revoked_at", "revoked_by"])
 
+    def seal_package(self):
+        """Cryptographically seal package with SHA-256 digest of manifest."""
+        self.is_sealed = True
+        self.sealed_at = timezone.now()
+        digest = self.generate_manifest()
+        if self.pk:
+            self.save(update_fields=["package_hash", "manifest_json", "is_sealed", "sealed_at"])
+        return digest
+
+
     def generate_manifest(self):
         """Assemble manifest data, compute package SHA-256 seal, and store manifest."""
         if not self.number and self.tenant_id and self.NUMBER_PREFIX:
