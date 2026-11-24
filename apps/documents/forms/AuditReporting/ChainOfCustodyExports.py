@@ -2,6 +2,7 @@ from datetime import timedelta
 from django import forms
 from django.utils import timezone
 
+from apps.documents.forms._common import reject_foreign
 from apps.documents.models.AuditReporting.ChainOfCustodyExports import ChainOfCustodyExport
 from apps.documents.models.StorageRepository.DocumentFolders import DocumentFolder
 from apps.documents.models.VersionControl.Documents import Document
@@ -50,16 +51,25 @@ class ChainOfCustodyExportForm(forms.ModelForm):
             "expires_at": forms.DateTimeInput(attrs={"type": "datetime-local", "class": "form-input"}),
         }
 
-    def __init__(self, tenant=None, *args, **kwargs):
+    def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.tenant = tenant
         if tenant:
             self.fields["document"].queryset = Document.objects.filter(tenant=tenant).order_by("title")
             self.fields["folder"].queryset = DocumentFolder.objects.filter(tenant=tenant).order_by("name")
+        else:
+            self.fields["document"].queryset = Document.objects.none()
+            self.fields["folder"].queryset = DocumentFolder.objects.none()
         self.fields["document"].required = False
         self.fields["folder"].required = False
 
         if not self.initial.get("expires_at") and not getattr(self.instance, "expires_at", None):
             self.initial["expires_at"] = (timezone.now() + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["document", "folder"])
+        return cleaned_data
 
 
 class AuditorPortalPasscodeForm(forms.Form):
