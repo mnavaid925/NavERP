@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ rule.number }} — {{ rule.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:routing_rule_list' %}">Routing Rules</a>
+            <span>/</span>
+            <span>{{ rule.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <h1 class="page-title">{{ rule.number }} — {{ rule.name }}</h1>
+            <span class="badge {{ rule.rule_type_badge }}">{{ rule.get_rule_type_display }}</span>
+            <span class="badge {{ rule.active_badge }}">{% if rule.is_active %}Active{% else %}Paused{% endif %}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:routing_rule_simulator' %}?rule={{ rule.pk }}" class="btn btn-primary">
+            <i data-lucide="flask-conical"></i>
+            <span>Test in Simulator</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Rule Specification</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Rule Number</dt>
+                        <dd class="font-mono font-semibold">{{ rule.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Priority</dt>
+                        <dd class="font-mono">P{{ rule.priority }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Trigger Event</dt>
+                        <dd>{{ rule.get_trigger_event_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Condition Logic</dt>
+                        <dd>{{ rule.get_condition_logic_mode_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Route Action</dt>
+                        <dd><span class="badge {{ rule.route_action_badge }}">{{ rule.get_route_action_display }}</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Linked BPM Process</dt>
+                        <dd>
+                            {% if rule.process_definition %}
+                            <a href="{% url 'documents:process_definition_detail' rule.process_definition.pk %}" class="text-blue-600 hover:underline">{{ rule.process_definition.name }}</a>
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Folder</dt>
+                        <dd>{% if rule.destination_folder %}{{ rule.destination_folder.path }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target OrgUnit / Role / User</dt>
+                        <dd>
+                            {% if rule.route_to_org_unit %}{{ rule.route_to_org_unit.name }}{% endif %}
+                            {% if rule.route_to_role %} · Role: {{ rule.route_to_role.name }}{% endif %}
+                            {% if rule.route_to_user %} · User: {{ rule.route_to_user.get_full_name|default:rule.route_to_user.username }}{% endif %}
+                            {% if not rule.route_to_org_unit and not rule.route_to_role and not rule.route_to_user %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Executions / Matches</dt>
+                        <dd class="font-mono">{{ rule.match_count }} / {{ rule.execution_count }} ({{ rule.match_rate_pct }}%)</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Owner</dt>
+                        <dd>{% if rule.owner %}{{ rule.owner.get_full_name|default:rule.owner.username }}{% else %}—{% endif %}</dd>
+                    </div>
+                </dl>
+                {% if rule.description %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <h3 class="text-xs font-semibold uppercase text-slate-500 mb-1">Description</h3>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ rule.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Conditional Predicates ({{ conditions|length }})</h2>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Field</th>
+                            <th>Operator</th>
+                            <th>Expected Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in conditions %}
+                        <tr>
+                            <td class="font-mono text-xs">{{ c.source|default:"document" }}</td>
+                            <td class="font-mono text-xs font-semibold">{{ c.field }}</td>
+                            <td><span class="badge badge-slate font-mono">{{ c.op }}</span></td>
+                            <td class="font-mono text-xs">{{ c.value }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-xs text-slate-500 py-4">No conditional predicates (matches all documents within scope).</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Validation Gates &amp; Auto-Populate Payloads</h2>
+            </div>
+            <div class="card-body space-y-3 text-xs">
+                <div>
+                    <div class="font-semibold text-slate-700 mb-1">Validation Rules ({{ validation_rules|length }})</div>
+                    {% for v in validation_rules %}
+                    <div class="p-2 rounded border border-slate-200 bg-slate-50 mb-1 font-mono">{{ v }}</div>
+                    {% empty %}
+                    <p class="text-slate-500">No pre-transition validation gates configured.</p>
+                    {% endfor %}
+                </div>
+                <div>
+                    <div class="font-semibold text-slate-700 mb-1">Auto-Populate Configuration</div>
+                    <pre class="p-3 rounded border border-slate-200 bg-slate-50 overflow-x-auto">{{ auto_populate }}</pre>
+                </div>
+                {% if rule.else_branch_enabled %}
+                <div>
+                    <div class="font-semibold text-slate-700 mb-1">Else Fallback Action</div>
+                    <pre class="p-3 rounded border border-slate-200 bg-slate-50 overflow-x-auto">{{ else_action }}</pre>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Actions</h2>
+            </div>
+            <div class="card-body space-y-2">
+                <a href="{% url 'documents:routing_rule_list' %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to Routing Rules</span>
+                </a>
+                <a href="{% url 'documents:routing_rule_edit' rule.pk %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Rule</span>
+                </a>
+                <a href="{% url 'documents:routing_rule_simulator' %}?rule={{ rule.pk }}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="flask-conical"></i>
+                    <span>Simulate Against Document</span>
+                </a>
+                {% if user.is_superuser or user.is_tenant_admin %}
+                <form method="post" action="{% url 'documents:routing_rule_toggle' rule.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline w-full justify-start">
+                        <i data-lucide="power"></i>
+                        <span>{% if rule.is_active %}Pause Rule{% else %}Activate Rule{% endif %}</span>
+                    </button>
+                </form>
+                <form method="post" action="{% url 'documents:routing_rule_delete' rule.pk %}" onsubmit="return confirm('Delete routing rule {{ rule.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full justify-start">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Rule</span>
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
