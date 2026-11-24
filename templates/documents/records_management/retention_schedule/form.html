@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Retention Schedule — {{ schedule.code }}{% else %}New Retention Schedule{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:retention_schedule_list' %}">Retention Schedules</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ schedule.code }}{% else %}New Schedule{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Retention Schedule: {{ schedule.code }}{% else %}Create Retention Schedule{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'documents:retention_schedule_detail' schedule.pk %}{% else %}{% url 'documents:retention_schedule_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <form method="post" class="card">
+        {% csrf_token %}
+        <div class="card-header">
+            <h2 class="card-title">File Plan Schedule Parameters</h2>
+        </div>
+        <div class="card-body space-y-6">
+            {% if form.errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                <p class="font-semibold mb-1">Please correct the errors below:</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                            <li>{{ field|title }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.code.id_for_label }}">File Plan Code *</label>
+                    {{ form.code }}
+                    <span class="text-xs text-slate-500">Unique alphanumeric record category identifier (e.g. FIN-TAX-01)</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Schedule Name *</label>
+                    {{ form.name }}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description & Scope</label>
+                {{ form.description }}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.compliance_framework.id_for_label }}">Compliance Framework</label>
+                    {{ form.compliance_framework }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.retention_mode.id_for_label }}">Retention Mode</label>
+                    {{ form.retention_mode }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.department.id_for_label }}">Owning Department</label>
+                    {{ form.department }}
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-4">
+                <h3 class="font-semibold text-sm text-slate-800">Retention Duration & Trigger</h3>
+                
+                <div class="flex items-center gap-2">
+                    {{ form.is_permanent }}
+                    <label class="text-sm font-medium text-slate-700" for="{{ form.is_permanent.id_for_label }}">
+                        Permanent Retention (Records never expire / are never destroyed)
+                    </label>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.retention_period_years.id_for_label }}">Retention Period (Years)</label>
+                        {{ form.retention_period_years }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.retention_period_months.id_for_label }}">Additional Months</label>
+                        {{ form.retention_period_months }}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.trigger_type.id_for_label }}">Retention Trigger Event</label>
+                        {{ form.trigger_type }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cutoff_rule.id_for_label }}">Cutoff Rule</label>
+                        {{ form.cutoff_rule }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.disposition_action.id_for_label }}">Disposition Action</label>
+                        {{ form.disposition_action }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.legal_citation.id_for_label }}">Legal Citation / Statutory Authority</label>
+                {{ form.legal_citation }}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Internal Compliance Notes</label>
+                {{ form.notes }}
+            </div>
+
+            <div class="flex items-center gap-2">
+                {{ form.is_active }}
+                <label class="text-sm font-medium text-slate-700" for="{{ form.is_active.id_for_label }}">
+                    Active (Available for new record declarations)
+                </label>
+            </div>
+        </div>
+
+        <div class="card-footer flex justify-end gap-3 p-4 border-t border-slate-200">
+            <a href="{% if is_edit %}{% url 'documents:retention_schedule_detail' schedule.pk %}{% else %}{% url 'documents:retention_schedule_list' %}{% endif %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check"></i>
+                <span>{% if is_edit %}Save Changes{% else %}Create Schedule{% endif %}</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
