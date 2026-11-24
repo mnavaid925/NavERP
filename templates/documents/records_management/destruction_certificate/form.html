@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Draft Destruction Certificate — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:destruction_certificate_list' %}">Destruction Certificates</a>
+            <span>/</span>
+            <span>Draft Certificate</span>
+        </div>
+        <h1 class="page-title">Draft Destruction Certificate</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:destruction_certificate_list' %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl mx-auto">
+    <form method="post" class="card">
+        {% csrf_token %}
+        <div class="card-header">
+            <h2 class="card-title">Disposition Authorization Parameters</h2>
+        </div>
+        <div class="card-body space-y-6">
+            {% if form.errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                <p class="font-semibold mb-1">Please correct the errors below:</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                            <li>{{ field|title }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-3">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0"></i>
+                <div>
+                    <span class="font-semibold block text-sm mb-0.5">Disposition Verification Standard</span>
+                    Drafting a destruction certificate initiates formal disposition review. The system verifies legal hold clearance and captures an immutable snapshot of document metadata and SHA-256 hash.
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.record_declaration.id_for_label }}">Declared Record for Disposition *</label>
+                {{ form.record_declaration }}
+                <span class="text-xs text-slate-500">Select the target record reaching expiration under its retention schedule</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.disposition_type.id_for_label }}">Disposition Type *</label>
+                    {{ form.disposition_type }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.destruction_method.id_for_label }}">Sanitization Method *</label>
+                    {{ form.destruction_method }}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.certificate_notes.id_for_label }}">Witness & Authorization Notes</label>
+                {{ form.certificate_notes }}
+            </div>
+        </div>
+
+        <div class="card-footer flex justify-end gap-3 p-4 border-t border-slate-200">
+            <a href="{% url 'documents:destruction_certificate_list' %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="file-check"></i>
+                <span>Draft Certificate</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
