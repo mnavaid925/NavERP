@@ -99,6 +99,8 @@ class RecordDeclaration(TenantNumbered):
 
     @property
     def is_under_legal_hold(self):
+        if hasattr(self, "has_active_hold"):
+            return bool(self.has_active_hold)
         return self.document.legal_holds.filter(is_active=True).exists()
 
     def calculate_disposition_due_date(self, from_date=None):
