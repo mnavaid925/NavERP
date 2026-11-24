@@ -29,6 +29,10 @@ from apps.documents.forms.MetadataIndexing.DocumentMetadataValues import Documen
 from apps.documents.forms.MetadataIndexing.DocumentOcrJobs import DocumentOcrJobForm
 from apps.documents.forms.MetadataIndexing.MetadataSchemas import MetadataSchemaForm
 from apps.documents.forms.MetadataIndexing.TaxonomyTerms import TaxonomyTermForm
+from apps.documents.forms.RecordsManagement.DestructionCertificates import DestructionCertificateForm
+from apps.documents.forms.RecordsManagement.DocumentLegalHolds import DocumentLegalHoldForm, LegalHoldReleaseForm
+from apps.documents.forms.RecordsManagement.RecordDeclarations import RecordDeclarationForm
+from apps.documents.forms.RecordsManagement.RetentionSchedules import RetentionScheduleForm
 from apps.documents.forms.SearchDiscovery.DocumentSavedSearches import DocumentSavedSearchForm
 from apps.documents.forms.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlertForm
 from apps.documents.forms.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLogForm
@@ -110,4 +114,9 @@ __all__ = [
     "CoauthorSessionForm",
     "DocumentTaskForm",
     "DocumentActivityForm",
+    "RetentionScheduleForm",
+    "RecordDeclarationForm",
+    "DocumentLegalHoldForm",
+    "LegalHoldReleaseForm",
+    "DestructionCertificateForm",
 ]
