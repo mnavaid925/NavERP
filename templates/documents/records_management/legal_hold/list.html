@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Document Legal Holds — Records Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Records Management</span>
+            <span>/</span>
+            <span>Legal Holds</span>
+        </div>
+        <h1 class="page-title">Litigation & Regulatory Legal Holds</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:disposition_review_board' %}" class="btn btn-outline">
+            <i data-lucide="clipboard-check"></i>
+            <span>Disposition Board</span>
+        </a>
+        <a href="{% url 'documents:legal_hold_create' %}" class="btn btn-primary">
+            <i data-lucide="shield-alert"></i>
+            <span>Place Legal Hold</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label" for="q">Search</label>
+                <input type="text" id="q" name="q" class="form-input" placeholder="Matter name, number, document..." value="{{ query }}">
+            </div>
+            <div>
+                <label class="form-label" for="hold_reason">Hold Reason</label>
+                <select id="hold_reason" name="hold_reason" class="form-select">
+                    <option value="">All Reasons</option>
+                    {% for code, label in reason_choices %}
+                    <option value="{{ code }}" {% if current_reason == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status">Hold Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="active" {% if current_status == "active" %}selected{% endif %}>Active Holds</option>
+                    <option value="released" {% if current_status == "released" %}selected{% endif %}>Released Holds</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:legal_hold_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Legal Holds Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Hold Reference</th>
+                    <th>Matter / Case</th>
+                    <th>Target Document</th>
+                    <th>Hold Reason</th>
+                    <th>Custodian</th>
+                    <th>Placed At</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for hold in holds %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:legal_hold_detail' hold.pk %}" class="font-mono font-semibold text-primary hover:underline">
+                            {{ hold.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ hold.matter_name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ hold.matter_number }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:document_detail' hold.document.pk %}" class="text-slate-900 hover:underline font-medium">
+                            {{ hold.document.title }}
+                        </a>
+                        <div class="text-xs text-slate-500 font-mono">{{ hold.document.document_number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ hold.reason_badge_class }}">
+                            {{ hold.get_hold_reason_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if hold.custodian %}
+                        <div class="text-sm font-medium text-slate-800">{{ hold.custodian.get_full_name|default:hold.custodian.username }}</div>
+                        {% if hold.custodian_acknowledged_at %}
+                        <span class="text-xs text-green-600 flex items-center gap-0.5">
+                            <i data-lucide="check" class="w-3 h-3"></i> Acknowledged
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-amber-600">Pending Acknowledgment</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ hold.placed_at|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {% if hold.is_active %}
+                        <span class="badge badge-red flex items-center gap-1 w-max">
+                            <i data-lucide="lock" class="w-3 h-3"></i> Active Hold
+                        </span>
+                        {% else %}
+                        <span class="badge badge-muted">Released</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'documents:legal_hold_detail' hold.pk %}" class="btn btn-icon" title="View Hold">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="shield-check"></i>
+                            </div>
+                            <div class="empty-state-title">No legal holds active</div>
+                            <div class="empty-state-description">Litigation and regulatory holds preserve documents in-place and halt all disposition actions.</div>
+                            <a href="{% url 'documents:legal_hold_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Place New Hold</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} legal holds
+        </div>
+        <div class="pagination-controls">
+            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_reason %}&hold_reason={{ current_reason }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_previous %}disabled{% endif %}">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_reason %}&hold_reason={{ current_reason }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_next %}disabled{% endif %}">
+                <i data-lucide="chevron-right"></i>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
