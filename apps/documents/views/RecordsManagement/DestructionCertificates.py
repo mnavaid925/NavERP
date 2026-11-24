@@ -1,10 +1,12 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.RecordsManagement.DestructionCertificates import DestructionCertificateForm
 from apps.documents.models.RecordsManagement.DestructionCertificates import DestructionCertificate
@@ -103,12 +105,14 @@ def destruction_certificate_create(request):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def destruction_certificate_authorize(request, pk):
     certificate = documents_object(request, DestructionCertificate, pk)
     try:
-        certificate.authorize(request.user)
-        write_audit_log(request.user, certificate, "approve", tenant=request.tenant)
+        with transaction.atomic():
+            certificate.authorize(request.user)
+            write_audit_log(request.user, certificate, "approve", tenant=request.tenant)
         messages.success(request, f"Disposition for certificate {certificate.number} authorized by {request.user.username}.")
     except ValueError as e:
         messages.error(request, str(e))
@@ -116,12 +120,14 @@ def destruction_certificate_authorize(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def destruction_certificate_execute(request, pk):
     certificate = documents_object(request, DestructionCertificate, pk)
     try:
-        certificate.execute_destruction(request.user)
-        write_audit_log(request.user, certificate, "execute", tenant=request.tenant)
+        with transaction.atomic():
+            certificate.execute_destruction(request.user)
+            write_audit_log(request.user, certificate, "execute", tenant=request.tenant)
         messages.success(
             request,
             f"Destruction certificate {certificate.number} successfully executed. Record status updated to disposed.",
