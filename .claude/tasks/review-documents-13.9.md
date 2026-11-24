@@ -17,8 +17,8 @@
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 4 | 1 | 3 | 0 |
-| **Total** | 18 | 1 | 17 | 0 |
+| **Minor** | 4 | 0 | 4 | 0 |
+| **Total** | 18 | 0 | 18 | 0 |
 
 ---
 
@@ -193,7 +193,7 @@
 - **Issue**: Clamping to day 28 shortens end-of-month dates (e.g. Dec 31 becomes Dec 28).
 - **Fix**: Use month-end preservation calculation so month-end dates land on the actual last day of the target month.
 
-### [ ] `M4`: Update Document Status to "archived" on Destruction Execution
+### [x] `M4`: Update Document Status to "archived" on Destruction Execution
 - **Found by**: `security-reviewer`
 - **Location**: `apps/documents/models/RecordsManagement/DestructionCertificates.py:132`
 - **Issue**: When a destruction certificate is executed, `record_declaration.record_status` becomes `"disposed"`, but the parent `Document.status` remains `"active"`.
