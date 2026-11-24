@@ -7,6 +7,8 @@ from django.utils import timezone
 
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.documents.models import (
+    AuditReportDefinition,
+    ChainOfCustodyExport,
     CoauthorSession,
     DestructionCertificate,
     DlpIncident,
@@ -16,6 +18,7 @@ from apps.documents.models import (
     DocumentActivity,
     DocumentApprovalRequest,
     DocumentApprovalWorkflow,
+    DocumentAuditTrail,
     DocumentBatchImport,
     DocumentBranch,
     DocumentDraft,
@@ -31,6 +34,7 @@ from apps.documents.models import (
     DocumentSearchAlert,
     DocumentSearchQueryLog,
     DocumentSearchSynonym,
+    DocumentSecurityAlert,
     DocumentShare,
     DocumentSignature,
     DocumentTask,
@@ -1773,166 +1777,166 @@ class Command(BaseCommand):
                             is_read=False,
                         )
 
-                    # 5. Sub-module 13.9: Records Management & Compliance
-                    if not RetentionSchedule.objects.filter(tenant=tenant).exists():
-                        self.stdout.write(f"  Seeding 13.9 Records Management & Compliance for '{tenant.slug}'...")
+                # 7. Sub-module 13.9: Records Management & Compliance
+                if not RetentionSchedule.objects.filter(tenant=tenant).exists():
+                    self.stdout.write(f"  Seeding 13.9 Records Management & Compliance for '{tenant.slug}'...")
 
-                        dept_fin = OrgUnit.objects.filter(tenant=tenant, name__icontains="Finance").first()
-                        dept_legal = OrgUnit.objects.filter(tenant=tenant, name__icontains="Legal").first()
+                    dept_fin = OrgUnit.objects.filter(tenant=tenant, name__icontains="Finance").first()
+                    dept_legal = OrgUnit.objects.filter(tenant=tenant, name__icontains="Legal").first()
 
-                        sched_tax = RetentionSchedule.objects.create(
+                    sched_tax = RetentionSchedule.objects.create(
+                        tenant=tenant,
+                        code="FIN-TAX-01",
+                        name="Corporate Tax Returns & Financial Ledgers",
+                        description="Comprehensive tax returns, workpapers, general ledger extracts, and supporting receipts.",
+                        retention_period_years=7,
+                        retention_period_months=0,
+                        is_permanent=False,
+                        trigger_type="creation_date",
+                        cutoff_rule="fiscal_year_end",
+                        disposition_action="destroy",
+                        compliance_framework="irs_tax",
+                        retention_mode="regulatory_worm",
+                        legal_citation="26 U.S. Code § 6501(a) / IRS Publication 583",
+                        department=dept_fin,
+                        is_active=True,
+                    )
+
+                    sched_gdpr = RetentionSchedule.objects.create(
+                        tenant=tenant,
+                        code="PRIV-GDPR-01",
+                        name="Customer Data Processing & Privacy Agreements",
+                        description="Customer PII data processing records, opt-in consent agreements, and GDPR Article 30 registers.",
+                        retention_period_years=3,
+                        retention_period_months=0,
+                        is_permanent=False,
+                        trigger_type="event_based",
+                        cutoff_rule="immediate",
+                        disposition_action="destroy",
+                        compliance_framework="gdpr",
+                        retention_mode="modifiable",
+                        legal_citation="GDPR Art. 5(1)(e) Storage Limitation",
+                        department=dept_legal,
+                        is_active=True,
+                    )
+
+                    sched_corp = RetentionSchedule.objects.create(
+                        tenant=tenant,
+                        code="LEGAL-CORP-01",
+                        name="Articles of Incorporation & Board Charters",
+                        description="Permanent foundational corporate charters, shareholder resolutions, and board meeting minutes.",
+                        retention_period_years=0,
+                        retention_period_months=0,
+                        is_permanent=True,
+                        trigger_type="declaration_date",
+                        cutoff_rule="event_completion",
+                        disposition_action="archive",
+                        compliance_framework="general",
+                        retention_mode="regulatory_worm",
+                        legal_citation="Delaware General Corporation Law § 220",
+                        department=dept_legal,
+                        is_active=True,
+                    )
+
+                    sched_iso = RetentionSchedule.objects.create(
+                        tenant=tenant,
+                        code="QMS-ISO-01",
+                        name="Quality Audit Reports & Inspection Certifications",
+                        description="ISO 9001 and ISO 15489 certified quality system internal audits, inspection logs, and calibration records.",
+                        retention_period_years=5,
+                        retention_period_months=0,
+                        is_permanent=False,
+                        trigger_type="creation_date",
+                        cutoff_rule="calendar_year_end",
+                        disposition_action="review",
+                        compliance_framework="iso_15489",
+                        retention_mode="modifiable",
+                        legal_citation="ISO 15489-1:2016 Records Retention Standard",
+                        is_active=True,
+                    )
+
+                    docs = list(Document.objects.filter(tenant=tenant).order_by("created_at"))
+                    if docs:
+                        doc_rec1 = docs[0]
+                        doc_rec2 = docs[1] if len(docs) > 1 else docs[0]
+                        doc_rec3 = docs[2] if len(docs) > 2 else docs[0]
+
+                        rec1 = RecordDeclaration.objects.create(
                             tenant=tenant,
-                            code="FIN-TAX-01",
-                            name="Corporate Tax Returns & Financial Ledgers",
-                            description="Comprehensive tax returns, workpapers, general ledger extracts, and supporting receipts.",
-                            retention_period_years=7,
-                            retention_period_months=0,
-                            is_permanent=False,
-                            trigger_type="creation_date",
-                            cutoff_rule="fiscal_year_end",
-                            disposition_action="destroy",
-                            compliance_framework="irs_tax",
-                            retention_mode="regulatory_worm",
-                            legal_citation="26 U.S. Code § 6501(a) / IRS Publication 583",
-                            department=dept_fin,
+                            document=doc_rec1,
+                            version=doc_rec1.current_version if hasattr(doc_rec1, "current_version") else None,
+                            retention_schedule=sched_tax,
+                            declared_by=user,
+                            declaration_mode="manual",
+                            record_status="active",
+                            is_vital_record=True,
+                            vital_review_frequency_months=12,
+                            is_locked=True,
+                            notes="Officially declared annual financial filing workpaper.",
+                        )
+
+                        past_cutoff = timezone.now().date() - timezone.timedelta(days=1200)
+                        past_due = timezone.now().date() - timezone.timedelta(days=60)
+                        rec2 = RecordDeclaration.objects.create(
+                            tenant=tenant,
+                            document=doc_rec2,
+                            version=doc_rec2.current_version if hasattr(doc_rec2, "current_version") else None,
+                            retention_schedule=sched_gdpr,
+                            declared_by=user,
+                            declaration_mode="automatic_rule",
+                            record_status="pending_disposition",
+                            is_vital_record=False,
+                            is_locked=True,
+                            cutoff_date=past_cutoff,
+                            cutoff_triggered_at=timezone.now() - timezone.timedelta(days=1200),
+                            disposition_due_date=past_due,
+                            notes="Customer consent agreement past 3-year GDPR storage limit.",
+                        )
+
+                        rec3 = RecordDeclaration.objects.create(
+                            tenant=tenant,
+                            document=doc_rec3,
+                            version=doc_rec3.current_version if hasattr(doc_rec3, "current_version") else None,
+                            retention_schedule=sched_corp,
+                            declared_by=user,
+                            declaration_mode="workflow_trigger",
+                            record_status="active",
+                            is_vital_record=True,
+                            vital_review_frequency_months=24,
+                            is_locked=True,
+                            notes="Permanent corporate governance founding charter.",
+                        )
+
+                        # Place an active legal hold on doc_rec1
+                        hold1 = DocumentLegalHold.objects.create(
+                            tenant=tenant,
+                            matter_name="SEC Financial & Corporate Tax Inquiries",
+                            matter_number="SEC-2026-9042",
+                            hold_reason="regulatory_audit",
+                            description="Preserve all financial ledgers, tax filings, and calculation workpapers pending audit completion.",
+                            document=doc_rec1,
+                            placed_by=user,
+                            custodian=user,
+                            custodian_notified=True,
+                            custodian_acknowledged_at=timezone.now() - timezone.timedelta(days=5),
                             is_active=True,
                         )
 
-                        sched_gdpr = RetentionSchedule.objects.create(
+                        # Draft a destruction certificate for rec2
+                        cert1 = DestructionCertificate.objects.create(
                             tenant=tenant,
-                            code="PRIV-GDPR-01",
-                            name="Customer Data Processing & Privacy Agreements",
-                            description="Customer PII data processing records, opt-in consent agreements, and GDPR Article 30 registers.",
-                            retention_period_years=3,
-                            retention_period_months=0,
-                            is_permanent=False,
-                            trigger_type="event_based",
-                            cutoff_rule="immediate",
-                            disposition_action="destroy",
-                            compliance_framework="gdpr",
-                            retention_mode="modifiable",
-                            legal_citation="GDPR Art. 5(1)(e) Storage Limitation",
-                            department=dept_legal,
-                            is_active=True,
+                            record_declaration=rec2,
+                            document_title_snapshot=doc_rec2.title,
+                            document_number_snapshot=doc_rec2.document_number,
+                            schedule_name_snapshot=f"{sched_gdpr.code} - {sched_gdpr.name}",
+                            disposition_type="destruction",
+                            destruction_method="database_purge",
+                            status="pending_approval",
+                            content_verification_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            legal_hold_verified_clear=True,
+                            hold_verification_date=timezone.now(),
+                            certificate_notes="Scheduled disposition following GDPR storage duration expiration.",
                         )
-
-                        sched_corp = RetentionSchedule.objects.create(
-                            tenant=tenant,
-                            code="LEGAL-CORP-01",
-                            name="Articles of Incorporation & Board Charters",
-                            description="Permanent foundational corporate charters, shareholder resolutions, and board meeting minutes.",
-                            retention_period_years=0,
-                            retention_period_months=0,
-                            is_permanent=True,
-                            trigger_type="declaration_date",
-                            cutoff_rule="event_completion",
-                            disposition_action="archive",
-                            compliance_framework="general",
-                            retention_mode="regulatory_worm",
-                            legal_citation="Delaware General Corporation Law § 220",
-                            department=dept_legal,
-                            is_active=True,
-                        )
-
-                        sched_iso = RetentionSchedule.objects.create(
-                            tenant=tenant,
-                            code="QMS-ISO-01",
-                            name="Quality Audit Reports & Inspection Certifications",
-                            description="ISO 9001 and ISO 15489 certified quality system internal audits, inspection logs, and calibration records.",
-                            retention_period_years=5,
-                            retention_period_months=0,
-                            is_permanent=False,
-                            trigger_type="creation_date",
-                            cutoff_rule="calendar_year_end",
-                            disposition_action="review",
-                            compliance_framework="iso_15489",
-                            retention_mode="modifiable",
-                            legal_citation="ISO 15489-1:2016 Records Retention Standard",
-                            is_active=True,
-                        )
-
-                        docs = list(Document.objects.filter(tenant=tenant).order_by("created_at"))
-                        if docs:
-                            doc_rec1 = docs[0]
-                            doc_rec2 = docs[1] if len(docs) > 1 else docs[0]
-                            doc_rec3 = docs[2] if len(docs) > 2 else docs[0]
-
-                            rec1 = RecordDeclaration.objects.create(
-                                tenant=tenant,
-                                document=doc_rec1,
-                                version=doc_rec1.current_version if hasattr(doc_rec1, "current_version") else None,
-                                retention_schedule=sched_tax,
-                                declared_by=user,
-                                declaration_mode="manual",
-                                record_status="active",
-                                is_vital_record=True,
-                                vital_review_frequency_months=12,
-                                is_locked=True,
-                                notes="Officially declared annual financial filing workpaper.",
-                            )
-
-                            past_cutoff = timezone.now().date() - timezone.timedelta(days=1200)
-                            past_due = timezone.now().date() - timezone.timedelta(days=60)
-                            rec2 = RecordDeclaration.objects.create(
-                                tenant=tenant,
-                                document=doc_rec2,
-                                version=doc_rec2.current_version if hasattr(doc_rec2, "current_version") else None,
-                                retention_schedule=sched_gdpr,
-                                declared_by=user,
-                                declaration_mode="automatic_rule",
-                                record_status="pending_disposition",
-                                is_vital_record=False,
-                                is_locked=True,
-                                cutoff_date=past_cutoff,
-                                cutoff_triggered_at=timezone.now() - timezone.timedelta(days=1200),
-                                disposition_due_date=past_due,
-                                notes="Customer consent agreement past 3-year GDPR storage limit.",
-                            )
-
-                            rec3 = RecordDeclaration.objects.create(
-                                tenant=tenant,
-                                document=doc_rec3,
-                                version=doc_rec3.current_version if hasattr(doc_rec3, "current_version") else None,
-                                retention_schedule=sched_corp,
-                                declared_by=user,
-                                declaration_mode="workflow_trigger",
-                                record_status="active",
-                                is_vital_record=True,
-                                vital_review_frequency_months=24,
-                                is_locked=True,
-                                notes="Permanent corporate governance founding charter.",
-                            )
-
-                            # Place an active legal hold on doc_rec1
-                            hold1 = DocumentLegalHold.objects.create(
-                                tenant=tenant,
-                                matter_name="SEC Financial & Corporate Tax Inquiries",
-                                matter_number="SEC-2026-9042",
-                                hold_reason="regulatory_audit",
-                                description="Preserve all financial ledgers, tax filings, and calculation workpapers pending audit completion.",
-                                document=doc_rec1,
-                                placed_by=user,
-                                custodian=user,
-                                custodian_notified=True,
-                                custodian_acknowledged_at=timezone.now() - timezone.timedelta(days=5),
-                                is_active=True,
-                            )
-
-                            # Draft a destruction certificate for rec2
-                            cert1 = DestructionCertificate.objects.create(
-                                tenant=tenant,
-                                record_declaration=rec2,
-                                document_title_snapshot=doc_rec2.title,
-                                document_number_snapshot=doc_rec2.document_number,
-                                schedule_name_snapshot=f"{sched_gdpr.code} - {sched_gdpr.name}",
-                                disposition_type="destruction",
-                                destruction_method="database_purge",
-                                status="pending_approval",
-                                content_verification_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                                legal_hold_verified_clear=True,
-                                hold_verification_date=timezone.now(),
-                                certificate_notes="Scheduled disposition following GDPR storage duration expiration.",
-                            )
 
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
 
