@@ -51,6 +51,16 @@ from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
 from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.VersionControl.DocumentVersions import DocumentVersion
+from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import (
+    DocumentProcessDefinition,
+)
+from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import (
+    DocumentProcessInstance,
+)
+from apps.documents.models.WorkflowAutomation.DocumentRoutingRules import DocumentRoutingRule
+from apps.documents.models.WorkflowAutomation.DocumentWebhookTriggers import (
+    DocumentWebhookTrigger,
+)
 
 
 @admin.register(Document)
@@ -394,6 +404,105 @@ class ChainOfCustodyExportAdmin(admin.ModelAdmin):
     list_filter = ("regulatory_framework", "scope", "is_portal_active", "tenant")
     search_fields = ("number", "title", "auditor_name", "auditor_email", "package_hash")
     readonly_fields = ("number", "access_token", "package_hash", "sealed_at", "created_at", "updated_at")
+
+
+# 13.11 Workflow Automation & BPM
+@admin.register(DocumentProcessDefinition)
+class DocumentProcessDefinitionAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "code",
+        "name",
+        "version_number",
+        "process_category",
+        "trigger_event",
+        "status",
+        "is_active",
+        "instance_count",
+        "tenant",
+    )
+    list_filter = ("status", "process_category", "trigger_event", "is_active", "tenant")
+    search_fields = ("number", "code", "name", "description")
+    readonly_fields = ("number", "instance_count", "published_at", "created_at", "updated_at")
+
+
+@admin.register(DocumentRoutingRule)
+class DocumentRoutingRuleAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "name",
+        "rule_type",
+        "trigger_event",
+        "route_action",
+        "priority",
+        "is_active",
+        "execution_count",
+        "match_count",
+        "tenant",
+    )
+    list_filter = ("rule_type", "trigger_event", "route_action", "is_active", "tenant")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("number", "execution_count", "match_count", "last_evaluated_at", "created_at", "updated_at")
+
+
+@admin.register(DocumentProcessInstance)
+class DocumentProcessInstanceAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "process_definition",
+        "document",
+        "status",
+        "current_node_id",
+        "is_sla_breached",
+        "is_conformant",
+        "started_at",
+        "tenant",
+    )
+    list_filter = ("status", "is_sla_breached", "is_conformant", "tenant")
+    search_fields = ("number", "current_node_id", "current_node_label", "variant_signature")
+    readonly_fields = (
+        "number",
+        "started_at",
+        "due_at",
+        "completed_at",
+        "cycle_time_minutes",
+        "rework_count",
+        "is_sla_breached",
+        "is_conformant",
+        "variant_signature",
+        "created_at",
+        "updated_at",
+    )
+
+
+@admin.register(DocumentWebhookTrigger)
+class DocumentWebhookTriggerAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "name",
+        "direction",
+        "trigger_event",
+        "http_method",
+        "last_status",
+        "is_active",
+        "fire_count",
+        "failure_count",
+        "tenant",
+    )
+    list_filter = ("direction", "trigger_event", "last_status", "is_active", "tenant")
+    search_fields = ("number", "name", "target_url", "signing_secret_prefix")
+    exclude = ("signing_secret",)
+    readonly_fields = (
+        "number",
+        "signing_secret_prefix",
+        "last_status",
+        "last_fired_at",
+        "fire_count",
+        "failure_count",
+        "delivery_history_json",
+        "created_at",
+        "updated_at",
+    )
 
 
 
