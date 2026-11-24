@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Record {{ declaration.number }} — {{ declaration.document.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:record_declaration_list' %}">Record Declarations</a>
+            <span>/</span>
+            <span>{{ declaration.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ declaration.number }} — {{ declaration.document.title }}</h1>
+            {% if declaration.is_vital_record %}
+            <span class="badge badge-amber">Vital Record</span>
+            {% endif %}
+            {% if declaration.is_under_legal_hold %}
+            <span class="badge badge-red">Under Legal Hold</span>
+            {% else %}
+            <span class="badge {{ declaration.status_badge_class }}">{{ declaration.get_record_status_display }}</span>
+            {% endif %}
+            <span class="badge {{ declaration.declaration_mode_badge_class }}">{{ declaration.get_declaration_mode_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:record_declaration_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Declarations</span>
+        </a>
+        {% if not declaration.cutoff_date and declaration.record_status == 'active' %}
+        <form method="post" action="{% url 'documents:record_declaration_trigger_cutoff' declaration.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-700 hover:bg-amber-50" onclick="return confirm('Trigger cutoff milestone now? This formally begins the retention countdown.');">
+                <i data-lucide="clock"></i>
+                <span>Trigger Cutoff Milestone</span>
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'documents:destruction_certificate_create' %}?declaration={{ declaration.pk }}" class="btn btn-outline text-red-600 hover:bg-red-50">
+            <i data-lucide="file-x"></i>
+            <span>Initiate Disposition</span>
+        </a>
+        <a href="{% url 'documents:record_declaration_edit' declaration.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Record</span>
+        </a>
+    </div>
+</div>
+
+<!-- Active Legal Holds Warning Banner -->
+{% if declaration.is_under_legal_hold %}
+<div class="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg mb-6">
+    <div class="flex items-start gap-3">
+        <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600 mt-0.5"></i>
+        <div>
+            <h3 class="font-semibold text-red-900 text-base">Litigation Legal Hold Active</h3>
+            <p class="text-sm text-red-700 mt-1">
+                This record is protected under one or more active legal holds. Automated or manual disposition, destruction, or purging is strictly prohibited until all holds are formally released.
+            </p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Detail Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Record Declaration Details</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Record Number</dt>
+                        <dd class="font-mono font-semibold text-slate-800">{{ declaration.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' declaration.document.pk %}" class="text-primary font-medium hover:underline">
+                                {{ declaration.document.title }}
+                            </a>
+                            <span class="text-xs text-slate-500 font-mono block">{{ declaration.document.document_number }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Version Locked</dt>
+                        <dd>
+                            {% if declaration.version %}
+                            <span class="font-medium text-slate-800">Version {{ declaration.version.version_number }}</span>
+                            {% else %}
+                            <span class="text-slate-500">Logical Document Master</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Retention Schedule</dt>
+                        <dd>
+                            <a href="{% url 'documents:retention_schedule_detail' declaration.retention_schedule.pk %}" class="text-primary font-medium hover:underline">
+                                {{ declaration.retention_schedule.code }} — {{ declaration.retention_schedule.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Retention Duration</dt>
+                        <dd class="font-medium text-slate-800">{{ declaration.retention_schedule.retention_summary }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Cutoff Milestone</dt>
+                        <dd>
+                            {% if declaration.cutoff_date %}
+                            <span class="font-semibold text-slate-800">{{ declaration.cutoff_date|date:"Y-m-d" }}</span>
+                            <span class="text-xs text-slate-500 block">Triggered {{ declaration.cutoff_triggered_at|date:"Y-m-d H:i" }}</span>
+                            {% else %}
+                            <span class="badge badge-amber">Awaiting Cutoff Trigger</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Disposition Due Date</dt>
+                        <dd>
+                            {% if declaration.retention_schedule.is_permanent %}
+                            <span class="badge badge-slate">Permanent (No Disposition)</span>
+                            {% elif declaration.disposition_due_date %}
+                            <span class="font-semibold text-slate-800">{{ declaration.disposition_due_date|date:"Y-m-d" }}</span>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Planned Disposition</dt>
+                        <dd>
+                            <span class="badge {{ declaration.retention_schedule.disposition_badge_class }}">
+                                {{ declaration.retention_schedule.get_disposition_action_display }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Declared By</dt>
+                        <dd>
+                            {% if declaration.declared_by %}{{ declaration.declared_by.get_full_name|default:declaration.declared_by.username }}{% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Declaration Date</dt>
+                        <dd>{{ declaration.declaration_date|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+
+                {% if declaration.version_hash_snapshot %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Cryptographic Fingerprint (SHA-256)</h3>
+                    <div class="p-2.5 bg-slate-900 text-green-400 font-mono text-xs rounded break-all select-all">
+                        {{ declaration.version_hash_snapshot }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if declaration.notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Declaration Notes</h3>
+                    <p class="text-slate-600 text-sm whitespace-pre-line">{{ declaration.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Associated Legal Holds Section -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Legal Holds Placed on this Record ({{ active_holds.count }})</h2>
+                <a href="{% url 'documents:legal_hold_create' %}?document={{ declaration.document.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="shield-alert"></i>
+                    <span>Place Hold</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Hold #</th>
+                            <th>Matter Reference</th>
+                            <th>Reason</th>
+                            <th>Placed At</th>
+                            <th>Custodian</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hold in active_holds %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'documents:legal_hold_detail' hold.pk %}" class="font-mono text-primary hover:underline">
+                                    {{ hold.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="font-medium text-slate-900">{{ hold.matter_name }}</span>
+                                <div class="text-xs text-slate-500 font-mono">{{ hold.matter_number }}</div>
+                            </td>
+                            <td>
+                                <span class="badge {{ hold.reason_badge_class }}">{{ hold.get_hold_reason_display }}</span>
+                            </td>
+                            <td>{{ hold.placed_at|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                {% if hold.custodian %}{{ hold.custodian.get_full_name|default:hold.custodian.username }}{% else %}—{% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-red">Active</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-slate-500 py-4 text-sm">
+                                No active legal holds placed on this document.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Destruction Certificates Section -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Destruction & Disposition Certificates ({{ certificates.count }})</h2>
+                <a href="{% url 'documents:destruction_certificate_create' %}?declaration={{ declaration.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>New Certificate</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Certificate #</th>
+                            <th>Disposition Type</th>
+                            <th>Method</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cert in certificates %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'documents:destruction_certificate_detail' cert.pk %}" class="font-mono text-primary hover:underline">
+                                    {{ cert.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="badge {{ cert.disposition_badge_class }}">{{ cert.get_disposition_type_display }}</span>
+                            </td>
+                            <td>{{ cert.get_destruction_method_display }}</td>
+                            <td>
+                                <span class="badge {{ cert.status_badge_class }}">{{ cert.get_status_display }}</span>
+                            </td>
+                            <td>{{ cert.created_at|date:"Y-m-d H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-slate-500 py-4 text-sm">
+                                No destruction certificates generated for this record yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Cards -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">WORM Lock Status</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="lock" class="w-5 h-5 text-green-600"></i>
+                    <span class="font-semibold text-slate-900">Tamper-Proof Immutability</span>
+                </div>
+                <p class="text-xs text-slate-600">
+                    This document is officially declared under WORM policies. Metadata edits and file modifications are disabled on this record version snapshot.
+                </p>
+                {% if declaration.is_vital_record %}
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800 space-y-1">
+                    <span class="font-semibold block">Vital Record Designation</span>
+                    <span>Review Frequency: Every {{ declaration.vital_review_frequency_months }} months</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Schedule Information</h3>
+            </div>
+            <div class="card-body text-sm space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Framework:</span>
+                    <span class="font-medium text-slate-800">{{ declaration.retention_schedule.get_compliance_framework_display }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Mode:</span>
+                    <span class="font-medium text-slate-800">{{ declaration.retention_schedule.get_retention_mode_display }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Citation:</span>
+                    <span class="font-mono text-xs text-slate-700">{% if declaration.retention_schedule.legal_citation %}{{ declaration.retention_schedule.legal_citation }}{% else %}—{% endif %}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
