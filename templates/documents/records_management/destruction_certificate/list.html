@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Destruction Certificates — Records Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Records Management</span>
+            <span>/</span>
+            <span>Destruction Certificates</span>
+        </div>
+        <h1 class="page-title">Destruction & Disposition Certificates</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:disposition_review_board' %}" class="btn btn-outline">
+            <i data-lucide="clipboard-check"></i>
+            <span>Disposition Board</span>
+        </a>
+        <a href="{% url 'documents:destruction_certificate_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Draft Certificate</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label" for="q">Search</label>
+                <input type="text" id="q" name="q" class="form-input" placeholder="Certificate #, document title..." value="{{ query }}">
+            </div>
+            <div>
+                <label class="form-label" for="status">Certificate Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if current_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="disposition_type">Disposition Type</label>
+                <select id="disposition_type" name="disposition_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for code, label in type_choices %}
+                    <option value="{{ code }}" {% if current_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:destruction_certificate_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Certificates Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Certificate Number</th>
+                    <th>Document Snapshot</th>
+                    <th>Schedule Reference</th>
+                    <th>Disposition Type</th>
+                    <th>Method</th>
+                    <th>Hold Verification</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cert in certificates %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:destruction_certificate_detail' cert.pk %}" class="font-mono font-semibold text-primary hover:underline">
+                            {{ cert.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ cert.document_title_snapshot }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ cert.document_number_snapshot }}</div>
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-700">{{ cert.schedule_name_snapshot }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ cert.disposition_badge_class }}">
+                            {{ cert.get_disposition_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ cert.method_badge_class }}">
+                            {{ cert.get_destruction_method_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if cert.legal_hold_verified_clear %}
+                        <span class="badge badge-green flex items-center gap-1 w-max">
+                            <i data-lucide="check" class="w-3 h-3"></i> Clear
+                        </span>
+                        {% else %}
+                        <span class="badge badge-red flex items-center gap-1 w-max">
+                            <i data-lucide="alert-triangle" class="w-3 h-3"></i> Hold Block
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ cert.status_badge_class }}">
+                            {{ cert.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'documents:destruction_certificate_detail' cert.pk %}" class="btn btn-icon" title="View Certificate">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="file-x"></i>
+                            </div>
+                            <div class="empty-state-title">No destruction certificates found</div>
+                            <div class="empty-state-description">Destruction certificates provide permanent legal proof of disposal after retention terms expire.</div>
+                            <a href="{% url 'documents:destruction_certificate_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Draft First Certificate</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} certificates
+        </div>
+        <div class="pagination-controls">
+            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_type %}&disposition_type={{ current_type }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_previous %}disabled{% endif %}">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_type %}&disposition_type={{ current_type }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_next %}disabled{% endif %}">
+                <i data-lucide="chevron-right"></i>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
