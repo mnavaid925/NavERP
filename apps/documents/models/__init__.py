@@ -20,6 +20,10 @@ from apps.documents.models.MetadataIndexing.DocumentMetadataValues import Docume
 from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
 from apps.documents.models.MetadataIndexing.MetadataSchemas import MetadataSchema
 from apps.documents.models.MetadataIndexing.TaxonomyTerms import TaxonomyTerm
+from apps.documents.models.RecordsManagement.DestructionCertificates import DestructionCertificate
+from apps.documents.models.RecordsManagement.DocumentLegalHolds import DocumentLegalHold
+from apps.documents.models.RecordsManagement.RecordDeclarations import RecordDeclaration
+from apps.documents.models.RecordsManagement.RetentionSchedules import RetentionSchedule
 from apps.documents.models.SearchDiscovery.DocumentSavedSearches import DocumentSavedSearch
 from apps.documents.models.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlert
 from apps.documents.models.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLog
@@ -76,4 +80,8 @@ __all__ = [
     "CoauthorSession",
     "DocumentTask",
     "DocumentActivity",
+    "RetentionSchedule",
+    "RecordDeclaration",
+    "DocumentLegalHold",
+    "DestructionCertificate",
 ]
