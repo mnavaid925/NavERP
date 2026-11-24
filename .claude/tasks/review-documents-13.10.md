@@ -56,3 +56,27 @@
   - **File**: `apps/documents/views/AuditReporting/ChainOfCustodyExports.py:203-209`
   - When `document` is None, `audit_trail` is defaulted to empty list even if `start_date` and `end_date` are set.
   - Fix: Filter `DocumentAuditTrail` by date range when document is None.
+
+---
+
+## 2. Explorer Reviewer Pass
+
+- [ ] **[EXP-I1] Missing `avg_approval_hours` Context Key in `document_lifecycle_dashboard` & Hardcoded Velocity KPI**
+  - **File**: `apps/documents/views/AuditReporting/AuditReportingDashboard.py:99-108` & `templates/documents/audit_reporting/lifecycle_dashboard.html:50-52`
+  - Contract Section 3.5 explicitly pins `lifecycle_kpis` context keys as `(avg_approval_hours, bottleneck_stages, high_churn_docs, status_distribution)`. Omitted from view context and hardcoded as `18.4 hrs` in template.
+  - Fix: Calculate or supply `avg_approval_hours` in `lifecycle_kpis` dict and bind `{{ lifecycle_kpis.avg_approval_hours|default:"18.4" }} hrs` in template.
+
+- [ ] **[EXP-I2] Omission of 13.10 Models from `--flush` in `seed_documents.py`**
+  - **File**: `apps/documents/management/commands/seed_documents.py:68-105`
+  - The `--flush` command in seeder deletes 13.1 to 13.9 models but omits 13.10 models (`ChainOfCustodyExport`, `DocumentSecurityAlert`, `AuditReportDefinition`, `DocumentAuditTrail`), leading to orphaned records on flush.
+  - Fix: Add 13.10 models in reverse dependency order to `--flush` routine.
+
+- [ ] **[EXP-M1] Missing `apps/documents/services/__init__.py` Re-exports**
+  - **File**: `apps/documents/services/__init__.py:1`
+  - `apps/documents/services/audit.py` defines `log_document_event` and `run_heuristic_anomaly_scan`, but `__init__.py` does not re-export them.
+  - Fix: Re-export `log_document_event` and `run_heuristic_anomaly_scan` in `services/__init__.py`.
+
+- [ ] **[EXP-M2] Missing Contract Context Key `"passcode_form": None` in `auditor_portal_view`**
+  - **File**: `apps/documents/views/AuditReporting/ChainOfCustodyExports.py:211-218`
+  - Contract Section 3.4 pins `passcode_form` in context. When session is authenticated (`passcode_required=False`), `passcode_form` is missing from context dict.
+  - Fix: Include `"passcode_form": None` in authenticated context dict.
