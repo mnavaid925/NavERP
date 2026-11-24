@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.AuditReporting.DocumentSecurityAlerts import (
     DocumentSecurityAlertFilterForm,
@@ -109,8 +110,8 @@ def security_alert_detail(request, pk):
     return render(request, "documents/audit_reporting/security_alert/detail.html", context)
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def security_alert_triage(request, pk):
     """Process triage update for a security alert incident."""
     alert = get_object_or_404(DocumentSecurityAlert, pk=pk, tenant=request.tenant)
@@ -134,8 +135,8 @@ def security_alert_triage(request, pk):
     return redirect("documents:security_alert_detail", pk=alert.pk)
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def security_alert_scan(request):
     """Run an on-demand heuristic anomaly detection scan over recent audit activity."""
     now = timezone.now()
