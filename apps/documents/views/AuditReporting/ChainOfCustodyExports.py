@@ -185,25 +185,30 @@ def auditor_portal_view(request, token):
             },
         )
 
-    # Update access tracking
-    export_pkg.access_count += 1
-    export_pkg.last_accessed_at = timezone.now()
-    export_pkg.save(update_fields=["access_count", "last_accessed_at"])
+    # Update access tracking & audit logging (throttled per session window)
+    last_logged_key = f"auditor_last_logged_{token}"
+    last_logged_ts = request.session.get(last_logged_key)
+    now_ts = timezone.now().timestamp()
+    if not last_logged_ts or (now_ts - last_logged_ts) > 900:
+        export_pkg.access_count += 1
+        export_pkg.last_accessed_at = timezone.now()
+        export_pkg.save(update_fields=["access_count", "last_accessed_at"])
 
-    # Unbroken chain logging back to DocumentAuditTrail
-    DocumentAuditTrail.objects.create(
-        tenant=export_pkg.tenant,
-        document=export_pkg.document,
-        action_type="auditor_portal_accessed",
-        actor_email_snapshot=export_pkg.auditor_email,
-        ip_address=request.META.get("REMOTE_ADDR"),
-        user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
-        details_json={
-            "export_number": export_pkg.number,
-            "auditor_name": export_pkg.auditor_name,
-            "organization": export_pkg.auditor_organization,
-        },
-    )
+        # Unbroken chain logging back to DocumentAuditTrail
+        DocumentAuditTrail.objects.create(
+            tenant=export_pkg.tenant,
+            document=export_pkg.document,
+            action_type="auditor_portal_accessed",
+            actor_email_snapshot=export_pkg.auditor_email,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
+            details_json={
+                "export_number": export_pkg.number,
+                "auditor_name": export_pkg.auditor_name,
+                "organization": export_pkg.auditor_organization,
+            },
+        )
+        request.session[last_logged_key] = now_ts
 
     doc = export_pkg.document
     versions = doc.versions.select_related("author").order_by("-created_at") if doc and hasattr(doc, "versions") else []
