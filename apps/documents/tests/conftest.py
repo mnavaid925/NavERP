@@ -757,7 +757,6 @@ def document_audit_trail(db, tenant_a, admin_user, document, document_version):
         actor=admin_user,
         actor_email_snapshot="admin@acme.com",
         action_type="viewed",
-        action_category="read",
         document_number_snapshot=document.number,
         document_title_snapshot=document.title,
         is_success=True,
@@ -771,10 +770,10 @@ def audit_report_definition(db, tenant_a, admin_user):
     return AuditReportDefinition.objects.create(
         tenant=tenant_a,
         name="Quarterly Access Compliance Audit",
-        report_type="user_access",
+        report_type="user_activity",
         description="Comprehensive quarterly user access and view report.",
-        query_filters_json={"is_success": True},
-        output_format="pdf",
+        filter_criteria_json={"is_success": True},
+        output_format="table_view",
         status="active",
         is_system_preset=False,
         created_by=admin_user,
@@ -786,20 +785,24 @@ def document_security_alert(db, tenant_a, member_user, document):
     """Fixture providing an open DocumentSecurityAlert in tenant_a."""
     return DocumentSecurityAlert.objects.create(
         tenant=tenant_a,
+        title="Mass Download Anomaly Detected",
         alert_type="mass_download",
         severity="high",
-        status="open",
+        status="investigating",
         target_user=member_user,
-        document=document,
+        target_document=document,
         risk_score=78,
         description="Detected rapid downloads of 25 documents within 5 minutes.",
-        anomaly_signals_json={"download_count_last_hour": 25, "threshold": 10},
+        evidence_json={"download_count_last_hour": 25, "threshold": 10},
     )
 
 
 @pytest.fixture
 def custody_export(db, tenant_a, admin_user, document):
     """Fixture providing an active ChainOfCustodyExport in tenant_a."""
+    from datetime import timedelta
+    from django.utils import timezone
+
     pkg = ChainOfCustodyExport(
         tenant=tenant_a,
         title="Regulatory Compliance Evidence Package",
@@ -809,7 +812,7 @@ def custody_export(db, tenant_a, admin_user, document):
         auditor_name="Dr. Marcus Vance",
         auditor_email="m.vance@fda.gov",
         auditor_organization="US Food and Drug Administration",
-        purpose_of_review="Annual 21 CFR Part 11 Electronic Records Inspection",
+        expires_at=timezone.now() + timedelta(days=30),
         is_portal_active=True,
         created_by=admin_user,
     )
