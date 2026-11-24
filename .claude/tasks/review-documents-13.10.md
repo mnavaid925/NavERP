@@ -80,3 +80,41 @@
   - **File**: `apps/documents/views/AuditReporting/ChainOfCustodyExports.py:211-218`
   - Contract Section 3.4 pins `passcode_form` in context. When session is authenticated (`passcode_required=False`), `passcode_form` is missing from context dict.
   - Fix: Include `"passcode_form": None` in authenticated context dict.
+
+---
+
+## 3. Frontend Reviewer Pass
+
+- [ ] **[FE-I1] Invalid CSS Badge Class `badge-purple` in Detail Templates**
+  - **Files**: `templates/documents/audit_reporting/report_definition/detail.html:24` & `templates/documents/audit_reporting/chain_of_custody/detail.html:124`
+  - `badge-purple` is non-existent in `static/css/theme.css`.
+  - Fix: Replace with `badge-info` (or `badge-slate`).
+
+- [ ] **[FE-I2] Missing Filter & Search Bar in `chain_of_custody/list.html`**
+  - **File**: `templates/documents/audit_reporting/chain_of_custody/list.html:70`
+  - View parses `q` and `framework` and passes `framework_choices`, but template lacks the GET filter bar card.
+  - Fix: Add standard GET filter bar card with `q` search and `framework` select dropdown.
+
+- [ ] **[FE-I3] Incomplete Query Parameter Preservation on Pagination Links**
+  - **Files**:
+    - `templates/documents/audit_reporting/chain_of_custody/list.html:176,186` (drops `q`, `framework`)
+    - `templates/documents/audit_reporting/security_alert/list.html:211,220` (drops `status`, `alert_type`)
+    - `templates/documents/audit_reporting/audit_trail/list.html:220,229` (drops `date_from`, `date_to`, `doc_id`)
+  - Fix: Preserve all active filter parameters in previous/next page links.
+
+- [ ] **[FE-M1] Missing Filter Form Fields in List Templates**
+  - **Files**:
+    - `templates/documents/audit_reporting/audit_trail/list.html:86-119` (omits `date_from`, `date_to` date inputs)
+    - `templates/documents/audit_reporting/report_definition/list.html:73-97` (omits `status` dropdown)
+    - `templates/documents/audit_reporting/security_alert/list.html:76-108` (omits `alert_type` dropdown)
+  - Fix: Add the missing filter fields to each respective filter form layout.
+
+- [ ] **[FE-M2] Empty Strong Tag When `report_def.last_run_at` is None**
+  - **File**: `templates/documents/audit_reporting/report_definition/detail.html:64`
+  - When report has never run, `<strong>{{ report_def.last_run_at|date:"Y-m-d H:i" }}</strong>` renders empty tags.
+  - Fix: Add default: `{{ report_def.last_run_at|date:"Y-m-d H:i"|default:"Never" }}`.
+
+- [ ] **[FE-M3] Use Design System Form Groups in `security_alert/form.html`**
+  - **File**: `templates/documents/audit_reporting/security_alert/form.html:36`
+  - Renders raw `{{ form.as_p }}` rather than explicit `.form-group` markup.
+  - Fix: Replace `form.as_p` with standard `.form-group` fields matching the other sub-module forms.
