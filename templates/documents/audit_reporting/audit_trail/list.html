@@ -130,6 +130,7 @@
         <table class="table">
             <thead>
                 <tr>
+                    <th>Audit ID</th>
                     <th>Timestamp (UTC)</th>
                     <th>Action</th>
                     <th>Target Document</th>
@@ -143,6 +144,11 @@
             <tbody>
                 {% for entry in audit_trails %}
                 <tr>
+                    <td class="text-xs font-mono font-semibold text-slate-700 whitespace-nowrap">
+                        <a href="{% url 'documents:audit_trail_detail' entry.pk %}" class="text-blue-600 hover:underline">
+                            {{ entry.number }}
+                        </a>
+                    </td>
                     <td class="text-xs font-mono text-slate-600 whitespace-nowrap">
                         {{ entry.event_timestamp|date:"Y-m-d H:i:s" }}
                     </td>
@@ -194,7 +200,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8">
+                    <td colspan="9">
                         <div class="empty-state">
                             <div class="empty-icon">
                                 <i data-lucide="clipboard-list"></i>
