@@ -179,3 +179,37 @@
   - **File**: `apps/documents/views/AuditReporting/DocumentAuditTrails.py:96-105`
   - `prev_entry` and `next_entry` fetch all columns instead of `.only("id")`.
   - Fix: Add `.only("id")` to previous/next queries.
+
+---
+
+## 5. QA Smoke Tester Pass
+
+- [ ] **[QA-C1] Evidence Package Number Blank in Manifest & Cryptographic Hash During Creation**
+  - **URL Route**: `documents:custody_export_create`
+  - **File**: `apps/documents/views/AuditReporting/ChainOfCustodyExports.py:74-75` & `apps/documents/models/AuditReporting/ChainOfCustodyExports.py:224-227`
+  - `generate_manifest()` called before `pkg.save()` causes `manifest_json["package_number"] = ""` permanently.
+  - Fix: Allocate `self.number` or call `super().save()` before computing `generate_manifest()`.
+
+- [ ] **[QA-C2] Superficial Integrity Check in Custody Export Detail View**
+  - **URL Route**: `documents:custody_export_detail`
+  - **File**: `apps/documents/views/AuditReporting/ChainOfCustodyExports.py:103-104`
+  - `is_hash_valid` is evaluated as `bool(export_pkg.package_hash)` rather than computing the actual SHA-256 digest over `export_pkg.manifest_json`.
+  - Fix: Recompute SHA-256 digest over `manifest_json` and compare against `package_hash`.
+
+- [ ] **[QA-I1] Missing Audit Record Number Column in Audit Trail List Table**
+  - **URL Route**: `documents:audit_trail_list`
+  - **File**: `templates/documents/audit_reporting/audit_trail/list.html:132-140`
+  - `DocumentAuditTrail` records have tenant numbers (`DAUD-XXXXX`) but the table header and rows omit the audit record number column.
+  - Fix: Add an "Audit ID" column displaying `entry.number`.
+
+- [ ] **[QA-I2] Form Choice Discrepancy on Regulatory Framework**
+  - **URL Route**: `documents:custody_export_create`
+  - **File**: `apps/documents/models/AuditReporting/ChainOfCustodyExports.py:18-26`
+  - Choice key is `soc2_type2`, but users or seeders submitting `soc2` fails choice validation.
+  - Fix: Add `soc2` as alias or ensure documentation and forms strictly align with choice keys.
+
+- [ ] **[QA-M1] Missing `passcode_form: None` Context Key in Authenticated Auditor Portal**
+  - **URL Route**: `documents:auditor_portal_view`
+  - **File**: `apps/documents/views/AuditReporting/ChainOfCustodyExports.py:211-218`
+  - When session is authenticated (`passcode_required=False`), `passcode_form` is missing from context dict.
+  - Fix: Add `"passcode_form": None` to context.
