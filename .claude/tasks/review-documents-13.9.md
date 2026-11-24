@@ -17,8 +17,8 @@
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
 | **Important** | 9 | 0 | 9 | 0 |
-| **Minor** | 4 | 2 | 2 | 0 |
-| **Total** | 18 | 2 | 16 | 0 |
+| **Minor** | 4 | 1 | 3 | 0 |
+| **Total** | 18 | 1 | 17 | 0 |
 
 ---
 
@@ -187,7 +187,7 @@
 - **Issue**: Sub-module 13.10 block was indented under 13.9's Acme tenant loop instead of running for all tenants.
 - **Fix**: Un-indent the 13.10 block to the correct tenant loop level.
 
-### [ ] `M3`: Calendar Month Clamping in Disposition Due Date Calculation
+### [x] `M3`: Calendar Month Clamping in Disposition Due Date Calculation
 - **Found by**: `qa-smoke-tester`
 - **Location**: `apps/documents/models/RecordsManagement/RecordDeclarations.py:116`
 - **Issue**: Clamping to day 28 shortens end-of-month dates (e.g. Dec 31 becomes Dec 28).
