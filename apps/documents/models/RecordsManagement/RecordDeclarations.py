@@ -79,6 +79,7 @@ class RecordDeclaration(TenantNumbered):
         verbose_name = "Record Declaration"
         verbose_name_plural = "Record Declarations"
         indexes = [
+            models.Index(fields=["tenant", "-declaration_date"], name="doc_drcd_tnt_dec_idx"),
             models.Index(fields=["tenant", "record_status"], name="doc_drcd_tnt_sts_idx"),
             models.Index(fields=["tenant", "is_vital_record"], name="doc_drcd_tnt_vtl_idx"),
             models.Index(fields=["tenant", "disposition_due_date"], name="doc_drcd_tnt_due_idx"),
