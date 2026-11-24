@@ -38,6 +38,10 @@ from apps.documents.models.RecordsManagement.RetentionSchedules import Retention
 from apps.documents.models.RecordsManagement.RecordDeclarations import RecordDeclaration
 from apps.documents.models.RecordsManagement.DocumentLegalHolds import DocumentLegalHold
 from apps.documents.models.RecordsManagement.DestructionCertificates import DestructionCertificate
+from apps.documents.models.AuditReporting.DocumentAuditTrails import DocumentAuditTrail
+from apps.documents.models.AuditReporting.AuditReportDefinitions import AuditReportDefinition
+from apps.documents.models.AuditReporting.DocumentSecurityAlerts import DocumentSecurityAlert
+from apps.documents.models.AuditReporting.ChainOfCustodyExports import ChainOfCustodyExport
 from apps.core.models import OrgUnit
 
 
@@ -739,6 +743,80 @@ def destruction_certificate(db, tenant_a, admin_user, record_declaration):
         status="pending_approval",
         legal_hold_verified_clear=True,
     )
+
+
+# --- Sub-module 13.10: Audit Trail & Reporting Fixtures ---
+
+@pytest.fixture
+def document_audit_trail(db, tenant_a, admin_user, document, document_version):
+    """Fixture providing a verified DocumentAuditTrail record in tenant_a."""
+    return DocumentAuditTrail.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        actor=admin_user,
+        actor_email_snapshot="admin@acme.com",
+        action_type="viewed",
+        action_category="read",
+        document_number_snapshot=document.number,
+        document_title_snapshot=document.title,
+        is_success=True,
+        details_json={"action": "viewed_online"},
+    )
+
+
+@pytest.fixture
+def audit_report_definition(db, tenant_a, admin_user):
+    """Fixture providing an active custom AuditReportDefinition in tenant_a."""
+    return AuditReportDefinition.objects.create(
+        tenant=tenant_a,
+        name="Quarterly Access Compliance Audit",
+        report_type="user_access",
+        description="Comprehensive quarterly user access and view report.",
+        query_filters_json={"is_success": True},
+        output_format="pdf",
+        status="active",
+        is_system_preset=False,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def document_security_alert(db, tenant_a, member_user, document):
+    """Fixture providing an open DocumentSecurityAlert in tenant_a."""
+    return DocumentSecurityAlert.objects.create(
+        tenant=tenant_a,
+        alert_type="mass_download",
+        severity="high",
+        status="open",
+        target_user=member_user,
+        document=document,
+        risk_score=78,
+        description="Detected rapid downloads of 25 documents within 5 minutes.",
+        anomaly_signals_json={"download_count_last_hour": 25, "threshold": 10},
+    )
+
+
+@pytest.fixture
+def custody_export(db, tenant_a, admin_user, document):
+    """Fixture providing an active ChainOfCustodyExport in tenant_a."""
+    pkg = ChainOfCustodyExport(
+        tenant=tenant_a,
+        title="Regulatory Compliance Evidence Package",
+        regulatory_framework="fda_21cfr11",
+        scope="single_document",
+        document=document,
+        auditor_name="Dr. Marcus Vance",
+        auditor_email="m.vance@fda.gov",
+        auditor_organization="US Food and Drug Administration",
+        purpose_of_review="Annual 21 CFR Part 11 Electronic Records Inspection",
+        is_portal_active=True,
+        created_by=admin_user,
+    )
+    pkg.set_passcode("AuditPass2026!")
+    pkg.save()
+    return pkg
+
 
 
 
