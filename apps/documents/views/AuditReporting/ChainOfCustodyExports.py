@@ -1,3 +1,5 @@
+import hashlib
+import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -100,7 +102,10 @@ def custody_export_detail(request, pk):
     )
 
     # Recompute check
-    is_hash_valid = bool(export_pkg.package_hash)
+    is_hash_valid = False
+    if export_pkg.manifest_json and export_pkg.package_hash:
+        recomputed = hashlib.sha256(json.dumps(export_pkg.manifest_json, sort_keys=True).encode("utf-8")).hexdigest()
+        is_hash_valid = (recomputed == export_pkg.package_hash)
 
     context = {
         "export_pkg": export_pkg,
