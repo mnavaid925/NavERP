@@ -44,10 +44,21 @@
             <i data-lucide="file-x"></i>
             <span>Initiate Disposition</span>
         </a>
+        {% if not declaration.is_locked and declaration.retention_schedule.retention_mode != 'regulatory_worm' and not declaration.is_under_legal_hold %}
         <a href="{% url 'documents:record_declaration_edit' declaration.pk %}" class="btn btn-primary">
             <i data-lucide="pencil"></i>
             <span>Edit Record</span>
         </a>
+        {% endif %}
+        {% if declaration.retention_schedule.retention_mode != 'regulatory_worm' and not declaration.is_under_legal_hold and declaration.record_status != 'disposed' %}
+        <form method="post" action="{% url 'documents:record_declaration_delete' declaration.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete record declaration {{ declaration.number }}? This action cannot be undone.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 hover:text-red-700">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
