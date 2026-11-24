@@ -3618,6 +3618,17 @@ LIVE_LINKS = {
         "Audit Command Center": "documents:audit_dashboard",
     },
 
+    # 13.11 Workflow Automation & BPM
+    "13.11": {
+        "Business Process Modeling": "documents:process_definition_list",
+        "Document Routing & Distribution": "documents:routing_rule_list",
+        "Conditional Logic & Business Rules": "documents:routing_rule_simulator",
+        "Integration Triggers & Webhooks": "documents:webhook_trigger_list",
+        "Process Performance Analytics": "documents:process_analytics_dashboard",
+        # Extra live leaves:
+        "Process Execution Instances": "documents:process_instance_list",
+    },
+
 
 
 
