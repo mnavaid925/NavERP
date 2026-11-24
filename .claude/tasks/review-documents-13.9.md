@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 9 | 0 | 0 |
+| **Important** | 9 | 8 | 1 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 13 | 5 | 0 |
+| **Total** | 18 | 12 | 6 | 0 |
 
 ---
 
@@ -101,7 +101,7 @@
 
 ## Important Findings (I1 – I9)
 
-### [ ] `I1`: Duplicate Active Record Declarations Permitted on Same Document
+### [x] `I1`: Duplicate Active Record Declarations Permitted on Same Document
 - **Found by**: `qa-smoke-tester`, `security-reviewer`
 - **Location**: `apps/documents/forms/RecordsManagement/RecordDeclarations.py:53`
 - **Issue**: A document already declared as an active record can be declared again under conflicting schedules.
