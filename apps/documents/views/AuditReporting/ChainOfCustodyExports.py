@@ -217,6 +217,7 @@ def auditor_portal_view(request, token):
         "export_pkg": export_pkg,
         "manifest_data": export_pkg.manifest_json,
         "passcode_required": False,
+        "passcode_form": None,
         "document": doc,
         "versions": versions,
         "audit_trail": audit_trail,
