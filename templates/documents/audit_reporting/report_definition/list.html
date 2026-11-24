@@ -43,7 +43,7 @@
             <i data-lucide="shield-check"></i>
         </div>
         <div>
-            <div class="stat-value">{{ system_reports.count }}</div>
+            <div class="stat-value">{{ system_reports|length }}</div>
             <div class="stat-label">System Compliance Presets</div>
         </div>
     </div>
@@ -52,7 +52,7 @@
             <i data-lucide="sliders"></i>
         </div>
         <div>
-            <div class="stat-value">{{ custom_reports.count }}</div>
+            <div class="stat-value">{{ custom_reports|length }}</div>
             <div class="stat-label">Custom Tenant Queries</div>
         </div>
     </div>
@@ -104,7 +104,7 @@
             <h2 class="text-base font-semibold text-slate-800">Pre-Configured Compliance Presets</h2>
             <p class="text-xs text-slate-500 mt-0.5">Standardized compliance queries aligned with ISO 27001, SOC 2, HIPAA, and FDA 21 CFR Part 11</p>
         </div>
-        <span class="badge badge-info">{{ system_reports.count }} Presets</span>
+        <span class="badge badge-info">{{ system_reports|length }} Presets</span>
     </div>
     <div class="table-wrap">
         <table class="table">
@@ -172,7 +172,7 @@
             <h2 class="text-base font-semibold text-slate-800">Custom Tenant Audit Reports</h2>
             <p class="text-xs text-slate-500 mt-0.5">User-created customized filter criteria and forensic investigation profiles</p>
         </div>
-        <span class="badge badge-green">{{ custom_reports.count }} Custom</span>
+        <span class="badge badge-green">{{ custom_reports|length }} Custom</span>
     </div>
     <div class="table-wrap">
         <table class="table">
