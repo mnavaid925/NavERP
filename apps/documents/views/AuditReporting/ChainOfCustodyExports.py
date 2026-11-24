@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.AuditReporting.ChainOfCustodyExports import (
     AuditorPortalPasscodeForm,
@@ -127,8 +128,8 @@ def custody_export_certificate(request, pk):
     return render(request, "documents/audit_reporting/chain_of_custody/certificate.html", context)
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def custody_export_revoke(request, pk):
     """Instantly terminate and revoke an auditor access pass."""
     export_pkg = get_object_or_404(ChainOfCustodyExport, pk=pk, tenant=request.tenant)
