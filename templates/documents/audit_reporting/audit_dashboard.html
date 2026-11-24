@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Audit & Compliance Command Center — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Audit & Compliance</span>
+        </div>
+        <h1 class="page-title">Audit Trail &amp; Compliance Command Center</h1>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'documents:audit_trail_verify_chain' %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Verify SHA-256 cryptographic chain">
+                <i data-lucide="shield-check"></i>
+                <span>Verify Chain</span>
+            </button>
+        </form>
+        <form method="post" action="{% url 'documents:security_alert_scan' %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Run UBA Anomaly Detection">
+                <i data-lucide="scan"></i>
+                <span>Anomaly Scan</span>
+            </button>
+        </form>
+        <a href="{% url 'documents:document_lifecycle_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="line-chart"></i>
+            <span>Lifecycle Metrics</span>
+        </a>
+        <a href="{% url 'documents:audit_trail_list' %}" class="btn btn-primary">
+            <i data-lucide="list"></i>
+            <span>View All Logs</span>
+        </a>
+    </div>
+</div>
+
+<!-- Primary Real-Time Security & Integrity Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ stats.total_events_24h }}</div>
+            <div class="stat-label">Events (Last 24 Hours)</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="download"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ stats.downloads_24h }}</div>
+            <div class="stat-label">Downloads (24h)</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if stats.security_threats > 0 %}red{% else %}slate{% endif %}">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ stats.security_threats }}</div>
+            <div class="stat-label">Open UBA Threat Incidents</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if stats.chain_status == 'intact' %}green{% else %}red{% endif %}">
+            <i data-lucide="{% if stats.chain_status == 'intact' %}check-circle{% else %}alert-triangle{% endif %}"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">
+                {% if stats.chain_status == 'intact' %}
+                <span class="badge badge-green">Chain Intact (100%)</span>
+                {% else %}
+                <span class="badge badge-red">Check Needed</span>
+                {% endif %}
+            </div>
+            <div class="stat-label">SHA-256 Ledger Status</div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Navigation Hub -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <a href="{% url 'documents:audit_trail_list' %}" class="card hover:shadow-md transition p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+            <i data-lucide="list-checks" class="w-5 h-5"></i>
+        </div>
+        <div>
+            <div class="font-semibold text-sm text-slate-800">Immutable Audit Trail</div>
+            <div class="text-xs text-slate-500">Append-only event stream</div>
+        </div>
+    </a>
+    <a href="{% url 'documents:audit_report_list' %}" class="card hover:shadow-md transition p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+            <i data-lucide="file-text" class="w-5 h-5"></i>
+        </div>
+        <div>
+            <div class="font-semibold text-sm text-slate-800">Compliance Reports</div>
+            <div class="text-xs text-slate-500">Presets & custom queries</div>
+        </div>
+    </a>
+    <a href="{% url 'documents:security_alert_list' %}" class="card hover:shadow-md transition p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <i data-lucide="shield-alert" class="w-5 h-5"></i>
+        </div>
+        <div>
+            <div class="font-semibold text-sm text-slate-800">UBA Threat Incidents</div>
+            <div class="text-xs text-slate-500">Behavioral anomaly feed</div>
+        </div>
+    </a>
+    <a href="{% url 'documents:custody_export_list' %}" class="card hover:shadow-md transition p-4 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-green-100 text-green-700 flex items-center justify-center shrink-0">
+            <i data-lucide="award" class="w-5 h-5"></i>
+        </div>
+        <div>
+            <div class="font-semibold text-sm text-slate-800">Chain of Custody</div>
+            <div class="text-xs text-slate-500">Auditor passes & packages</div>
+        </div>
+    </a>
+</div>
+
+<!-- Main Activity & Threats Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Live Activity Feed -->
+    <div class="lg:col-span-2">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-800">Recent Immutable Activity Stream</h2>
+                    <p class="text-xs text-slate-500">Live append-only document lifecycle transactions</p>
+                </div>
+                <a href="{% url 'documents:audit_trail_list' %}" class="text-xs text-blue-600 hover:underline font-medium">View Full Ledger &rarr;</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Time (UTC)</th>
+                            <th>Action</th>
+                            <th>Target Document</th>
+                            <th>Actor</th>
+                            <th>Result</th>
+                            <th class="text-right">Inspect</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in recent_audit_logs %}
+                        <tr>
+                            <td class="text-xs font-mono text-slate-600 whitespace-nowrap">
+                                {{ log.event_timestamp|date:"m-d H:i:s" }}
+                            </td>
+                            <td>
+                                <span class="badge {{ log.get_action_type_badge }} text-xs">
+                                    {{ log.get_action_type_display }}
+                                </span>
+                            </td>
+                            <td class="text-xs">
+                                {% if log.document %}
+                                <a href="{% url 'documents:document_detail' log.document.pk %}" class="text-blue-600 hover:underline font-medium">
+                                    {{ log.document_title_snapshot|default:log.document.title|truncatechars:28 }}
+                                </a>
+                                {% else %}
+                                <span class="text-slate-500 italic">{{ log.document_title_snapshot|default:"General" }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs">
+                                <span class="font-medium text-slate-800">{{ log.actor.get_full_name|default:log.actor_email_snapshot|default:"System" }}</span>
+                            </td>
+                            <td>
+                                <span class="badge {{ log.get_result_badge }} text-xs">
+                                    {% if log.is_success %}OK{% else %}Deny{% endif %}
+                                </span>
+                            </td>
+                            <td class="table-actions text-right">
+                                <a href="{% url 'documents:audit_trail_detail' log.pk %}" class="btn btn-icon btn-outline btn-sm" title="Inspect">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-6 text-slate-400 text-xs">No audit events recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Active Security Alerts & Auditor Passes -->
+    <div class="space-y-6">
+        <!-- Open Security Alerts -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Behavioral Security Alerts</h2>
+                <a href="{% url 'documents:security_alert_list' %}" class="text-xs text-blue-600 hover:underline">All &rarr;</a>
+            </div>
+            <div class="card-body p-0 divide-y divide-slate-100">
+                {% for alert in recent_alerts %}
+                <div class="p-3 hover:bg-slate-50 transition">
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                        <span class="badge {{ alert.get_severity_badge }} text-xs">
+                            {{ alert.get_severity_display }}
+                        </span>
+                        <span class="text-xs font-mono text-slate-500 font-bold">Risk: {{ alert.risk_score }}/100</span>
+                    </div>
+                    <div class="font-medium text-xs text-slate-900">
+                        <a href="{% url 'documents:security_alert_detail' alert.pk %}" class="hover:underline">
+                            {{ alert.title|truncatechars:45 }}
+                        </a>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-0.5 flex justify-between">
+                        <span>{{ alert.target_user.get_full_name|default:alert.target_user.email|default:"User" }}</span>
+                        <span>{{ alert.detected_at|date:"m-d H:i" }}</span>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-4 text-center text-xs text-slate-400">
+                    <i data-lucide="shield-check" class="w-6 h-6 text-green-500 mx-auto mb-1"></i>
+                    No active threat incidents detected.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Active Auditor Passes -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Live Auditor Passes</h2>
+                <a href="{% url 'documents:custody_export_list' %}" class="text-xs text-blue-600 hover:underline">All &rarr;</a>
+            </div>
+            <div class="card-body p-0 divide-y divide-slate-100">
+                {% for pass in active_custody_passes %}
+                <div class="p-3 hover:bg-slate-50 transition">
+                    <div class="flex items-center justify-between text-xs mb-1">
+                        <span class="font-semibold text-slate-800">{{ pass.auditor_name }}</span>
+                        <span class="badge badge-green text-xs">Live</span>
+                    </div>
+                    <div class="text-xs text-slate-600 font-medium truncate">{{ pass.title }}</div>
+                    <div class="text-xs text-slate-400 mt-1 flex justify-between">
+                        <span>{{ pass.auditor_organization|default:"Independent" }}</span>
+                        <span>Exp: {{ pass.expires_at|date:"m-d" }}</span>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-4 text-center text-xs text-slate-400">
+                    No external auditor passes currently active.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
