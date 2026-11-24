@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Audit Record {{ audit_entry.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_trail_list' %}">Audit Trail</a>
+            <span>/</span>
+            <span>{{ audit_entry.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Audit Record: {{ audit_entry.number }}</h1>
+            <span class="badge {{ audit_entry.get_action_type_badge }} text-sm">
+                {{ audit_entry.get_action_type_display }}
+            </span>
+            <span class="badge {{ audit_entry.get_result_badge }} text-sm">
+                {% if audit_entry.is_success %}Success{% else %}Failed / Blocked{% endif %}
+            </span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:audit_trail_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Trail</span>
+        </a>
+        {% if prev_entry %}
+        <a href="{% url 'documents:audit_trail_detail' prev_entry.pk %}" class="btn btn-outline" title="Previous Audit Record">
+            <i data-lucide="chevron-left"></i>
+            <span>Prev</span>
+        </a>
+        {% endif %}
+        {% if next_entry %}
+        <a href="{% url 'documents:audit_trail_detail' next_entry.pk %}" class="btn btn-outline" title="Next Audit Record">
+            <span>Next</span>
+            <i data-lucide="chevron-right"></i>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Event Details & Metadata -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Main Event Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Event Overview & Snapshots</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Audit Entry #</dt>
+                        <dd class="font-mono font-semibold">{{ audit_entry.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Event Timestamp (UTC)</dt>
+                        <dd class="font-mono text-sm">{{ audit_entry.event_timestamp|date:"Y-m-d H:i:s T" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Action Type</dt>
+                        <dd>
+                            <span class="badge {{ audit_entry.get_action_type_badge }}">
+                                {{ audit_entry.get_action_type_display }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Outcome Status</dt>
+                        <dd>
+                            <span class="badge {{ audit_entry.get_result_badge }}">
+                                {% if audit_entry.is_success %}Success{% else %}Failed / Blocked{% endif %}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            {% if audit_entry.document %}
+                            <a href="{% url 'documents:document_detail' audit_entry.document.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ audit_entry.document_title_snapshot|default:audit_entry.document.title }}
+                            </a>
+                            <div class="text-xs text-slate-500 font-mono">ID #{{ audit_entry.document.pk }} | {{ audit_entry.document_number_snapshot|default:audit_entry.document.number }}</div>
+                            {% else %}
+                            <span class="text-slate-600">{{ audit_entry.document_title_snapshot|default:"None / Tenant Action" }}</span>
+                            {% if audit_entry.document_number_snapshot %}
+                            <div class="text-xs text-slate-400 font-mono">{{ audit_entry.document_number_snapshot }}</div>
+                            {% endif %}
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Version Reference</dt>
+                        <dd>
+                            {% if audit_entry.version %}
+                            <span class="badge badge-info font-mono">v{{ audit_entry.version.version_number }}</span>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Acting User / Actor</dt>
+                        <dd>
+                            <div class="font-medium text-slate-800">{{ audit_entry.actor.get_full_name|default:audit_entry.actor_email_snapshot|default:"System Automation" }}</div>
+                            <div class="text-xs text-slate-500">{{ audit_entry.actor_email_snapshot|default:"System Internal" }}</div>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Actor User ID</dt>
+                        <dd class="font-mono text-sm">{{ audit_entry.actor.pk|default:"N/A" }}</dd>
+                    </div>
+                    {% if audit_entry.failure_reason %}
+                    <div class="detail-item sm:col-span-2">
+                        <dt class="text-red-600 font-semibold">Security / Failure Reason</dt>
+                        <dd class="text-red-700 font-medium bg-red-50 p-2 rounded border border-red-200">
+                            {{ audit_entry.failure_reason }}
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+
+        <!-- Environmental & Client Headers -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Environmental & Network Headers</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Client IP Address</dt>
+                        <dd class="font-mono text-sm">{{ audit_entry.ip_address|default:"Not recorded" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Session Identifier</dt>
+                        <dd class="font-mono text-xs text-slate-600">{{ audit_entry.session_id|default:"Stateless / API" }}</dd>
+                    </div>
+                    <div class="detail-item sm:col-span-2">
+                        <dt>Browser User Agent</dt>
+                        <dd class="text-xs font-mono bg-slate-50 p-2 rounded text-slate-700 break-all border border-slate-100">
+                            {{ audit_entry.user_agent|default:"Standard HTTP Client" }}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Structured Event Details & Parameters -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Structured Payload & Change Diffs</h2>
+            </div>
+            <div class="card-body">
+                {% if audit_entry.details_json %}
+                <pre class="bg-slate-900 text-slate-100 p-4 rounded-lg text-xs font-mono overflow-x-auto leading-relaxed">{{ audit_entry.details_json|pprint }}</pre>
+                {% else %}
+                <p class="text-slate-400 text-sm italic">No supplementary parameters recorded for this event.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Cryptographic Verification Card -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Cryptographic Seal</h2>
+                {% if chain_valid %}
+                <span class="badge badge-green flex items-center gap-1">
+                    <i data-lucide="check-circle" class="w-3 h-3"></i>
+                    <span>Verified</span>
+                </span>
+                {% else %}
+                <span class="badge badge-red flex items-center gap-1">
+                    <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+                    <span>Hash Mismatch</span>
+                </span>
+                {% endif %}
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-3 rounded-lg {% if chain_valid %}bg-green-50 border border-green-200 text-green-800{% else %}bg-red-50 border border-red-200 text-red-800{% endif %} text-xs">
+                    {% if chain_valid %}
+                    <strong>Cryptographic Hash Intact:</strong> This record's SHA-256 seal matches its stored payload and points to its predecessor in the tenant hash chain.
+                    {% else %}
+                    <strong>Tamper Warning:</strong> Recomputed SHA-256 hash does not match stored chain_hash! Data alteration detected.
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Previous Chain Hash</label>
+                    <div class="bg-slate-50 p-2 rounded text-xs font-mono text-slate-600 break-all border border-slate-200">
+                        {{ audit_entry.prev_hash|default:"GENESIS_BLOCK" }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">Current Entry Hash</label>
+                    <div class="bg-slate-50 p-2 rounded text-xs font-mono font-semibold text-slate-800 break-all border border-slate-200">
+                        {{ audit_entry.chain_hash }}
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-3 text-xs text-slate-500 space-y-1">
+                    <div><strong>Algorithm:</strong> SHA-256 (NIST FIPS 180-4)</div>
+                    <div><strong>Payload:</strong> prev_hash + tenant + action + ts + actor + doc + details</div>
+                    <div><strong>Storage:</strong> Append-only immutable write-once</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compliance & Regulatory Alignment Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Compliance Verification</h2>
+            </div>
+            <div class="card-body text-xs text-slate-600 space-y-3">
+                <div class="flex items-start gap-2">
+                    <i data-lucide="check" class="w-4 h-4 text-green-600 mt-0.5 shrink-0"></i>
+                    <span><strong>FDA 21 CFR Part 11:</strong> Computer-generated, time-stamped audit trails recording the date, time, operator, and action.</span>
+                </div>
+                <div class="flex items-start gap-2">
+                    <i data-lucide="check" class="w-4 h-4 text-green-600 mt-0.5 shrink-0"></i>
+                    <span><strong>SOC 2 Type II:</strong> Immutable record keeping demonstrating non-repudiation of all privileged document operations.</span>
+                </div>
+                <div class="flex items-start gap-2">
+                    <i data-lucide="check" class="w-4 h-4 text-green-600 mt-0.5 shrink-0"></i>
+                    <span><strong>ISO/IEC 27001 §A.12.4:</strong> Logging and monitoring controls preventing unauthorized alteration or deletion.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
