@@ -30,7 +30,7 @@
 <!-- Filters Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div>
                 <label class="form-label" for="q">Search</label>
                 <input type="text" id="q" name="q" class="form-input" placeholder="Code, name, citation..." value="{{ query }}">
@@ -51,6 +51,14 @@
                     {% for code, label in retention_mode_choices %}
                     <option value="{{ code }}" {% if current_mode == code %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status">Status</label>
+                <select id="status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="active" {% if current_status == "active" %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if current_status == "inactive" %}selected{% endif %}>Inactive</option>
                 </select>
             </div>
             <div>
@@ -171,13 +179,13 @@
             Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} retention schedules
         </div>
         <div class="pagination-controls">
-            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_framework %}&compliance_framework={{ current_framework }}{% endif %}{% if current_mode %}&retention_mode={{ current_mode }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_previous %}disabled{% endif %}">
+            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_framework %}&compliance_framework={{ current_framework }}{% endif %}{% if current_mode %}&retention_mode={{ current_mode }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_previous %}disabled{% endif %}">
                 <i data-lucide="chevron-left"></i>
             </a>
             <span class="pagination-current">
                 Page {{ page_obj.number }} of {{ paginator.num_pages }}
             </span>
-            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_framework %}&compliance_framework={{ current_framework }}{% endif %}{% if current_mode %}&retention_mode={{ current_mode }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_next %}disabled{% endif %}">
+            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_framework %}&compliance_framework={{ current_framework }}{% endif %}{% if current_mode %}&retention_mode={{ current_mode }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_next %}disabled{% endif %}">
                 <i data-lucide="chevron-right"></i>
             </a>
         </div>
