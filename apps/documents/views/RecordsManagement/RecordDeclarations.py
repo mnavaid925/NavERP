@@ -187,9 +187,16 @@ def record_declaration_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def record_declaration_trigger_cutoff(request, pk):
     declaration = documents_object(request, RecordDeclaration, pk)
+    if declaration.record_status not in ["active"]:
+        messages.error(
+            request,
+            f"Cannot trigger cutoff: Record {declaration.number} is in '{declaration.get_record_status_display()}' status.",
+        )
+        return redirect("documents:record_declaration_detail", pk=declaration.pk)
     declaration.trigger_cutoff()
     write_audit_log(request.user, declaration, "cutoff", tenant=request.tenant)
     messages.success(request, f"Cutoff milestone triggered for record {declaration.number}. Retention clock started.")
