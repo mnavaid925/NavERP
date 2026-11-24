@@ -158,6 +158,12 @@ def document_edit(request, pk):
 @tenant_admin_required
 def document_delete(request, pk):
     document = documents_object(request, Document, pk)
+    if document.legal_holds.filter(is_active=True).exists():
+        messages.error(request, "Cannot delete document: An active legal hold is in place.")
+        return redirect("documents:document_detail", pk=document.pk)
+    if document.record_declarations.filter(is_locked=True).exists():
+        messages.error(request, "Cannot delete document: It is an immutable official record.")
+        return redirect("documents:document_detail", pk=document.pk)
     title = document.title
     write_audit_log(request.user, document, "delete", tenant=request.tenant)
     document.delete()
