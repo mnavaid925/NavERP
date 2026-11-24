@@ -1,13 +1,14 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.RecordsManagement.RecordDeclarations import RecordDeclarationForm
+from apps.documents.models.RecordsManagement.DocumentLegalHolds import DocumentLegalHold
 from apps.documents.models.RecordsManagement.RecordDeclarations import RecordDeclaration
 from apps.documents.models.RecordsManagement.RetentionSchedules import RetentionSchedule
 from apps.documents.models.VersionControl.Documents import Document
@@ -19,6 +20,13 @@ def record_declaration_list(request):
     qs = documents_scope(RecordDeclaration.objects.all(), request).select_related(
         "document", "version", "retention_schedule", "declared_by"
     )
+
+    hold_subquery = DocumentLegalHold.objects.filter(
+        tenant=request.tenant,
+        document=OuterRef("document_id"),
+        is_active=True,
+    )
+    qs = qs.annotate(has_active_hold=Exists(hold_subquery))
 
     current_status = request.GET.get("status", "").strip()
     if current_status:
