@@ -1,4 +1,7 @@
-from apps.documents.forms.AuditReporting.AuditReportDefinitions import AuditReportDefinitionForm
+from apps.documents.forms.AuditReporting.AuditReportDefinitions import (
+    AuditReportDefinitionForm,
+    AuditReportRunForm,
+)
 from apps.documents.forms.AuditReporting.ChainOfCustodyExports import (
     AuditorPortalPasscodeForm,
     ChainOfCustodyExportForm,
@@ -12,6 +15,7 @@ from apps.documents.forms.AuditReporting.DocumentSecurityAlerts import (
 __all__ = [
     "DocumentAuditTrailFilterForm",
     "AuditReportDefinitionForm",
+    "AuditReportRunForm",
     "DocumentSecurityAlertTriageForm",
     "DocumentSecurityAlertFilterForm",
     "ChainOfCustodyExportForm",
