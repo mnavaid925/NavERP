@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.models import OrgUnit
 from apps.core.utils import write_audit_log
 from apps.documents.forms.RecordsManagement.RetentionSchedules import RetentionScheduleForm
@@ -81,6 +82,7 @@ def retention_schedule_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def retention_schedule_create(request):
     if request.method == "POST":
         form = RetentionScheduleForm(request.POST, tenant=request.tenant)
@@ -103,6 +105,7 @@ def retention_schedule_create(request):
 
 
 @login_required
+@tenant_admin_required
 def retention_schedule_edit(request, pk):
     schedule = documents_object(request, RetentionSchedule, pk)
     if request.method == "POST":
@@ -124,6 +127,7 @@ def retention_schedule_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def retention_schedule_delete(request, pk):
     schedule = documents_object(request, RetentionSchedule, pk)
