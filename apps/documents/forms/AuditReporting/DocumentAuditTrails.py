@@ -37,3 +37,12 @@ class DocumentAuditTrailFilterForm(forms.Form):
         required=False,
         widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
     )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        date_from = cleaned_data.get("date_from")
+        date_to = cleaned_data.get("date_to")
+        if date_from and date_to and date_from > date_to:
+            self.add_error("date_to", "Date to must be on or after date from.")
+        return cleaned_data
+
