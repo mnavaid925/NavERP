@@ -3606,6 +3606,17 @@ LIVE_LINKS = {
         "Disposition Review Board": "documents:disposition_review_board",
         "Vital Records Register": "documents:vital_records_list",
     },
+    # 13.10 Audit Trail & Reporting
+    "13.10": {
+        "Immutable Activity Logs": "documents:audit_trail_list",
+        "Audit Report Generation": "documents:audit_report_list",
+        "User Behavior Analytics": "documents:security_alert_list",
+        "Document Lifecycle Reporting": "documents:document_lifecycle_dashboard",
+        "Regulatory Audit Support": "documents:custody_export_list",
+        # Extra live leaves:
+        "Chain of Custody Packages": "documents:custody_export_list",
+        "Audit Command Center": "documents:audit_dashboard",
+    },
 
 
 
