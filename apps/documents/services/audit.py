@@ -72,12 +72,19 @@ def run_heuristic_anomaly_scan(tenant, hours=24):
         .filter(cnt__gte=10)
     )
 
+    existing_download_alerts = set(
+        DocumentSecurityAlert.objects.filter(
+            tenant=tenant,
+            alert_type="mass_download",
+            detected_at__gte=since,
+            target_user_id__isnull=False,
+        ).values_list("target_user_id", flat=True)
+    )
+
     for item in downloads:
         actor_id = item["actor"]
         cnt = item["cnt"]
-        if not DocumentSecurityAlert.objects.filter(
-            tenant=tenant, target_user_id=actor_id, alert_type="mass_download", detected_at__gte=since
-        ).exists():
+        if actor_id not in existing_download_alerts:
             DocumentSecurityAlert.objects.create(
                 tenant=tenant,
                 alert_type="mass_download",
@@ -89,6 +96,7 @@ def run_heuristic_anomaly_scan(tenant, hours=24):
                 event_count=cnt,
                 status="new",
             )
+            existing_download_alerts.add(actor_id)
             created_count += 1
 
     # 2. Permission denials
@@ -104,12 +112,19 @@ def run_heuristic_anomaly_scan(tenant, hours=24):
         .filter(cnt__gte=5)
     )
 
+    existing_denial_alerts = set(
+        DocumentSecurityAlert.objects.filter(
+            tenant=tenant,
+            alert_type="excessive_denials",
+            detected_at__gte=since,
+            target_user_id__isnull=False,
+        ).values_list("target_user_id", flat=True)
+    )
+
     for item in denials:
         actor_id = item["actor"]
         cnt = item["cnt"]
-        if not DocumentSecurityAlert.objects.filter(
-            tenant=tenant, target_user_id=actor_id, alert_type="excessive_denials", detected_at__gte=since
-        ).exists():
+        if actor_id not in existing_denial_alerts:
             DocumentSecurityAlert.objects.create(
                 tenant=tenant,
                 alert_type="excessive_denials",
@@ -121,6 +136,7 @@ def run_heuristic_anomaly_scan(tenant, hours=24):
                 event_count=cnt,
                 status="new",
             )
+            existing_denial_alerts.add(actor_id)
             created_count += 1
 
     return created_count
