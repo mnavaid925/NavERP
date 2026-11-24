@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificate of Authenticity — {{ export_pkg.number }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen py-8 text-slate-900 font-serif">
+    <div class="max-w-4xl mx-auto mb-4 px-4 flex justify-between items-center no-print">
+        <a href="{% url 'documents:custody_export_detail' export_pkg.pk %}" class="text-sm font-sans text-blue-600 hover:underline">&larr; Return to Evidence Package</a>
+        <button onclick="window.print()" class="px-4 py-2 bg-slate-900 text-white rounded font-sans text-sm font-semibold hover:bg-slate-800 shadow">
+            Print Certificate
+        </button>
+    </div>
+
+    <!-- Certificate Container -->
+    <div class="max-w-4xl mx-auto bg-white p-12 shadow-xl border-8 border-double border-slate-700 relative">
+        <!-- Certificate Header -->
+        <div class="text-center border-b-2 border-slate-300 pb-8 mb-8">
+            <div class="text-xs font-sans uppercase tracking-widest text-slate-500 font-bold mb-1">
+                {{ tenant.name|default:"Enterprise Document Management System" }}
+            </div>
+            <h1 class="text-3xl font-extrabold tracking-tight text-slate-900 uppercase">
+                Certificate of Authenticity &amp; Chain of Custody
+            </h1>
+            <p class="text-sm italic text-slate-600 mt-2">
+                Certified Legal Evidence &bull; Cryptographic Hash Verification &bull; {{ export_pkg.get_regulatory_framework_display }}
+            </p>
+        </div>
+
+        <!-- Attestation Statement -->
+        <div class="text-sm leading-relaxed text-slate-800 mb-8 space-y-4">
+            <p>
+                This certifies that the digital record detailed herein has been maintained in an immutable, append-only electronic document management repository in strict adherence to <strong>{{ export_pkg.get_regulatory_framework_display }}</strong>, FDA 21 CFR Part 11, SOC 2 Type II, and ISO/IEC 27001 data integrity standards.
+            </p>
+            <p>
+                All revisions, approval sign-offs, and environmental interaction logs have been cryptographically linked via sequential SHA-256 chain hashing to guarantee non-repudiation and forensic mathematical integrity.
+            </p>
+        </div>
+
+        <!-- Certified Record Details Grid -->
+        <div class="border border-slate-300 rounded p-6 bg-slate-50 mb-8 text-xs font-sans space-y-3">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <span class="text-slate-500 uppercase font-semibold">Evidence Package ID:</span>
+                    <div class="font-mono font-bold text-sm text-slate-900">{{ export_pkg.number }}</div>
+                </div>
+                <div>
+                    <span class="text-slate-500 uppercase font-semibold">Certification Date &amp; Time:</span>
+                    <div class="font-mono text-sm text-slate-900">{{ export_pkg.sealed_at|date:"Y-m-d H:i:s T" }}</div>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-200 pt-3">
+                <span class="text-slate-500 uppercase font-semibold">Subject Matter / Document Title:</span>
+                <div class="font-serif text-base font-bold text-slate-900">
+                    {{ export_pkg.document.title|default:export_pkg.title }}
+                </div>
+                {% if export_pkg.document %}
+                <div class="text-xs text-slate-600 font-mono mt-0.5">
+                    Logical Document Reference: {{ export_pkg.document.number }} &bull; Current Status: {{ export_pkg.document.get_status_display }}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="border-t border-slate-200 pt-3 grid grid-cols-2 gap-4">
+                <div>
+                    <span class="text-slate-500 uppercase font-semibold">Accredited Auditor:</span>
+                    <div class="font-semibold text-slate-900">{{ export_pkg.auditor_name }}</div>
+                    <div class="text-slate-500">{{ export_pkg.auditor_organization|default:export_pkg.auditor_email }}</div>
+                </div>
+                <div>
+                    <span class="text-slate-500 uppercase font-semibold">Authorized Custodian:</span>
+                    <div class="font-semibold text-slate-900">{{ export_pkg.created_by.get_full_name|default:export_pkg.created_by.email }}</div>
+                    <div class="text-slate-500">System Records Officer</div>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-200 pt-3">
+                <span class="text-slate-500 uppercase font-semibold">Master Package Cryptographic Seal (SHA-256):</span>
+                <div class="font-mono font-bold text-xs bg-white p-2 rounded border border-slate-300 break-all text-slate-800 mt-1">
+                    {{ export_pkg.package_hash }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Signatures & Seal Section -->
+        <div class="grid grid-cols-2 gap-12 pt-8 border-t-2 border-slate-300 mt-12 text-center text-xs font-sans">
+            <div>
+                <div class="h-16 flex items-center justify-center italic text-slate-400 font-serif text-base">
+                    [Digitally Sealed &bull; Verified]
+                </div>
+                <div class="border-t border-slate-400 pt-2 font-semibold text-slate-800">
+                    {{ export_pkg.created_by.get_full_name|default:export_pkg.created_by.email }}
+                </div>
+                <div class="text-slate-500">Authorized Records Officer</div>
+            </div>
+            <div>
+                <div class="h-16 flex items-center justify-center font-mono text-xs text-slate-500">
+                    TOKEN: {{ export_pkg.access_token|slice:":16" }}…
+                </div>
+                <div class="border-t border-slate-400 pt-2 font-semibold text-slate-800">
+                    Cryptographic Assurance Engine
+                </div>
+                <div class="text-slate-500">NavERP Document Subsystem 13.10</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
