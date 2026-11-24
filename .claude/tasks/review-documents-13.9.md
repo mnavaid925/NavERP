@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 5 | 4 | 0 |
+| **Important** | 9 | 4 | 5 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 9 | 9 | 0 |
+| **Total** | 18 | 8 | 10 | 0 |
 
 ---
 
@@ -129,7 +129,7 @@
 - **Issue**: If `self.record_declaration` is None, `verify_legal_holds()` unconditionally returns `False`, blocking certificate operations even when no legal hold exists.
 - **Fix**: If `self.record_declaration` is None, return `True` (or check `self.document` if available).
 
-### [ ] `I5`: Disallowed CSS Class `stat-icon red` and Duplicate Query Count on Disposition Review Board
+### [x] `I5`: Disallowed CSS Class `stat-icon red` and Duplicate Query Count on Disposition Review Board
 - **Found by**: `frontend-reviewer`, `performance-reviewer`
 - **Location**:
   - `templates/documents/records_management/disposition_review/board.html:36`
