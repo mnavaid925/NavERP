@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 3 | 6 | 0 |
+| **Important** | 9 | 2 | 7 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 7 | 11 | 0 |
+| **Total** | 18 | 6 | 12 | 0 |
 
 ---
 
@@ -147,7 +147,7 @@
   - Destruction certificate list lacks a Sanitization Method dropdown and pagination omits `&destruction_method={{ current_method }}`.
 - **Fix**: Add the missing filter dropdowns and ensure pagination preserves all query parameters.
 
-### [ ] `I7`: Add Status-Conditional Delete Forms to Detail Templates
+### [x] `I7`: Add Status-Conditional Delete Forms to Detail Templates
 - **Found by**: `frontend-reviewer`
 - **Location**:
   - `templates/documents/records_management/retention_schedule/detail.html`
