@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 4 | 5 | 0 |
+| **Important** | 9 | 3 | 6 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 8 | 10 | 0 |
+| **Total** | 18 | 7 | 11 | 0 |
 
 ---
 
@@ -137,7 +137,7 @@
 - **Issue**: Theme only permits `blue|green|orange|purple|slate` for `.stat-icon` (L33 prohibits `red`). Also, evaluating `.count` inside the template triggers multiple redundant SQL queries.
 - **Fix**: Replace `stat-icon red` with `stat-icon orange`, and calculate counts in view context (`due_count`, `held_count`, `pending_count`).
 
-### [ ] `I6`: Missing Filter Dropdowns and Pagination Preservation in Templates
+### [x] `I6`: Missing Filter Dropdowns and Pagination Preservation in Templates
 - **Found by**: `qa-smoke-tester`
 - **Location**:
   - `templates/documents/records_management/retention_schedule/list.html`
