@@ -17,7 +17,10 @@ from apps.documents.forms.ApprovalWorkflow.DocumentSignatures import (
     DocumentSignatureForm,
     SignatureVerificationForm,
 )
-from apps.documents.forms.AuditReporting.AuditReportDefinitions import AuditReportDefinitionForm
+from apps.documents.forms.AuditReporting.AuditReportDefinitions import (
+    AuditReportDefinitionForm,
+    AuditReportRunForm,
+)
 from apps.documents.forms.AuditReporting.ChainOfCustodyExports import (
     AuditorPortalPasscodeForm,
     ChainOfCustodyExportForm,
@@ -131,6 +134,7 @@ __all__ = [
     "DestructionCertificateForm",
     "DocumentAuditTrailFilterForm",
     "AuditReportDefinitionForm",
+    "AuditReportRunForm",
     "DocumentSecurityAlertTriageForm",
     "DocumentSecurityAlertFilterForm",
     "ChainOfCustodyExportForm",
