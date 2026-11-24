@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Immutable Audit Trail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <span>Audit Trail</span>
+        </div>
+        <h1 class="page-title">Immutable Document Activity Audit Trail</h1>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'documents:audit_trail_verify_chain' %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Verify SHA-256 cryptographic hash chain across all records">
+                <i data-lucide="shield-check"></i>
+                <span>Verify Hash Chain</span>
+            </button>
+        </form>
+        <a href="{% url 'documents:audit_trail_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline">
+            <i data-lucide="download"></i>
+            <span>Export CSV</span>
+        </a>
+        <a href="{% url 'documents:audit_dashboard' %}" class="btn btn-primary">
+            <i data-lucide="activity"></i>
+            <span>Audit Dashboard</span>
+        </a>
+    </div>
+</div>
+
+<!-- Integrity & Summary Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="list-checks"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Logged Events</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if chain_status == 'intact' %}green{% else %}red{% endif %}">
+            <i data-lucide="{% if chain_status == 'intact' %}shield-check{% else %}shield-alert{% endif %}"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">
+                {% if chain_status == 'intact' %}
+                <span class="badge badge-green">Chain 100% Intact</span>
+                {% else %}
+                <span class="badge badge-red">Integrity Check Warning</span>
+                {% endif %}
+            </div>
+            <div class="stat-label">Cryptographic Status</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="hash"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold font-mono">SHA-256</div>
+            <div class="stat-label">Mathematical Chaining</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="lock"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">Append-Only</div>
+            <div class="stat-label">Tamper-Proof Storage</div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label" for="id_q">Search Activity</label>
+                <div class="relative">
+                    <input type="text" name="q" id="id_q" value="{{ request.GET.q }}" placeholder="Search action, actor, document, IP..." class="form-input w-full">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_action_type">Action Type</label>
+                <select name="action_type" id="id_action_type" class="form-select w-full">
+                    <option value="">All Action Types</option>
+                    {% for val, label in action_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.action_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_is_success">Result Status</label>
+                <select name="is_success" id="id_is_success" class="form-select w-full">
+                    <option value="">All Results</option>
+                    <option value="1" {% if request.GET.is_success == "1" %}selected{% endif %}>Success</option>
+                    <option value="0" {% if request.GET.is_success == "0" %}selected{% endif %}>Failed / Blocked</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:audit_trail_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Audit Trail Table -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold text-slate-800">Event History Log</h2>
+        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Timestamp (UTC)</th>
+                    <th>Action</th>
+                    <th>Target Document</th>
+                    <th>Actor</th>
+                    <th>Result</th>
+                    <th>IP / Host</th>
+                    <th>Chain Hash</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in audit_trails %}
+                <tr>
+                    <td class="text-xs font-mono text-slate-600 whitespace-nowrap">
+                        {{ entry.event_timestamp|date:"Y-m-d H:i:s" }}
+                    </td>
+                    <td>
+                        <span class="badge {{ entry.get_action_type_badge }}">
+                            {{ entry.get_action_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if entry.document %}
+                        <a href="{% url 'documents:document_detail' entry.document.pk %}" class="text-blue-600 hover:underline font-medium text-sm">
+                            {{ entry.document_title_snapshot|default:entry.document.title|truncatechars:35 }}
+                        </a>
+                        <div class="text-xs text-slate-400 font-mono">{{ entry.document_number_snapshot|default:entry.document.number }}</div>
+                        {% else %}
+                        <span class="text-slate-500 italic text-sm">{{ entry.document_title_snapshot|default:"General / Purged" }}</span>
+                        {% if entry.document_number_snapshot %}
+                        <div class="text-xs text-slate-400 font-mono">{{ entry.document_number_snapshot }}</div>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium text-slate-800">
+                            {{ entry.actor.get_full_name|default:entry.actor_email_snapshot|default:"System / Guest" }}
+                        </div>
+                        <div class="text-xs text-slate-400">{{ entry.actor_email_snapshot|default:"automated" }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ entry.get_result_badge }}">
+                            {% if entry.is_success %}Success{% else %}Blocked{% endif %}
+                        </span>
+                        {% if entry.failure_reason %}
+                        <div class="text-xs text-red-500 truncate max-w-xs" title="{{ entry.failure_reason }}">{{ entry.failure_reason }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600 font-mono">
+                        {{ entry.ip_address|default:"—" }}
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs text-slate-500" title="{{ entry.chain_hash }}">
+                            {{ entry.chain_hash|slice:":10" }}…
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:audit_trail_detail' entry.pk %}" class="btn btn-icon btn-outline" title="Inspect Record">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <i data-lucide="clipboard-list"></i>
+                            </div>
+                            <h3>No Audit Records Found</h3>
+                            <p class="text-slate-500 text-sm">No activity events match your current filter parameters.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-body border-t border-slate-100 flex items-center justify-between">
+        <div class="text-sm text-slate-500">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} records
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.is_success %}&is_success={{ request.GET.is_success }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="text-sm font-medium text-slate-700 px-3 py-1">
+                {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.is_success %}&is_success={{ request.GET.is_success }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
