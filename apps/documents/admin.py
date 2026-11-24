@@ -332,7 +332,7 @@ class RetentionScheduleAdmin(admin.ModelAdmin):
 class RecordDeclarationAdmin(admin.ModelAdmin):
     list_display = ("number", "document", "retention_schedule", "record_status", "is_vital_record", "is_locked", "cutoff_date", "disposition_due_date", "tenant")
     list_filter = ("record_status", "is_vital_record", "is_locked", "declaration_mode", "tenant")
-    search_fields = ("number", "document__title", "document__document_number", "retention_schedule__code", "version_hash_snapshot")
+    search_fields = ("number", "document__title", "document__number", "retention_schedule__code", "version_hash_snapshot")
     readonly_fields = ("number", "declaration_date", "cutoff_triggered_at", "version_hash_snapshot", "created_at", "updated_at")
 
 
