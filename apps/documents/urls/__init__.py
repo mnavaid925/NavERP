@@ -109,6 +109,9 @@ from apps.documents.urls.VersionControl.Documents import (
 from apps.documents.urls.VersionControl.DocumentVersions import (
     urlpatterns as document_versions_urls,
 )
+from apps.documents.urls.WorkflowAutomation import (
+    urlpatterns as workflow_automation_urls,
+)
 
 app_name = "documents"
 
@@ -150,4 +153,5 @@ urlpatterns = (
     + collaboration_sharing_urls
     + records_management_urls
     + audit_reporting_urls
+    + workflow_automation_urls
 )
