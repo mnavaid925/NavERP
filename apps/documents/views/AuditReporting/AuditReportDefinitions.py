@@ -2,6 +2,7 @@ import csv
 import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -162,6 +163,11 @@ def audit_report_edit(request, pk):
 def audit_report_delete(request, pk):
     """Delete a custom audit report definition."""
     report_def = get_object_or_404(AuditReportDefinition, pk=pk, tenant=request.tenant)
+
+    is_admin = request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)
+    is_creator = report_def.created_by_id == request.user.pk
+    if not (is_admin or is_creator):
+        raise PermissionDenied("Only the creator or a tenant administrator can delete this report.")
 
     if report_def.is_system_preset:
         messages.error(request, "System preset report definitions cannot be deleted.")
