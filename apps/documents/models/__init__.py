@@ -49,6 +49,16 @@ from apps.documents.models.VersionControl.DocumentBranches import DocumentBranch
 from apps.documents.models.VersionControl.DocumentLocks import DocumentLock
 from apps.documents.models.VersionControl.Documents import Document
 from apps.documents.models.VersionControl.DocumentVersions import DocumentVersion
+from apps.documents.models.WorkflowAutomation.DocumentProcessDefinitions import (
+    DocumentProcessDefinition,
+)
+from apps.documents.models.WorkflowAutomation.DocumentProcessInstances import (
+    DocumentProcessInstance,
+)
+from apps.documents.models.WorkflowAutomation.DocumentRoutingRules import DocumentRoutingRule
+from apps.documents.models.WorkflowAutomation.DocumentWebhookTriggers import (
+    DocumentWebhookTrigger,
+)
 
 __all__ = [
     "Document",
@@ -92,4 +102,8 @@ __all__ = [
     "AuditReportDefinition",
     "DocumentSecurityAlert",
     "ChainOfCustodyExport",
+    "DocumentProcessDefinition",
+    "DocumentRoutingRule",
+    "DocumentProcessInstance",
+    "DocumentWebhookTrigger",
 ]
