@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Retention Schedules — Records Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Records Management</span>
+            <span>/</span>
+            <span>Retention Schedules</span>
+        </div>
+        <h1 class="page-title">Retention Schedules & File Plans</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:disposition_review_board' %}" class="btn btn-outline">
+            <i data-lucide="clipboard-check"></i>
+            <span>Disposition Board</span>
+        </a>
+        <a href="{% url 'documents:retention_schedule_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Retention Schedule</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="form-label" for="q">Search</label>
+                <input type="text" id="q" name="q" class="form-input" placeholder="Code, name, citation..." value="{{ query }}">
+            </div>
+            <div>
+                <label class="form-label" for="compliance_framework">Framework</label>
+                <select id="compliance_framework" name="compliance_framework" class="form-select">
+                    <option value="">All Frameworks</option>
+                    {% for code, label in framework_choices %}
+                    <option value="{{ code }}" {% if current_framework == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="retention_mode">Retention Mode</label>
+                <select id="retention_mode" name="retention_mode" class="form-select">
+                    <option value="">All Modes</option>
+                    {% for code, label in retention_mode_choices %}
+                    <option value="{{ code }}" {% if current_mode == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="department">Department</label>
+                <select id="department" name="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk|stringformat:'d' }}" {% if request.GET.department == dept.pk|stringformat:'d' %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:retention_schedule_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Schedules Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>File Plan Code</th>
+                    <th>Schedule Name</th>
+                    <th>Framework</th>
+                    <th>Retention Duration</th>
+                    <th>Cutoff Rule</th>
+                    <th>Mode</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for schedule in schedules %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:retention_schedule_detail' schedule.pk %}" class="font-semibold text-primary hover:underline">
+                            {{ schedule.code }}
+                        </a>
+                        <div class="text-xs text-slate-500 font-mono">{{ schedule.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ schedule.name }}</div>
+                        {% if schedule.department %}
+                        <div class="text-xs text-slate-500">{{ schedule.department.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ schedule.framework_badge_class }}">
+                            {{ schedule.get_compliance_framework_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-medium text-slate-700">{{ schedule.retention_summary }}</span>
+                        <div class="text-xs text-slate-500">{{ schedule.get_disposition_action_display }}</div>
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-600">{{ schedule.get_cutoff_rule_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ schedule.retention_mode_badge_class }}">
+                            {{ schedule.get_retention_mode_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ schedule.status_badge_class }}">
+                            {% if schedule.is_active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'documents:retention_schedule_detail' schedule.pk %}" class="btn btn-icon" title="View Schedule">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:retention_schedule_edit' schedule.pk %}" class="btn btn-icon" title="Edit Schedule">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:retention_schedule_delete' schedule.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete retention schedule {{ schedule.code }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete Schedule">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="shield-alert"></i>
+                            </div>
+                            <div class="empty-state-title">No retention schedules found</div>
+                            <div class="empty-state-description">Define file plans and regulatory retention rules for enterprise documents.</div>
+                            <a href="{% url 'documents:retention_schedule_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Schedule</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} retention schedules
+        </div>
+        <div class="pagination-controls">
+            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_framework %}&compliance_framework={{ current_framework }}{% endif %}{% if current_mode %}&retention_mode={{ current_mode }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_previous %}disabled{% endif %}">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if query %}&q={{ query }}{% endif %}{% if current_framework %}&compliance_framework={{ current_framework }}{% endif %}{% if current_mode %}&retention_mode={{ current_mode }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_next %}disabled{% endif %}">
+                <i data-lucide="chevron-right"></i>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
