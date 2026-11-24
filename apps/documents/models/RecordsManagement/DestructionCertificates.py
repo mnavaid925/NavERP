@@ -101,6 +101,10 @@ class DestructionCertificate(TenantNumbered):
         return f"{self.number} - {self.document_title_snapshot}"
 
     @property
+    def document(self):
+        return self.record_declaration.document if self.record_declaration else None
+
+    @property
     def status_badge_class(self):
         return self.STATUS_CSS.get(self.status, "badge-slate")
 
@@ -148,6 +152,9 @@ class DestructionCertificate(TenantNumbered):
         if self.record_declaration:
             self.record_declaration.record_status = "disposed"
             self.record_declaration.save(update_fields=["record_status", "updated_at"])
+            if self.record_declaration.document:
+                self.record_declaration.document.status = "archived"
+                self.record_declaration.document.save(update_fields=["status", "updated_at"])
         self.save(update_fields=["status", "executed_by", "executed_at", "updated_at"])
 
     def save(self, *args, **kwargs):
