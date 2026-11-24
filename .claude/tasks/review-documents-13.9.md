@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 2 | 7 | 0 |
+| **Important** | 9 | 1 | 8 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 6 | 12 | 0 |
+| **Total** | 18 | 5 | 13 | 0 |
 
 ---
 
@@ -155,7 +155,7 @@
 - **Issue**: Detail views have no action button or modal form to delete schedules (when no records attached) or delete modifiable records.
 - **Fix**: Add clean, confirmation-gated POST delete action forms in detail header/card actions when eligible.
 
-### [ ] `I8`: Missing Composite Database Indexes for Performance
+### [x] `I8`: Missing Composite Database Indexes for Performance
 - **Found by**: `performance-reviewer`
 - **Location**: `apps/documents/models/RecordsManagement/*.py`
 - **Issue**: Frequent list filtering and legal hold lookups perform table scans without composite indexes.
