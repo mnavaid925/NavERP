@@ -7,6 +7,377 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 13.11: Workflow Automation & BPM (Module 13: Document Management System, `documents`) — plan from `research-documents-13.11.md` (2026-11-24)
+
+> **This plan EXTENDS an existing app.** `apps/documents/` is live with Sub-modules 13.1 through 13.10.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> **Migration is incremental**: previous committed leaf is `0022_alter_chainofcustodyexport_regulatory_framework.py` (claims next available incremental migration `0023_...`) (L43).
+> **Free prefixes verified (0 collisions repo-wide):** **`DBPM`** (`DocumentProcessDefinition`), **`DRUL`** (`DocumentRoutingRule`), **`DPIN`** (`DocumentProcessInstance`), **`DWHK`** (`DocumentWebhookTrigger`).
+> **Plan written from:** `.claude/tasks/research-documents-13.11.md` (Phase 1) and `NavERP.md` (`### 13.11 Workflow Automation & BPM`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/WorkflowAutomation/<Entity>.py` (`DocumentProcessDefinitions.py`, `DocumentRoutingRules.py`, `DocumentProcessInstances.py`, `DocumentWebhookTriggers.py`, plus `WorkflowAnalytics.py` in views/urls and `apps/documents/services/workflow_automation.py` for BPMN graph validation, rule evaluation, execution, simulated webhook dispatch, and process mining analytics).
+> **Template folder name:** `templates/documents/workflow_automation/{process_definition,routing_rule,process_instance,webhook_trigger}/{list,detail,form}.html` + `process_definition/designer.html` + `routing_rule/simulator.html` + `analytics_dashboard.html`.
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DBPM`** (`DocumentProcessDefinition`), **`DRUL`** (`DocumentRoutingRule`), **`DPIN`** (`DocumentProcessInstance`), **`DWHK`** (`DocumentWebhookTrigger`), all 4 model classes, and all URL stems (`process_definition_*`, `routing_rule_*`, `process_instance_*`, `webhook_trigger_*`, `process_analytics_dashboard`) verified unique across `apps/` and `.claude/tasks/contract-*.md`. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed — L28)**:
+  - `core.Tenant` (`apps/core/models/Tenant.py:class Tenant`): Multi-tenant isolation anchor.
+  - `accounts.User` (`settings.AUTH_USER_MODEL` / `apps/accounts/models.py:52`) & `accounts.Role` (`apps/accounts/models.py:35`): Process owners, routing assignees, pool roles, and instance initiators/assignees, each with unique reverse `related_name`s (`owned_dms_process_definitions`, `owned_dms_routing_rules`, `assigned_dms_routing_rules`, `dms_routing_rules`, `initiated_dms_process_instances`, `assigned_dms_process_instances`, `owned_dms_webhook_triggers`).
+  - `core.OrgUnit` (`apps/core/models/OrgUnit.py:5`) & `core.Employment` (`apps/core/models/Employment.py:5`): Organizational hierarchy (`company`/`branch`/`department`/`team`/`cost_center` with `parent` self-FK) for department-level routing and manager lookup.
+  - `core.WorkflowDefinition` (`apps/core/models/Workflow.py:27`), `core.BusinessRule` (`apps/core/models/BusinessRule.py:23`), & `core.ConnectorDefinition` (`apps/core/models/Integration.py:143`): Optional nullable FKs (`core_workflow_ref`, `core_rule_ref`, `connector_ref`) linking 13.11 DMS orchestration to 0.11/0.13 platform documentation & connector catalogs without altering 0.11's non-enforcing design.
+  - `documents.Document` (`apps/documents/models/VersionControl/Documents.py:8`), `documents.DocumentVersion` (`apps/documents/models/VersionControl/DocumentVersions.py:9`), `documents.DocumentFolder` (`apps/documents/models/StorageRepository/DocumentFolders.py:9`), `documents.DocumentApprovalWorkflow` (`apps/documents/models/ApprovalWorkflow/DocumentApprovalWorkflows.py:8`), `documents.DocumentMetadataValue` (`apps/documents/models/MetadataIndexing/DocumentMetadataValues.py:8`), `documents.DocumentOcrJob` (`apps/documents/models/MetadataIndexing/DocumentOcrJobs.py:8`), `documents.DocumentTask` (`apps/documents/models/CollaborationSharing/DocumentTasks.py:8`), and `documents.DocumentAuditTrail` (`apps/documents/models/AuditReporting/DocumentAuditTrails.py:11`).
+- **Boundary ruling — 13.3 vs 13.11 (L36)**: 13.3 owns per-document human review & 21 CFR Part 11 e-signatures (`DocumentApprovalWorkflow`, `DocumentApprovalRequest`, `DocumentSignature`, `DocumentReviewComment`). 13.11 owns reusable BPMN blueprints, conditional metadata/hierarchy routing, process execution traces/mining, and DMS webhooks; `DocumentProcessInstance.approval_workflow` links to 13.3 when an `approval_subprocess` node or `spawn_approval_workflow` routing action creates a `DocumentApprovalWorkflow` (`DWF-`).
+- **CRITICAL REALITY CHECK — `documents.Document` has NO `.folder` FK field**:
+  - Verified in `apps/documents/models/VersionControl/Documents.py`: `Document` has `tags` (`CharField(max_length=500)`), `department` (`FK core.OrgUnit`), `classification`, `status`, `owner`, etc., and NO `.folder` foreign key (`DocumentFolder` views match documents via virtual criteria/tags).
+  - Therefore, any `move_to_folder` action in `DocumentRoutingRule` evaluation MUST NOT access or assign `document.folder`. Instead, `move_to_folder` MUST:
+    1. Append `destination_folder.slug` to `document.tags` (comma-separated, idempotent if already present, safely capped at 500 chars),
+    2. Optionally set `document.department = destination_folder.department` when `destination_folder.department_id` is present and `document.department_id` is unset (or explicitly configured), and
+    3. Upsert a `DocumentMetadataValue` row via `update_or_create(tenant=tenant, document=document, version=None, field_name="routed_folder_path", defaults={"field_label": "Routed Folder Path", "data_type": "text", "value_text": destination_folder.path, "source": "bulk_updated", "updated_by": actor})` (honoring `doc_dmeta_tnt_doc_fld_nullver_uniq`).
+- **CRITICAL REALITY CHECK — `core.OrgUnit` has NO `.head` FK field**:
+  - Verified in `apps/core/models/OrgUnit.py`: `OrgUnit` exposes `tenant`, `kind`, `name`, `parent`, `created_at` (no `.head` field).
+  - Therefore, `assign_org_unit_head` resolves the target user deterministically: look up active `core.Employment` in `(tenant=tenant, org_unit=target_org_unit, status="active", manager__isnull=False).order_by("pk")` and find its linked `accounts.User` (`party=emp.manager, is_active=True`), falling back to `rule.route_to_user`, `rule.owner`, or first active `User` in `tenant` ordered by `"pk"` (L61), while assigning `document.department = target_org_unit`.
+- **CRITICAL REALITY CHECK — `DocumentAuditTrail.ACTION_TYPE_CHOICES` & `log_document_event(...)`**:
+  - `apps/documents/models/AuditReporting/DocumentAuditTrails.py:16-39` enforces fixed `ACTION_TYPE_CHOICES` (`created`, `viewed`, `previewed`, `edited`, `version_uploaded`, `downloaded`, `printed`, `checked_out`, `checked_in`, `permission_changed`, `watermark_applied`, `shared_externally`, `share_revoked`, `workflow_approved`, `workflow_rejected`, `signed`, `moved`, `deleted`, `restored`, `purged`, `dlp_violation`, `auditor_portal_accessed`).
+  - Every `log_document_event(...)` call from 13.11 services/views MUST pass a valid `ACTION_TYPE_CHOICES` key (`"moved"` for routing/folder placement, `"edited"` for metadata auto-population/process updates, `"workflow_approved"` / `"workflow_rejected"` for process completion/validation blocks, `"created"` for spawned workflows) and place BPM telemetry (`{"bpm_event": "routing.matched" | "process.started" | "process.advanced" | "webhook.simulated", ...}`) inside `details_json`.
+- **L66 `AuditLog.action` width (`max_length=10`)**:
+  - Every `write_audit_log(request.user, obj, action, tenant=request.tenant)` call MUST pass a verb `<= 10` characters (`create`, `update`, `delete`, `publish`, `deprecate`, `archive`, `design`, `eval`, `trigger`, `advance`, `cancel`, `rotate`, `ping`, `inbound`), putting any longer description inside `changes=`.
+- **L20 & L25 Secret Encryption & Pop-Once Reveal (`DocumentWebhookTrigger`)**:
+  - `signing_secret` (`CharField(max_length=512, blank=True, editable=False)`) stores ciphertext encrypted via `apps.core.crypto.encrypt/decrypt`; `signing_secret_prefix` (`CharField(max_length=16, blank=True, editable=False)`) stores the first 8 plaintext characters for masked display.
+  - Both fields carry `editable=False` and are structurally excluded from `DocumentWebhookTriggerForm.Meta.fields` (L20).
+  - Secret generation (on create) and secret rotation (`webhook_trigger_rotate_secret`, POST-only, `@tenant_admin_required`) store the plaintext once in `request.session["_dwhk_secret_reveal"] = {"pk": obj.pk, "secret": raw}` and `webhook_trigger_detail` pops it with `request.session.pop("_dwhk_secret_reveal", None)` to render a one-time copy alert (never via `messages`, L25).
+- **SSRF & Header Injection Hardening (`DocumentWebhookTrigger`)**:
+  - Model `clean()` and form `clean_target_url()` / `clean_custom_headers()` validate:
+    - `target_url` required when `direction` is `outbound_webhook` or `middleware_callback`; only `https://` or explicit non-private `http://`; rejects `localhost`, `*.local`, `*.internal`, loopback (`127.0.0.0/8`, `::1`), RFC1918 private subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), link-local / cloud metadata (`169.254.0.0/16`, `fe80::/10`), `0.0.0.0/8`, and IPv6 ULA (`fc00::/7`).
+    - `custom_headers` must be a flat `{str: str}` dict with zero `\r` or `\n` characters in keys or values.
+- **L55 Zero Outbound HTTP / Honest `simulated` Status**:
+  - No `requests`, `urllib.request`, or `httpx` calls exist in 13.11. `webhook_trigger_test_ping`, `webhook_trigger_simulate_inbound`, and process-triggered webhook events generate authentic `X-NavERP-Signature-256` HMAC-SHA256 headers and JSON / CloudEvents envelopes locally, recording honest `last_status="simulated"` and appending snapshots to `delivery_history_json` (ring buffer capped at 25 entries).
+- **L65 Choice `max_length` & Index/Constraint Length (`<= 30` chars)**:
+  - Every `CharField(choices=...)` is sized generously beyond its longest choice **VALUE** (verified below).
+  - Every `UniqueConstraint.name` and `Index.name` is strictly `<= 30` chars (all 20–25 chars below).
+- **L22 / L29 / L39 / L11 / L57 / L58 / L61 Hygiene**:
+  - System timestamps (`published_at`, `last_evaluated_at`, `started_at`, `due_at`, `completed_at`, `last_fired_at`) and derived telemetry (`instance_count`, `execution_count`, `match_count`, `cycle_time_minutes`, `rework_count`, `is_sla_breached`, `is_conformant`, `variant_signature`, `fire_count`, `failure_count`, `last_status`) have `editable=False` and are excluded from forms.
+  - All tenant-scoped FKs filtered by `tenant=self.tenant` in form `__init__` + verified via `reject_foreign(...)` in `clean()`.
+  - List GET FK filters check `.isdigit()` before filtering (L11); date filters use `safe_parse_date()`.
+  - No `annotate()` alias matches any model `@property` name (L57); list/detail queries use `select_related`/`prefetch_related` for O(1) row-count invariance (L58).
+- **L33 / L9 / L10 / L2 Frontend Standards**:
+  - Badges use colour-named classes ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Stat icons use `stat-icon` classes ONLY (`blue`, `green`, `orange`, `purple`, `slate` — NEVER `amber` or `red`).
+  - Detail views use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Paginators guard `has_previous` / `has_next` / `paginator.num_pages` (L9); user FKs guard `{% if fk %}` (L10); no multi-line `{# ... #}` comments (L2).
+
+---
+
+## Models (from research — 4 `TenantNumbered` models)
+
+### 1. `DocumentProcessDefinition` [`NUMBER_PREFIX = "DBPM"`]
+- **Purpose**: Reusable, versioned BPMN 2.0–style process blueprint with role/department swimlanes, typed nodes, decision gateways (`XOR`/`AND`/`OR`), directed conditional transitions, and repository event triggers (drivers: Camunda 8, Alfresco Process Services, Laserfiche, ProcessMaker).
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DBPM"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `name`: `CharField(max_length=200)`
+  - `code`: `CharField(max_length=60)` (uppercase normalized in `clean()`/`save()`)
+  - `description`: `TextField(blank=True)`
+  - `process_category`: `CharField(max_length=40, choices=PROCESS_CATEGORY_CHOICES, default="intake_triage", db_index=True)` — longest value `lifecycle_automation` (20 chars):
+    - `intake_triage`, `lifecycle_automation`, `compliance_routing`, `contract_review`, `records_disposition`, `ocr_classification`, `custom`
+  - `trigger_event`: `CharField(max_length=40, choices=TRIGGER_EVENT_CHOICES, default="document_created", db_index=True)` — longest value `approval_completed` (18 chars):
+    - `document_created`, `version_uploaded`, `status_changed`, `metadata_updated`, `ocr_completed`, `approval_completed`, `manual_trigger`, `webhook_inbound`
+  - `target_document_type`: `CharField(max_length=40, choices=TARGET_DOC_TYPE_CHOICES, default="all", blank=True)` — `"all"` + `Document.DOCUMENT_TYPE_CHOICES` (longest `specification` = 13 chars)
+  - `target_folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.SET_NULL, null=True, blank=True, related_name="process_definitions")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_process_definitions")`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_dms_process_definitions")`
+  - `core_workflow_ref`: `ForeignKey("core.WorkflowDefinition", on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_process_definitions")`
+  - `version_number`: `PositiveIntegerField(default=1)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft", db_index=True)` — longest value `deprecated` (10 chars):
+    - `draft`, `published`, `deprecated`, `archived`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `sla_target_hours`: `PositiveIntegerField(default=48)`
+  - `swimlanes_json`: `JSONField(default=list, blank=True)` (`[{id, name, role_id, org_unit_id, color}]`)
+  - `nodes_json`: `JSONField(default=list, blank=True)` (`[{id, type, label, lane_id, x, y, sla_hours, config}]` supporting `start_event`, `user_task`, `service_task`, `approval_subprocess`, `exclusive_gateway`, `parallel_gateway`, `inclusive_gateway`, `timer_event`, `webhook_task`, `end_event`)
+  - `transitions_json`: `JSONField(default=list, blank=True)` (`[{id, from_node, to_node, label, is_default, condition}]`)
+  - `instance_count`: `PositiveIntegerField(default=0, editable=False)`
+  - `published_at`: `DateTimeField(null=True, blank=True, editable=False)`
+- **Properties & Helpers**: `status_badge`, `category_badge`, `node_count`, `transition_count`, `validate_graph()` (calls `validate_process_graph` checking start/end nodes, node ID uniqueness, edge integrity, reachability, and gateway default branches), `simulate_path(context=None)`.
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dbpm_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "code", "version_number"], name="doc_dbpm_tnt_cod_ver_uniq")` (25 chars)
+  - `Index(fields=["tenant", "status"], name="doc_dbpm_tnt_sts_idx")` (20 chars)
+  - `Index(fields=["tenant", "trigger_event"], name="doc_dbpm_tnt_trg_idx")` (20 chars)
+  - `Index(fields=["tenant", "is_active"], name="doc_dbpm_tnt_act_idx")` (20 chars)
+  - `Index(fields=["tenant", "process_category"], name="doc_dbpm_tnt_cat_idx")` (20 chars)
+  - `Index(fields=["tenant", "department"], name="doc_dbpm_tnt_dpt_idx")` (20 chars)
+- **CSS Badge Mappings (L33)**:
+  - `STATUS_CSS`: `draft` → `badge-slate`, `published` → `badge-green`, `deprecated` → `badge-amber`, `archived` → `badge-muted`
+  - `CATEGORY_CSS`: `intake_triage` → `badge-info`, `lifecycle_automation` → `badge-green`, `compliance_routing` → `badge-amber`, `contract_review` → `badge-info`, `records_disposition` → `badge-red`, `ocr_classification` → `badge-slate`, `custom` → `badge-muted`
+- **Forms**:
+  - `DocumentProcessDefinitionForm` `Meta.fields`: `["name", "code", "description", "process_category", "trigger_event", "target_document_type", "target_folder", "department", "core_workflow_ref", "version_number", "sla_target_hours", "is_active", "swimlanes_json", "nodes_json", "transitions_json"]`.
+  - `ProcessDesignerForm`: validates structured `swimlanes_json`, `nodes_json`, `transitions_json` payloads on designer POST.
+  - Excludes: `tenant`, `number`, `owner`, `status`, `instance_count`, `published_at`, `created_at`, `updated_at`.
+
+### 2. `DocumentRoutingRule` [`NUMBER_PREFIX = "DRUL"`]
+- **Purpose**: Priority-ordered if-then-else rule engine evaluating document fields, `DocumentMetadataValue` entries, `DocumentOcrJob` results, and org hierarchy to auto-file (via tags/department/`routed_folder_path` metadata), validate gates, auto-populate fields, and dispatch tasks/approvals/processes (drivers: M-Files, Laserfiche, DocuWare, OnBase, Camunda DMN).
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DRUL"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `name`: `CharField(max_length=200)`
+  - `description`: `TextField(blank=True)`
+  - `process_definition`: `ForeignKey("documents.DocumentProcessDefinition", on_delete=models.SET_NULL, null=True, blank=True, related_name="routing_rules")`
+  - `core_rule_ref`: `ForeignKey("core.BusinessRule", on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_routing_rules")`
+  - `rule_type`: `CharField(max_length=40, choices=RULE_TYPE_CHOICES, default="routing_distribution", db_index=True)` — longest value `routing_distribution` / `lifecycle_transition` (20 chars):
+    - `routing_distribution`, `conditional_branch`, `metadata_autofill`, `data_validation`, `escalation_fallback`, `lifecycle_transition`
+  - `trigger_event`: `CharField(max_length=40, choices=TRIGGER_EVENT_CHOICES, default="on_upload", db_index=True)` — longest value `on_approval_decision` (20 chars):
+    - `on_upload`, `on_metadata_change`, `on_ocr_complete`, `on_status_change`, `on_approval_decision`, `on_manual_eval`
+  - `priority`: `PositiveIntegerField(default=100, db_index=True)`
+  - `source_folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.SET_NULL, null=True, blank=True, related_name="source_routing_rules")`
+  - `target_document_type`: `CharField(max_length=40, blank=True)`
+  - `target_classification`: `CharField(max_length=25, blank=True)` (longest `confidential` = 12 chars)
+  - `condition_logic_mode`: `CharField(max_length=20, choices=CONDITION_LOGIC_CHOICES, default="all_and")` — longest value `all_and` (7 chars):
+    - `all_and` (`All Conditions (AND)`), `any_or` (`Any Condition (OR)`)
+  - `conditions_json`: `JSONField(default=list, blank=True)` (`[{source, field, op, value}]` supporting `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `regex_match`, `is_set`, `is_empty`)
+  - `else_branch_enabled`: `BooleanField(default=False)`
+  - `else_action_json`: `JSONField(default=dict, blank=True)` (`{route_action, destination_folder_id, metadata_fields, note}`)
+  - `validation_rules_json`: `JSONField(default=list, blank=True)` (`[{check, field, min_confidence, message}]`)
+  - `auto_populate_json`: `JSONField(default=dict, blank=True)` (`{document_fields: {...}, metadata_fields: {...}}`)
+  - `route_action`: `CharField(max_length=40, choices=ROUTE_ACTION_CHOICES, default="move_to_folder", db_index=True)` — longest value `spawn_approval_workflow` (23 chars):
+    - `move_to_folder`, `assign_role`, `assign_user`, `assign_org_unit_head`, `spawn_approval_workflow`, `create_document_task`, `populate_metadata`, `trigger_process`, `block_validation`
+  - `destination_folder`: `ForeignKey("documents.DocumentFolder", on_delete=models.SET_NULL, null=True, blank=True, related_name="destination_routing_rules")`
+  - `route_to_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_routing_rules")`
+  - `route_to_role`: `ForeignKey("accounts.Role", on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_routing_rules")`
+  - `route_to_user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_dms_routing_rules")`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_dms_routing_rules")`
+  - `execution_count`: `PositiveIntegerField(default=0, editable=False)`
+  - `match_count`: `PositiveIntegerField(default=0, editable=False)`
+  - `last_evaluated_at`: `DateTimeField(null=True, blank=True, editable=False)`
+- **Properties & Helpers**: `rule_type_badge`, `active_badge`, `route_action_badge`, `condition_count`, `match_rate_pct`.
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_drul_ten_num_uniq")` (21 chars)
+  - `Index(fields=["tenant", "priority"], name="doc_drul_tnt_pri_idx")` (20 chars)
+  - `Index(fields=["tenant", "rule_type"], name="doc_drul_tnt_typ_idx")` (20 chars)
+  - `Index(fields=["tenant", "trigger_event"], name="doc_drul_tnt_trg_idx")` (20 chars)
+  - `Index(fields=["tenant", "is_active"], name="doc_drul_tnt_act_idx")` (20 chars)
+  - `Index(fields=["tenant", "process_definition"], name="doc_drul_tnt_prc_idx")` (20 chars)
+- **CSS Badge Mappings (L33)**:
+  - `IS_ACTIVE_CSS`: `True` → `badge-green`, `False` → `badge-slate`
+  - `RULE_TYPE_CSS`: `routing_distribution` → `badge-info`, `conditional_branch` → `badge-amber`, `metadata_autofill` → `badge-green`, `data_validation` → `badge-red`, `escalation_fallback` → `badge-amber`, `lifecycle_transition` → `badge-slate`
+- **Forms**:
+  - `DocumentRoutingRuleForm` `Meta.fields`: `["name", "description", "process_definition", "core_rule_ref", "rule_type", "trigger_event", "priority", "source_folder", "target_document_type", "target_classification", "condition_logic_mode", "conditions_json", "else_branch_enabled", "else_action_json", "validation_rules_json", "auto_populate_json", "route_action", "destination_folder", "route_to_org_unit", "route_to_role", "route_to_user", "is_active"]`.
+  - `RoutingRuleSimulatorForm`: tenant-scoped `document` (required), optional `rule` (single rule or blank for full active chain), `trigger_event` filter, and `apply_mutations` (`BooleanField`, default False for safe dry-run).
+  - Excludes: `tenant`, `number`, `owner`, `execution_count`, `match_count`, `last_evaluated_at`, `created_at`, `updated_at`.
+
+### 3. `DocumentProcessInstance` [`NUMBER_PREFIX = "DPIN"`]
+- **Purpose**: Live orchestration run linking a `DocumentProcessDefinition` to a `Document`/`DocumentVersion`, tracking current BPMN node, SLA countdowns, optional spawned 13.3 `DocumentApprovalWorkflow`, step-level execution log (`step_trace_json`), cycle time, rework count, and process mining variant conformance (drivers: Laserfiche Instance Tracking, Camunda Optimize, Power Automate Process Mining).
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DPIN"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `process_definition`: `ForeignKey("documents.DocumentProcessDefinition", on_delete=models.PROTECT, related_name="instances")`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="process_instances")`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="process_instances")`
+  - `triggered_by_rule`: `ForeignKey("documents.DocumentRoutingRule", on_delete=models.SET_NULL, null=True, blank=True, related_name="triggered_instances")`
+  - `approval_workflow`: `ForeignKey("documents.DocumentApprovalWorkflow", on_delete=models.SET_NULL, null=True, blank=True, related_name="bpm_process_instances")`
+  - `department`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_process_instances")`
+  - `initiated_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="initiated_dms_process_instances")`
+  - `current_assignee`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_dms_process_instances")`
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="queued", db_index=True)` — longest value `waiting_approval` (16 chars):
+    - `queued`, `running`, `waiting_approval`, `waiting_timer`, `completed`, `failed`, `cancelled`, `sla_breached`
+  - `current_node_id`: `CharField(max_length=80, blank=True)`
+  - `current_node_label`: `CharField(max_length=160, blank=True)`
+  - `started_at`: `DateTimeField(default=timezone.now, editable=False)`
+  - `due_at`: `DateTimeField(null=True, blank=True, editable=False)`
+  - `completed_at`: `DateTimeField(null=True, blank=True, editable=False)`
+  - `cycle_time_minutes`: `PositiveIntegerField(null=True, blank=True, editable=False)`
+  - `rework_count`: `PositiveSmallIntegerField(default=0, editable=False)`
+  - `is_sla_breached`: `BooleanField(default=False, editable=False, db_index=True)`
+  - `is_conformant`: `BooleanField(default=True, editable=False)`
+  - `variant_signature`: `CharField(max_length=500, blank=True, editable=False)`
+  - `step_trace_json`: `JSONField(default=list, blank=True)` (`[{node_id, node_type, label, lane, entered_at, exited_at, duration_minutes, outcome, actor}]`)
+  - `context_variables_json`: `JSONField(default=dict, blank=True)`
+  - `error_message`: `TextField(blank=True)`
+- **Properties & Helpers**: `status_badge`, `sla_badge`, `conformance_badge`, `step_count`, `duration_display`.
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dpin_ten_num_uniq")` (21 chars)
+  - `Index(fields=["tenant", "status"], name="doc_dpin_tnt_sts_idx")` (20 chars)
+  - `Index(fields=["tenant", "process_definition"], name="doc_dpin_tnt_prc_idx")` (20 chars)
+  - `Index(fields=["tenant", "document"], name="doc_dpin_tnt_doc_idx")` (20 chars)
+  - `Index(fields=["tenant", "is_sla_breached"], name="doc_dpin_tnt_sla_idx")` (20 chars)
+  - `Index(fields=["tenant", "-started_at"], name="doc_dpin_tnt_str_idx")` (20 chars)
+- **CSS Badge Mappings (L33)**:
+  - `STATUS_CSS`: `queued` → `badge-slate`, `running` → `badge-info`, `waiting_approval` → `badge-amber`, `waiting_timer` → `badge-amber`, `completed` → `badge-green`, `failed` → `badge-red`, `cancelled` → `badge-muted`, `sla_breached` → `badge-red`
+- **Forms**:
+  - `DocumentProcessInstanceForm` `Meta.fields`: `["process_definition", "document", "version", "department", "current_assignee", "context_variables_json"]`.
+  - `ProcessAdvanceForm`: `outcome` (`ChoiceField`: `approved`, `rejected`, `escalated`, `completed`, `retry`), `notes` (`CharField`, optional).
+  - Excludes: `tenant`, `number`, `initiated_by`, `triggered_by_rule`, `approval_workflow`, `status`, `current_node_id`, `current_node_label`, `started_at`, `due_at`, `completed_at`, `cycle_time_minutes`, `rework_count`, `is_sla_breached`, `is_conformant`, `variant_signature`, `step_trace_json`, `error_message`, `created_at`, `updated_at`.
+
+### 4. `DocumentWebhookTrigger` [`NUMBER_PREFIX = "DWHK"`]
+- **Purpose**: DMS-scoped inbound/outbound event webhooks and middleware triggers with encrypted HMAC-SHA256 signing secrets, SSRF-hardened endpoint validation, CR/LF-safe custom headers, and honest local `simulated` delivery diagnostics (drivers: Camunda 8 Connectors, Power Automate Webhooks, Nintex, `projects.ProjectWebhookEndpoint`, `scm.WebhookSubscription`).
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DWHK"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `name`: `CharField(max_length=160)`
+  - `description`: `TextField(blank=True)`
+  - `direction`: `CharField(max_length=30, choices=DIRECTION_CHOICES, default="outbound_webhook", db_index=True)` — longest value `middleware_callback` (19 chars):
+    - `outbound_webhook`, `inbound_webhook`, `middleware_callback`
+  - `trigger_event`: `CharField(max_length=40, choices=TRIGGER_EVENT_CHOICES, default="document.uploaded", db_index=True)` — longest value `document.status_changed` (23 chars):
+    - `document.uploaded`, `document.status_changed`, `version.published`, `metadata.updated`, `ocr.completed`, `routing.matched`, `process.started`, `process.completed`, `process.sla_breached`, `approval.decided`, `inbound.trigger`
+  - `process_definition`: `ForeignKey("documents.DocumentProcessDefinition", on_delete=models.SET_NULL, null=True, blank=True, related_name="webhook_triggers")`
+  - `connector_ref`: `ForeignKey("core.ConnectorDefinition", on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_webhook_triggers")`
+  - `target_url`: `URLField(max_length=500, blank=True)` (validated against SSRF in `clean()`)
+  - `http_method`: `CharField(max_length=15, choices=HTTP_METHOD_CHOICES, default="post")` — longest value `patch` (5 chars):
+    - `post`, `put`, `patch`
+  - `payload_format`: `CharField(max_length=30, choices=PAYLOAD_FORMAT_CHOICES, default="json")` — longest value `cloudevents_json` (16 chars):
+    - `json`, `cloudevents_json`
+  - `custom_headers`: `JSONField(default=dict, blank=True)` (validated flat `{str: str}`, no `\r`/`\n`)
+  - `payload_template_json`: `JSONField(default=dict, blank=True)`
+  - `filter_document_type`: `CharField(max_length=40, blank=True)`
+  - `retry_policy_max`: `PositiveSmallIntegerField(default=5)`
+  - `signing_secret`: `CharField(max_length=512, blank=True, editable=False)` (Fernet-encrypted via `apps.core.crypto`)
+  - `signing_secret_prefix`: `CharField(max_length=16, blank=True, editable=False)`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_dms_webhook_triggers")`
+  - `last_status`: `CharField(max_length=25, choices=LAST_STATUS_CHOICES, default="never_fired", editable=False, db_index=True)` — longest value `never_fired` (11 chars):
+    - `never_fired`, `simulated`, `queued`, `delivered`, `failed`
+  - `last_fired_at`: `DateTimeField(null=True, blank=True, editable=False)`
+  - `fire_count`: `PositiveIntegerField(default=0, editable=False)`
+  - `failure_count`: `PositiveIntegerField(default=0, editable=False)`
+  - `delivery_history_json`: `JSONField(default=list, blank=True, editable=False)`
+- **Properties & Helpers**: `last_status_badge`, `direction_badge`, `active_badge`, `masked_secret`, `set_signing_secret(raw)`, `get_signing_secret()`, `generate_signing_secret()`, `compute_signature(payload_bytes)`, `verify_signature(payload_bytes, signature)`, `record_simulated_delivery(event_name, payload_dict)`.
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dwhk_ten_num_uniq")` (21 chars)
+  - `Index(fields=["tenant", "trigger_event"], name="doc_dwhk_tnt_evt_idx")` (20 chars)
+  - `Index(fields=["tenant", "direction"], name="doc_dwhk_tnt_dir_idx")` (20 chars)
+  - `Index(fields=["tenant", "is_active"], name="doc_dwhk_tnt_act_idx")` (20 chars)
+  - `Index(fields=["tenant", "last_status"], name="doc_dwhk_tnt_sts_idx")` (20 chars)
+- **CSS Badge Mappings (L33)**:
+  - `LAST_STATUS_CSS`: `never_fired` → `badge-slate`, `simulated` → `badge-info`, `queued` → `badge-amber`, `delivered` → `badge-green`, `failed` → `badge-red`
+  - `DIRECTION_CSS`: `outbound_webhook` → `badge-info`, `inbound_webhook` → `badge-amber`, `middleware_callback` → `badge-slate`
+  - `IS_ACTIVE_CSS`: `True` → `badge-green`, `False` → `badge-slate`
+- **Forms**:
+  - `DocumentWebhookTriggerForm` `Meta.fields`: `["name", "description", "direction", "trigger_event", "process_definition", "connector_ref", "target_url", "http_method", "payload_format", "custom_headers", "payload_template_json", "filter_document_type", "retry_policy_max", "is_active"]`.
+  - `WebhookTestPingForm`: `event_override` (optional choice/slug), `document` (optional tenant-scoped `Document` for realistic payload preview).
+  - Excludes: `tenant`, `number`, `owner`, `signing_secret`, `signing_secret_prefix`, `last_status`, `last_fired_at`, `fire_count`, `failure_count`, `delivery_history_json`, `created_at`, `updated_at`.
+
+---
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-documents-13.11.md` with exact model fields, choices tuples, `max_length` values, `<= 30`-char constraints/indexes, form `Meta.fields` + exclusions, URL names, and every view/template context key (`object` vs entity var, `status_choices`, FK querysets, `revealed_secret`).
+
+### Phase 3.2: Service Layer & Entity-by-Entity Implementation
+
+#### Shared BPM & Automation Service Layer
+- [ ] `apps/documents/services/workflow_automation.py`:
+  - `validate_process_graph(swimlanes, nodes, transitions)` returning `(is_valid, errors, warnings)`.
+  - `simulate_process_path(process_definition, context=None)` returning deterministic dry-run step list & gateway choices.
+  - `evaluate_routing_rules(tenant, document, rules=None, trigger_event=None, apply_mutations=False, actor=None, request=None)` evaluating `all_and`/`any_or` clauses (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `regex_match`, `is_set`, `is_empty`), validation gates, `else_branch_enabled` fallback, auto-population of `Document` / `DocumentMetadataValue`, `move_to_folder` (`tags` + optional `department` + `DocumentMetadataValue` `routed_folder_path`), `assign_org_unit_head` via `core.Employment`, `spawn_approval_workflow` (13.3 `DocumentApprovalWorkflow`), `create_document_task` (13.8 `DocumentTask`), and valid `DocumentAuditTrail` logging.
+  - `start_process_instance(...)` & `advance_process_instance(...)` tracking node progression, `step_trace_json`, `rework_count`, `variant_signature`, `is_conformant`, `cycle_time_minutes`, `is_sla_breached`, and `DocumentAuditTrail` events.
+  - `dispatch_simulated_webhook(trigger, event_name, payload_data, actor=None, request=None)` computing HMAC-SHA256 signatures and recording honest `simulated` delivery entries with zero outbound HTTP (L55).
+  - `compute_process_analytics(tenant, process_def_id=None, org_unit_id=None, date_from=None, date_to=None)` aggregating cycle times (avg/median/p95), throughput, SLA breach %, node & swimlane/department bottlenecks, variant frequencies, conformance %, and rework hotspots.
+
+#### Entity 1: `DocumentProcessDefinition` (`DBPM-`)
+- [ ] `apps/documents/models/WorkflowAutomation/DocumentProcessDefinitions.py`
+- [ ] `apps/documents/forms/WorkflowAutomation/DocumentProcessDefinitions.py` (`DocumentProcessDefinitionForm`, `ProcessDesignerForm`; tenant-scoped `target_folder`, `department`, `core_workflow_ref` + `reject_foreign`; JSON structure checks)
+- [ ] `apps/documents/views/WorkflowAutomation/DocumentProcessDefinitions.py` (`process_definition_list`, `process_definition_create`, `process_definition_detail`, `process_definition_edit`, `process_definition_delete`, `process_definition_designer`, `process_definition_publish`, `process_definition_deprecate`; `write_audit_log` verbs `<= 10` chars; `.isdigit()` filters; pagination)
+- [ ] `apps/documents/urls/WorkflowAutomation/DocumentProcessDefinitions.py` (literal `bpm/processes/` & `bpm/processes/create/` before `bpm/processes/<int:pk>/...`)
+- [ ] `templates/documents/workflow_automation/process_definition/list.html` (filters reflecting `request.GET`, KPI cards, colour-named badges, pagination guards L9, POST delete with CSRF)
+- [ ] `templates/documents/workflow_automation/process_definition/detail.html` (`<dl class="detail-grid">`, swimlanes & node summary, linked routing rules & recent instances, publish/deprecate/designer actions)
+- [ ] `templates/documents/workflow_automation/process_definition/form.html`
+- [ ] `templates/documents/workflow_automation/process_definition/designer.html` (interactive visual swimlane & BPMN node/gateway flow canvas + graph validation alert banner + simulated dry-run path preview)
+
+#### Entity 2: `DocumentRoutingRule` (`DRUL-`)
+- [ ] `apps/documents/models/WorkflowAutomation/DocumentRoutingRules.py`
+- [ ] `apps/documents/forms/WorkflowAutomation/DocumentRoutingRules.py` (`DocumentRoutingRuleForm`, `RoutingRuleSimulatorForm`; tenant-scoped `process_definition`, `core_rule_ref`, `source_folder`, `destination_folder`, `route_to_org_unit`, `route_to_role`, `route_to_user` + `reject_foreign`; JSON operator/schema checks)
+- [ ] `apps/documents/views/WorkflowAutomation/DocumentRoutingRules.py` (`routing_rule_list`, `routing_rule_create`, `routing_rule_detail`, `routing_rule_edit`, `routing_rule_delete`, `routing_rule_toggle`, `routing_rule_simulator`; `.isdigit()` filters; `write_audit_log` verbs `<= 10` chars)
+- [ ] `apps/documents/urls/WorkflowAutomation/DocumentRoutingRules.py` (literal `bpm/routing-rules/`, `bpm/routing-rules/create/`, `bpm/routing-rules/simulator/` BEFORE `bpm/routing-rules/<int:pk>/...`)
+- [ ] `templates/documents/workflow_automation/routing_rule/list.html`
+- [ ] `templates/documents/workflow_automation/routing_rule/detail.html`
+- [ ] `templates/documents/workflow_automation/routing_rule/form.html`
+- [ ] `templates/documents/workflow_automation/routing_rule/simulator.html` (interactive test bench picking any tenant `Document` + rule/trigger, running dry-run or live apply, rendering clause-by-clause boolean trace, validation gates, and proposed/applied field & metadata mutations)
+
+#### Entity 3: `DocumentProcessInstance` (`DPIN-`)
+- [ ] `apps/documents/models/WorkflowAutomation/DocumentProcessInstances.py`
+- [ ] `apps/documents/forms/WorkflowAutomation/DocumentProcessInstances.py` (`DocumentProcessInstanceForm`, `ProcessAdvanceForm`; tenant-scoped `process_definition`, `document`, `version`, `department`, `current_assignee` + `reject_foreign` + `version.document == document` check)
+- [ ] `apps/documents/views/WorkflowAutomation/DocumentProcessInstances.py` (`process_instance_list`, `process_instance_create`, `process_instance_detail`, `process_instance_edit`, `process_instance_delete`, `process_instance_advance`, `process_instance_cancel`; `.isdigit()` filters; `write_audit_log` verbs `<= 10` chars)
+- [ ] `apps/documents/urls/WorkflowAutomation/DocumentProcessInstances.py`
+- [ ] `templates/documents/workflow_automation/process_instance/list.html`
+- [ ] `templates/documents/workflow_automation/process_instance/detail.html` (visual node progression stepper, chronological `step_trace_json` timeline, SLA due/breach badge, rework/conformance indicators, linked `DocumentApprovalWorkflow` card, advance/cancel controls)
+- [ ] `templates/documents/workflow_automation/process_instance/form.html`
+
+#### Entity 4: `DocumentWebhookTrigger` (`DWHK-`)
+- [ ] `apps/documents/models/WorkflowAutomation/DocumentWebhookTriggers.py`
+- [ ] `apps/documents/forms/WorkflowAutomation/DocumentWebhookTriggers.py` (`DocumentWebhookTriggerForm`, `WebhookTestPingForm`; excludes `signing_secret` & `signing_secret_prefix` structurally L20; SSRF validation blocking localhost/loopback/RFC1918/link-local/metadata IP/IPv6 ULA; flat `{str: str}` CR/LF-free `custom_headers`; tenant-scoped `process_definition`, `connector_ref` + `reject_foreign`)
+- [ ] `apps/documents/views/WorkflowAutomation/DocumentWebhookTriggers.py` (`webhook_trigger_list`, `webhook_trigger_create`, `webhook_trigger_detail`, `webhook_trigger_edit`, `webhook_trigger_delete`, `webhook_trigger_rotate_secret`, `webhook_trigger_test_ping`, `webhook_trigger_simulate_inbound`; pop-once `_dwhk_secret_reveal` session reveal L25; `@tenant_admin_required` on rotate/delete; honest `simulated` status L55; `write_audit_log` verbs `<= 10` chars)
+- [ ] `apps/documents/urls/WorkflowAutomation/DocumentWebhookTriggers.py`
+- [ ] `templates/documents/workflow_automation/webhook_trigger/list.html`
+- [ ] `templates/documents/workflow_automation/webhook_trigger/detail.html` (pop-once revealed secret copy banner shown only once, masked prefix otherwise, SSRF/header inspection, signed simulated delivery log ring buffer, test ping & rotate secret actions)
+- [ ] `templates/documents/workflow_automation/webhook_trigger/form.html`
+
+#### Dedicated Analytics & Process Mining Dashboard
+- [ ] `apps/documents/views/WorkflowAutomation/WorkflowAnalytics.py` (`process_analytics_dashboard` with `process_definition` & `department` `.isdigit()` filters and `safe_parse_date()` bounds)
+- [ ] `apps/documents/urls/WorkflowAutomation/WorkflowAnalytics.py` (`bpm/analytics/` → `process_analytics_dashboard`)
+- [ ] `templates/documents/workflow_automation/analytics_dashboard.html` (cycle time avg/median/p95 KPI cards, throughput & SLA breach breakdown, node & role/OrgUnit bottleneck heatmap table, process mining variant frequency & conformance/rework analysis table)
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all 4 models in `apps/documents/models/WorkflowAutomation/__init__.py` and append surgically to `apps/documents/models/__init__.py`.
+- [ ] Re-export all forms in `apps/documents/forms/WorkflowAutomation/__init__.py` and append surgically to `apps/documents/forms/__init__.py`.
+- [ ] Re-export all views in `apps/documents/views/WorkflowAutomation/__init__.py` and append surgically to `apps/documents/views/__init__.py`.
+- [ ] Wire URL routes in `apps/documents/urls/WorkflowAutomation/__init__.py` and append surgically to `apps/documents/urls/__init__.py`.
+- [ ] Register all 4 models in `apps/documents/admin.py` (with `readonly_fields` hiding `signing_secret` / `signing_secret_prefix` / `delivery_history_json` / telemetry fields).
+- [ ] Extend `apps/documents/management/commands/seed_documents.py` idempotently (reusing existing Acme/Globex `User`, `Role`, `OrgUnit`, `Document`, `DocumentVersion`, `DocumentFolder`, `DocumentApprovalWorkflow`, `ConnectorDefinition`, `WorkflowDefinition`, `BusinessRule` rows; deterministic `.order_by("pk")` lookups per L61):
+  - 2–3 versioned `DocumentProcessDefinition`s (`DBPM-`, e.g., Contract Legal Triage & Approval BPMN with XOR gateway + swimlanes, SOP Regulatory Lifecycle BPMN)
+  - 3–4 priority-ordered `DocumentRoutingRule`s (`DRUL-`, covering `move_to_folder`, `metadata_autofill`, `data_validation`, `spawn_approval_workflow`, `else_branch_enabled`)
+  - 4–5 `DocumentProcessInstance`s (`DPIN-`, covering `completed`, `waiting_approval`, `running`, `sla_breached` + rework loop & variant signatures for meaningful analytics & process mining)
+  - 2–3 `DocumentWebhookTrigger`s (`DWHK-`, SSRF-safe `https://hooks.example.com/...` URLs, encrypted HMAC secrets, `simulated` delivery history)
+- [ ] Wire `LIVE_LINKS["13.11"]` in `apps/core/navigation.py` (matching exact `NavERP.md` 13.11 bullets → distinct staff views per L30/L32):
+  - `"Business Process Modeling": "documents:process_definition_list"`
+  - `"Document Routing & Distribution": "documents:routing_rule_list"`
+  - `"Conditional Logic & Business Rules": "documents:routing_rule_simulator"`
+  - `"Integration Triggers & Webhooks": "documents:webhook_trigger_list"`
+  - `"Process Performance Analytics": "documents:process_analytics_dashboard"`
+  - Extra live leaf: `"Process Execution Instances": "documents:process_instance_list"`
+- [ ] Run `makemigrations documents --dry-run` (verify only the 4 expected 13.11 models) then `makemigrations documents` (claims `0023_...`).
+- [ ] Run `migrate`.
+- [ ] Run `seed_documents` twice (verify 100% idempotency and unchanged row counts on second pass).
+- [ ] Run `manage.py check` (zero errors/warnings).
+
+### Phase 3.4: Smoke Verification
+- [ ] `qa-smoke-tester` sweeps all new `documents:*` 13.11 routes as `admin_acme` / `password`: asserts 200/302 + real seeded record content (no `{#` / `{% comment` leaks), valid closed-vocabulary filter combinations + junk `.isdigit()` param check, page 2 pagination check, pop-once secret reveal present after create/rotate and gone on refresh, simulator dry-run & apply, analytics dashboard rendering, sidebar `13.11` Live links, and cross-tenant IDOR → 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] `code-reviewer` review (`BASE...HEAD`) → append to `.claude/tasks/review-documents-13.11.md`
+- [ ] `explorer` review → append to `.claude/tasks/review-documents-13.11.md`
+- [ ] `frontend-reviewer` review → append to `.claude/tasks/review-documents-13.11.md`
+- [ ] `performance-reviewer` review → append to `.claude/tasks/review-documents-13.11.md`
+- [ ] `qa-smoke-tester` review → append to `.claude/tasks/review-documents-13.11.md`
+- [ ] `security-reviewer` review → append to `.claude/tasks/review-documents-13.11.md`
+- [ ] Deduplicate, sort Critical → Important → Minor, assign `C#`/`I#`/`M#` IDs, and commit `.claude/tasks/review-documents-13.11.md`.
+
+### Phase 5: Code Fixer
+- [ ] `code-fixer` resolves all findings in ID order (`C` → `I` → `M`), commits one file per commit, updates checkboxes in `review-documents-13.11.md`, and verifies `manage.py check` clean.
+
+### Phase 6: Automated Test Suite (Strictly Serial)
+- [ ] Pin test contract and append 13.11 fixtures (`sample_process_definition`, `sample_routing_rule`, `sample_process_instance`, `sample_webhook_trigger` + tenant B counterparts) below a `# ===== 13.11 Workflow Automation & BPM =====` marker in `apps/documents/tests/conftest.py` (L59 append-only!).
+- [ ] `apps/documents/tests/test_workflow_automation_models.py` (prefixes, constraints, graph validation, simulation, encrypted secret roundtrip + HMAC signing/verification, `@property` badges; helpers prefixed `_workflow_automation_*`, test functions `test_workflow_automation_*`).
+- [ ] `apps/documents/tests/test_workflow_automation_forms.py` (whitelist `Meta.fields`, secret/system field exclusions L20/L22, tenant FK scoping + `reject_foreign`, SSRF IP/hostname rejection, CR/LF header injection rejection, JSON rule operator checks).
+- [ ] `apps/documents/tests/test_workflow_automation_views.py` (CRUD, designer save/publish/deprecate, simulator dry-run vs live apply incl. `move_to_folder` tags + `routed_folder_path` metadata upsert, instance create/advance/cancel, webhook test ping `simulated` status & pop-once secret reveal, analytics dashboard, valid + junk filters, pagination).
+- [ ] `apps/documents/tests/test_workflow_automation_security.py` (cross-tenant IDOR 404 on all detail/edit/delete/action routes, `@tenant_admin_required` gating on rotate/delete/publish, SSRF/CRLF boundaries, pop-once secret non-persistence across refresh, `signing_secret` absent from edit form HTML, `DocumentAuditTrail` valid action type invariant).
+- [ ] Run **full unfiltered** `apps/documents/tests/` suite (with migrations enabled, L47/L49) and verify 100% green.
+
+### Phase 7: Skill & Documentation Closeout
+- [ ] Update `.claude/skills/documents/SKILL.md` with 13.11 models (`DBPM`, `DRUL`, `DPIN`, `DWHK`), service layer, URLs, templates, seeder rows, and `LIVE_LINKS["13.11"]`.
+- [ ] Update `README.md` marking Sub-module 13.11 complete with test counts and migration range.
+- [ ] Document gap register in `.claude/tasks/gaps-documents-13.11.md` (recording deferred transport/scheduler items or `**Gaps**: None` if scope-complete) and link from `todo.md`.
+- [ ] Complete close-out review notes in `.claude/tasks/todo.md`.
+
+## Later passes / deferred
+- **Outbound HTTP Transport & Retry Worker (Celery / RQ)** — Consistent with **L55** (`scm` 4.19 / `projects` 7.18), 13.11 executes zero outbound HTTP (`requests`/`urllib`/`httpx`); `DocumentWebhookTrigger` validates SSRF boundaries, encrypts HMAC secrets, and records honest `simulated` deliveries until an async worker transport pass is enabled.
+- **Background Cron / Timer Event Scheduler** — Timer nodes (`timer_event`) and SLA deadlines (`due_at`) are stamped and evaluated dynamically on views and explicit advance actions rather than via a background polling daemon.
+- **LLM / Natural-Language Text-to-BPMN Process Generation** — Generative AI workflow drafting deferred to an AI gateway pass.
+- **External Middleware SaaS OAuth Flows (Zapier / Make / MuleSoft / Boomi)** — Multi-step OAuth2 iPaaS adapters deferred to **13.12 Integration & API Ecosystem**.
+- **Parked sibling scopes (owned elsewhere, not duplicated in 13.11):** 13.3 human approvals/e-signatures, 13.5 OCR/schema definitions, 13.9 retention/holds/destruction, 13.10 immutable audit & UBA, 13.12 enterprise ERP/CRM/cloud-storage connectors & GraphQL/SDK, 13.13 mobile push/biometric signing, 13.14 OAIS/PREMIS archival, 13.15 e-forms builder, 13.16 CLM, 13.18 localization.
+
+## Review notes
+(filled in at the end)
+
+---
 # Sub-module 13.10: Audit Trail & Reporting (Module 13: Document Management System, `documents`) — plan from `research-documents-13.10.md` (2026-11-24)
 
 > **This plan EXTENDS an existing app.** `apps/documents/` is live with Sub-modules 13.1 through 13.8.
