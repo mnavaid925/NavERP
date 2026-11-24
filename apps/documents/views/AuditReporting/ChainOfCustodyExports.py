@@ -201,7 +201,7 @@ def auditor_portal_view(request, token):
     )
 
     doc = export_pkg.document
-    versions = doc.versions.order_by("-version_number") if doc and hasattr(doc, "versions") else []
+    versions = doc.versions.order_by("-created_at") if doc and hasattr(doc, "versions") else []
     audit_trail = (
         DocumentAuditTrail.objects.filter(tenant=export_pkg.tenant, document=doc).order_by("-event_timestamp")[:50]
         if doc
