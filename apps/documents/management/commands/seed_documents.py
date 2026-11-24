@@ -1938,6 +1938,188 @@ class Command(BaseCommand):
                             certificate_notes="Scheduled disposition following GDPR storage duration expiration.",
                         )
 
+                        # ==========================================
+                        # 13.10 Audit Trail & Reporting
+                        # ==========================================
+                        if not DocumentAuditTrail.objects.filter(tenant=tenant).exists():
+                            self.stdout.write("  Seeding 13.10 Audit Trail & Reporting demo records...")
+
+                            doc_audit = Document.objects.filter(tenant=tenant).first()
+                            doc_ver = doc_audit.versions.first() if doc_audit and hasattr(doc_audit, "versions") else None
+
+                            # Seed sequential immutable audit entries with SHA-256 hash chaining
+                            prev_hash = "GENESIS_BLOCK_000000000000000000000000000000000000000000000000000000"
+
+                            e1 = DocumentAuditTrail(
+                                tenant=tenant,
+                                document=doc_audit,
+                                version=doc_ver,
+                                actor=user,
+                                action_type="created",
+                                is_success=True,
+                                ip_address="192.168.1.105",
+                                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0",
+                                details_json={"template": "Standard Policy", "category": "Governance"},
+                                prev_hash=prev_hash,
+                            )
+                            e1.save()
+                            prev_hash = e1.chain_hash
+
+                            e2 = DocumentAuditTrail(
+                                tenant=tenant,
+                                document=doc_audit,
+                                version=doc_ver,
+                                actor=user,
+                                action_type="edited",
+                                is_success=True,
+                                ip_address="192.168.1.105",
+                                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0",
+                                details_json={"sections_modified": ["Scope", "Enforcement"]},
+                                prev_hash=prev_hash,
+                            )
+                            e2.save()
+                            prev_hash = e2.chain_hash
+
+                            e3 = DocumentAuditTrail(
+                                tenant=tenant,
+                                document=doc_audit,
+                                version=doc_ver,
+                                actor=user,
+                                action_type="workflow_approved",
+                                is_success=True,
+                                ip_address="192.168.1.105",
+                                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0",
+                                details_json={"workflow_stage": "Legal Sign-off", "decision": "approved"},
+                                prev_hash=prev_hash,
+                            )
+                            e3.save()
+                            prev_hash = e3.chain_hash
+
+                            e4 = DocumentAuditTrail(
+                                tenant=tenant,
+                                document=doc_audit,
+                                version=doc_ver,
+                                actor=user,
+                                action_type="downloaded",
+                                is_success=True,
+                                ip_address="10.0.4.52",
+                                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
+                                details_json={"format": "PDF", "watermarked": True},
+                                prev_hash=prev_hash,
+                            )
+                            e4.save()
+                            prev_hash = e4.chain_hash
+
+                            e5 = DocumentAuditTrail(
+                                tenant=tenant,
+                                document=doc_audit,
+                                version=doc_ver,
+                                actor=user,
+                                action_type="dlp_violation",
+                                is_success=False,
+                                failure_reason="Restricted PII data pattern detected by DLP Policy #DLP-0001",
+                                ip_address="198.51.100.44",
+                                user_agent="curl/7.88.1",
+                                details_json={"dlp_rule": "Credit Card Masking", "blocked_action": "external_share"},
+                                prev_hash=prev_hash,
+                            )
+                            e5.save()
+
+                            # Seed Audit Report Definitions (system compliance presets)
+                            rpt_preset1 = AuditReportDefinition.objects.create(
+                                tenant=tenant,
+                                name="ISO/IEC 27001 Access & Privilege Audit",
+                                description="Mandatory quarterly ISO 27001 review of privileged document access, permission changes, and external links.",
+                                report_type="permission_audit",
+                                is_system_preset=True,
+                                date_range_preset="last_90_days",
+                                output_format="table_view",
+                                status="active",
+                                created_by=user,
+                                total_runs=3,
+                                last_run_at=timezone.now() - timezone.timedelta(days=2),
+                                last_run_by=user,
+                            )
+
+                            rpt_preset2 = AuditReportDefinition.objects.create(
+                                tenant=tenant,
+                                name="FDA 21 CFR Part 11 Electronic Records Audit",
+                                description="Forensic review of electronic signatures, record approvals, and append-only version transitions.",
+                                report_type="document_history",
+                                is_system_preset=True,
+                                date_range_preset="last_30_days",
+                                output_format="table_view",
+                                status="active",
+                                created_by=user,
+                                total_runs=1,
+                                last_run_at=timezone.now() - timezone.timedelta(days=7),
+                                last_run_by=user,
+                            )
+
+                            rpt_custom = AuditReportDefinition.objects.create(
+                                tenant=tenant,
+                                name="Confidential Executive Document Views",
+                                description="Targeted monitoring of confidential board minutes and executive financial disclosures.",
+                                report_type="confidential_access",
+                                is_system_preset=False,
+                                date_range_preset="last_30_days",
+                                output_format="csv",
+                                status="active",
+                                created_by=user,
+                                total_runs=5,
+                                last_run_at=timezone.now() - timezone.timedelta(hours=6),
+                                last_run_by=user,
+                            )
+
+                            # Seed Document Security Alerts (UBA anomalies)
+                            alert1 = DocumentSecurityAlert.objects.create(
+                                tenant=tenant,
+                                alert_type="mass_download",
+                                severity="critical",
+                                risk_score=94,
+                                title="Exfiltration burst: 35 sensitive files downloaded in 12 minutes",
+                                description="User account initiated rapid consecutive bulk downloads of restricted technical specifications and supplier contracts.",
+                                target_user=user,
+                                target_document=doc_audit,
+                                source_ip="198.51.100.18",
+                                event_count=35,
+                                status="investigating",
+                                action_taken="downloads_blocked",
+                                assigned_to=user,
+                                triage_notes="Restricted external downloads pending confirmation from line manager.",
+                            )
+
+                            alert2 = DocumentSecurityAlert.objects.create(
+                                tenant=tenant,
+                                alert_type="off_hours_access",
+                                severity="medium",
+                                risk_score=58,
+                                title="Unusual off-hours access during holiday weekend",
+                                description="Bulk folder reading operations detected at 03:42 AM Sunday from an anomalous IP range.",
+                                target_user=user,
+                                source_ip="203.0.113.89",
+                                event_count=8,
+                                status="new",
+                                action_taken="logged_only",
+                            )
+
+                            # Seed Chain of Custody Evidence Package & External Auditor Pass
+                            custody_pkg = ChainOfCustodyExport(
+                                tenant=tenant,
+                                title="2026 Annual SOC 2 Type II Confidentiality Evidence Package",
+                                regulatory_framework="soc2_type2",
+                                scope="single_document",
+                                document=doc_audit,
+                                auditor_name="Sarah Jenkins, CPA, CISA",
+                                auditor_email="sjenkins@independent-auditors.org",
+                                auditor_organization="Ernst & Young LLP",
+                                is_portal_active=True,
+                                expires_at=timezone.now() + timezone.timedelta(days=21),
+                                created_by=user,
+                            )
+                            custody_pkg.set_passcode("Audit2026!")
+                            custody_pkg.save()
+
                 self.stdout.write(self.style.SUCCESS(f"Successfully processed Document Management seeding for '{tenant.slug}'."))
 
         self.stdout.write(
