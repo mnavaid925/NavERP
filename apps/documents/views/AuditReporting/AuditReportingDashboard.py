@@ -1,6 +1,6 @@
 from datetime import timedelta
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count, F
+from django.db.models import Avg, Count, F, Q
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -19,8 +19,12 @@ def audit_dashboard(request):
     since_24h = now - timedelta(hours=24)
 
     logs_24h = DocumentAuditTrail.objects.filter(tenant=tenant, event_timestamp__gte=since_24h)
-    total_events_24h = logs_24h.count()
-    downloads_24h = logs_24h.filter(action_type="downloaded").count()
+    agg_24h = logs_24h.aggregate(
+        total=Count("id"),
+        downloads=Count("id", filter=Q(action_type="downloaded")),
+    )
+    total_events_24h = agg_24h["total"] or 0
+    downloads_24h = agg_24h["downloads"] or 0
     security_threats = DocumentSecurityAlert.objects.filter(
         tenant=tenant,
         status__in=["new", "investigating", "confirmed_threat"],
@@ -28,7 +32,11 @@ def audit_dashboard(request):
 
     # Fast verification on top 10 records
     chain_status = "intact"
-    sample = list(DocumentAuditTrail.objects.filter(tenant=tenant).order_by("-id")[:10])
+    sample = list(
+        DocumentAuditTrail.objects.filter(tenant=tenant)
+        .select_related("actor", "document")
+        .order_by("-id")[:10]
+    )
     for item in sample:
         if not item.verify_hash():
             chain_status = "compromised"
