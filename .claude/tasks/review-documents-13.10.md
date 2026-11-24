@@ -118,3 +118,64 @@
   - **File**: `templates/documents/audit_reporting/security_alert/form.html:36`
   - Renders raw `{{ form.as_p }}` rather than explicit `.form-group` markup.
   - Fix: Replace `form.as_p` with standard `.form-group` fields matching the other sub-module forms.
+
+---
+
+## 4. Performance Reviewer Pass
+
+- [ ] **[PERF-C1] N+1 Queries on Document Versions in External Auditor Portal**
+  - **File**: `apps/documents/views/AuditReporting/ChainOfCustodyExports.py:204` & `templates/documents/audit_reporting/chain_of_custody/auditor_portal.html:150`
+  - `versions` accessed in template loop touching `ver.author` without `select_related("author")`.
+  - Fix: Add `.select_related("author")` to `doc.versions.select_related("author").order_by("-created_at")`.
+
+- [ ] **[PERF-C2] Unchunked Evaluation & Lazy-Loading Risk in Cryptographic Hash Verification**
+  - **File**: `apps/documents/views/AuditReporting/DocumentAuditTrails.py:120-141`
+  - `audit_trail_verify_chain` evaluates all tenant records in memory without chunking; `verify_hash()` may trigger lazy `self.actor` or `self.document` queries if snapshots empty.
+  - Fix: Add `.select_related("actor", "document").iterator(chunk_size=2000)`.
+
+- [ ] **[PERF-I1] Report Definition List Query Inflation from Template `.count` Invocations**
+  - **File**: `apps/documents/views/AuditReporting/AuditReportDefinitions.py:34-43` & `templates/documents/audit_reporting/report_definition/list.html:46,55,107,175`
+  - Unevaluated querysets cause 7 SQL queries via template `.count`.
+  - Fix: Materialize `system_reports` and `custom_reports` into lists in view, compute lengths, and pass in context.
+
+- [ ] **[PERF-I2] Triplicate Count Queries for User Statistics in Security Alert Detail**
+  - **File**: `apps/documents/views/AuditReporting/DocumentSecurityAlerts.py:98-101`
+  - Three separate `.count()` queries scanning `DocumentAuditTrail`.
+  - Fix: Combine into single `aggregate(Count("id"), Count("id", filter=Q(...)), ...)`.
+
+- [ ] **[PERF-I3] Triplicate Aggregation Queries in Audit Report Detail Execution**
+  - **File**: `apps/documents/views/AuditReporting/AuditReportDefinitions.py:99-103`
+  - Separate queries for total, failed, and unique actors.
+  - Fix: Combine into single database round-trip using `aggregate()`.
+
+- [ ] **[PERF-I4] Audit Dashboard Redundant Counts & Potential Lazy Loading in Sample Verification**
+  - **File**: `apps/documents/views/AuditReporting/AuditReportingDashboard.py:21-35`
+  - 2 separate count queries and un-selected related fields on sample verification.
+  - Fix: Use single `aggregate()` and add `.select_related("actor", "document")` to sample slice.
+
+- [ ] **[PERF-I5] Missing Composite Indexes on High-Frequency Filter & Sort Combinations**
+  - **Files**:
+    - `apps/documents/models/AuditReporting/ChainOfCustodyExports.py:175-180` (`["tenant", "is_portal_active", "expires_at"]`)
+    - `apps/documents/models/AuditReporting/DocumentSecurityAlerts.py:177-183` (`["tenant", "status", "-detected_at"]`, `["tenant", "target_user", "alert_type", "detected_at"]`)
+    - `apps/documents/models/AuditReporting/DocumentAuditTrails.py:173-180` (`["tenant", "document", "-event_timestamp"]`, `["tenant", "actor", "-event_timestamp"]`)
+  - Fix: Add these composite `models.Index` declarations to model `Meta.indexes`.
+
+- [ ] **[PERF-M1] Redundant `.exists()` & Duplicate Count in Lifecycle Dashboard**
+  - **File**: `apps/documents/views/AuditReporting/AuditReportingDashboard.py:91-103`
+  - Redundant `.exists()` before aggregation, and duplicate query for total docs already present in status distribution.
+  - Fix: Remove `.exists()` guard and calculate total from status distribution sum.
+
+- [ ] **[PERF-M2] Duplicate Count Query in Audit Trail List Prior to Pagination**
+  - **File**: `apps/documents/views/AuditReporting/DocumentAuditTrails.py:58-70`
+  - `qs.count()` called, then `paginator.get_page()` counts again.
+  - Fix: Use `page_obj.paginator.count` for `total_count`.
+
+- [ ] **[PERF-M3] Loop-Internal `exists()` Lookups in Heuristic Anomaly Scans**
+  - **Files**: `apps/documents/views/AuditReporting/DocumentSecurityAlerts.py:164-170,200-206` & `apps/documents/services/audit.py:78-80,110-112`
+  - Alert existence checked inside actor loops.
+  - Fix: Pre-fetch existing actor IDs into a set before the loop.
+
+- [ ] **[PERF-M4] Over-fetching in Audit Trail Detail Navigation Queries**
+  - **File**: `apps/documents/views/AuditReporting/DocumentAuditTrails.py:96-105`
+  - `prev_entry` and `next_entry` fetch all columns instead of `.only("id")`.
+  - Fix: Add `.only("id")` to previous/next queries.
