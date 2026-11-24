@@ -15,10 +15,10 @@
 
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
-| **Critical** | 5 | 1 | 4 | 0 |
+| **Critical** | 5 | 0 | 5 | 0 |
 | **Important** | 9 | 9 | 0 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 14 | 4 | 0 |
+| **Total** | 18 | 13 | 5 | 0 |
 
 ---
 
@@ -81,7 +81,7 @@
   1. In `record_declaration_edit`, reject editing with error message if `declaration.is_locked` or `declaration.retention_schedule.retention_mode == "regulatory_worm"` or `declaration.is_under_legal_hold`.
   2. In `RecordDeclarationForm.clean()`, forbid changing `document`, `version`, or `retention_schedule` on existing instances (`if self.instance.pk`).
 
-### [ ] `C5`: Evidence Spoliation Prevention on Parent Document Deletion
+### [x] `C5`: Evidence Spoliation Prevention on Parent Document Deletion
 - **Found by**: `security-reviewer`
 - **Location**:
   - `apps/documents/views/VersionControl/Documents.py:156` (`document_delete`)
