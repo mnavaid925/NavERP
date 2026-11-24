@@ -35,7 +35,7 @@ def legal_hold_list(request):
             | Q(matter_number__icontains=query)
             | Q(description__icontains=query)
             | Q(document__title__icontains=query)
-            | Q(document__document_number__icontains=query)
+            | Q(document__number__icontains=query)
         )
 
     qs = qs.order_by("-placed_at")
