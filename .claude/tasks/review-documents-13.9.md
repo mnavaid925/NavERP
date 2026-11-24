@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 8 | 1 | 0 |
+| **Important** | 9 | 7 | 2 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 12 | 6 | 0 |
+| **Total** | 18 | 11 | 7 | 0 |
 
 ---
 
@@ -107,7 +107,7 @@
 - **Issue**: A document already declared as an active record can be declared again under conflicting schedules.
 - **Fix**: In `RecordDeclarationForm.clean()`, reject declaration if an existing declaration for that document exists in the tenant that is not `disposed`.
 
-### [ ] `I2`: Missing Authorization & State Validation on Record Cutoff and Retention Schedule Config
+### [x] `I2`: Missing Authorization & State Validation on Record Cutoff and Retention Schedule Config
 - **Found by**: `code-reviewer`, `security-reviewer`
 - **Location**:
   - `apps/documents/views/RecordsManagement/RetentionSchedules.py` (`retention_schedule_create`, `retention_schedule_edit`)
