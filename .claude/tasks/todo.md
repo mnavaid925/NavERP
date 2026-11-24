@@ -7,6 +7,511 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 13.10: Audit Trail & Reporting (Module 13: Document Management System, `documents`) — plan from `research-documents-13.10.md` (2026-11-24)
+
+> **This plan EXTENDS an existing app.** `apps/documents/` is live with Sub-modules 13.1 through 13.8.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> **Migration is incremental**: previous committed leaf is `0017_dlpincident_doc_dinc_tnt_crt_idx_and_more.py` (claims next available incremental migration `0018_...`) (L43).
+> **Free prefixes verified (0 collisions repo-wide):** **`DAUD`** (`DocumentAuditTrail`), **`DRPT`** (`AuditReportDefinition`), **`DANM`** (`DocumentSecurityAlert`), **`DCOC`** (`ChainOfCustodyExport`).
+> **Plan written from:** `.claude/tasks/research-documents-13.10.md` (Phase 1) and `NavERP.md` (`### 13.10 Audit Trail & Reporting`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/AuditReporting/<Entity>.py` (`DocumentAuditTrails.py`, `AuditReportDefinitions.py`, `DocumentSecurityAlerts.py`, `ChainOfCustodyExports.py`, plus dedicated `AuditReportingDashboard.py` in views/urls and `apps/documents/services/audit.py` for event logging helper)
+> **Template folder name:** `templates/documents/audit_reporting/{audit_trail,report_definition,security_alert,chain_of_custody}/{list,detail,form}.html` + `audit_dashboard.html` + `lifecycle_dashboard.html` + `chain_of_custody/certificate.html` + `chain_of_custody/auditor_portal.html`
+
+## Architectural Rulings (from research, spine audit & `lessons.md`)
+- **No-collision & prefix verification**: Prefixes **`DAUD`** (`DocumentAuditTrail`), **`DRPT`** (`AuditReportDefinition`), **`DANM`** (`DocumentSecurityAlert`), and **`DCOC`** (`ChainOfCustodyExport`), all 4 model classes, and URL stems verified unique across all modules and contract files. Every model subclasses `TenantNumbered` (`NUMBER_PREFIX` set on each).
+- **Verified spine & sibling FKs (no missing masters assumed)**:
+  - `core.Tenant` (`apps/core/models/Tenant.py:class Tenant`): Multi-tenant isolation anchor.
+  - `accounts.User` (`settings.AUTH_USER_MODEL` / `apps/accounts/models.py`): Document actors, report runners, triage investigators, security officers, and portal creators. Scoped with unique reverse relation names (`dms_audit_entries`, `dms_executed_audit_reports`, `dms_security_alerts`, `dms_assigned_security_alerts`, `dms_resolved_security_alerts`, `dms_created_custody_exports`, `dms_revoked_custody_exports`).
+  - `core.OrgUnit` (`apps/core/models/OrgUnit.py:class OrgUnit`): Department scopes for lifecycle reporting and anomaly attribution.
+  - `documents.Document` (`apps/documents/models/VersionControl/Documents.py:8`): Target logical document master for audit events, security alerts, report scopes, and custody export packages. Nullable on audit trail with title/number snapshots so that deleted/purged documents preserve immutable audit history.
+  - `documents.DocumentVersion` (`apps/documents/models/VersionControl/DocumentVersions.py:9`): Target physical revision snapshot for version-specific file hash verification and audit tracking.
+  - `documents.DocumentFolder` (`apps/documents/models/StorageRepository/DocumentFolders.py:12`): Folder taxonomy for hierarchical reporting.
+  - `documents.DocumentApprovalRequest` (`apps/documents/models/ApprovalWorkflow/DocumentApprovalRequests.py:9`): Approval routing requests for turnaround cycle times and bottleneck analysis.
+  - `documents.DlpIncident` (`apps/documents/models/SecurityAccessControl/DlpIncidents.py:13`): Correlated security incident cross-referencing.
+- **Cryptographic Immutability & Mathematical Tamper Evidence (OpenText Part 11 & GxP Standards)**:
+  - `DocumentAuditTrail` enforces append-only immutability at the model level: `save()` prevents updating persisted records (`if self.pk and not is_new: raise ValidationError("Audit records are strictly immutable.")`) and `delete()` explicitly raises `ValidationError("Audit records cannot be deleted.")`.
+  - SHA-256 hash chaining: every record calculates and records `prev_hash` (the `chain_hash` of the preceding tenant entry) and `chain_hash = SHA256(prev_hash | tenant_id | action_type | timestamp | actor_email | doc_number | details_json)`. Any manual database manipulation breaks the mathematical hash chain and is flagged immediately.
+  - Built-in verification routine walks the audit log sequence and reports green "Chain Intact: 100% Valid" or flags tampered records.
+- **User Behavior Analytics (UBA) & Heuristic Anomaly Detection (Box Shield & iManage Threat Manager)**:
+  - Heuristic detection rules evaluate audit logs:
+    1. *Mass Download / Data Exfiltration:* >25 downloads within 30 minutes or >100 MB of confidential documents.
+    2. *Off-Hours Document Access:* Bulk operations occurring between 11 PM and 5 AM or on weekends.
+    3. *Rapid Document Deletion / Purge:* >10 documents deleted or purged in under 5 minutes.
+    4. *Excessive Access Denials (Brute Force / Probing):* >5 `403 Forbidden` / permission denied events in 10 minutes.
+    5. *Unusual Geolocation / IP Address:* Access from unknown subnets or impossible travel.
+    6. *Dormant Sensitive File Access:* Sudden read on confidential documents untouched for >180 days.
+  - Risk scoring (1–100 scale) mapped to standard enterprise severities: `low` (1–39), `medium` (40–69), `high` (70–89), `critical` (90–100).
+  - Triage workbench transitions status: `new` → `investigating` → `confirmed_threat` / `false_positive` → `resolved` / `dismissed`, with mitigation actions (`logged_only`, `user_warned`, `downloads_blocked`, `sharing_revoked`, `session_terminated`).
+  - On-demand heuristic scan action evaluates the past 24 hours / 7 days of audit records and generates security alerts.
+- **Regulatory Chain of Custody & External Auditor Portal (FDA 21 CFR Part 11, SOC 2, ISO 27001, HIPAA)**:
+  - Legally defensible export package (`ChainOfCustodyExport` - `DCOC`) bundles document metadata, revision history, SHA-256 file hashes, and chronological audit entries into an immutable cryptographic manifest (`manifest_json`, `package_hash`).
+  - Time-bound, passcode-protected, read-only guest portal (`/documents/auditor/<token>/`) enables accredited external auditors or regulatory inspectors to verify document authenticity, inspect version diffs, and review audit trails without granting system logins.
+  - Every auditor portal interaction is logged back into `DocumentAuditTrail` with `action_type="auditor_portal_accessed"`, maintaining unbroken custody over the inspection.
+  - Official printable Certificate of Authenticity & Chain of Custody with cryptographic verification seal.
+- **Document Lifecycle Reporting & Velocity Metrics**:
+  - Creation-to-approval turnaround timelines measuring inception (`DocumentDraft` or v1.0) to published state.
+  - Approval bottleneck identification pinpointing overdue approvers and highest latency review stages.
+  - Version churn & volatility analysis highlighting unstable documents with excessive revision counts (>10 versions in 30 days).
+  - Repository status distribution visual breakdown (`draft`, `in_review`, `approved`, `published`, `archived`, `superseded`) with dormant document flags (>365 days untouched).
+- **Service Interception Helper (`log_document_event`)**:
+  - `apps/documents/services/audit.py` provides a centralized helper:
+    `log_document_event(tenant, action_type, document=None, version=None, actor=None, request=None, details=None, is_success=True, failure_reason="")`.
+    Extracts IP address, user agent, and actor snapshot automatically from the request if provided, computes the cryptographic chain hash, and commits the immutable audit entry.
+- **Global vs Tenant FK Scoping in Forms (L29, L39, L11)**:
+  - All foreign keys (`accounts.User`, `documents.Document`, `documents.DocumentVersion`) are TENANT-SCOPED.
+  - Form `__init__` filters all foreign keys by `tenant=self.tenant`.
+  - Form `clean()` methods invoke `reject_foreign(...)` or validate tenant matching.
+  - List views parse query parameters with `.isdigit()` checks (L11) before applying FK filters.
+- **Workflow State, Secrets & Read-Only Timestamp Hygiene (L20, L22, L25)**:
+  - Passcode protection on `ChainOfCustodyExport` uses Django's `make_password` / `check_password`; raw passcodes are never stored or exposed in templates.
+  - System timestamps (`created_at`, `updated_at`, `event_timestamp`, `detected_at`, `sealed_at`, `last_run_at`, `last_accessed_at`, `resolved_at`, `revoked_at`) have `editable=False` or are excluded from form `Meta.fields`.
+  - Computed flags (`is_valid`, `is_expired`, `is_sealed`, `integrity_status`) are implemented as `@property` methods, never stored editable columns (L22).
+- **L65 Rule on CharField `max_length` vs Choice Values**:
+  - `DocumentAuditTrail.action_type`: `max_length=40` (longest value: `auditor_portal_accessed` = 23 chars).
+  - `DocumentAuditTrail.failure_reason`: `max_length=100`.
+  - `AuditReportDefinition.report_type`: `max_length=40` (longest value: `lifecycle_bottlenecks` = 21 chars).
+  - `AuditReportDefinition.date_range_preset`: `max_length=30` (longest value: `last_90_days` = 12 chars).
+  - `AuditReportDefinition.output_format`: `max_length=20` (longest value: `table_view` = 10 chars).
+  - `AuditReportDefinition.status`: `max_length=20` (longest value: `archived` = 8 chars).
+  - `DocumentSecurityAlert.alert_type`: `max_length=40` (longest value: `permission_escalation` = 21 chars).
+  - `DocumentSecurityAlert.severity`: `max_length=20` (longest value: `critical` = 8 chars).
+  - `DocumentSecurityAlert.status`: `max_length=30` (longest value: `confirmed_threat` = 16 chars).
+  - `DocumentSecurityAlert.action_taken`: `max_length=40` (longest value: `session_terminated` = 18 chars).
+  - `ChainOfCustodyExport.scope`: `max_length=30` (longest value: `regulatory_filing` = 17 chars).
+  - `ChainOfCustodyExport.regulatory_framework`: `max_length=50` (longest value: `general_compliance` = 18 chars).
+- **L65 Rule on Index / Constraint Name Lengths (`<= 30` chars)**:
+  - `doc_daud_ten_num_uniq` (21 chars), `doc_daud_tnt_evt_idx` (20 chars), `doc_daud_tnt_act_idx` (20 chars), `doc_daud_tnt_doc_idx` (20 chars), `doc_daud_tnt_usr_idx` (20 chars), `doc_daud_tnt_suc_idx` (20 chars), `doc_daud_chn_hsh_idx` (20 chars).
+  - `doc_drpt_ten_num_uniq` (21 chars), `doc_drpt_tnt_typ_idx` (20 chars), `doc_drpt_tnt_sts_idx` (20 chars), `doc_drpt_tnt_sys_idx` (20 chars).
+  - `doc_danm_ten_num_uniq` (21 chars), `doc_danm_tnt_sts_idx` (20 chars), `doc_danm_tnt_sev_idx` (20 chars), `doc_danm_tnt_typ_idx` (20 chars), `doc_danm_tnt_rsk_idx` (20 chars), `doc_danm_tnt_act_idx` (20 chars).
+  - `doc_dcoc_ten_num_uniq` (21 chars), `doc_dcoc_tnt_doc_idx` (20 chars), `doc_dcoc_tnt_tok_idx` (20 chars), `doc_dcoc_tnt_act_idx` (20 chars), `doc_dcoc_tnt_exp_idx` (20 chars).
+- **L66 Audit Log Signature**: Every mutating view strictly calls `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)`.
+- **L33 / L40 / L42 / L57 Frontend & View Standards**:
+  - Color-named badges ONLY: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+  - Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>...</dt><dd>...</dd></div></dl>`.
+  - Delete and action views use `@require_POST`; paginators guard `has_previous` / `has_next` (L9).
+  - List views implement search, multi-criteria filtering with `.isdigit()` validation, and pagination.
+
+---
+
+## Detailed Checkable Work Items
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze `.claude/tasks/contract-documents-13.10.md` with every model field, choices tuple, form `Meta.fields` + exclusions, URL pattern names, and view context keys.
+
+### Phase 3.2: Entity by Entity Implementation
+
+#### Entity 1: DocumentAuditTrail (`DAUD-`)
+- [ ] `apps/documents/models/AuditReporting/DocumentAuditTrails.py`
+  - Subclasses `TenantNumbered` (`NUMBER_PREFIX = "DAUD"`).
+  - Immutable event ledger tracking 22 lifecycle action types with user and document snapshots.
+  - Cryptographic SHA-256 hash chaining (`prev_hash`, `chain_hash`).
+  - Model-level `save()` immutability check and `delete()` prevention.
+  - Helper methods: `verify_hash()`, `get_action_type_badge()`, `get_result_badge()`.
+  - Constraints & Indexes: `doc_daud_ten_num_uniq`, `doc_daud_tnt_evt_idx`, `doc_daud_tnt_act_idx`, `doc_daud_tnt_doc_idx`, `doc_daud_tnt_usr_idx`, `doc_daud_tnt_suc_idx`, `doc_daud_chn_hsh_idx`.
+- [ ] `apps/documents/forms/AuditReporting/DocumentAuditTrails.py`
+  - `DocumentAuditTrailFilterForm` for multi-criteria audit querying (date range, action type, actor, document, success status, IP).
+  - Read-only / admin manual note entry form if needed.
+- [ ] `apps/documents/views/AuditReporting/DocumentAuditTrails.py`
+  - `audit_trail_list`: Interactive audit log console with quick filters, date picker, search, and pagination.
+  - `audit_trail_detail`: Deep forensic inspection with environmental headers, diffs, and cryptographic hash verification.
+  - `audit_trail_verify_chain`: Action / HTMX endpoint walking audit log sequence and returning hash chain verification badge.
+  - `audit_trail_export_csv`: Streaming CSV export (`.iterator(chunk_size=1000)`) with formula injection defense.
+- [ ] `apps/documents/urls/AuditReporting/DocumentAuditTrails.py`
+  - Routes: `audit_trail_list`, `audit_trail_detail`, `audit_trail_verify_chain`, `audit_trail_export_csv`.
+- [ ] `templates/documents/audit_reporting/audit_trail/list.html`
+  - Audit log console, quick-filter chips, chain integrity status banner, CSV export button, responsive data table.
+- [ ] `templates/documents/audit_reporting/audit_trail/detail.html`
+  - Forensic detail grid, cryptographic hash chain card (previous hash, current hash), actor snapshot, state diffs JSON viewer.
+- [ ] `templates/documents/audit_reporting/audit_trail/form.html`
+  - Filter modal / manual query form.
+
+#### Entity 2: AuditReportDefinition (`DRPT-`)
+- [ ] `apps/documents/models/AuditReporting/AuditReportDefinitions.py`
+  - Subclasses `TenantNumbered` (`NUMBER_PREFIX = "DRPT"`).
+  - Pre-built compliance presets and custom report definitions.
+  - 10 report types, date range presets, custom dates, filter JSON, output formats.
+  - Run tracking: `last_run_at`, `last_run_by`, `total_runs`.
+  - Helper methods: `get_report_type_badge()`, `get_status_badge()`.
+  - Constraints & Indexes: `doc_drpt_ten_num_uniq`, `doc_drpt_tnt_typ_idx`, `doc_drpt_tnt_sts_idx`, `doc_drpt_tnt_sys_idx`.
+- [ ] `apps/documents/forms/AuditReporting/AuditReportDefinitions.py`
+  - `AuditReportDefinitionForm` with tenant-scoped querysets, date range validation, and JSON filter criteria.
+- [ ] `apps/documents/views/AuditReporting/AuditReportDefinitions.py`
+  - `audit_report_list`: Catalog of pre-built compliance reports and custom saved reports.
+  - `audit_report_create`: Create custom report definition.
+  - `audit_report_detail`: Execute and render report with summary KPI cards, chart aggregates, and download buttons.
+  - `audit_report_edit`: Edit report parameters.
+  - `audit_report_delete`: Delete/archive report definition (`@require_POST`).
+  - `audit_report_run`: Run on-demand report execution returning table or downloadable CSV/JSON.
+- [ ] `apps/documents/urls/AuditReporting/AuditReportDefinitions.py`
+  - Routes: `audit_report_list`, `audit_report_create`, `audit_report_detail`, `audit_report_edit`, `audit_report_delete`, `audit_report_run`.
+- [ ] `templates/documents/audit_reporting/report_definition/list.html`
+  - Report catalog with System Presets tab vs Custom Reports tab, execution counters, action menus.
+- [ ] `templates/documents/audit_reporting/report_definition/detail.html`
+  - Report execution results, summary KPI cards (total events, unique actors, success rate %), aggregated tables, export triggers.
+- [ ] `templates/documents/audit_reporting/report_definition/form.html`
+  - Report builder form with report type selector, date range preset, dynamic filter options.
+
+#### Entity 3: DocumentSecurityAlert (`DANM-`)
+- [ ] `apps/documents/models/AuditReporting/DocumentSecurityAlerts.py`
+  - Subclasses `TenantNumbered` (`NUMBER_PREFIX = "DANM"`).
+  - User Behavior Analytics (UBA) anomaly detection records.
+  - Heuristic alert types: `mass_download`, `off_hours_access`, `rapid_deletion`, `excessive_denials`, `unusual_location`, `dormant_file_access`, `permission_escalation`.
+  - Severities: `low`, `medium`, `high`, `critical`; risk score 1–100.
+  - Triage tracking: `status`, `action_taken`, `assigned_to`, `triage_notes`, `resolved_at`, `resolved_by`.
+  - Helper methods: `get_severity_badge()`, `get_status_badge()`, `get_alert_type_badge()`.
+  - Constraints & Indexes: `doc_danm_ten_num_uniq`, `doc_danm_tnt_sts_idx`, `doc_danm_tnt_sev_idx`, `doc_danm_tnt_typ_idx`, `doc_danm_tnt_rsk_idx`, `doc_danm_tnt_act_idx`.
+- [ ] `apps/documents/forms/AuditReporting/DocumentSecurityAlerts.py`
+  - `DocumentSecurityAlertTriageForm`: Triage status transition, severity adjustment, assigned investigator, mitigation action, and triage notes.
+  - `DocumentSecurityAlertFilterForm`: Filter by severity, status, alert type, and date range.
+- [ ] `apps/documents/views/AuditReporting/DocumentSecurityAlerts.py`
+  - `security_alert_list`: UBA incident feed with risk score indicators, severity filters, and triage status tabs.
+  - `security_alert_detail`: Investigation workbench showing incident timeline, correlated audit events, actor baseline, and triage form.
+  - `security_alert_scan`: POST action executing on-demand heuristic scan across recent audit logs.
+  - `security_alert_triage`: POST/HTMX endpoint to update incident status and execute mitigation countermeasures.
+- [ ] `apps/documents/urls/AuditReporting/DocumentSecurityAlerts.py`
+  - Routes: `security_alert_list`, `security_alert_detail`, `security_alert_scan`, `security_alert_triage`.
+- [ ] `templates/documents/audit_reporting/security_alert/list.html`
+  - UBA security console, severity cards, threat score badges, on-demand scan trigger, filterable incident feed.
+- [ ] `templates/documents/audit_reporting/security_alert/detail.html`
+  - Investigation workbench, actor profile snapshot, correlated audit log timeline, triage action panel.
+- [ ] `templates/documents/audit_reporting/security_alert/form.html`
+  - Alert edit / triage modal form.
+
+#### Entity 4: ChainOfCustodyExport (`DCOC-`)
+- [ ] `apps/documents/models/AuditReporting/ChainOfCustodyExports.py`
+  - Subclasses `TenantNumbered` (`NUMBER_PREFIX = "DCOC"`).
+  - Regulatory compliance export packages for legal and regulatory audits.
+  - Regulatory frameworks: `general_compliance`, `iso_27001`, `soc2_type2`, `fda_21cfr11`, `hipaa`, `gdpr_article30`, `legal_hold`.
+  - Cryptographic manifest: `manifest_json`, `package_hash`, `is_sealed`, `sealed_at`.
+  - External Auditor Access Portal: `auditor_name`, `auditor_email`, `auditor_organization`, `access_token`, `passcode_hash`, `is_portal_active`, `expires_at`, `access_count`, `last_accessed_at`, `revoked_at`, `revoked_by`.
+  - Helper methods: `is_valid`, `is_expired`, `generate_manifest()`, `verify_package_hash()`, `get_status_badge()`, `get_scope_badge()`.
+  - Constraints & Indexes: `doc_dcoc_ten_num_uniq`, `doc_dcoc_tnt_doc_idx`, `doc_dcoc_tnt_tok_idx`, `doc_dcoc_tnt_act_idx`, `doc_dcoc_tnt_exp_idx`.
+- [ ] `apps/documents/forms/AuditReporting/ChainOfCustodyExports.py`
+  - `ChainOfCustodyExportForm`: Document selection, regulatory framework, scope, auditor information, expiration deadline, and optional portal passcode.
+- [ ] `apps/documents/views/AuditReporting/ChainOfCustodyExports.py`
+  - `custody_export_list`: Evidence package and auditor portal management list.
+  - `custody_export_create`: Package document evidence and generate auditor portal access credentials.
+  - `custody_export_detail`: Package manifest inspector, digital checksum verification, portal link copy, and access history.
+  - `custody_export_certificate`: Printable official Certificate of Authenticity & Chain of Custody.
+  - `custody_export_revoke`: POST endpoint to instantly revoke auditor portal access.
+  - `auditor_portal_view`: Public token-authenticated read-only portal view (`/documents/auditor/<token>/`) allowing external auditors to inspect verified documents and audit trails.
+  - `auditor_portal_verify`: POST endpoint for portal passcode challenge.
+- [ ] `apps/documents/urls/AuditReporting/ChainOfCustodyExports.py`
+  - Routes: `custody_export_list`, `custody_export_create`, `custody_export_detail`, `custody_export_certificate`, `custody_export_revoke`, `auditor_portal_view`, `auditor_portal_verify`.
+- [ ] `templates/documents/audit_reporting/chain_of_custody/list.html`
+  - Evidence packages list, active auditor passes, expiration countdown, verification badges.
+- [ ] `templates/documents/audit_reporting/chain_of_custody/detail.html`
+  - Package manifest inspector, SHA-256 integrity verification badge, auditor link sharing card, session history table.
+- [ ] `templates/documents/audit_reporting/chain_of_custody/form.html`
+  - Evidence export builder form with document selector, compliance framework, auditor details, passcode.
+- [ ] `templates/documents/audit_reporting/chain_of_custody/certificate.html`
+  - Formal printable Certificate of Authenticity with corporate seal, document lifecycle chronology, and cryptographic SHA-256 hashes.
+- [ ] `templates/documents/audit_reporting/chain_of_custody/auditor_portal.html`
+  - Dedicated standalone read-only auditor inspection portal with passcode gate, document preview, version history, and verified audit trail.
+
+#### Dedicated Dashboards & Service Helper
+- [ ] `apps/documents/services/audit.py`
+  - Standardized `log_document_event(tenant, action_type, document=None, version=None, actor=None, request=None, details=None, is_success=True, failure_reason="")` helper.
+  - Heuristic anomaly evaluator `run_heuristic_anomaly_scan(tenant, hours=24)` scanning audit records and creating `DocumentSecurityAlert` instances.
+- [ ] `apps/documents/views/AuditReporting/AuditReportingDashboard.py`
+  - `audit_dashboard`: Central Audit & Security command center with integrity status, recent alerts, activity trends, and active auditor passes.
+  - `document_lifecycle_dashboard`: Lifecycle metrics showing Creation-to-Approval turnaround times, approval bottlenecks, version churn, and repository status distribution.
+- [ ] `apps/documents/urls/AuditReporting/AuditReportingDashboard.py`
+  - Routes: `audit_dashboard`, `document_lifecycle_dashboard`.
+- [ ] `templates/documents/audit_reporting/audit_dashboard.html`
+  - Executive command center: cryptographic chain health badge, 24h event volume, threat alert cards, top active users, rapid audit explorer.
+- [ ] `templates/documents/audit_reporting/lifecycle_dashboard.html`
+  - Lifecycle analytics: Creation-to-Approval velocity, approval bottleneck table, high-churn document watchlist, status breakdown charts.
+
+### Phase 3.3: Integration & Migration
+- [ ] Re-export all models in `apps/documents/models/AuditReporting/__init__.py` and `apps/documents/models/__init__.py`
+- [ ] Re-export all forms in `apps/documents/forms/AuditReporting/__init__.py` and `apps/documents/forms/__init__.py`
+- [ ] Re-export all views in `apps/documents/views/AuditReporting/__init__.py` and `apps/documents/views/__init__.py`
+- [ ] Wire URL routes in `apps/documents/urls/AuditReporting/__init__.py` and `apps/documents/urls/__init__.py`
+- [ ] Register all 4 models in `apps/documents/admin.py` with list displays, filters, search fields, and read-only field guards
+- [ ] Extend `apps/documents/management/commands/seed_documents.py` with realistic 13.10 seed data (audit logs with valid SHA-256 chain, compliance report presets, security alerts with threat scores, custody export packages)
+- [ ] Wire `LIVE_LINKS["13.10"]` in `apps/core/navigation.py`:
+  - `"Immutable Activity Logs": "documents:audit_trail_list"`
+  - `"Audit Report Generation": "documents:audit_report_list"`
+  - `"User Behavior Analytics": "documents:security_alert_list"`
+  - `"Document Lifecycle Reporting": "documents:document_lifecycle_dashboard"`
+  - `"Regulatory Audit Support": "documents:custody_export_list"`
+  - `"Chain of Custody Packages": "documents:custody_export_list"`
+  - `"Audit Command Center": "documents:audit_dashboard"`
+- [ ] Run `makemigrations documents` (claims `0018_...`)
+- [ ] Run `migrate`
+- [ ] Run `seed_documents` twice (verify 100% idempotency)
+- [ ] Run `manage.py check`
+
+### Phase 3.4: Smoke Verification
+- [ ] `qa-smoke-tester` agent verifies all 13.10 routes return 200/302 as `admin_acme`, verifies content matches contract, checks pagination, tests hash chain verification, verifies auditor portal access, and confirms cross-tenant IDOR returns 404.
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] `code-reviewer` review
+- [ ] `explorer` review
+- [ ] `frontend-reviewer` review
+- [ ] `performance-reviewer` review
+- [ ] `qa-smoke-tester` review
+- [ ] `security-reviewer` review
+- [ ] Deduplicate and consolidate findings into `.claude/tasks/review-documents-13.10.md` with C/I/M IDs.
+
+### Phase 5: Code Fixer
+- [ ] `code-fixer` agent resolves findings in ID order (Critical → Important → Minor), commits one file per commit, and verifies `manage.py check` clean.
+
+### Phase 6: Automated Test Suite
+- [ ] Update `tests/conftest.py` with 13.10 fixtures (`sample_audit_trail`, `sample_report_def`, `sample_security_alert`, `sample_custody_export`)
+- [ ] `tests/test_audit_reporting_models.py` (model creation, immutability enforcement, SHA-256 chain calculation, helper badges)
+- [ ] `tests/test_audit_reporting_forms.py` (tenant scoping, date range validation, clean rejection)
+- [ ] `tests/test_audit_reporting_views.py` (list, detail, create, export, verify chain, triage, auditor portal, dashboard)
+- [ ] `tests/test_audit_reporting_security.py` (cross-tenant IDOR, guest passcode verification, token revocation, immutability rejection)
+- [ ] Run full unfiltered test suite and ensure 100% green.
+
+### Phase 7: Skill & Documentation Closeout
+- [ ] Update `.claude/skills/documents/SKILL.md` with 13.10 models, URLs, templates, and conventions
+- [ ] Update `README.md` marking Sub-module 13.10 complete
+- [ ] Document gap register in `.agents/tasks/gaps-documents-13.10.md`
+- [ ] Complete close-out review notes in `.claude/tasks/todo.md`
+
+---
+
+## Models (from research — 1–4)
+
+### 1. `DocumentAuditTrail` [PREFIX: `DAUD-`]
+- **Purpose**: Append-only, write-once ledger capturing every meaningful user and system action on documents. Features cryptographic SHA-256 hash chaining back to the previous entry, strict immutability safeguards, environmental metadata snapshots, and state diffs.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DAUD"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.SET_NULL, null=True, blank=True, related_name="audit_trails", db_index=True)`
+  - `document_title_snapshot`: `CharField(max_length=255, blank=True)`
+  - `document_number_snapshot`: `CharField(max_length=32, blank=True)`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="audit_trails")`
+  - `version_label_snapshot`: `CharField(max_length=32, blank=True)`
+  - `actor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_audit_entries")`
+  - `actor_name_snapshot`: `CharField(max_length=150, blank=True)`
+  - `actor_email_snapshot`: `CharField(max_length=254, blank=True)`
+  - `action_type`: `CharField(max_length=40, choices=ACTION_TYPE_CHOICES, db_index=True)`:
+    - `created`: Document Created
+    - `viewed`: Document Viewed / Read
+    - `previewed`: In-Browser Preview Rendered
+    - `edited`: Content / Metadata Edited
+    - `version_uploaded`: New Version Uploaded
+    - `downloaded`: Binary File Downloaded
+    - `printed`: Document Printed
+    - `checked_out`: Exclusive Edit Lock Acquired
+    - `checked_in`: Edit Lock Released / Checked In
+    - `permission_changed`: Access Permissions / ACL Modified
+    - `watermark_applied`: Watermarked Copy Generated
+    - `shared_externally`: External Share Link Created
+    - `share_revoked`: External Share Link Revoked
+    - `workflow_approved`: Workflow Step Approved
+    - `workflow_rejected`: Workflow Step Rejected
+    - `signed`: Electronic Signature Captured
+    - `moved`: Moved / Folder Reassigned
+    - `deleted`: Soft-Deleted / Moved to Trash
+    - `restored`: Restored from Trash
+    - `purged`: Permanently Purged
+    - `dlp_violation`: DLP Policy Violation Triggered
+    - `auditor_portal_accessed`: External Auditor Portal Access
+  - `event_timestamp`: `DateTimeField(default=timezone.now, db_index=True)`
+  - `ip_address`: `GenericIPAddressField(null=True, blank=True)`
+  - `user_agent`: `CharField(max_length=255, blank=True)`
+  - `session_id`: `CharField(max_length=64, blank=True)`
+  - `is_success`: `BooleanField(default=True, db_index=True)`
+  - `failure_reason`: `CharField(max_length=100, blank=True)`
+  - `details_json`: `TextField(blank=True, default="{}")`
+  - `prev_hash`: `CharField(max_length=64, blank=True, help_text="SHA-256 hash of previous audit record in chain")`
+  - `chain_hash`: `CharField(max_length=64, blank=True, db_index=True, help_text="Cryptographic SHA-256 tamper-evident hash")`
+  - `is_immutable`: `BooleanField(default=True)`
+- **Behavior & Safeguards**:
+  - `save()`: Overridden to calculate `prev_hash` (retrieving the latest entry's `chain_hash` for this tenant) and generate `chain_hash = hashlib.sha256(f"{prev_hash}|{tenant_id}|{action_type}|{event_timestamp.isoformat()}|{actor_email_snapshot}|{document_number_snapshot}|{details_json}".encode()).hexdigest()`. Disallows updates if already persisted (`if self.pk and not is_new: raise ValidationError("Audit records are immutable.")`).
+  - `delete()`: Overridden to raise `ValidationError("Audit records cannot be deleted.")`.
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_daud_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "-event_timestamp"], name="doc_daud_tnt_evt_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "action_type"], name="doc_daud_tnt_act_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "document"], name="doc_daud_tnt_doc_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "actor"], name="doc_daud_tnt_usr_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "is_success"], name="doc_daud_tnt_suc_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "chain_hash"], name="doc_daud_chn_hsh_idx")` (20 chars)
+- **Form exclusions**: `tenant`, `number`, `prev_hash`, `chain_hash`, `is_immutable`, `created_at`, `updated_at`.
+- **CSS Badge Mappings**:
+  - `created`, `version_uploaded`, `signed`: `badge-green`
+  - `viewed`, `previewed`, `downloaded`: `badge-info`
+  - `edited`, `checked_in`, `moved`, `restored`: `badge-slate`
+  - `checked_out`, `permission_changed`, `shared_externally`: `badge-amber`
+  - `deleted`, `purged`, `share_revoked`, `dlp_violation`: `badge-red`
+
+### 2. `AuditReportDefinition` [PREFIX: `DRPT-`]
+- **Purpose**: Pre-built compliance presets and user-configured forensic query definitions for document history, user activity, confidential access, permission changes, and lifecycle bottleneck analysis.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DRPT"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `name`: `CharField(max_length=150)`
+  - `description`: `TextField(blank=True)`
+  - `report_type`: `CharField(max_length=40, choices=REPORT_TYPE_CHOICES, db_index=True)`:
+    - `document_history`: Full Document Lifecycle History
+    - `user_activity`: User Activity & Accountability
+    - `confidential_access`: Confidential & Restricted Document Access
+    - `permission_audit`: Security & Permission Changes
+    - `security_exceptions`: Access Denials & Security Violations
+    - `external_sharing`: External Sharing & Guest Downloads
+    - `deletion_purge`: Document Deletion & Purge Audit
+    - `lifecycle_bottlenecks`: Approval Bottlenecks & Turnaround Times
+    - `version_churn`: High Version Churn & Volatility Analysis
+    - `custom_query`: Custom Filtered Audit Query
+  - `is_system_preset`: `BooleanField(default=False, db_index=True)`
+  - `date_range_preset`: `CharField(max_length=30, choices=DATE_RANGE_CHOICES, default="last_30_days")`:
+    - `today`: Today
+    - `yesterday`: Yesterday
+    - `last_7_days`: Last 7 Days
+    - `last_30_days`: Last 30 Days
+    - `last_90_days`: Last 90 Days
+    - `year_to_date`: Year to Date
+    - `all_time`: All Recorded History
+    - `custom`: Custom Date Range
+  - `start_date`: `DateField(null=True, blank=True)`
+  - `end_date`: `DateField(null=True, blank=True)`
+  - `filter_criteria_json`: `TextField(blank=True, default="{}")` (JSON: selected document types, classifications, action types, specific users, org units)
+  - `output_format`: `CharField(max_length=20, choices=FORMAT_CHOICES, default="table_view")`:
+    - `table_view`: Interactive Web Table
+    - `csv_export`: CSV Data Export
+    - `json_export`: JSON Raw Feed
+    - `pdf_summary`: Formal PDF Report
+  - `last_run_at`: `DateTimeField(null=True, blank=True)`
+  - `last_run_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_executed_audit_reports")`
+  - `total_runs`: `PositiveIntegerField(default=0)`
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="active")`:
+    - `active`: Active / Ready
+    - `draft`: Draft Configuration
+    - `archived`: Archived
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_drpt_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "report_type"], name="doc_drpt_tnt_typ_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "status"], name="doc_drpt_tnt_sts_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "is_system_preset"], name="doc_drpt_tnt_sys_idx")` (20 chars)
+- **Form exclusions**: `tenant`, `number`, `total_runs`, `last_run_at`, `last_run_by`, `created_at`, `updated_at`.
+- **CSS Badge Mappings**:
+  - Status: `active`: `badge-green`, `draft`: `badge-slate`, `archived`: `badge-muted`
+  - Report types: `document_history`: `badge-info`, `user_activity`: `badge-slate`, `confidential_access`: `badge-amber`, `security_exceptions`: `badge-red`, `lifecycle_bottlenecks`: `badge-amber`, `deletion_purge`: `badge-red`
+
+### 3. `DocumentSecurityAlert` [PREFIX: `DANM-`]
+- **Purpose**: User Behavior Analytics (UBA) anomaly detection records and security incident logs. Captures heuristic violations (mass downloads, off-hours spikes, rapid deletions, brute force denials), calculates risk scores (1–100), and tracks investigation triage.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DANM"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `title`: `CharField(max_length=200)`
+  - `alert_type`: `CharField(max_length=40, choices=ALERT_TYPE_CHOICES, db_index=True)`:
+    - `mass_download`: Bulk Document Download / Exfiltration
+    - `off_hours_access`: Abnormal Off-Hours Access (Night / Weekend)
+    - `rapid_deletion`: Mass Document Deletion / Potential Sabotage
+    - `excessive_denials`: Multiple Access Denied Violations (Probing)
+    - `unusual_location`: Anomalous IP Address / Unknown Subnet
+    - `dormant_file_access`: Sudden Access to Dormant Sensitive Files
+    - `permission_escalation`: Rapid Permission Modification Burst
+  - `severity`: `CharField(max_length=20, choices=SEVERITY_CHOICES, default="medium", db_index=True)`:
+    - `low`: Low (Informational deviation)
+    - `medium`: Medium (Moderate threat potential)
+    - `high`: High (Probable security policy violation)
+    - `critical`: Critical (Immediate threat / bulk exfiltration)
+  - `risk_score`: `PositiveIntegerField(default=50, help_text="Calculated risk score 1-100", db_index=True)`
+  - `actor`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_security_alerts")`
+  - `actor_name_snapshot`: `CharField(max_length=150, blank=True)`
+  - `target_document`: `ForeignKey("documents.Document", on_delete=models.SET_NULL, null=True, blank=True, related_name="security_alerts")`
+  - `event_count`: `PositiveIntegerField(default=1, help_text="Number of correlated anomalous events")`
+  - `time_window_minutes`: `PositiveIntegerField(default=60, help_text="Evaluation window in minutes")`
+  - `detected_at`: `DateTimeField(default=timezone.now, db_index=True)`
+  - `details_json`: `TextField(blank=True, default="{}")` (JSON: IP addresses, file list, threshold triggered, user baseline stats)
+  - `status`: `CharField(max_length=30, choices=STATUS_CHOICES, default="new", db_index=True)`:
+    - `new`: New Alert
+    - `investigating`: Under Active Investigation
+    - `confirmed_threat`: Confirmed Insider Threat / Incident
+    - `false_positive`: False Positive / Authorized Activity
+    - `resolved`: Resolved & Remediated
+    - `dismissed`: Dismissed / Accepted Risk
+  - `action_taken`: `CharField(max_length=40, choices=ACTION_TAKEN_CHOICES, default="logged_only")`:
+    - `logged_only`: Alert Logged (No Automated Block)
+    - `user_warned`: Authoritative Warning Issued
+    - `downloads_blocked`: Download Permissions Temporarily Suspended
+    - `sharing_revoked`: External Share Links Auto-Revoked
+    - `session_terminated`: Active User Sessions Revoked
+  - `assigned_to`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_assigned_security_alerts")`
+  - `triage_notes`: `TextField(blank=True, help_text="Investigation observations and remediation actions")`
+  - `resolved_at`: `DateTimeField(null=True, blank=True)`
+  - `resolved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_resolved_security_alerts")`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_danm_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "status"], name="doc_danm_tnt_sts_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "severity"], name="doc_danm_tnt_sev_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "alert_type"], name="doc_danm_tnt_typ_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "-risk_score"], name="doc_danm_tnt_rsk_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "actor"], name="doc_danm_tnt_act_idx")` (20 chars)
+- **Form exclusions**: `tenant`, `number`, `detected_at`, `resolved_at`, `resolved_by`, `created_at`, `updated_at`.
+- **CSS Badge Mappings**:
+  - Severity: `low`: `badge-slate`, `medium`: `badge-info`, `high`: `badge-amber`, `critical`: `badge-red`
+  - Status: `new`: `badge-red`, `investigating`: `badge-amber`, `confirmed_threat`: `badge-red`, `false_positive`: `badge-slate`, `resolved`: `badge-green`, `dismissed`: `badge-muted`
+
+### 4. `ChainOfCustodyExport` [PREFIX: `DCOC-`]
+- **Purpose**: Defensible regulatory evidence packages bundling document files, historical revision checksums, and chronological audit entries with a master cryptographic SHA-256 manifest. Includes secure, time-bound, passcode-protected External Auditor Access Portal governance.
+- **Fields**:
+  - `number`: `CharField(max_length=32, editable=False)` (`NUMBER_PREFIX = "DCOC"`)
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, db_index=True)`
+  - `title`: `CharField(max_length=200)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.SET_NULL, null=True, blank=True, related_name="custody_exports")`
+  - `document_title_snapshot`: `CharField(max_length=255, blank=True)`
+  - `scope`: `CharField(max_length=30, choices=SCOPE_CHOICES, default="single_document")`:
+    - `single_document`: Single Document (All Revisions & Logs)
+    - `folder_hierarchy`: Entire Folder / Project Package
+    - `date_range_audit`: System-Wide Audit Log Archive for Period
+    - `regulatory_filing`: Formal Regulatory Submission Bundle
+  - `regulatory_framework`: `CharField(max_length=50, choices=REGULATORY_FRAMEWORKS, default="general_compliance")`:
+    - `general_compliance`: General Corporate Compliance
+    - `iso_27001`: ISO 27001 Information Security Audit
+    - `soc2_type2`: SOC 2 Type II Compliance Examination
+    - `fda_21cfr11`: FDA 21 CFR Part 11 Electronic Records
+    - `hipaa`: HIPAA Security & Privacy Rule
+    - `gdpr_article30`: GDPR Article 30 Processing Records
+    - `legal_hold`: Formal Litigation / Legal Hold Evidence
+  - `package_hash`: `CharField(max_length=64, blank=True, help_text="Master SHA-256 checksum of complete export manifest")`
+  - `manifest_json`: `TextField(blank=True, default="{}", help_text="Cryptographic manifest of all files, versions, and audit entries")`
+  - `export_file`: `models.FileField(upload_to="documents/custody_exports/%Y/%m/", null=True, blank=True)`
+  - `export_file_size`: `BigIntegerField(default=0)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_created_custody_exports")`
+  - `is_sealed`: `BooleanField(default=True, help_text="Once sealed, manifest and cryptographic hashes cannot be regenerated")`
+  - `sealed_at`: `DateTimeField(default=timezone.now)`
+  # External Auditor Access Portal fields
+  - `auditor_name`: `CharField(max_length=150, blank=True, help_text="External auditor / regulator name")`
+  - `auditor_email`: `CharField(max_length=254, blank=True)`
+  - `auditor_organization`: `CharField(max_length=150, blank=True, help_text="Audit firm or regulatory agency, e.g. Deloitte, FDA")`
+  - `access_token`: `CharField(max_length=64, unique=True, db_index=True, help_text="Cryptographic unguessable URL token")`
+  - `passcode_hash`: `CharField(max_length=128, blank=True, help_text="Hashed optional portal passcode")`
+  - `is_portal_active`: `BooleanField(default=True, db_index=True)`
+  - `expires_at`: `DateTimeField(null=True, blank=True, help_text="Auditor access expiration timestamp")`
+  - `access_count`: `PositiveIntegerField(default=0)`
+  - `last_accessed_at`: `DateTimeField(null=True, blank=True)`
+  - `revoked_at`: `DateTimeField(null=True, blank=True)`
+  - `revoked_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="dms_revoked_custody_exports")`
+- **Behavior & Properties**:
+  - `is_valid`: `@property` returning `is_portal_active and not is_expired`.
+  - `is_expired`: `@property` returning `bool(expires_at and timezone.now() > expires_at)`.
+  - `has_passcode`: `@property` returning `bool(passcode_hash)`.
+  - `generate_manifest()`: Compiles document versions, computes revision SHA-256 hashes, packages audit history, and computes `package_hash`.
+  - `verify_package_hash()`: Validates that current manifest contents re-hash to `package_hash`.
+  - `set_passcode(raw_passcode)`: Hashes raw passcode via Django `make_password`.
+  - `check_passcode(raw_passcode)`: Verifies passcode via Django `check_password`.
+  - `revoke(user=None)`: Deactivates portal, records `revoked_at` and `revoked_by`.
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dcoc_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "document"], name="doc_dcoc_tnt_doc_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "access_token"], name="doc_dcoc_tnt_tok_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "is_portal_active"], name="doc_dcoc_tnt_act_idx")` (20 chars)
+  - `models.Index(fields=["tenant", "expires_at"], name="doc_dcoc_tnt_exp_idx")` (20 chars)
+- **Form exclusions**: `tenant`, `number`, `access_token`, `package_hash`, `manifest_json`, `access_count`, `last_accessed_at`, `passcode_hash` (handled via form's `raw_passcode`), `is_sealed`, `sealed_at`, `revoked_at`, `revoked_by`, `created_by`, `created_at`, `updated_at`.
+- **CSS Badge Mappings**:
+  - Status: Valid/Active: `badge-green`, Expired: `badge-amber`, Revoked: `badge-red`
+  - Scope: `single_document`: `badge-info`, `folder_hierarchy`: `badge-slate`, `regulatory_filing`: `badge-amber`, `date_range_audit`: `badge-slate`
+
+---
+
 # Sub-module 12.19: Laboratory Information Management (LIMS) (Module 12: Quality Management System, `quality`) — plan from `research-quality-12.19.md` (2026-11-21)
 
 > **This plan EXTENDS an existing app.** `apps/quality/` is live with Sub-modules 12.1 through 12.18.
