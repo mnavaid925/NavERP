@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Report Definition: {{ report_def.name }}{% else %}New Audit Report Definition{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_report_list' %}">Report Catalog</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Query{% else %}New Query{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Audit Report: {{ report_def.name }}{% else %}Create Custom Audit Report{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:audit_report_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Report Parameters & Filter Scope</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Report Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Description & Scope</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.report_type.id_for_label }}">Report Category *</label>
+                        {{ form.report_type }}
+                        {% if form.report_type.errors %}<div class="form-error">{{ form.report_type.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.output_format.id_for_label }}">Default Export Format *</label>
+                        {{ form.output_format }}
+                        {% if form.output_format.errors %}<div class="form-error">{{ form.output_format.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.date_range_preset.id_for_label }}">Evaluation Time Window *</label>
+                    {{ form.date_range_preset }}
+                    {% if form.date_range_preset.errors %}<div class="form-error">{{ form.date_range_preset.errors }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.custom_start_date.id_for_label }}">Custom Start Date</label>
+                        {{ form.custom_start_date }}
+                        {% if form.custom_start_date.errors %}<div class="form-error">{{ form.custom_start_date.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.custom_end_date.id_for_label }}">Custom End Date</label>
+                        {{ form.custom_end_date }}
+                        {% if form.custom_end_date.errors %}<div class="form-error">{{ form.custom_end_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="col-span-2 text-xs text-slate-500 italic">
+                        Custom dates are evaluated only when the time window is set to 'Custom Date Range'.
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <a href="{% url 'documents:audit_report_list' %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Save Report Definition{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
