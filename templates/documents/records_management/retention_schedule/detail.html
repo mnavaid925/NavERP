@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ schedule.code }} — {{ schedule.name }} — Retention Schedule — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:retention_schedule_list' %}">Retention Schedules</a>
+            <span>/</span>
+            <span>{{ schedule.code }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ schedule.code }} — {{ schedule.name }}</h1>
+            <span class="badge {{ schedule.framework_badge_class }}">{{ schedule.get_compliance_framework_display }}</span>
+            <span class="badge {{ schedule.retention_mode_badge_class }}">{{ schedule.get_retention_mode_display }}</span>
+            <span class="badge {{ schedule.status_badge_class }}">{% if schedule.is_active %}Active{% else %}Inactive{% endif %}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:retention_schedule_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Schedules</span>
+        </a>
+        <a href="{% url 'documents:retention_schedule_edit' schedule.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Schedule</span>
+        </a>
+        <a href="{% url 'documents:record_declaration_create' %}?schedule={{ schedule.pk }}" class="btn btn-primary">
+            <i data-lucide="file-plus"></i>
+            <span>Declare Record</span>
+        </a>
+    </div>
+</div>
+
+<!-- Details Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Schedule Specification</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>File Plan Code</dt>
+                        <dd class="font-mono font-semibold text-slate-800">{{ schedule.code }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Schedule Number</dt>
+                        <dd class="font-mono text-slate-600">{{ schedule.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Compliance Framework</dt>
+                        <dd>
+                            <span class="badge {{ schedule.framework_badge_class }}">
+                                {{ schedule.get_compliance_framework_display }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Retention Mode</dt>
+                        <dd>
+                            <span class="badge {{ schedule.retention_mode_badge_class }}">
+                                {{ schedule.get_retention_mode_display }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Retention Period</dt>
+                        <dd class="font-semibold text-slate-900">{{ schedule.retention_summary }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Trigger Type</dt>
+                        <dd>{{ schedule.get_trigger_type_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Cutoff Rule</dt>
+                        <dd>{{ schedule.get_cutoff_rule_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Disposition Action</dt>
+                        <dd>
+                            <span class="badge {{ schedule.disposition_badge_class }}">
+                                {{ schedule.get_disposition_action_display }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Owning Department</dt>
+                        <dd>{% if schedule.department %}{{ schedule.department.name }}{% else %}Enterprise-Wide (Global){% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Legal Citation / Authority</dt>
+                        <dd class="font-mono text-sm text-slate-700">{% if schedule.legal_citation %}{{ schedule.legal_citation }}{% else %}—{% endif %}</dd>
+                    </div>
+                </dl>
+
+                {% if schedule.description %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Description</h3>
+                    <p class="text-slate-600 text-sm whitespace-pre-line">{{ schedule.description }}</p>
+                </div>
+                {% endif %}
+
+                {% if schedule.notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-1">Internal Notes</h3>
+                    <p class="text-slate-600 text-sm whitespace-pre-line">{{ schedule.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Declared Records Section -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Declared Records Under This Schedule ({{ declared_records_count }})</h2>
+                <a href="{% url 'documents:record_declaration_list' %}?schedule={{ schedule.pk }}" class="text-sm text-primary hover:underline font-medium">
+                    View All
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Record #</th>
+                            <th>Document</th>
+                            <th>Declared Date</th>
+                            <th>Status</th>
+                            <th>Declared By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in declared_records %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'documents:record_declaration_detail' record.pk %}" class="font-mono text-primary hover:underline">
+                                    {{ record.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{% url 'documents:document_detail' record.document.pk %}" class="font-medium text-slate-900 hover:underline">
+                                    {{ record.document.title }}
+                                </a>
+                            </td>
+                            <td>{{ record.declaration_date|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                <span class="badge {{ record.status_badge_class }}">
+                                    {{ record.get_record_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if record.declared_by %}{{ record.declared_by.get_full_name|default:record.declared_by.username }}{% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-slate-500 py-4 text-sm">
+                                No records currently declared under this schedule.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Cards -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Audit Metadata</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-slate-500">Created At</dt>
+                        <dd class="font-medium text-slate-800">{{ schedule.created_at|date:"Y-m-d H:i:s" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Last Updated</dt>
+                        <dd class="font-medium text-slate-800">{{ schedule.updated_at|date:"Y-m-d H:i:s" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-slate-500">Active Records</dt>
+                        <dd class="font-medium text-slate-800">{{ declared_records_count }} declared</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Regulatory WORM Notice -->
+        {% if schedule.retention_mode == "regulatory_worm" %}
+        <div class="card border-red-200 bg-red-50">
+            <div class="card-body">
+                <div class="flex items-start gap-3">
+                    <i data-lucide="shield-alert" class="w-5 h-5 text-red-600 mt-0.5"></i>
+                    <div>
+                        <h4 class="font-semibold text-red-900 text-sm">Regulatory WORM Enforced</h4>
+                        <p class="text-xs text-red-700 mt-1">
+                            This schedule adheres to strict non-rewriteable, non-erasable electronic storage rules (e.g. SEC Rule 17a-4 / DoD 5015.2). Declared records are permanently locked against manual deletion or premature disposition until the retention term has officially elapsed.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
