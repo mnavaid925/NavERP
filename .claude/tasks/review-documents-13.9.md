@@ -15,10 +15,10 @@
 
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
-| **Critical** | 5 | 4 | 1 | 0 |
+| **Critical** | 5 | 3 | 2 | 0 |
 | **Important** | 9 | 9 | 0 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 17 | 1 | 0 |
+| **Total** | 18 | 16 | 2 | 0 |
 
 ---
 
@@ -39,7 +39,7 @@
   2. Prevent re-execution if `self.status == "executed"`.
   3. Wrap the view execution logic in `transaction.atomic()`.
 
-### [ ] `C2`: Missing `@tenant_admin_required` on Destructive & Compliance Mutating Views
+### [x] `C2`: Missing `@tenant_admin_required` on Destructive & Compliance Mutating Views
 - **Found by**: `code-reviewer`, `security-reviewer`
 - **Location**:
   - `apps/documents/views/RecordsManagement/DestructionCertificates.py` (`destruction_certificate_authorize`, `destruction_certificate_execute`)
