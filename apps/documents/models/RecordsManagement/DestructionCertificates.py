@@ -130,6 +130,10 @@ class DestructionCertificate(TenantNumbered):
         self.save(update_fields=["status", "authorized_by", "authorized_at", "updated_at"])
 
     def execute_destruction(self, user):
+        if self.status == "executed":
+            raise ValueError("Destruction certificate has already been executed.")
+        if self.status != "authorized":
+            raise ValueError("Cannot execute destruction: Certificate must be authorized first.")
         if not self.verify_legal_holds():
             raise ValueError("Cannot execute destruction: Document has an active legal hold.")
         now = timezone.now()
