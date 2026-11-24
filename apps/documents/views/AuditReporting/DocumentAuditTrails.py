@@ -96,11 +96,13 @@ def audit_trail_detail(request, pk):
     prev_entry = (
         DocumentAuditTrail.objects.filter(tenant=request.tenant, id__lt=audit_entry.id)
         .order_by("-id")
+        .only("id")
         .first()
     )
     next_entry = (
         DocumentAuditTrail.objects.filter(tenant=request.tenant, id__gt=audit_entry.id)
         .order_by("id")
+        .only("id")
         .first()
     )
 
