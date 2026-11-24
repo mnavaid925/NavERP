@@ -118,7 +118,12 @@ def audit_trail_detail(request, pk):
 @tenant_admin_required
 def audit_trail_verify_chain(request):
     """Walk through tenant audit entries sequentially to verify cryptographic chain integrity."""
-    entries = DocumentAuditTrail.objects.filter(tenant=request.tenant).order_by("id")
+    entries = (
+        DocumentAuditTrail.objects.filter(tenant=request.tenant)
+        .select_related("actor", "document")
+        .order_by("id")
+        .iterator(chunk_size=2000)
+    )
     verified_count = 0
     tampered_id = None
     is_valid = True
