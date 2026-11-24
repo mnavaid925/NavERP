@@ -207,11 +207,19 @@ def auditor_portal_view(request, token):
 
     doc = export_pkg.document
     versions = doc.versions.select_related("author").order_by("-created_at") if doc and hasattr(doc, "versions") else []
-    audit_trail = (
-        DocumentAuditTrail.objects.filter(tenant=export_pkg.tenant, document=doc).order_by("-event_timestamp")[:50]
-        if doc
-        else []
-    )
+    if doc:
+        audit_trail = list(
+            DocumentAuditTrail.objects.filter(tenant=export_pkg.tenant, document=doc).order_by("-event_timestamp")[:50]
+        )
+    else:
+        trail_qs = DocumentAuditTrail.objects.filter(tenant=export_pkg.tenant)
+        if export_pkg.folder:
+            trail_qs = trail_qs.filter(document__folder=export_pkg.folder)
+        if export_pkg.start_date:
+            trail_qs = trail_qs.filter(event_timestamp__date__gte=export_pkg.start_date)
+        if export_pkg.end_date:
+            trail_qs = trail_qs.filter(event_timestamp__date__lte=export_pkg.end_date)
+        audit_trail = list(trail_qs.order_by("-event_timestamp")[:50])
 
     context = {
         "export_pkg": export_pkg,
