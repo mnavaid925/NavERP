@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}BPM Process Execution Instances — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Workflow Automation &amp; BPM</span>
+            <span>/</span>
+            <span>Process Instances</span>
+        </div>
+        <h1 class="page-title">Process Execution Instances</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:process_analytics_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="bar-chart-3"></i>
+            <span>Analytics &amp; Mining</span>
+        </a>
+        <a href="{% url 'documents:process_instance_create' %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Launch Process</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="activity"></i></div>
+        <div>
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Instances</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div>
+            <div class="stat-value">{{ active_count }}</div>
+            <div class="stat-label">Active WIP</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div>
+            <div class="stat-value">{{ completed_count }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+        <div>
+            <div class="stat-value">{{ sla_breached_count }}</div>
+            <div class="stat-label">SLA Breached</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_q">Search</label>
+                <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="DPIN-, document, node..." class="form-input w-full">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_status">Status</label>
+                <select id="id_status" name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_process_definition">Process</label>
+                <select id="id_process_definition" name="process_definition" class="form-select w-full">
+                    <option value="">All Processes</option>
+                    {% for proc in process_definitions %}
+                    <option value="{{ proc.pk|stringformat:'d' }}" {% if process_definition == proc.pk|stringformat:'d' %}selected{% endif %}>{{ proc.code }} v{{ proc.version_number }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_department">Department</label>
+                <select id="id_department" name="department" class="form-select w-full">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk|stringformat:'d' }}" {% if department == dept.pk|stringformat:'d' %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_sla_breached">SLA Health</label>
+                <select id="id_sla_breached" name="sla_breached" class="form-select w-full">
+                    <option value="">All</option>
+                    <option value="1" {% if sla_breached == '1' %}selected{% endif %}>Breached Only</option>
+                    <option value="0" {% if sla_breached == '0' %}selected{% endif %}>Within SLA</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:process_instance_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Instance</th>
+                    <th>Process Blueprint</th>
+                    <th>Document</th>
+                    <th>Current Node</th>
+                    <th>Duration &amp; Rework</th>
+                    <th>SLA</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inst in instances %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="font-mono font-semibold text-blue-600 hover:underline">
+                            {{ inst.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ inst.started_at|date:"Y-m-d H:i" }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:process_definition_detail' inst.process_definition.pk %}" class="font-medium text-slate-800 hover:underline">{{ inst.process_definition.name }}</a>
+                        <div class="text-xs text-slate-500 font-mono">{{ inst.process_definition.code }} v{{ inst.process_definition.version_number }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:document_detail' inst.document.pk %}" class="text-blue-600 hover:underline">{{ inst.document.title|truncatechars:35 }}</a>
+                        <div class="text-xs text-slate-500 font-mono">{{ inst.document.number }}</div>
+                    </td>
+                    <td class="text-xs text-slate-700">
+                        <div class="font-medium">{{ inst.current_node_label|default:inst.current_node_id|default:"—" }}</div>
+                        {% if inst.current_assignee %}
+                        <div class="text-slate-500">{{ inst.current_assignee.get_full_name|default:inst.current_assignee.username }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        <div>{{ inst.duration_display }}</div>
+                        <div class="text-slate-500">Rework: {{ inst.rework_count }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ inst.sla_badge }}">
+                            {% if inst.is_sla_breached or inst.status == 'sla_breached' %}Breached{% else %}On Track{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ inst.status_badge }}">{{ inst.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="btn btn-icon btn-outline" title="Inspect Instance" aria-label="View {{ inst.number }}">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if inst.status != 'completed' and inst.status != 'cancelled' %}
+                        <a href="{% url 'documents:process_instance_edit' inst.pk %}" class="btn btn-icon btn-outline" title="Edit Instance" aria-label="Edit {{ inst.number }}">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        {% if inst.status == 'queued' or inst.status == 'cancelled' or inst.status == 'failed' %}
+                        {% if user.is_superuser or user.is_tenant_admin %}
+                        <form method="post" action="{% url 'documents:process_instance_delete' inst.pk %}" class="inline" onsubmit="return confirm('Delete process instance {{ inst.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Instance" aria-label="Delete {{ inst.number }}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="play-circle" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                            <p class="font-medium text-slate-700">No process instances found</p>
+                            <p class="text-xs text-slate-500 mb-3">Launch a published BPM blueprint on any document to track step execution and SLA compliance.</p>
+                            <a href="{% url 'documents:process_instance_create' %}" class="btn btn-primary btn-sm">Launch Process</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&status={{ status|urlencode }}&process_definition={{ process_definition|urlencode }}&department={{ department|urlencode }}&sla_breached={{ sla_breached|urlencode }}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ q|urlencode }}&status={{ status|urlencode }}&process_definition={{ process_definition|urlencode }}&department={{ department|urlencode }}&sla_breached={{ sla_breached|urlencode }}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
