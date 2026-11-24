@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}BPM Process Performance &amp; Mining Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <span>Workflow Automation &amp; BPM</span>
+            <span>/</span>
+            <span>Process Performance Analytics</span>
+        </div>
+        <h1 class="page-title">Process Performance &amp; Mining Analytics</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:process_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="git-branch"></i>
+            <span>Process Blueprints</span>
+        </a>
+        <a href="{% url 'documents:process_instance_list' %}" class="btn btn-primary">
+            <i data-lucide="play-circle"></i>
+            <span>Execution Instances</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="id_process_definition">Process Blueprint</label>
+                <select id="id_process_definition" name="process_definition" class="form-select w-full">
+                    <option value="">All Blueprints</option>
+                    {% for proc in process_definitions %}
+                    <option value="{{ proc.pk|stringformat:'d' }}" {% if selected_process_id == proc.pk|stringformat:'d' %}selected{% endif %}>{{ proc.code }} v{{ proc.version_number }} — {{ proc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_department">Department</label>
+                <select id="id_department" name="department" class="form-select w-full">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk|stringformat:'d' }}" {% if selected_department_id == dept.pk|stringformat:'d' %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_date_from">Started From</label>
+                <input type="date" id="id_date_from" name="date_from" value="{{ date_from }}" class="form-input w-full">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_date_to">Started To</label>
+                <input type="date" id="id_date_to" name="date_to" value="{{ date_to }}" class="form-input w-full">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Apply</span>
+                </button>
+                <a href="{% url 'documents:process_analytics_dashboard' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="layers"></i></div>
+        <div>
+            <div class="stat-value">{{ analytics.total_instances }}</div>
+            <div class="stat-label">Total Instances ({{ analytics.active_wip }} WIP)</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="clock"></i></div>
+        <div>
+            <div class="stat-value">{{ analytics.avg_cycle_minutes }}m</div>
+            <div class="stat-label">Avg Cycle (P95: {{ analytics.p95_cycle_minutes }}m)</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if analytics.sla_breached_count > 0 %}red{% else %}slate{% endif %}"><i data-lucide="alert-triangle"></i></div>
+        <div>
+            <div class="stat-value">{{ analytics.sla_breach_rate }}%</div>
+            <div class="stat-label">SLA Breach ({{ analytics.sla_breached_count }} runs)</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="check-check"></i></div>
+        <div>
+            <div class="stat-value">{{ analytics.conformance_rate }}%</div>
+            <div class="stat-label">Conformance (Rework: {{ analytics.rework_rate }}%)</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Node &amp; Swimlane Bottleneck Analysis</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Node</th>
+                        <th>Swimlane</th>
+                        <th>Executions</th>
+                        <th>Avg / Max</th>
+                        <th>Active Wait</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for b in analytics.bottlenecks %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-800">{{ b.label }}</div>
+                            <div class="text-xs text-slate-500 font-mono">{{ b.node_id }}</div>
+                        </td>
+                        <td class="text-xs text-slate-600">{{ b.lane }}</td>
+                        <td class="text-xs font-mono">{{ b.executions }}</td>
+                        <td class="text-xs font-mono">{{ b.avg_minutes }}m / {{ b.max_minutes }}m</td>
+                        <td>
+                            <span class="badge {% if b.active_waiting > 0 %}badge-amber{% else %}badge-slate{% endif %}">{{ b.active_waiting }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-xs text-slate-500 py-4">No step telemetry recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Process Mining Variants &amp; Conformance</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Execution Variant Path</th>
+                        <th>Runs (%)</th>
+                        <th>Avg Cycle</th>
+                        <th>Rework</th>
+                        <th>Conform</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in analytics.variants %}
+                    <tr>
+                        <td class="font-mono text-xs text-slate-700">{{ v.signature }}</td>
+                        <td class="text-xs font-mono">{{ v.count }} ({{ v.pct }}%)</td>
+                        <td class="text-xs font-mono">{{ v.avg_cycle_minutes }}m</td>
+                        <td>
+                            <span class="badge {% if v.rework_count > 0 %}badge-red{% else %}badge-slate{% endif %}">{{ v.rework_count }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {% if v.conformance_pct == 100.0 %}badge-green{% else %}badge-amber{% endif %}">{{ v.conformance_pct }}%</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-xs text-slate-500 py-4">No process variants discovered yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Top Routing Rules Effectiveness</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Rule</th>
+                    <th>Type</th>
+                    <th>Action</th>
+                    <th>Executions</th>
+                    <th>Matches</th>
+                    <th>Match Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rule in analytics.top_rules %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="font-medium text-blue-600 hover:underline">{{ rule.name }}</a>
+                        <div class="text-xs text-slate-500 font-mono">{{ rule.number }}</div>
+                    </td>
+                    <td><span class="badge {{ rule.rule_type_badge }}">{{ rule.get_rule_type_display }}</span></td>
+                    <td><span class="badge {{ rule.route_action_badge }}">{{ rule.get_route_action_display }}</span></td>
+                    <td class="text-xs font-mono">{{ rule.execution_count }}</td>
+                    <td class="text-xs font-mono">{{ rule.match_count }}</td>
+                    <td class="text-xs font-mono">{{ rule.match_rate_pct }}%</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center text-xs text-slate-500 py-4">No routing rule telemetry recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
