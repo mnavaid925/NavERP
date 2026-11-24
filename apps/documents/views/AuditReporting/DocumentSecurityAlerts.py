@@ -96,10 +96,15 @@ def security_alert_detail(request, pk):
             actor=alert.target_user,
         ).order_by("-event_timestamp")
         correlated_audit_logs = list(logs_qs[:25])
+        agg = logs_qs.aggregate(
+            total_events=Count("id"),
+            download_count=Count("id", filter=Q(action_type="downloaded")),
+            denied_count=Count("id", filter=Q(is_success=False)),
+        )
         target_user_stats = {
-            "total_events": logs_qs.count(),
-            "download_count": logs_qs.filter(action_type="downloaded").count(),
-            "denied_count": logs_qs.filter(is_success=False).count(),
+            "total_events": agg["total_events"] or 0,
+            "download_count": agg["download_count"] or 0,
+            "denied_count": agg["denied_count"] or 0,
         }
 
     context = {
