@@ -38,11 +38,17 @@ class RecordDeclarationForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant, is_active=True
             ).order_by("code")
             if self.instance and self.instance.pk and self.instance.document_id:
-                self.fields["version"].queryset = DocumentVersion.objects.filter(
-                    tenant=self.tenant, document_id=self.instance.document_id
-                ).order_by("-major_number", "-minor_number", "-patch_number")
+                self.fields["version"].queryset = (
+                    DocumentVersion.objects.filter(tenant=self.tenant, document_id=self.instance.document_id)
+                    .select_related("document")
+                    .order_by("-major_number", "-minor_number", "-patch_number")
+                )
             else:
-                self.fields["version"].queryset = DocumentVersion.objects.filter(tenant=self.tenant).order_by("-created_at")
+                self.fields["version"].queryset = (
+                    DocumentVersion.objects.filter(tenant=self.tenant)
+                    .select_related("document")
+                    .order_by("-created_at")
+                )
         else:
             self.fields["document"].queryset = Document.objects.none()
             self.fields["version"].queryset = DocumentVersion.objects.none()
@@ -56,6 +62,24 @@ class RecordDeclarationForm(TenantUniqueMixin, TenantModelForm):
 
         document = cleaned_data.get("document")
         version = cleaned_data.get("version")
+        retention_schedule = cleaned_data.get("retention_schedule")
+
+        if self.instance and self.instance.pk:
+            if document and document != self.instance.document:
+                self.add_error("document", "Cannot change document on an existing record declaration.")
+            if version and version != self.instance.version:
+                self.add_error("version", "Cannot change version on an existing record declaration.")
+            if retention_schedule and retention_schedule != self.instance.retention_schedule:
+                self.add_error("retention_schedule", "Cannot change retention schedule on an existing record declaration.")
+        else:
+            if document and self.tenant:
+                existing_active = (
+                    RecordDeclaration.objects.filter(tenant=self.tenant, document=document)
+                    .exclude(record_status="disposed")
+                    .exists()
+                )
+                if existing_active:
+                    self.add_error("document", "An active record declaration already exists for this document.")
 
         if document and version:
             if version.document_id != document.id:
