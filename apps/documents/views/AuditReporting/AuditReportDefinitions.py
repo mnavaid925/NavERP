@@ -32,13 +32,16 @@ def audit_report_list(request):
     if status:
         qs = qs.filter(status=status)
 
-    system_reports = qs.filter(is_system_preset=True).order_by("name")
-    custom_reports = qs.filter(is_system_preset=False).order_by("-created_at")
+    system_reports = list(qs.filter(is_system_preset=True).order_by("name"))
+    custom_reports = list(qs.filter(is_system_preset=False).order_by("-created_at"))
+    total_reports = len(system_reports) + len(custom_reports)
 
     context = {
         "system_reports": system_reports,
         "custom_reports": custom_reports,
-        "total_reports": qs.count(),
+        "total_reports": total_reports,
+        "system_count": len(system_reports),
+        "custom_count": len(custom_reports),
         "report_type_choices": AuditReportDefinition.REPORT_TYPE_CHOICES,
         "status_choices": AuditReportDefinition.STATUS_CHOICES,
     }
