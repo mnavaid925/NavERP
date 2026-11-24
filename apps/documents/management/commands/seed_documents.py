@@ -1927,7 +1927,7 @@ class Command(BaseCommand):
                             tenant=tenant,
                             record_declaration=rec2,
                             document_title_snapshot=doc_rec2.title,
-                            document_number_snapshot=doc_rec2.document_number,
+                            document_number_snapshot=doc_rec2.number,
                             schedule_name_snapshot=f"{sched_gdpr.code} - {sched_gdpr.name}",
                             disposition_type="destruction",
                             destruction_method="database_purge",
