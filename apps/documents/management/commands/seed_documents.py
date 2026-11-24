@@ -65,6 +65,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options.get("flush"):
             self.stdout.write("Flushing documents module data...")
+            ChainOfCustodyExport.objects.all().delete()
+            DocumentSecurityAlert.objects.all().delete()
+            AuditReportDefinition.objects.all().delete()
+            DocumentAuditTrail.objects.all().delete()
             DestructionCertificate.objects.all().delete()
             DocumentLegalHold.objects.all().delete()
             RecordDeclaration.objects.all().delete()
