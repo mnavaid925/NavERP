@@ -81,6 +81,7 @@ class DocumentLegalHold(TenantNumbered):
             models.Index(fields=["tenant", "is_active"], name="doc_dhld_tnt_act_idx"),
             models.Index(fields=["tenant", "matter_number"], name="doc_dhld_tnt_mat_idx"),
             models.Index(fields=["tenant", "document"], name="doc_dhld_tnt_doc_idx"),
+            models.Index(fields=["tenant", "document", "is_active"], name="doc_dhld_tnt_doc_act_idx"),
         ]
 
     def __str__(self):
