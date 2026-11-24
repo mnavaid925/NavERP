@@ -1,9 +1,10 @@
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import render
 
 from apps.core.models import OrgUnit
+from apps.documents.models.RecordsManagement.DocumentLegalHolds import DocumentLegalHold
 from apps.documents.models.RecordsManagement.RecordDeclarations import RecordDeclaration
 from apps.documents.views._common import documents_scope
 
@@ -15,6 +16,13 @@ def vital_records_list(request):
         RecordDeclaration.objects.filter(is_vital_record=True),
         request,
     ).select_related("document", "version", "retention_schedule", "retention_schedule__department", "declared_by")
+
+    hold_subquery = DocumentLegalHold.objects.filter(
+        tenant=request.tenant,
+        document=OuterRef("document_id"),
+        is_active=True,
+    )
+    qs = qs.annotate(has_active_hold=Exists(hold_subquery))
 
     department_id = request.GET.get("department", "").strip()
     if department_id.isdigit():
