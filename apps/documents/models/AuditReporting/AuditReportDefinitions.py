@@ -188,3 +188,59 @@ class AuditReportDefinition(TenantNumbered):
             return start, end
 
         return now - timedelta(days=30), now
+
+    def execute_query(self, user=None):
+        """Execute audit trail query matching this definition and compute summary KPI metrics."""
+        from django.db.models import Count, Q
+        from apps.documents.models.AuditReporting.DocumentAuditTrails import DocumentAuditTrail
+
+        start_dt, end_dt = self.get_effective_date_range()
+        events_qs = DocumentAuditTrail.objects.filter(
+            tenant=self.tenant,
+            event_timestamp__range=(start_dt, end_dt),
+        ).select_related("document", "actor", "version")
+
+        rtype = self.report_type
+        if rtype == "confidential_access":
+            events_qs = events_qs.filter(action_type__in=["viewed", "previewed", "downloaded", "printed"])
+        elif rtype == "permission_audit":
+            events_qs = events_qs.filter(action_type="permission_changed")
+        elif rtype == "security_exceptions":
+            events_qs = events_qs.filter(Q(is_success=False) | Q(action_type="dlp_violation"))
+        elif rtype == "external_sharing":
+            events_qs = events_qs.filter(action_type__in=["shared_externally", "share_revoked"])
+        elif rtype == "deletion_purge":
+            events_qs = events_qs.filter(action_type__in=["deleted", "purged"])
+        elif rtype == "lifecycle_bottlenecks":
+            events_qs = events_qs.filter(action_type__in=["workflow_approved", "workflow_rejected"])
+        elif rtype == "version_churn":
+            events_qs = events_qs.filter(action_type="version_uploaded")
+
+        agg = events_qs.aggregate(
+            total_events=Count("id"),
+            failed_events=Count("id", filter=Q(is_success=False)),
+            unique_actors=Count("actor", distinct=True),
+        )
+        total_events = agg["total_events"] or 0
+        failed_events = agg["failed_events"] or 0
+        success_events = total_events - failed_events
+        success_rate = round((success_events / total_events * 100), 1) if total_events > 0 else 100.0
+        unique_actors = agg["unique_actors"] or 0
+
+        summary_kpis = {
+            "total_events": total_events,
+            "success_events": success_events,
+            "failed_events": failed_events,
+            "success_rate": success_rate,
+            "unique_actors": unique_actors,
+        }
+
+        self.last_run_at = timezone.now()
+        if user:
+            self.last_run_by = user
+        self.total_runs += 1
+        if self.pk:
+            self.save(update_fields=["last_run_at", "last_run_by", "total_runs"] if user else ["last_run_at", "total_runs"])
+
+        return events_qs, summary_kpis
+
