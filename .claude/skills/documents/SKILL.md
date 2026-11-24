@@ -1,6 +1,6 @@
 ---
 name: documents
-description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics) + 13.7 Document Security & Access Control (DocumentAccessPermission[DPRM-], WatermarkPolicy[DWTR-], DocumentDrmPolicy[DDRM-], DlpPolicy[DDLP-], DlpIncident[DINC-], effective permissions simulator, visual watermark studio, DRM emergency kill-switch, DLP incident triage workbench, zero-download sandboxed secure viewer) + 13.8 Collaboration & Sharing (DocumentShare[DSHR-], CoauthorSession[DCOA-], DocumentTask[DTSK-], DocumentActivity[DACT-], unified CollaborationHub, guest passcode challenge, presence telemetry & heartbeats, task action tracking, in-app notification inbox). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6/13.7/13.8), or invokes /documents.
+description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics) + 13.7 Document Security & Access Control (DocumentAccessPermission[DPRM-], WatermarkPolicy[DWTR-], DocumentDrmPolicy[DDRM-], DlpPolicy[DDLP-], DlpIncident[DINC-], effective permissions simulator, visual watermark studio, DRM emergency kill-switch, DLP incident triage workbench, zero-download sandboxed secure viewer) + 13.8 Collaboration & Sharing (DocumentShare[DSHR-], CoauthorSession[DCOA-], DocumentTask[DTSK-], DocumentActivity[DACT-], unified CollaborationHub, guest passcode challenge, presence telemetry & heartbeats, task action tracking, in-app notification inbox) + 13.9 Records Management & Compliance (RetentionSchedule[DRTN-], RecordDeclaration[DRCD-], DocumentLegalHold[DHLD-], DestructionCertificate[DDST-], regulatory WORM freeze, cutoff calculation, legal hold preservation orders, dual-control destruction certificates, Disposition Review Board, Vital Records disaster recovery register). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6/13.7/13.8/13.9), or invokes /documents.
 ---
 
 # Document Management System (DMS) (Module 13)
@@ -8,7 +8,7 @@ description: Work on the Document Management System (DMS) module (Module 13 — 
 App path: `apps/documents`. Templates: `templates/documents/`. URL prefix: `/documents/`, `app_name = "documents"`.
 Mirrors `NavERP.md` "## 13. Document Management System (DMS)" (Sub-modules 13.1–13.20).
 
-**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery + 13.7 Document Security & Access Control + 13.8 Collaboration & Sharing.**
+**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery + 13.7 Document Security & Access Control + 13.8 Collaboration & Sharing + 13.9 Records Management & Compliance.**
 Build the next sub-module with `/next-module next` — see `apps/quality`/`apps/procurement` for reference package layout and the mandatory Module Creation Sequence.
 
 ---
@@ -24,6 +24,7 @@ Module 13 provides an enterprise document repository, authoring workspace, revis
 - **13.6 Search & Discovery**: Multi-faceted omni-search console (`SearchHub`), natural language search filter chip parsing (`type:`, `status:`), synonym dictionary expansion (`DocumentSearchSynonym`), saved search queries and visibility scopes (`DocumentSavedSearch`), automated notification monitors (`DocumentSearchAlert`), and organization-wide search telemetry and query gap analytics (`DocumentSearchQueryLog`).
 - **13.7 Document Security & Access Control**: Document-level and folder-level ACL permissions with capability matrices and precedence inheritance (`DocumentAccessPermission`), dynamic token-interpolated visual watermarks (`WatermarkPolicy`) with live interactive studio, digital rights management policies (`DocumentDrmPolicy`) with emergency kill-switch revocation, regex-based DLP inspection engine and incident triage workbench (`DlpPolicy`, `DlpIncident`), and zero-download DOM-sandboxed secure web viewer with focus-loss blur and anti-screen capture defense (`SecureViewer`).
 - **13.8 Collaboration & Sharing**: Link-based and targeted document sharing (`DocumentShare`), real-time co-author presence telemetry and cursor positions (`CoauthorSession`), workflow action item assignment and completion tracking (`DocumentTask`), granular audit feeds and targeted notification inbox (`DocumentActivity`), unified multi-tab collaboration cockpit (`collaboration_hub.html`), and secure public guest preview portal (`public_share_preview.html`).
+- **13.9 Records Management & Compliance**: Enterprise retention file plans with regulatory WORM and modifiable modes (`RetentionSchedule`), official record declarations with cutoff calculation and WORM immutability (`RecordDeclaration`), statutory litigation preservation holds with custodian tracking and acknowledgement (`DocumentLegalHold`), dual-control authorized destruction certificates with SHA-256 integrity hashing and spoliation guards (`DestructionCertificate`), 3-column Disposition Review Board (`board.html`), and Vital Records business continuity disaster recovery register (`vital_records_list.html`).
 
 ---
 
@@ -308,6 +309,49 @@ Shared base in `models/_base.py`:
   - Properties & Helpers: `actor_display_name`, `badge_class`, `mark_as_read()`.
   - Constraints & Indexes: unique `(tenant, number)`, indexes on `(tenant, document, -created_at)`, `(tenant, target_user, is_read)`, `(tenant, created_at)`.
 
+### 13.9 RecordsManagement (`apps/documents/models/RecordsManagement/`)
+
+- **`RetentionSchedules.py`** — `RetentionSchedule` (`NUMBER_PREFIX = "DRTN"`):
+  - `name`, `code` (slug/unique code per tenant), `compliance_framework` (iso_15489, dod_5015_2, sec_17a_4, irs_rev_proc, gdpr, hipaa, custom).
+  - `retention_mode`: regulatory_worm, modifiable.
+  - Duration: `retention_period_years`, `retention_period_months`, `is_permanent`.
+  - Lifecycle: `trigger_type` (creation_date, last_modified_date, event_triggered, superseded_date), `cutoff_rule` (immediate, end_of_calendar_year, end_of_fiscal_year).
+  - Disposition: `disposition_action` (secure_purge, archive_cold_storage, transfer_custody, review_required), `requires_legal_review`.
+  - Governance: `governing_department` (FK `core.OrgUnit`, nullable), `citation_reference`, `is_active`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Properties & Helpers: `retention_summary`, `framework_badge`, `mode_badge`, `action_badge`.
+  - Constraints & Indexes: unique `(tenant, number)`, unique `(tenant, code)`, indexes on `(tenant, is_active)`, `(tenant, compliance_framework)`.
+
+- **`RecordDeclarations.py`** — `RecordDeclaration` (`NUMBER_PREFIX = "DRCD"`):
+  - `document` (FK `Document`, `related_name="record_declarations"`), `version` (FK `DocumentVersion`, nullable).
+  - `retention_schedule` (FK `RetentionSchedule`, `related_name="declared_records"`).
+  - `declared_by` (FK `settings.AUTH_USER_MODEL`), `declaration_date`, `version_hash_snapshot` (SHA-256 baseline).
+  - Lifecycle states: `record_status` (active, cutoff, under_legal_hold, eligible_for_disposition, disposed).
+  - Retention Clock: `cutoff_date`, `disposition_due_date`, `is_locked` (WORM freeze).
+  - Vital Records DR: `is_vital_record`, `vital_record_category` (legal_corporate, intellectual_property, financial_tax, operational_critical, regulatory_filing), `offsite_backup_confirmed`, `retrieval_sla_hours`.
+  - Properties & Helpers: `is_under_legal_hold` (supports annotated `has_active_hold`), `calculate_disposition_due_date()`, `trigger_cutoff()`, `status_badge`.
+  - Constraints & Indexes: unique `(tenant, number)`, composite indexes on `(tenant, -declaration_date)`, `(tenant, record_status)`, `(tenant, is_vital_record)`.
+
+- **`DocumentLegalHolds.py`** — `DocumentLegalHold` (`NUMBER_PREFIX = "DHLD"`):
+  - `document` (FK `Document`, `related_name="legal_holds"`), `matter_name`, `matter_number`, `court_or_agency`, `external_docket_ref`.
+  - `hold_reason` (pending_litigation, government_investigation, internal_audit, regulatory_inquiry, patent_trademark_dispute).
+  - `custodian` (FK `settings.AUTH_USER_MODEL`, nullable), `custodian_notified`, `custodian_acknowledged_at`.
+  - Lifecycle: `is_active`, `issued_by` (FK `settings.AUTH_USER_MODEL`), `issued_at`.
+  - Release: `released_by` (FK `settings.AUTH_USER_MODEL`, nullable), `released_at`, `release_justification`.
+  - Core link: `core_legal_hold` (FK `core.LegalHold`, nullable).
+  - Properties & Helpers: `acknowledge_hold()`, `release_hold(user, justification)`, `reason_badge`, `status_badge`.
+  - Constraints & Indexes: unique `(tenant, number)`, composite indexes on `(tenant, document, is_active)`, `(tenant, is_active)`.
+
+- **`DestructionCertificates.py`** — `DestructionCertificate` (`NUMBER_PREFIX = "DDST"`):
+  - `record_declaration` (FK `RecordDeclaration`, nullable, `related_name="destruction_certificates"`).
+  - Snapshots: `document_title_snapshot`, `document_number_snapshot`, `schedule_name_snapshot`, `content_verification_hash`.
+  - Destruction Strategy: `disposition_type` (document_only, document_and_history, metadata_tombstone), `destruction_method` (cryptographic_erasure, dod_5220_22_m_overwrite, physical_shredding, degaussing, db_purge).
+  - Dual-Control Governance: `status` (pending_approval, authorized, executed, rejected).
+  - Authorizer: `authorized_by` (FK `settings.AUTH_USER_MODEL`, nullable), `authorized_at`, `authorization_notes`.
+  - Executor: `executed_by` (FK `settings.AUTH_USER_MODEL`, nullable), `executed_at`, `witness_name`.
+  - Compliance check: `legal_hold_verified_clear`, `audit_trail_snapshot_json`.
+  - Properties & Helpers: `document`, `verify_legal_holds()`, `authorize(user, notes)`, `execute_destruction(user, witness)`.
+  - Constraints & Indexes: unique `(tenant, number)`, composite indexes on `(tenant, status)`.
+
 
 
 ---
@@ -481,6 +525,23 @@ Registered under namespace `documents:`:
 - `/documents/activities/<int:pk>/`: `document_activity_detail` (auto-marks read)
 - `/documents/activities/<int:pk>/mark-read/`: `document_activity_mark_read` (POST-only)
 
+### 13.9 Records Management & Compliance Routes
+- `/documents/records/schedules/`: `retention_schedule_list`, `retention_schedule_create` (`@tenant_admin_required`)
+- `/documents/records/schedules/<int:pk>/`: `retention_schedule_detail`, `retention_schedule_edit` (`@tenant_admin_required`), `retention_schedule_delete` (POST-only, `@tenant_admin_required`)
+- `/documents/records/declarations/`: `record_declaration_list`, `record_declaration_create`
+- `/documents/records/declarations/<int:pk>/`: `record_declaration_detail`, `record_declaration_edit`, `record_declaration_delete` (POST-only, `@tenant_admin_required`)
+- `/documents/records/declarations/<int:pk>/cutoff/`: `record_declaration_trigger_cutoff` (POST-only, `@tenant_admin_required`)
+- `/documents/records/holds/`: `legal_hold_list`, `legal_hold_create`
+- `/documents/records/holds/<int:pk>/`: `legal_hold_detail`
+- `/documents/records/holds/<int:pk>/release/`: `legal_hold_release` (POST-only, `@tenant_admin_required`, requires justification)
+- `/documents/records/holds/<int:pk>/acknowledge/`: `legal_hold_acknowledge` (POST-only custodian ack)
+- `/documents/records/certificates/`: `destruction_certificate_list`, `destruction_certificate_create`
+- `/documents/records/certificates/<int:pk>/`: `destruction_certificate_detail`
+- `/documents/records/certificates/<int:pk>/authorize/`: `destruction_certificate_authorize` (POST-only, `@tenant_admin_required`, checks active holds)
+- `/documents/records/certificates/<int:pk>/execute/`: `destruction_certificate_execute` (POST-only, `@tenant_admin_required`, enforces authorized status & checks holds)
+- `/documents/records/disposition-review/`: `disposition_review_board` (3-column Kanban/board review: Due, Held, In-Approval)
+- `/documents/records/vital-records/`: `vital_records_list` (business continuity disaster recovery register)
+
 ---
 
 ## Templates
@@ -530,6 +591,13 @@ Located in:
   - `document_task/`: `list.html`, `detail.html`, `form.html`
   - `document_activity/`: `list.html`, `detail.html`, `form.html`
   - `public_share_preview.html`: Clean guest portal (`base_auth.html`), passcode challenge form, gated document preview & download
+- `templates/documents/records_management/` (13.9 templates):
+  - `retention_schedule/`: `list.html`, `detail.html`, `form.html`
+  - `record_declaration/`: `list.html`, `detail.html`, `form.html`
+  - `document_legal_hold/`: `list.html`, `detail.html`, `form.html`
+  - `destruction_certificate/`: `list.html`, `detail.html`, `form.html`
+  - `disposition_review/`: `board.html` (3-column visual review board)
+  - `vital_records/`: `list.html` (Vital records & disaster recovery register)
 
 
 ---
@@ -573,6 +641,10 @@ Supports `--flush` option to reset module data cleanly. Demo data seeds:
 30. Co-Authoring Sessions (Active session with presence color #3B82F6 and JSON cursor position, Idle session, Disconnected session with telemetry).
 31. Document Review & Action Tasks (Review clause compliance, Sign authorization, Revise security section, Translate SOP into French with due dates and priority badges).
 32. Collaborative Document Activities (Document shared, link accessed, guest download, coauthor joined, task assigned, task completed audit event stream).
+33. Retention Schedules (Financial & Tax 7yr WORM, HR Employee Records 5yr Modifiable, Clinical Trial cGMP Permanent WORM, Litigation Hold Baseline).
+34. Record Declarations (Active tax return declared record with SHA-256 snapshot, Cutoff vendor contract with disposition countdown, Vital corporate bylaws with 4hr retrieval SLA).
+35. Document Legal Holds (SEC Audit Inquiry hold on financial docs, Patent Dispute hold with custodian notification and acknowledgment).
+36. Destruction Certificates (Authorized cryptographic erasure certificate, Executed document-and-history destruction certificate).
 
 ---
 
@@ -634,6 +706,15 @@ LIVE_LINKS["13.8"] = {
     "Document Tasks": "documents:document_task_list",
     "Activity Feed & Alerts": "documents:document_activity_list",
 }
+LIVE_LINKS["13.9"] = {
+    "Retention Policies & File Plans": "documents:retention_schedule_list",
+    "Record Declaration & Freezing": "documents:record_declaration_list",
+    "Legal Holds & Litigation Support": "documents:legal_hold_list",
+    "Destruction Certificates": "documents:destruction_certificate_list",
+    "Disposition Review Board": "documents:disposition_review_board",
+    "Vital Records Directory": "documents:vital_records_list",
+    "Disaster Recovery SLA Register": "documents:vital_records_list",
+}
 ```
 
 ---
@@ -671,3 +752,8 @@ LIVE_LINKS["13.8"] = {
 29. **ReDoS Defense in Custom DLP Regular Expressions**: Custom regular expressions in `DlpPolicyForm` are validated against nested quantifiers and overlapping repetitions before saving, preventing catastrophic backtracking ReDoS denial of service.
 30. **Dynamic Watermark Token Interpolation & Template Safety**: Watermark template strings interpolate tokens safely in Python memory (`render_watermark()`), avoiding server-side template injection (SSTI). Template hints in `form.html` are wrapped in `{% verbatim %}` blocks to avoid colliding with Django's template engine.
 31. **Zero-Download Secure Web Viewer Sandboxing**: `secure_viewer.html` implements client-side focus-loss blur overlays (`onblur`/`onfocus`), keyboard shortcut interception (`Ctrl+P`, `Ctrl+C`, `Ctrl+S`), and context menu suppression as deterrents, backed by server-side payload access controls and active forensic watermark embedding.
+32. **WORM Immutability & Record Declaration Protection**: Declared official records (`is_locked=True` or under `regulatory_worm` schedules) cannot be edited or deleted via views or forms. `RecordDeclarationForm.clean()` strictly forbids changing `document`, `version`, or `retention_schedule` on existing declarations, and prevents duplicate active declarations on the same document.
+33. **Dual-Control Destruction Governance**: Destruction certificates enforce strict separation of duties and affirmative status gates. A certificate MUST be in `status='authorized'` before execution can occur, and cannot be re-executed once in `status='executed'`. Execution sets `record_status='disposed'`, parent `document.status='archived'`, and is wrapped in `transaction.atomic()`.
+34. **Evidence Spoliation Defense**: Parent `document_delete` strictly prevents deleting any document that has active legal holds (`document.legal_holds.filter(is_active=True).exists()`) or locked record declarations (`document.record_declarations.filter(is_locked=True).exists()`), preventing accidental cascade spoliation.
+35. **Legal Hold Preservation Precedence**: Active legal holds take precedence over all retention clocks and disposition schedules. While an active hold exists, records cannot be cutoff, edited, deleted, or authorized/executed for destruction. Release of a legal hold strictly requires mandatory justification and administrator authorization (`@tenant_admin_required`).
+36. **N+1 Performance Subquery Optimization**: List views checking legal hold status (`record_declaration_list`, `vital_records_list`) annotate querysets using `has_active_hold=Exists(...)` subqueries. Model property `is_under_legal_hold` checks for the annotated attribute before falling back to individual database queries.
