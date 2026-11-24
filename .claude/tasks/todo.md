@@ -40554,4 +40554,349 @@ apps/quality/
 - **Skill Documentation**: Fully updated in `.claude/skills/documents/SKILL.md`.
 - **System Check**: Clean (`manage.py check` reports 0 issues).
 
+---
+
+# Sub-module 13.9: Records Management & Compliance (Module 13: Document Management System, `documents`) — plan from `research-documents-13.9.md` (2026-11-24)
+
+> **This plan EXTENDS existing app `apps/documents/`.** (13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.7, 13.8 already built and verified).
+> **Free prefixes verified (0 collisions repo-wide):** **`DRTN`** (`RetentionSchedule`), **`DRCD`** (`RecordDeclaration`), **`DHLD`** (`DocumentLegalHold`), **`DDST`** (`DestructionCertificate`).
+> **Plan written from:** `.claude/tasks/research-documents-13.9.md` (Phase 1) and `NavERP.md` (`### 13.9 Records Management & Compliance`).
+> **Package folder name:** `apps/documents/{models,forms,views,urls}/RecordsManagement/<Entity>.py` (`RetentionSchedules.py`, `RecordDeclarations.py`, `DocumentLegalHolds.py`, `DestructionCertificates.py`, plus dedicated `DispositionReview.py` and `VitalRecords.py`)
+
+## Models (from research — 4 tenant-scoped models)
+
+### 1. `RetentionSchedule` (`DRTN-`)
+- **Table / Prefix**: `documents_retentionschedule` / `NUMBER_PREFIX = "DRTN"` (e.g. `DRTN-000001`).
+- **Inheritance**: Subclasses `TenantNumbered` (`apps.documents.models._base`).
+- **Fields**:
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="retention_schedules")`
+  - `number`: `CharField(max_length=32, editable=False)`
+  - `name`: `CharField(max_length=150, help_text="e.g. Corporate Commercial Contracts Retention Schedule")`
+  - `file_plan_code`: `CharField(max_length=64, db_index=True, help_text="Standardized file plan code, e.g. LEGAL-CONT-01")`
+  - `description`: `TextField(blank=True)`
+  - `retention_period_years`: `PositiveIntegerField(default=7, help_text="Mandatory retention period in years")`
+  - `retention_period_months`: `PositiveIntegerField(default=0, help_text="Additional retention months")`
+  - `is_permanent`: `BooleanField(default=False, help_text="Vital historical record that must never be destroyed")`
+  - `trigger_type`: `CharField(max_length=24, choices=TRIGGER_TYPE_CHOICES, default="creation_date")` (`creation_date`, `last_modified`, `event_based`, `declaration_date`)
+  - `cutoff_type`: `CharField(max_length=24, choices=CUTOFF_TYPE_CHOICES, default="calendar_year_end")` (`immediate`, `calendar_year_end`, `fiscal_year_end`, `event_completion`)
+  - `disposition_action`: `CharField(max_length=24, choices=DISPOSITION_ACTION_CHOICES, default="review")` (`destroy`, `permanent_archive`, `review`, `transfer`)
+  - `retention_mode`: `CharField(max_length=20, choices=RETENTION_MODE_CHOICES, default="modifiable")` (`modifiable`, `regulatory_worm`)
+  - `compliance_framework`: `CharField(max_length=24, choices=COMPLIANCE_FRAMEWORK_CHOICES, default="iso_15489")` (`iso_15489`, `dod_5015_2`, `sec_17a_4`, `gdpr`, `hipaa`, `irs_tax`, `custom`)
+  - `legal_citation`: `CharField(max_length=255, blank=True, help_text="Statutory legal citation, e.g. IRS 26 CFR § 1.6001-1; Sarbanes-Oxley § 802")`
+  - `owner_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="retention_schedules")`
+  - `is_active`: `BooleanField(default=True, db_index=True)`
+  - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_retention_schedules")`
+  - `created_at`: `DateTimeField(auto_now_add=True)`
+  - `updated_at`: `DateTimeField(auto_now=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_drtn_ten_num_uniq")` (21 chars)
+  - `UniqueConstraint(fields=["tenant", "file_plan_code"], name="doc_drtn_tnt_code_uniq")` (22 chars)
+  - `models.Index(fields=["tenant", "compliance_framework"], name="doc_drtn_tnt_cmpl_idx")` (21 chars)
+  - `models.Index(fields=["tenant", "is_active", "retention_mode"], name="doc_drtn_tnt_act_mod_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `created_by`, `created_at`, `updated_at`.
+- **Drivers**: File Plan & Classification Taxonomy, Configurable Retention Duration, Lifecycle Trigger Types, Cutoff Rules, Retention Enforcement Modes (Modifiable vs. Regulatory WORM), Compliance Framework Alignment, Statutory Legal Citation Reference.
+
+### 2. `RecordDeclaration` (`DRCD-`)
+- **Table / Prefix**: `documents_recorddeclaration` / `NUMBER_PREFIX = "DRCD"` (e.g. `DRCD-000001`).
+- **Inheritance**: Subclasses `TenantNumbered` (`apps.documents.models._base`).
+- **Fields**:
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="record_declarations")`
+  - `number`: `CharField(max_length=32, editable=False)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="record_declarations", db_index=True)`
+  - `version`: `ForeignKey("documents.DocumentVersion", on_delete=models.SET_NULL, null=True, blank=True, related_name="record_declarations")`
+  - `retention_schedule`: `ForeignKey("documents.RetentionSchedule", on_delete=models.PROTECT, related_name="declared_records")`
+  - `declaration_type`: `CharField(max_length=20, choices=DECLARATION_TYPE_CHOICES, default="manual")` (`manual`, `automatic_rule`, `workflow_trigger`)
+  - `declared_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="declared_records")`
+  - `declared_at`: `DateTimeField(default=timezone.now)`
+  - `record_status`: `CharField(max_length=24, choices=RECORD_STATUS_CHOICES, default="active", db_index=True)` (`active`, `cutoff_met`, `disposition_pending`, `disposed`, `archived`)
+  - `is_vital_record`: `BooleanField(default=False, db_index=True, help_text="Mission-critical record required for disaster recovery and operational continuity")`
+  - `is_locked`: `BooleanField(default=True, help_text="Tamper-resistance lock preventing document content modification or deletion")`
+  - `cutoff_date`: `DateField(null=True, blank=True, help_text="Date cutoff criteria were reached and retention clock started")`
+  - `disposition_due_date`: `DateField(null=True, blank=True, db_index=True, help_text="Calculated date record becomes eligible for disposition")`
+  - `notes`: `TextField(blank=True)`
+  - `created_at`: `DateTimeField(auto_now_add=True)`
+  - `updated_at`: `DateTimeField(auto_now=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_drcd_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "document", "record_status"], name="doc_drcd_tnt_doc_sts_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "disposition_due_date"], name="doc_drcd_tnt_dsp_due_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "is_vital_record"], name="doc_drcd_tnt_vital_idx")` (22 chars)
+- **Form exclusions**: `tenant`, `number`, `declared_by`, `declared_at`, `is_locked`, `cutoff_date`, `disposition_due_date`, `created_at`, `updated_at`.
+- **Drivers**: Official Record Declaration, Declaration Triggers & Modes, File Plan Assignment & Record Identifier, Vital Records Designation, Cutoff Status & Tracking, WORM Tamper-Resistance Lock.
+
+### 3. `DocumentLegalHold` (`DHLD-`)
+- **Table / Prefix**: `documents_documentlegalhold` / `NUMBER_PREFIX = "DHLD"` (e.g. `DHLD-000001`).
+- **Inheritance**: Subclasses `TenantNumbered` (`apps.documents.models._base`).
+- **Fields**:
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="document_legal_holds")`
+  - `number`: `CharField(max_length=32, editable=False)`
+  - `document`: `ForeignKey("documents.Document", on_delete=models.CASCADE, related_name="legal_holds", db_index=True)`
+  - `record_declaration`: `ForeignKey("documents.RecordDeclaration", on_delete=models.SET_NULL, null=True, blank=True, related_name="legal_holds")`
+  - `core_legal_hold`: `ForeignKey("core.LegalHold", on_delete=models.SET_NULL, null=True, blank=True, related_name="document_holds", help_text="Cross-link to 0.16 enterprise preservation order")`
+  - `matter_number`: `CharField(max_length=100, db_index=True, help_text="Legal case identifier, e.g. LIT-2026-0042")`
+  - `title`: `CharField(max_length=150)`
+  - `hold_reason`: `CharField(max_length=24, choices=HOLD_REASON_CHOICES, default="litigation")` (`litigation`, `regulatory_audit`, `tax_investigation`, `internal_inquiry`)
+  - `scope_description`: `TextField(blank=True)`
+  - `custodian_name`: `CharField(max_length=200, blank=True)`
+  - `custodian_user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="custodian_document_holds")`
+  - `custodian_acknowledged`: `BooleanField(default=False)`
+  - `custodian_acknowledged_at`: `DateTimeField(null=True, blank=True)`
+  - `is_active`: `BooleanField(default=True, db_index=True, help_text="Active hold strictly overrides all retention and prevents destruction")`
+  - `placed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="placed_document_legal_holds")`
+  - `placed_at`: `DateTimeField(default=timezone.now)`
+  - `released_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="released_document_legal_holds")`
+  - `released_at`: `DateTimeField(null=True, blank=True)`
+  - `release_reason`: `CharField(max_length=255, blank=True, help_text="Mandatory written justification for lifting hold")`
+  - `notes`: `TextField(blank=True)`
+  - `created_at`: `DateTimeField(auto_now_add=True)`
+  - `updated_at`: `DateTimeField(auto_now=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_dhld_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "document", "is_active"], name="doc_dhld_tnt_doc_act_idx")` (24 chars)
+  - `models.Index(fields=["tenant", "matter_number"], name="doc_dhld_tnt_matter_idx")` (23 chars)
+  - `models.Index(fields=["tenant", "is_active", "hold_reason"], name="doc_dhld_tnt_act_rsn_idx")` (24 chars)
+- **Form exclusions**: `tenant`, `number`, `placed_by`, `placed_at`, `released_by`, `released_at`, `release_reason`, `custodian_acknowledged_at`, `created_at`, `updated_at`.
+- **Drivers**: Litigation Hold Placement, Retention Suspension & Disposition Override, Enterprise Legal Hold Integration (`core.LegalHold`), Matter Tracking & Case Reference, Custodian Scoping & Tracking, Defensible Hold Release Workflow.
+
+### 4. `DestructionCertificate` (`DDST-`)
+- **Table / Prefix**: `documents_destructioncertificate` / `NUMBER_PREFIX = "DDST"` (e.g. `DDST-000001`).
+- **Inheritance**: Subclasses `TenantNumbered` (`apps.documents.models._base`).
+- **Fields**:
+  - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="destruction_certificates")`
+  - `number`: `CharField(max_length=32, editable=False)`
+  - `record_declaration`: `ForeignKey("documents.RecordDeclaration", on_delete=models.SET_NULL, null=True, blank=True, related_name="destruction_certificates")`
+  - `document_title_snapshot`: `CharField(max_length=255, help_text="Preserved document title surviving underlying record deletion")`
+  - `document_number_snapshot`: `CharField(max_length=64, help_text="Preserved DOC-XXXXXX number")`
+  - `file_plan_code_snapshot`: `CharField(max_length=64, blank=True, help_text="Preserved file plan code")`
+  - `disposition_type`: `CharField(max_length=24, choices=DISPOSITION_TYPE_CHOICES, default="secure_destruction")` (`secure_destruction`, `physical_shredding`, `archival_transfer`, `de_identification`)
+  - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="pending_approval", db_index=True)` (`draft`, `pending_approval`, `approved`, `executed`, `rejected`)
+  - `approval_requested_at`: `DateTimeField(default=timezone.now)`
+  - `approved_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_destruction_certs")`
+  - `approved_at`: `DateTimeField(null=True, blank=True)`
+  - `rejection_reason`: `CharField(max_length=255, blank=True)`
+  - `executed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="executed_destruction_certs")`
+  - `executed_at`: `DateTimeField(null=True, blank=True)`
+  - `destruction_method`: `CharField(max_length=24, choices=DESTRUCTION_METHOD_CHOICES, default="database_purge")` (`cryptographic_erase`, `dod_5220_22m`, `database_purge`, `physical_crosscut`, `nara_transfer`)
+  - `verification_hash`: `CharField(max_length=64, blank=True, help_text="SHA-256 cryptographic digest snapshot verifying destroyed item")`
+  - `legal_hold_verified_clear`: `BooleanField(default=False, help_text="Affirmative verification that zero active legal holds exist on document")`
+  - `notes`: `TextField(blank=True)`
+  - `created_at`: `DateTimeField(auto_now_add=True)`
+  - `updated_at`: `DateTimeField(auto_now=True)`
+- **Constraints & Indexes (`<= 30` chars)**:
+  - `UniqueConstraint(fields=["tenant", "number"], name="doc_ddst_ten_num_uniq")` (21 chars)
+  - `models.Index(fields=["tenant", "status", "disposition_type"], name="doc_ddst_tnt_sts_type_idx")` (25 chars)
+  - `models.Index(fields=["tenant", "executed_at"], name="doc_ddst_tnt_exec_idx")` (21 chars)
+- **Form exclusions**: `tenant`, `number`, `approval_requested_at`, `approved_by`, `approved_at`, `rejection_reason`, `executed_by`, `executed_at`, `legal_hold_verified_clear`, `verification_hash`, `created_at`, `updated_at`.
+- **Drivers**: Defensible Disposition Review Board, Multi-Stage Disposition Approval, Destruction Execution & Methods, Cryptographic Verification Hash (Proof of Disposal), Legal Hold Pre-Destruction Clearance Check, Permanent Certificate of Destruction (Chain of Custody).
+
+---
+
+## Backend (`apps/documents/{models,forms,views,urls}/RecordsManagement/`)
+
+### Models (`apps/documents/models/RecordsManagement/`)
+- [ ] `RetentionSchedules.py`: `RetentionSchedule` model with file plan taxonomy, retention duration, trigger/cutoff types, WORM enforcement, legal citation, and `DRTN-` numbering.
+- [ ] `RecordDeclarations.py`: `RecordDeclaration` model binding `Document` to `RetentionSchedule`, locking document version, tracking cutoff date, vital records flag, disposition due date calculation, and `DRCD-` numbering.
+- [ ] `DocumentLegalHolds.py`: `DocumentLegalHold` model preserving document against disposition, matter tracking, custodian tracking and acknowledgment, hold release audit, and `DHLD-` numbering.
+- [ ] `DestructionCertificates.py`: `DestructionCertificate` model tracking disposition approval, multi-stage sign-off, legal hold clearance check, SHA-256 verification hash, execution method, permanent audit snapshot, and `DDST-` numbering.
+- [ ] `__init__.py`: Package re-exports for `RetentionSchedule`, `RecordDeclaration`, `DocumentLegalHold`, `DestructionCertificate`.
+
+### Forms (`apps/documents/forms/RecordsManagement/`)
+- [ ] `RetentionSchedules.py`: `RetentionScheduleForm` with tenant scoping, validation of retention periods and WORM modes.
+- [ ] `RecordDeclarations.py`: `RecordDeclarationForm`, `RecordDeclarationCutoffForm` with document and version tenant filtering, automatic date calculations.
+- [ ] `DocumentLegalHolds.py`: `DocumentLegalHoldForm`, `LegalHoldReleaseForm`, `LegalHoldAcknowledgeForm` with active hold overrides and matter metadata.
+- [ ] `DestructionCertificates.py`: `DestructionCertificateForm`, `DestructionApprovalForm`, `DestructionExecutionForm` with affirmative legal hold clearance validation.
+- [ ] `__init__.py`: Package re-exports for all form classes.
+
+### Views (`apps/documents/views/RecordsManagement/`)
+- [ ] `RetentionSchedules.py`: `retention_schedule_list`, `retention_schedule_create`, `retention_schedule_detail`, `retention_schedule_edit`, `retention_schedule_delete`.
+- [ ] `RecordDeclarations.py`: `record_declaration_list`, `record_declaration_create`, `record_declaration_detail`, `record_declaration_edit`, `record_declaration_delete`, `record_declaration_trigger_cutoff`.
+- [ ] `DocumentLegalHolds.py`: `legal_hold_list`, `legal_hold_create`, `legal_hold_detail`, `legal_hold_edit`, `legal_hold_delete`, `legal_hold_release`, `legal_hold_acknowledge`.
+- [ ] `DestructionCertificates.py`: `destruction_certificate_list`, `destruction_certificate_create`, `destruction_certificate_detail`, `destruction_certificate_edit`, `destruction_certificate_delete`, `destruction_certificate_approve`, `destruction_certificate_execute`.
+- [ ] `DispositionReview.py`: `disposition_review_board` (interactive board showing records reaching disposition due date with hold status indicators).
+- [ ] `VitalRecords.py`: `vital_records_register` (vital records audit register for disaster recovery compliance).
+- [ ] `__init__.py`: Package re-exports for all view functions.
+
+### URLs (`apps/documents/urls/RecordsManagement/`)
+- [ ] `RetentionSchedules.py`: Routes for `retention_schedule_list`, `create`, `detail`, `edit`, `delete`.
+- [ ] `RecordDeclarations.py`: Routes for `record_declaration_list`, `create`, `detail`, `edit`, `delete`, `trigger_cutoff`.
+- [ ] `DocumentLegalHolds.py`: Routes for `legal_hold_list`, `create`, `detail`, `edit`, `delete`, `release`, `acknowledge`.
+- [ ] `DestructionCertificates.py`: Routes for `destruction_certificate_list`, `create`, `detail`, `edit`, `delete`, `approve`, `execute`.
+- [ ] `DispositionReview.py`: Route for `disposition_review_board`.
+- [ ] `VitalRecords.py`: Route for `vital_records_register`.
+- [ ] `__init__.py`: Aggregates all records management url patterns into `urlpatterns`.
+
+### Package Re-exports & Registrations
+- [ ] Re-export models in `apps/documents/models/__init__.py` and include in `__all__`.
+- [ ] Re-export forms in `apps/documents/forms/__init__.py`.
+- [ ] Re-export views in `apps/documents/views/__init__.py` and include in `__all__`.
+- [ ] Wire `RecordsManagement` urls in `apps/documents/urls/__init__.py`.
+- [ ] Register all 4 models in `apps/documents/admin.py` with search, list_filter, and readonly fields.
+- [ ] Incremental migration `0018_...` generated via `python manage.py makemigrations documents`.
+- [ ] Extend `seed_documents.py` command with realistic, idempotent demo data for Acme and Apex tenants.
+
+---
+
+## Wire-up
+
+### Navigation (`apps/core/navigation.py`)
+- [ ] Add `LIVE_LINKS["13.9"]` mapping all 5 exact `NavERP.md` feature bullets:
+  - `"Records Classification & Retention": "documents:retention_schedule_list"`
+  - `"Records Declaration & Filing": "documents:record_declaration_list"`
+  - `"Legal Hold & eDiscovery": "documents:legal_hold_list"`
+  - `"Disposition & Destruction": "documents:destruction_certificate_list"`
+  - `"Compliance Framework Mapping": "documents:retention_schedule_list"`
+  - `"Disposition Review Board": "documents:disposition_review_board"`
+  - `"Vital Records Register": "documents:vital_records_register"`
+
+---
+
+## Templates (`templates/documents/records_management/`)
+
+### RetentionSchedule Templates
+- [ ] `templates/documents/records_management/retention_schedule/list.html`: Filter bar (`compliance_framework`, `retention_mode`, `is_active`, `search`), table with file plan codes, retention durations, WORM badge, Actions column, pagination.
+- [ ] `templates/documents/records_management/retention_schedule/detail.html`: Header with `DRTN-` badge, statutory legal citation, WORM lock status, linked declared records count, audit timestamps.
+- [ ] `templates/documents/records_management/retention_schedule/form.html`: Crisp Tailwind card layout, org unit selector, trigger & cutoff choices, WORM warning banner.
+
+### RecordDeclaration Templates
+- [ ] `templates/documents/records_management/record_declaration/list.html`: Filter bar (`record_status`, `is_vital_record`, `retention_schedule`, `search`), table with document link, version hash snapshot, cutoff date, disposition due date, status badge.
+- [ ] `templates/documents/records_management/record_declaration/detail.html`: Header with `DRCD-` badge, vital record indicator, WORM lock status, cutoff trigger button, linked legal holds alert banner, disposition due countdown.
+- [ ] `templates/documents/records_management/record_declaration/form.html`: Document and version pickers, retention schedule picker, vital record checkbox, notes.
+
+### DocumentLegalHold Templates
+- [ ] `templates/documents/records_management/legal_hold/list.html`: Filter bar (`is_active`, `hold_reason`, `matter_number`, `search`), matter badges, custodian names, release status, Actions column.
+- [ ] `templates/documents/records_management/legal_hold/detail.html`: Active preservation alert banner, matter details, custodian acknowledgment timestamp, release modal/form, target document link.
+- [ ] `templates/documents/records_management/legal_hold/form.html`: Matter number, hold reason, document picker, core legal hold cross-link, custodian assignment.
+
+### DestructionCertificate Templates
+- [ ] `templates/documents/records_management/destruction_certificate/list.html`: Filter bar (`status`, `disposition_type`, `destruction_method`, `search`), certificate number, document title snapshot, SHA-256 hash preview, approval status badge.
+- [ ] `templates/documents/records_management/destruction_certificate/detail.html`: Defensible certificate layout, document snapshot metadata, cryptographic verification hash block, chain of custody sign-offs (approver, executor), legal hold clearance verification badge.
+- [ ] `templates/documents/records_management/destruction_certificate/form.html`: Record declaration picker, snapshot fields prefill, disposition type, method selection.
+
+### Board & Register Views
+- [ ] `templates/documents/records_management/disposition_review/board.html`: Records reaching cutoff/due date, legal hold status check indicator (clear vs. blocked), batch review controls.
+- [ ] `templates/documents/records_management/vital_records/list.html`: Filtered register of vital records with org units, disaster recovery classification, and inspection dates.
+
+---
+
+## Verify
+
+- [ ] Execute `python manage.py makemigrations documents` to generate `0018_...`
+- [ ] Execute `python manage.py migrate`
+- [ ] Execute `python manage.py seed_documents` twice to verify complete idempotence
+- [ ] Run `python manage.py check` to assert 0 system errors
+- [ ] Execute comprehensive smoke sweep `temp/smoke_13_9.py` checking all routes return HTTP 200/302, content checks for table headers and seeded records, cross-tenant IDOR returns 404
+- [ ] Verify sidebar navigation displays `13.9 Records Management & Compliance` as Live
+
+---
+
+## Detailed Build Plan (Phases 3 to 7)
+
+### Phase 3.1: Spec Contract
+- [ ] Read `NavERP.md`, `research-documents-13.9.md`, and sibling modules to author `.claude/tasks/contract-documents-13.9.md`.
+- [ ] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
+- [ ] Commit contract: `git add .claude/tasks/contract-documents-13.9.md; git commit -m "docs(documents): freeze 13.9 contract specification"`
+
+### Phase 3.2: Build Entity by Entity (Strictly Serial)
+- [ ] **Entity 1: RetentionSchedule** (`DRTN-`)
+  - [ ] `apps/documents/models/RecordsManagement/RetentionSchedules.py`
+  - [ ] `apps/documents/forms/RecordsManagement/RetentionSchedules.py`
+  - [ ] `apps/documents/views/RecordsManagement/RetentionSchedules.py` (`retention_schedule_list`, `retention_schedule_create`, `retention_schedule_detail`, `retention_schedule_edit`, `retention_schedule_delete`)
+  - [ ] `apps/documents/urls/RecordsManagement/RetentionSchedules.py`
+  - [ ] `templates/documents/records_management/retention_schedule/list.html`
+  - [ ] `templates/documents/records_management/retention_schedule/detail.html`
+  - [ ] `templates/documents/records_management/retention_schedule/form.html`
+- [ ] **Entity 2: RecordDeclaration** (`DRCD-`)
+  - [ ] `apps/documents/models/RecordsManagement/RecordDeclarations.py`
+  - [ ] `apps/documents/forms/RecordsManagement/RecordDeclarations.py`
+  - [ ] `apps/documents/views/RecordsManagement/RecordDeclarations.py` (`record_declaration_list`, `record_declaration_create`, `record_declaration_detail`, `record_declaration_edit`, `record_declaration_delete`, `record_declaration_trigger_cutoff`)
+  - [ ] `apps/documents/urls/RecordsManagement/RecordDeclarations.py`
+  - [ ] `templates/documents/records_management/record_declaration/list.html`
+  - [ ] `templates/documents/records_management/record_declaration/detail.html`
+  - [ ] `templates/documents/records_management/record_declaration/form.html`
+- [ ] **Entity 3: DocumentLegalHold** (`DHLD-`)
+  - [ ] `apps/documents/models/RecordsManagement/DocumentLegalHolds.py`
+  - [ ] `apps/documents/forms/RecordsManagement/DocumentLegalHolds.py`
+  - [ ] `apps/documents/views/RecordsManagement/DocumentLegalHolds.py` (`legal_hold_list`, `legal_hold_create`, `legal_hold_detail`, `legal_hold_edit`, `legal_hold_delete`, `legal_hold_release`, `legal_hold_acknowledge`)
+  - [ ] `apps/documents/urls/RecordsManagement/DocumentLegalHolds.py`
+  - [ ] `templates/documents/records_management/legal_hold/list.html`
+  - [ ] `templates/documents/records_management/legal_hold/detail.html`
+  - [ ] `templates/documents/records_management/legal_hold/form.html`
+- [ ] **Entity 4: DestructionCertificate** (`DDST-`)
+  - [ ] `apps/documents/models/RecordsManagement/DestructionCertificates.py`
+  - [ ] `apps/documents/forms/RecordsManagement/DestructionCertificates.py`
+  - [ ] `apps/documents/views/RecordsManagement/DestructionCertificates.py` (`destruction_certificate_list`, `destruction_certificate_create`, `destruction_certificate_detail`, `destruction_certificate_edit`, `destruction_certificate_delete`, `destruction_certificate_approve`, `destruction_certificate_execute`)
+  - [ ] `apps/documents/urls/RecordsManagement/DestructionCertificates.py`
+  - [ ] `templates/documents/records_management/destruction_certificate/list.html`
+  - [ ] `templates/documents/records_management/destruction_certificate/detail.html`
+  - [ ] `templates/documents/records_management/destruction_certificate/form.html`
+- [ ] **Dedicated Board & Register Views**
+  - [ ] `apps/documents/views/RecordsManagement/DispositionReview.py` & `VitalRecords.py`
+  - [ ] `apps/documents/urls/RecordsManagement/DispositionReview.py` & `VitalRecords.py`
+  - [ ] `templates/documents/records_management/disposition_review/board.html`
+  - [ ] `templates/documents/records_management/vital_records/list.html`
+
+### Phase 3.3: Integration & Administration
+- [ ] Create `apps/documents/{models,forms,views,urls}/RecordsManagement/__init__.py` re-export files
+- [ ] Update `apps/documents/models/__init__.py` re-exports and `__all__`
+- [ ] Update `apps/documents/forms/__init__.py` re-exports
+- [ ] Update `apps/documents/views/__init__.py` re-exports and `__all__`
+- [ ] Update `apps/documents/urls/__init__.py` registering `RecordsManagement` urls
+- [ ] Register `RetentionSchedule`, `RecordDeclaration`, `DocumentLegalHold`, `DestructionCertificate` in `apps/documents/admin.py`
+- [ ] Generate migration `0018_...`: `python manage.py makemigrations documents`
+- [ ] Apply migration: `python manage.py migrate`
+- [ ] Extend seeder in `apps/documents/management/commands/seed_documents.py` with records schedules, declarations, holds, and certificates
+- [ ] Run seeder idempotently: `python manage.py seed_documents` (run twice)
+- [ ] Wire `apps/core/navigation.py` `LIVE_LINKS["13.9"]`
+- [ ] Validate system integrity: `python manage.py check`
+
+### Phase 3.4: Automated Smoke Sweep
+- [ ] Author `temp/smoke_13_9.py` checking authenticated endpoints as `admin_acme` / `password`
+- [ ] Verify 200/302 responses, HTML content assertions, badge classes, and cross-tenant IDOR 404
+- [ ] Remove `temp/smoke_13_9.py` after clean execution
+
+### Phase 4: Six Review Passes (Strictly Serial)
+- [ ] `code-reviewer` agent reviewing `BASE...HEAD` → findings in `.claude/tasks/review-documents-13.9.md`
+- [ ] `explorer` agent reviewing contract alignment and re-export integrity
+- [ ] `frontend-reviewer` agent reviewing Tailwind styles, semantic badges, and filter bars
+- [ ] `performance-reviewer` agent reviewing queries, N+1 query prevention, and composite indexes
+- [ ] `qa-smoke-tester` agent running live browser and status checks
+- [ ] `security-reviewer` agent verifying tenant isolation, legal hold bypass protection, and write permissions
+- [ ] Deduplicate, prioritize (Critical → Important → Minor), and assign IDs in `.claude/tasks/review-documents-13.9.md`
+
+### Phase 5: Code Fixer
+- [ ] Invoke `code-fixer` agent to resolve all findings from `review-documents-13.9.md` one by one
+- [ ] Commit each fix with single-file git commits
+- [ ] Verify `manage.py check` remains 100% clean
+
+### Phase 6: Test Suite (Strictly Serial)
+- [ ] Write `apps/documents/tests/test_records_management_models.py` (model creation, WORM lock, hold check, hash digest)
+- [ ] Write `apps/documents/tests/test_records_management_forms.py` (form validations, tenant filtering, exclusion checks)
+- [ ] Write `apps/documents/tests/test_records_management_views.py` (CRUD routes, approval workflows, cutoff triggers)
+- [ ] Write `apps/documents/tests/test_records_management_security.py` (cross-tenant IDOR isolation, hold destruction blockage, permission checks)
+- [ ] Run full unfiltered test suite: `pytest apps/documents/tests/` to assert 100% green
+
+### Phase 7: Skill, README & Close-out
+- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.9 models, routes, templates, and seed details
+- [ ] Update `README.md` marking 13.9 complete and recording test statistics
+- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.9.md` and `.claude/tasks/gaps-documents-13.9.md`
+- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+
+---
+
+## Belongs to sibling sub-modules (parked, not scoped here)
+- **13.10 Audit Trail & Reporting** — Universal tenant-wide immutable compliance audit logs, forensic chain of custody exports, and regulatory compliance reporting.
+- **13.14 Document Archival & Long-Term Preservation** — Long-term preservation formats (PDF/A, TIFF), bit-rot integrity sweeps, media transcoding, and cold tier storage volume migration.
+- **13.15 Electronic Forms & Data Capture** — Electronic form submissions, field extraction, and form response data retention.
+- **13.16 Contract Lifecycle Management (CLM)** — Contract milestone-based retention triggers (contract execution, expiration, renewal).
+
+## Later passes / deferred (from `research-documents-13.9.md`)
+- **Automated Background Scheduler / Daemon Worker** — NavERP operates as a synchronous single-process web application without a daemon background runner (see 0.8/0.16 precedent). Automated cron-based deletion is deferred; disposition is managed through the interactive Disposition Review Board and authorized manually by records managers.
+- **External eDiscovery EDRM / Relativity Export** — Direct API integration with commercial legal review platforms (Relativity, Disco, Exterro) deferred; legal hold and record metadata can be exported via CSV/JSON.
+- **Physical Warehouse Barcode & RFID Box Tracking** — Physical box location tracking for off-site paper archives (e.g. Iron Mountain physical depot integration) deferred to physical records management extension.
+- **Machine Learning Auto-Classification Engine** — Automated ML classification of unstructured documents into file plan categories deferred; classification uses rule-based matching and folder defaults.
+
+## Review notes — Sub-module 13.9 Close-out
+(to be filled in at the end of Sub-module 13.9 build)
+
+
 
