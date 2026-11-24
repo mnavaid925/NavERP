@@ -349,7 +349,19 @@ class DestructionCertificateAdmin(admin.ModelAdmin):
     list_display = ("number", "document_title_snapshot", "disposition_type", "destruction_method", "status", "legal_hold_verified_clear", "authorized_by", "executed_by", "tenant")
     list_filter = ("disposition_type", "destruction_method", "status", "legal_hold_verified_clear", "tenant")
     search_fields = ("number", "document_title_snapshot", "document_number_snapshot", "schedule_name_snapshot", "content_verification_hash")
-    readonly_fields = ("number", "content_verification_hash", "hold_verification_date", "authorized_at", "executed_at", "created_at", "updated_at")
+    readonly_fields = (
+        "number",
+        "status",
+        "authorized_by",
+        "executed_by",
+        "authorized_at",
+        "executed_at",
+        "legal_hold_verified_clear",
+        "content_verification_hash",
+        "hold_verification_date",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(DocumentAuditTrail)
