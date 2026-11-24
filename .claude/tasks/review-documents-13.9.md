@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 7 | 2 | 0 |
+| **Important** | 9 | 6 | 3 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 11 | 7 | 0 |
+| **Total** | 18 | 10 | 8 | 0 |
 
 ---
 
@@ -117,7 +117,7 @@
   1. Add `@tenant_admin_required` to `retention_schedule_create`, `retention_schedule_edit`, and `record_declaration_trigger_cutoff`.
   2. In `record_declaration_trigger_cutoff`, verify `if declaration.record_status not in ["active"]:` return error message.
 
-### [ ] `I3`: N+1 Query in `RecordDeclarationForm` Version Dropdown Initialization
+### [x] `I3`: N+1 Query in `RecordDeclarationForm` Version Dropdown Initialization
 - **Found by**: `code-reviewer`, `performance-reviewer`
 - **Location**: `apps/documents/forms/RecordsManagement/RecordDeclarations.py:46`
 - **Issue**: `self.fields["version"].queryset` lacks `.select_related("document")`, causing individual document fetches per version choice when rendering the dropdown.
