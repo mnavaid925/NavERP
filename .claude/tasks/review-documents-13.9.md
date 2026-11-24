@@ -16,9 +16,9 @@
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | **Critical** | 5 | 0 | 5 | 0 |
-| **Important** | 9 | 6 | 3 | 0 |
+| **Important** | 9 | 5 | 4 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 10 | 8 | 0 |
+| **Total** | 18 | 9 | 9 | 0 |
 
 ---
 
@@ -123,7 +123,7 @@
 - **Issue**: `self.fields["version"].queryset` lacks `.select_related("document")`, causing individual document fetches per version choice when rendering the dropdown.
 - **Fix**: Add `.select_related("document")` to `self.fields["version"].queryset`.
 
-### [ ] `I4`: `verify_legal_holds()` False Negative When Certificate Lacks Declaration
+### [x] `I4`: `verify_legal_holds()` False Negative When Certificate Lacks Declaration
 - **Found by**: `qa-smoke-tester`
 - **Location**: `apps/documents/models/RecordsManagement/DestructionCertificates.py:115`
 - **Issue**: If `self.record_declaration` is None, `verify_legal_holds()` unconditionally returns `False`, blocking certificate operations even when no legal hold exists.
