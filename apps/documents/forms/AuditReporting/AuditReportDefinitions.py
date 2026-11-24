@@ -45,3 +45,30 @@ class AuditReportDefinitionForm(forms.ModelForm):
                 self.add_error("custom_end_date", "End date must be on or after start date.")
 
         return cleaned_data
+
+
+class AuditReportRunForm(forms.Form):
+    """Optional parameters for ad-hoc execution of an audit report."""
+
+    output_format = forms.ChoiceField(
+        required=False,
+        choices=[("", "Default Format")] + list(AuditReportDefinition.OUTPUT_FORMAT_CHOICES),
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    date_from = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
+    )
+    date_to = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        date_from = cleaned_data.get("date_from")
+        date_to = cleaned_data.get("date_to")
+        if date_from and date_to and date_from > date_to:
+            self.add_error("date_to", "Date to must be on or after date from.")
+        return cleaned_data
+
