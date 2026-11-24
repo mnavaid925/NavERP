@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ webhook.number }} — {{ webhook.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:webhook_trigger_list' %}">Webhook Triggers</a>
+            <span>/</span>
+            <span>{{ webhook.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <h1 class="page-title">{{ webhook.number }} — {{ webhook.name }}</h1>
+            <span class="badge {{ webhook.direction_badge }}">{{ webhook.get_direction_display }}</span>
+            <span class="badge {{ webhook.last_status_badge }}">{{ webhook.get_last_status_display }}</span>
+            <span class="badge {{ webhook.active_badge }}">{% if webhook.is_active %}Active{% else %}Paused{% endif %}</span>
+        </div>
+    </div>
+</div>
+
+{% if revealed_secret %}
+<div class="card mb-6 border-amber-300 bg-amber-50">
+    <div class="card-body">
+        <div class="font-semibold text-amber-900 text-sm mb-1">HMAC-SHA256 Signing Secret (Displayed Once)</div>
+        <p class="text-xs text-amber-800 mb-2">Copy and store this signing secret now. It will not be displayed again after you refresh or leave this page.</p>
+        <div class="font-mono text-xs bg-white p-3 rounded border border-amber-200 select-all break-all">{{ revealed_secret }}</div>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Trigger &amp; Security Configuration</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Trigger Number</dt>
+                        <dd class="font-mono font-semibold">{{ webhook.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>DMS Event</dt>
+                        <dd class="font-mono text-xs">{{ webhook.trigger_event }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target URL</dt>
+                        <dd class="font-mono text-xs break-all">{{ webhook.target_url|default:"Inbound Callback Listener" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>HTTP Method &amp; Payload</dt>
+                        <dd>{{ webhook.get_http_method_display }} · {{ webhook.get_payload_format_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Masked Signing Secret</dt>
+                        <dd class="font-mono text-xs">{{ webhook.masked_secret }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Dispatch Mode</dt>
+                        <dd><span class="badge badge-info">Simulated Local Dispatch (Zero Outbound HTTP)</span></dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Linked Process Blueprint</dt>
+                        <dd>
+                            {% if webhook.process_definition %}
+                            <a href="{% url 'documents:process_definition_detail' webhook.process_definition.pk %}" class="text-blue-600 hover:underline">{{ webhook.process_definition.name }}</a>
+                            {% else %}—{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Core Connector Catalog</dt>
+                        <dd>{% if webhook.connector_ref %}{{ webhook.connector_ref.name }}{% else %}Standalone DMS Trigger{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Fire Count / Failures</dt>
+                        <dd class="font-mono">{{ webhook.fire_count }} / {{ webhook.failure_count }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Owner</dt>
+                        <dd>{% if webhook.owner %}{{ webhook.owner.get_full_name|default:webhook.owner.username }}{% else %}—{% endif %}</dd>
+                    </div>
+                </dl>
+                {% if webhook.description %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <h3 class="text-xs font-semibold uppercase text-slate-500 mb-1">Description</h3>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ webhook.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Simulated Delivery Log (Latest {{ delivery_history|length }})</h2>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Event</th>
+                            <th>Status</th>
+                            <th>HMAC Signature</th>
+                            <th>Payload Envelope</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in delivery_history %}
+                        <tr>
+                            <td class="text-xs font-mono text-slate-500">{{ entry.timestamp|truncatechars:19 }}</td>
+                            <td class="text-xs font-mono">{{ entry.event }}</td>
+                            <td><span class="badge badge-info">{{ entry.status }}</span></td>
+                            <td class="text-xs font-mono text-slate-600">{{ entry.signature_header|default:"—" }}</td>
+                            <td class="text-xs font-mono text-slate-600">{{ entry.payload|truncatechars:70 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center text-xs text-slate-500 py-4">No simulated deliveries recorded yet. Send a test ping to inspect the signed payload envelope.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Send Simulated Test Ping</h2>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'documents:webhook_trigger_test_ping' webhook.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label class="form-label" for="{{ ping_form.event_override.id_for_label }}">Event Name Override</label>
+                        {{ ping_form.event_override }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ ping_form.document.id_for_label }}">Sample Document</label>
+                        {{ ping_form.document }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="radio"></i>
+                        <span>Run Simulated Ping</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if webhook.process_definition %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Simulate Inbound Trigger</h2>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'documents:webhook_trigger_simulate_inbound' webhook.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label class="form-label" for="id_inbound_doc">Target Document</label>
+                        <select id="id_inbound_doc" name="document_id" class="form-select w-full">
+                            <option value="">No Document (Log Callback Only)</option>
+                            {% for doc in tenant_documents %}
+                            <option value="{{ doc.pk }}">{{ doc.number }} — {{ doc.title|truncatechars:32 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-outline w-full">
+                        <i data-lucide="play"></i>
+                        <span>Simulate Inbound Trigger</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Actions</h2>
+            </div>
+            <div class="card-body space-y-2">
+                <a href="{% url 'documents:webhook_trigger_list' %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to Webhooks</span>
+                </a>
+                <a href="{% url 'documents:webhook_trigger_edit' webhook.pk %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Webhook</span>
+                </a>
+                {% if user.is_superuser or user.is_tenant_admin %}
+                <form method="post" action="{% url 'documents:webhook_trigger_rotate_secret' webhook.pk %}" onsubmit="return confirm('Rotate HMAC signing secret for {{ webhook.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline w-full justify-start">
+                        <i data-lucide="refresh-cw"></i>
+                        <span>Rotate Signing Secret</span>
+                    </button>
+                </form>
+                <form method="post" action="{% url 'documents:webhook_trigger_delete' webhook.pk %}" onsubmit="return confirm('Delete webhook trigger {{ webhook.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full justify-start">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Webhook</span>
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
