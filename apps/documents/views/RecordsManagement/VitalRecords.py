@@ -25,7 +25,7 @@ def vital_records_list(request):
         qs = qs.filter(
             Q(number__icontains=query)
             | Q(document__title__icontains=query)
-            | Q(document__document_number__icontains=query)
+            | Q(document__number__icontains=query)
             | Q(retention_schedule__name__icontains=query)
             | Q(notes__icontains=query)
         )
