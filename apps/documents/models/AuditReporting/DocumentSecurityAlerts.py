@@ -180,6 +180,9 @@ class DocumentSecurityAlert(TenantNumbered):
             models.Index(fields=["tenant", "alert_type"], name="doc_danm_tnt_typ_idx"),
             models.Index(fields=["tenant", "risk_score"], name="doc_danm_tnt_rsk_idx"),
             models.Index(fields=["tenant", "action_taken"], name="doc_danm_tnt_act_idx"),
+            models.Index(fields=["tenant", "status", "-detected_at"], name="doc_danm_tnt_sts_dt_idx"),
+            models.Index(fields=["tenant", "severity", "-detected_at"], name="doc_danm_tnt_sev_dt_idx"),
+            models.Index(fields=["tenant", "target_user", "alert_type", "detected_at"], name="doc_danm_usr_typ_dt_idx"),
         ]
 
     def __str__(self):
