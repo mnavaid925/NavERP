@@ -57,6 +57,7 @@ def destruction_certificate_list(request):
         "method_choices": DestructionCertificate.DESTRUCTION_METHOD_CHOICES,
         "current_status": current_status,
         "current_type": current_type,
+        "current_method": current_method,
         "query": query,
     }
     return render(request, "documents/records_management/destruction_certificate/list.html", context)
