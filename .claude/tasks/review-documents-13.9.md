@@ -15,10 +15,10 @@
 
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
-| **Critical** | 5 | 2 | 3 | 0 |
+| **Critical** | 5 | 1 | 4 | 0 |
 | **Important** | 9 | 9 | 0 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 15 | 3 | 0 |
+| **Total** | 18 | 14 | 4 | 0 |
 
 ---
 
@@ -71,7 +71,7 @@
      ```
   2. In `RecordDeclaration.is_under_legal_hold`, check `if hasattr(self, "has_active_hold"): return bool(self.has_active_hold)`.
 
-### [ ] `C4`: WORM Immutability Bypass via In-Place Record Declaration Editing
+### [x] `C4`: WORM Immutability Bypass via In-Place Record Declaration Editing
 - **Found by**: `security-reviewer`
 - **Location**:
   - `apps/documents/views/RecordsManagement/RecordDeclarations.py:130` (`record_declaration_edit`)
