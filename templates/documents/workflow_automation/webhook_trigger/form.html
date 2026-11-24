@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ webhook.number }}{% else %}New Webhook Trigger{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:webhook_trigger_list' %}">Webhook Triggers</a>
+            <span>/</span>
+            <span>{% if is_edit %}{{ webhook.number }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Webhook Trigger: {{ webhook.number }}{% else %}Register DMS Webhook Trigger{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:webhook_trigger_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Event Subscription &amp; SSRF-Validated Endpoint</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Trigger Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.direction.id_for_label }}">Direction *</label>
+                        {{ form.direction }}
+                        {% if form.direction.errors %}<div class="form-error">{{ form.direction.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.trigger_event.id_for_label }}">DMS Event *</label>
+                        {{ form.trigger_event }}
+                        {% if form.trigger_event.errors %}<div class="form-error">{{ form.trigger_event.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_url.id_for_label }}">Target Endpoint URL (HTTPS / Public HTTP Only)</label>
+                    {{ form.target_url }}
+                    {% if form.target_url.errors %}<div class="form-error">{{ form.target_url.errors }}</div>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.http_method.id_for_label }}">HTTP Method *</label>
+                        {{ form.http_method }}
+                        {% if form.http_method.errors %}<div class="form-error">{{ form.http_method.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.payload_format.id_for_label }}">Payload Format *</label>
+                        {{ form.payload_format }}
+                        {% if form.payload_format.errors %}<div class="form-error">{{ form.payload_format.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.retry_policy_max.id_for_label }}">Max Retries</label>
+                        {{ form.retry_policy_max }}
+                        {% if form.retry_policy_max.errors %}<div class="form-error">{{ form.retry_policy_max.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.process_definition.id_for_label }}">Process Blueprint</label>
+                        {{ form.process_definition }}
+                        {% if form.process_definition.errors %}<div class="form-error">{{ form.process_definition.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.connector_ref.id_for_label }}">Core Connector</label>
+                        {{ form.connector_ref }}
+                        {% if form.connector_ref.errors %}<div class="form-error">{{ form.connector_ref.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.filter_document_type.id_for_label }}">Document Type Filter</label>
+                        {{ form.filter_document_type }}
+                        {% if form.filter_document_type.errors %}<div class="form-error">{{ form.filter_document_type.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.custom_headers.id_for_label }}">Custom Headers (Flat JSON Object)</label>
+                    {{ form.custom_headers }}
+                    {% if form.custom_headers.errors %}<div class="form-error">{{ form.custom_headers.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.payload_template_json.id_for_label }}">Base Payload Template (JSON Object)</label>
+                    {{ form.payload_template_json }}
+                    {% if form.payload_template_json.errors %}<div class="form-error">{{ form.payload_template_json.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group flex items-center gap-2">
+                    {{ form.is_active }}
+                    <label class="form-label mb-0" for="{{ form.is_active.id_for_label }}">Active Subscription</label>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <a href="{% url 'documents:webhook_trigger_list' %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Webhook Trigger{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
