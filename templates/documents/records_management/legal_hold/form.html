@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Place Legal Hold — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:legal_hold_list' %}">Legal Holds</a>
+            <span>/</span>
+            <span>Place Legal Hold</span>
+        </div>
+        <h1 class="page-title">Place Legal Hold & Preservation Order</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:legal_hold_list' %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl mx-auto">
+    <form method="post" class="card">
+        {% csrf_token %}
+        <div class="card-header">
+            <h2 class="card-title">Litigation / Regulatory Matter Details</h2>
+        </div>
+        <div class="card-body space-y-6">
+            {% if form.errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                <p class="font-semibold mb-1">Please correct the errors below:</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                            <li>{{ field|title }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-xs text-red-900 flex items-start gap-3">
+                <i data-lucide="shield-alert" class="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0"></i>
+                <div>
+                    <span class="font-semibold block text-sm mb-0.5">Defensible Legal Preservation Duty</span>
+                    Placing a legal hold locks the document and immediately halts all automated destruction, retention expirations, and manual purges. All actions are logged permanently for court defensibility.
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.matter_name.id_for_label }}">Matter / Case Name *</label>
+                    {{ form.matter_name }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.matter_number.id_for_label }}">Docket / File Number *</label>
+                    {{ form.matter_number }}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.hold_reason.id_for_label }}">Hold Reason *</label>
+                    {{ form.hold_reason }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.core_legal_hold.id_for_label }}">Enterprise Legal Matter (Optional)</label>
+                    {{ form.core_legal_hold }}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.document.id_for_label }}">Target Document to Preserve *</label>
+                {{ form.document }}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.custodian.id_for_label }}">Designated Records Custodian</label>
+                {{ form.custodian }}
+                <span class="text-xs text-slate-500">Assign a responsible user for preservation acknowledgment and notice tracking</span>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Scope of Preservation & Legal Instructions</label>
+                {{ form.description }}
+            </div>
+        </div>
+
+        <div class="card-footer flex justify-end gap-3 p-4 border-t border-slate-200">
+            <a href="{% url 'documents:legal_hold_list' %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="lock"></i>
+                <span>Enforce Legal Hold</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
