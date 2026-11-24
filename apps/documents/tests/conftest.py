@@ -34,6 +34,10 @@ from apps.documents.models.SecurityAccessControl.WatermarkPolicies import Waterm
 from apps.documents.models.SecurityAccessControl.DocumentDrmPolicies import DocumentDrmPolicy
 from apps.documents.models.SecurityAccessControl.DlpPolicies import DlpPolicy
 from apps.documents.models.SecurityAccessControl.DlpIncidents import DlpIncident
+from apps.documents.models.RecordsManagement.RetentionSchedules import RetentionSchedule
+from apps.documents.models.RecordsManagement.RecordDeclarations import RecordDeclaration
+from apps.documents.models.RecordsManagement.DocumentLegalHolds import DocumentLegalHold
+from apps.documents.models.RecordsManagement.DestructionCertificates import DestructionCertificate
 from apps.core.models import OrgUnit
 
 
@@ -673,6 +677,69 @@ def dlp_incident(db, tenant_a, member_user, document, dlp_policy):
         resolution_notes="Detected unmasked Visa card in document draft upload.",
         resolution_status="open",
     )
+
+
+@pytest.fixture
+def retention_schedule(db, tenant_a, admin_user):
+    """Fixture providing an active RetentionSchedule in tenant_a."""
+    return RetentionSchedule.objects.create(
+        tenant=tenant_a,
+        name="Financial & Tax Records Schedule",
+        schedule_code="RET-FIN-001",
+        compliance_framework="irs_rev_proc",
+        retention_mode="regulatory_worm",
+        retention_period_years=7,
+        cutoff_trigger="end_of_fiscal_year",
+        disposition_action="secure_purge",
+        requires_legal_review=True,
+        is_active=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def record_declaration(db, tenant_a, admin_user, document, document_version, retention_schedule):
+    """Fixture providing an active official RecordDeclaration in tenant_a."""
+    return RecordDeclaration.objects.create(
+        tenant=tenant_a,
+        document=document,
+        version=document_version,
+        retention_schedule=retention_schedule,
+        declared_by=admin_user,
+        record_status="active",
+        is_locked=True,
+        is_vital_record=True,
+        vital_record_category="regulatory_filing",
+        retrieval_sla_hours=4,
+    )
+
+
+@pytest.fixture
+def document_legal_hold(db, tenant_a, admin_user, document):
+    """Fixture providing an active litigation DocumentLegalHold in tenant_a."""
+    return DocumentLegalHold.objects.create(
+        tenant=tenant_a,
+        document=document,
+        matter_name="SEC v. Acme Audit Inquiry",
+        hold_reason="regulatory_inquiry",
+        court_or_agency="Securities and Exchange Commission",
+        issued_by=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def destruction_certificate(db, tenant_a, admin_user, record_declaration):
+    """Fixture providing a pending DestructionCertificate in tenant_a."""
+    return DestructionCertificate.objects.create(
+        tenant=tenant_a,
+        record_declaration=record_declaration,
+        destruction_type="document_and_history",
+        destruction_method="cryptographic_erasure",
+        status="pending_approval",
+        legal_hold_verified_clear=True,
+    )
+
 
 
 
