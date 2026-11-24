@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ report_def.name }} — NavERP Audit Reports{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_report_list' %}">Report Catalog</a>
+            <span>/</span>
+            <span>{{ report_def.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ report_def.name }}</h1>
+            <span class="badge {{ report_def.get_report_type_badge }} text-sm">
+                {{ report_def.get_report_type_display }}
+            </span>
+            {% if report_def.is_system_preset %}
+            <span class="badge badge-purple text-sm">System Preset</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:audit_report_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Catalog</span>
+        </a>
+        <a href="{% url 'documents:audit_report_run' report_def.pk %}?format=csv" class="btn btn-outline">
+            <i data-lucide="download"></i>
+            <span>Export CSV</span>
+        </a>
+        <a href="{% url 'documents:audit_report_run' report_def.pk %}?format=json" class="btn btn-outline">
+            <i data-lucide="file-json"></i>
+            <span>Export JSON</span>
+        </a>
+        {% if not report_def.is_system_preset %}
+        <a href="{% url 'documents:audit_report_edit' report_def.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Query</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Scope Banner -->
+<div class="card mb-6 bg-slate-50 border-slate-200">
+    <div class="card-body py-4 flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Evaluation Window</span>
+            <div class="text-sm font-medium text-slate-800">
+                {{ date_start|date:"Y-m-d H:i" }} UTC &rarr; {{ date_end|date:"Y-m-d H:i" }} UTC
+                <span class="text-xs text-slate-500 font-normal">({{ report_def.get_date_range_preset_display }})</span>
+            </div>
+            {% if report_def.description %}
+            <p class="text-xs text-slate-600 mt-1">{{ report_def.description }}</p>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-4 text-xs text-slate-500">
+            <div>Last run: <strong>{{ report_def.last_run_at|date:"Y-m-d H:i" }}</strong></div>
+            <div>Total executions: <strong>{{ report_def.total_runs }}</strong></div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary KPI Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ summary_kpis.total_events }}</div>
+            <div class="stat-label">Total Filtered Events</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ summary_kpis.success_rate }}%</div>
+            <div class="stat-label">Operation Success Rate</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if summary_kpis.failed_events > 0 %}red{% else %}slate{% endif %}">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ summary_kpis.failed_events }}</div>
+            <div class="stat-label">Failed / Blocked Events</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ summary_kpis.unique_actors }}</div>
+            <div class="stat-label">Unique Active Actors</div>
+        </div>
+    </div>
+</div>
+
+<!-- Executed Results Table -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Filtered Event Results</h2>
+            <span class="text-xs text-slate-500">Displaying top {{ report_data|length }} matching activity records</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="badge badge-info">{{ summary_kpis.total_events }} Total Found</span>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Timestamp (UTC)</th>
+                    <th>Action</th>
+                    <th>Target Document</th>
+                    <th>Actor</th>
+                    <th>Result</th>
+                    <th>IP / Subnet</th>
+                    <th>Cryptographic Hash</th>
+                    <th class="text-right">Inspect</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in report_data %}
+                <tr>
+                    <td class="text-xs font-mono text-slate-600 whitespace-nowrap">
+                        {{ entry.event_timestamp|date:"Y-m-d H:i:s" }}
+                    </td>
+                    <td>
+                        <span class="badge {{ entry.get_action_type_badge }}">
+                            {{ entry.get_action_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if entry.document %}
+                        <a href="{% url 'documents:document_detail' entry.document.pk %}" class="text-blue-600 hover:underline font-medium text-sm">
+                            {{ entry.document_title_snapshot|default:entry.document.title|truncatechars:35 }}
+                        </a>
+                        <div class="text-xs text-slate-400 font-mono">{{ entry.document_number_snapshot|default:entry.document.number }}</div>
+                        {% else %}
+                        <span class="text-slate-500 italic text-sm">{{ entry.document_title_snapshot|default:"General / Purged" }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium text-slate-800">
+                            {{ entry.actor.get_full_name|default:entry.actor_email_snapshot|default:"System" }}
+                        </div>
+                        <div class="text-xs text-slate-400">{{ entry.actor_email_snapshot }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ entry.get_result_badge }}">
+                            {% if entry.is_success %}Success{% else %}Failed{% endif %}
+                        </span>
+                        {% if entry.failure_reason %}
+                        <div class="text-xs text-red-500 truncate max-w-xs">{{ entry.failure_reason }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600 font-mono">
+                        {{ entry.ip_address|default:"—" }}
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs text-slate-500" title="{{ entry.chain_hash }}">
+                            {{ entry.chain_hash|slice:":10" }}…
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:audit_trail_detail' entry.pk %}" class="btn btn-icon btn-outline" title="View Audit Record">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-8">
+                            <div class="empty-icon">
+                                <i data-lucide="check-circle-2"></i>
+                            </div>
+                            <h3>No Events Found</h3>
+                            <p class="text-slate-500 text-sm">No activity records matched this report's filter criteria within the selected date window.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
