@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ process_def.number }} — {{ process_def.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:process_definition_list' %}">Process Definitions</a>
+            <span>/</span>
+            <span>{{ process_def.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <h1 class="page-title">{{ process_def.number }} — {{ process_def.name }}</h1>
+            <span class="badge {{ process_def.status_badge }}">{{ process_def.get_status_display }}</span>
+            <span class="badge {{ process_def.category_badge }}">{{ process_def.get_process_category_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:process_definition_designer' process_def.pk %}" class="btn btn-primary">
+            <i data-lucide="workflow"></i>
+            <span>Open Visual Designer</span>
+        </a>
+        <a href="{% url 'documents:process_instance_create' %}?process_definition={{ process_def.pk }}" class="btn btn-outline">
+            <i data-lucide="play"></i>
+            <span>Launch Instance</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">BPMN Blueprint Specification</h2>
+                <span class="text-xs font-mono text-slate-500">{{ process_def.code }} v{{ process_def.version_number }}</span>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Process Number</dt>
+                        <dd class="font-mono font-semibold">{{ process_def.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Blueprint Code</dt>
+                        <dd class="font-mono">{{ process_def.code }} (v{{ process_def.version_number }})</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Trigger Event</dt>
+                        <dd>{{ process_def.get_trigger_event_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Doc Type</dt>
+                        <dd>{{ process_def.get_target_document_type_display|default:"All Types" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Department Scope</dt>
+                        <dd>{% if process_def.department %}{{ process_def.department.name }}{% else %}Tenant-Wide{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Folder</dt>
+                        <dd>{% if process_def.target_folder %}{{ process_def.target_folder.path }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>SLA Target</dt>
+                        <dd>{{ process_def.sla_target_hours }} hours</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Owner</dt>
+                        <dd>{% if process_def.owner %}{{ process_def.owner.get_full_name|default:process_def.owner.username }}{% else %}—{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Core Registry Link</dt>
+                        <dd>{% if process_def.core_workflow_ref %}{{ process_def.core_workflow_ref.name }}{% else %}Standalone DMS BPM{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Published At</dt>
+                        <dd>{% if process_def.published_at %}{{ process_def.published_at|date:"Y-m-d H:i" }}{% else %}Not published{% endif %}</dd>
+                    </div>
+                </dl>
+                {% if process_def.description %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <h3 class="text-xs font-semibold uppercase text-slate-500 mb-1">Description</h3>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ process_def.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Graph Validation &amp; Dry-Run Path</h2>
+                {% if validation_result.is_valid %}
+                <span class="badge badge-green">Valid BPMN Graph</span>
+                {% else %}
+                <span class="badge badge-red">Graph Errors Found</span>
+                {% endif %}
+            </div>
+            <div class="card-body space-y-4">
+                {% if validation_result.errors %}
+                <div class="p-3 rounded border border-red-200 bg-red-50 text-red-700 text-xs space-y-1">
+                    {% for err in validation_result.errors %}
+                    <div>• {{ err }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if validation_result.warnings %}
+                <div class="p-3 rounded border border-amber-200 bg-amber-50 text-amber-800 text-xs space-y-1">
+                    {% for warn in validation_result.warnings %}
+                    <div>• {{ warn }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div>
+                    <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Simulated Execution Sequence</h3>
+                    <div class="flex flex-wrap items-center gap-2">
+                        {% for step in simulation_steps %}
+                        <div class="px-3 py-2 rounded border border-slate-200 bg-slate-50 text-xs">
+                            <div class="font-semibold text-slate-800">{{ step.label }}</div>
+                            <div class="text-slate-500">{{ step.type }}{% if step.lane %} · {{ step.lane }}{% endif %}</div>
+                        </div>
+                        {% if not forloop.last %}
+                        <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400"></i>
+                        {% endif %}
+                        {% empty %}
+                        <span class="text-xs text-slate-500">No simulation path available. Open Visual Designer to add nodes.</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Linked Routing Rules ({{ routing_rules|length }})</h2>
+                <a href="{% url 'documents:routing_rule_create' %}?process_definition={{ process_def.pk }}" class="btn btn-outline btn-sm">Add Rule</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Priority</th>
+                            <th>Rule</th>
+                            <th>Action</th>
+                            <th>Matches</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rule in routing_rules %}
+                        <tr>
+                            <td class="font-mono text-xs">{{ rule.priority }}</td>
+                            <td>
+                                <a href="{% url 'documents:routing_rule_detail' rule.pk %}" class="text-blue-600 hover:underline font-medium">{{ rule.name }}</a>
+                                <div class="text-xs text-slate-500 font-mono">{{ rule.number }}</div>
+                            </td>
+                            <td><span class="badge {{ rule.route_action_badge }}">{{ rule.get_route_action_display }}</span></td>
+                            <td class="text-xs font-mono">{{ rule.match_count }} / {{ rule.execution_count }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-xs text-slate-500 py-4">No routing rules attached to this blueprint.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Recent Execution Instances ({{ process_def.instance_count }})</h2>
+                <a href="{% url 'documents:process_instance_list' %}?process_definition={{ process_def.pk }}" class="text-xs text-blue-600 hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Instance</th>
+                            <th>Document</th>
+                            <th>Current Node</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inst in recent_instances %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'documents:process_instance_detail' inst.pk %}" class="font-mono text-blue-600 hover:underline">{{ inst.number }}</a>
+                            </td>
+                            <td class="text-sm">{{ inst.document.title|truncatechars:40 }}</td>
+                            <td class="text-xs text-slate-600">{{ inst.current_node_label|default:inst.current_node_id }}</td>
+                            <td><span class="badge {{ inst.status_badge }}">{{ inst.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-xs text-slate-500 py-4">No instances launched yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Actions</h2>
+            </div>
+            <div class="card-body space-y-2">
+                <a href="{% url 'documents:process_definition_list' %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to Process List</span>
+                </a>
+                {% if process_def.status != 'archived' %}
+                <a href="{% url 'documents:process_definition_edit' process_def.pk %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Blueprint</span>
+                </a>
+                {% endif %}
+                <a href="{% url 'documents:process_definition_designer' process_def.pk %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="workflow"></i>
+                    <span>Visual Swimlane Designer</span>
+                </a>
+                {% if user.is_superuser or user.is_tenant_admin %}
+                {% if process_def.status != 'published' %}
+                <form method="post" action="{% url 'documents:process_definition_publish' process_def.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary w-full justify-start">
+                        <i data-lucide="check-circle"></i>
+                        <span>Publish Blueprint</span>
+                    </button>
+                </form>
+                {% endif %}
+                {% if process_def.status == 'published' %}
+                <form method="post" action="{% url 'documents:process_definition_deprecate' process_def.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline w-full justify-start">
+                        <i data-lucide="archive"></i>
+                        <span>Deprecate Blueprint</span>
+                    </button>
+                </form>
+                {% endif %}
+                {% if process_def.status == 'draft' and not recent_instances %}
+                <form method="post" action="{% url 'documents:process_definition_delete' process_def.pk %}" onsubmit="return confirm('Delete process definition {{ process_def.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full justify-start">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Blueprint</span>
+                    </button>
+                </form>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Connected Webhooks ({{ webhooks|length }})</h2>
+            </div>
+            <div class="card-body space-y-2">
+                {% for wh in webhooks %}
+                <div class="p-2 rounded border border-slate-200 text-xs">
+                    <a href="{% url 'documents:webhook_trigger_detail' wh.pk %}" class="font-semibold text-blue-600 hover:underline">{{ wh.name }}</a>
+                    <div class="text-slate-500 font-mono">{{ wh.trigger_event }}</div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-500">No webhooks attached to this process.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
