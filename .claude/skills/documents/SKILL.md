@@ -1,6 +1,6 @@
 ---
 name: documents
-description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics) + 13.7 Document Security & Access Control (DocumentAccessPermission[DPRM-], WatermarkPolicy[DWTR-], DocumentDrmPolicy[DDRM-], DlpPolicy[DDLP-], DlpIncident[DINC-], effective permissions simulator, visual watermark studio, DRM emergency kill-switch, DLP incident triage workbench, zero-download sandboxed secure viewer) + 13.8 Collaboration & Sharing (DocumentShare[DSHR-], CoauthorSession[DCOA-], DocumentTask[DTSK-], DocumentActivity[DACT-], unified CollaborationHub, guest passcode challenge, presence telemetry & heartbeats, task action tracking, in-app notification inbox) + 13.9 Records Management & Compliance (RetentionSchedule[DRTN-], RecordDeclaration[DRCD-], DocumentLegalHold[DHLD-], DestructionCertificate[DDST-], regulatory WORM freeze, cutoff calculation, legal hold preservation orders, dual-control destruction certificates, Disposition Review Board, Vital Records disaster recovery register). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6/13.7/13.8/13.9), or invokes /documents.
+description: Work on the Document Management System (DMS) module (Module 13 — Document Management System). As-built = 13.1 Document Creation & Authoring (DocumentTemplate[DTMPL-], TemplateSection[DSEC-], DocumentDraft[DDFT-], DraftCollaboration[DCMT-], interactive canvas, redline diff, promotion) + 13.2 Version Control & Revision Management (Document[DOC-], DocumentVersion[DVER-], DocumentLock[DLOCK-], DocumentBranch[DBRN-], side-by-side diff comparison, check-out/check-in locking, rollback, branching/merging) + 13.3 Document Approval & Review Workflow (DocumentApprovalWorkflow[DWF-], DocumentApprovalRequest[DAPR-], DocumentSignature[DSIG-], DocumentReviewComment[DREV-], visual workflow designer, 21 CFR Part 11 manifest, token verification, approval analytics dashboard) + 13.4 Document Storage & Repository (DocumentFolder[DFLD-], StorageVolume[DSTG-], DocumentRelationship[DREL-], DocumentBatchImport[DBLK-], interactive folder tree, dependency network graph, repository dashboard, streaming archive ingestion) + 13.5 Metadata & Indexing (MetadataSchema[DSCH-], DocumentMetadataValue[DMETA-], TaxonomyTerm[DTAX-], DocumentOcrJob[DOCR-], controlled vocabularies, thesauri, full-text OCR indexing, metadata dashboard) + 13.6 Search & Discovery (DocumentSavedSearch[DSVD-], DocumentSearchAlert[DALT-], DocumentSearchSynonym[DSYN-], DocumentSearchQueryLog[DQRY-], SearchHub faceted console, natural language query parsing, automated alert monitors, search telemetry & query gap analytics) + 13.7 Document Security & Access Control (DocumentAccessPermission[DPRM-], WatermarkPolicy[DWTR-], DocumentDrmPolicy[DDRM-], DlpPolicy[DDLP-], DlpIncident[DINC-], effective permissions simulator, visual watermark studio, DRM emergency kill-switch, DLP incident triage workbench, zero-download sandboxed secure viewer) + 13.8 Collaboration & Sharing (DocumentShare[DSHR-], CoauthorSession[DCOA-], DocumentTask[DTSK-], DocumentActivity[DACT-], unified CollaborationHub, guest passcode challenge, presence telemetry & heartbeats, task action tracking, in-app notification inbox) + 13.9 Records Management & Compliance (RetentionSchedule[DRTN-], RecordDeclaration[DRCD-], DocumentLegalHold[DHLD-], DestructionCertificate[DDST-], regulatory WORM freeze, cutoff calculation, legal hold preservation orders, dual-control destruction certificates, Disposition Review Board, Vital Records disaster recovery register) + 13.10 Audit Trail & Reporting (DocumentAuditTrail[DAUD-], AuditReportDefinition[DRPT-], DocumentSecurityAlert[DANM-], ChainOfCustodyExport[DCOC-], append-only SHA-256 cryptographic chain hashing, UBA anomaly detection & risk scoring, defensible evidence packages, time-bound external auditor portal, printable Certificate of Authenticity, compliance report engine, audit dashboard, document lifecycle dashboard). Use when the user asks to add/change/debug anything under apps/documents or templates/documents, extend the seed_documents seeder, touch documents sidebar wiring (LIVE_LINKS 13.1/13.2/13.3/13.4/13.5/13.6/13.7/13.8/13.9/13.10), or invokes /documents.
 ---
 
 # Document Management System (DMS) (Module 13)
@@ -8,7 +8,7 @@ description: Work on the Document Management System (DMS) module (Module 13 — 
 App path: `apps/documents`. Templates: `templates/documents/`. URL prefix: `/documents/`, `app_name = "documents"`.
 Mirrors `NavERP.md` "## 13. Document Management System (DMS)" (Sub-modules 13.1–13.20).
 
-**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery + 13.7 Document Security & Access Control + 13.8 Collaboration & Sharing + 13.9 Records Management & Compliance.**
+**As-built: 13.1 Document Creation & Authoring + 13.2 Version Control & Revision Management + 13.3 Document Approval & Review Workflow + 13.4 Document Storage & Repository + 13.5 Metadata & Indexing + 13.6 Search & Discovery + 13.7 Document Security & Access Control + 13.8 Collaboration & Sharing + 13.9 Records Management & Compliance + 13.10 Audit Trail & Reporting.**
 Build the next sub-module with `/next-module next` — see `apps/quality`/`apps/procurement` for reference package layout and the mandatory Module Creation Sequence.
 
 ---
@@ -25,6 +25,7 @@ Module 13 provides an enterprise document repository, authoring workspace, revis
 - **13.7 Document Security & Access Control**: Document-level and folder-level ACL permissions with capability matrices and precedence inheritance (`DocumentAccessPermission`), dynamic token-interpolated visual watermarks (`WatermarkPolicy`) with live interactive studio, digital rights management policies (`DocumentDrmPolicy`) with emergency kill-switch revocation, regex-based DLP inspection engine and incident triage workbench (`DlpPolicy`, `DlpIncident`), and zero-download DOM-sandboxed secure web viewer with focus-loss blur and anti-screen capture defense (`SecureViewer`).
 - **13.8 Collaboration & Sharing**: Link-based and targeted document sharing (`DocumentShare`), real-time co-author presence telemetry and cursor positions (`CoauthorSession`), workflow action item assignment and completion tracking (`DocumentTask`), granular audit feeds and targeted notification inbox (`DocumentActivity`), unified multi-tab collaboration cockpit (`collaboration_hub.html`), and secure public guest preview portal (`public_share_preview.html`).
 - **13.9 Records Management & Compliance**: Enterprise retention file plans with regulatory WORM and modifiable modes (`RetentionSchedule`), official record declarations with cutoff calculation and WORM immutability (`RecordDeclaration`), statutory litigation preservation holds with custodian tracking and acknowledgement (`DocumentLegalHold`), dual-control authorized destruction certificates with SHA-256 integrity hashing and spoliation guards (`DestructionCertificate`), 3-column Disposition Review Board (`board.html`), and Vital Records business continuity disaster recovery register (`vital_records_list.html`).
+- **13.10 Audit Trail & Reporting**: Append-only immutable compliance event ledger with cryptographic SHA-256 linear chain verification (`DocumentAuditTrail`), compliance reporting engine with preset/custom queries and export dispatching (`AuditReportDefinition`), User Behavior Analytics (UBA) anomaly detection, risk scoring (1-100), and triage workbench (`DocumentSecurityAlert`), defensible legal/regulatory evidence packages with cryptographic manifests (`ChainOfCustodyExport`), time-bound rate-limited public external auditor portal, printable Certificate of Authenticity, unified audit telemetry command center (`audit_dashboard.html`), and document lifecycle velocity cockpit (`lifecycle_dashboard.html`).
 
 ---
 
@@ -352,6 +353,51 @@ Shared base in `models/_base.py`:
   - Properties & Helpers: `document`, `verify_legal_holds()`, `authorize(user, notes)`, `execute_destruction(user, witness)`.
   - Constraints & Indexes: unique `(tenant, number)`, composite indexes on `(tenant, status)`.
 
+### 13.10 AuditReporting (`apps/documents/models/AuditReporting/`)
+
+- **`DocumentAuditTrails.py`** — `DocumentAuditTrail` (`NUMBER_PREFIX = "DAUD"`):
+  - Append-only immutable compliance event ledger. Model-level update and delete prevention via `ValidationError`.
+  - `document` (FK `Document`, nullable), `version` (FK `DocumentVersion`, nullable), `actor` (FK `settings.AUTH_USER_MODEL`, nullable).
+  - Snapshots: `actor_email_snapshot`, `document_number_snapshot`, `document_title_snapshot`.
+  - Event metadata: `action_type` (viewed, downloaded, checked_out, checked_in, approved, rejected, shared, permission_changed, legal_hold_applied, legal_hold_released, security_alert_triggered, custody_exported, purged), `is_success`, `failure_reason`.
+  - Network telemetry: `ip_address`, `user_agent`, `details_json`.
+  - Cryptographic Chain: `prev_hash` (64-char SHA-256 or `GENESIS_BLOCK_...`), `chain_hash` (64-char SHA-256).
+  - Concurrency Safety: Atomic transaction with `select_for_update()` on previous chain head during save.
+  - Helpers: `compute_chain_hash(prev_hash)`, `verify_hash()`, `get_action_type_badge`, `get_result_badge`.
+  - Indexes: composite indexes on `(tenant, -event_timestamp)`, `(tenant, action_type, -event_timestamp)`, `(tenant, is_success)`, `(tenant, document, -event_timestamp)`, `(tenant, actor, -event_timestamp)`.
+
+- **`AuditReportDefinitions.py`** — `AuditReportDefinition` (`NUMBER_PREFIX = "DRPT"`):
+  - Compliance report generator presets and custom query builder.
+  - `name`, `report_type` (user_access, document_activity, security_events, compliance_sox, compliance_hipaa, compliance_gdpr, system_admin), `description`.
+  - Date preset: `date_range_preset` (today, last_7_days, last_30_days, last_90_days, last_year, custom), `custom_start_date`, `custom_end_date`.
+  - Output & State: `output_format` (table_view, csv, json, pdf), `status` (active, archived, draft), `is_system_preset`.
+  - Telemetry: `query_filters_json`, `last_run_at`, `last_run_by` (FK `settings.AUTH_USER_MODEL`, nullable), `run_count`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Helpers: `get_effective_date_range()`, `execute_query(user)`, `get_report_type_badge`, `get_status_badge`.
+  - Indexes: composite indexes on `(tenant, report_type, status)`, `(tenant, is_system_preset)`.
+
+- **`DocumentSecurityAlerts.py`** — `DocumentSecurityAlert` (`NUMBER_PREFIX = "DANM"`):
+  - User Behavior Analytics (UBA) anomaly detection, scoring, and forensic triage.
+  - `alert_type` (mass_download, off_hours_access, brute_force_share, permission_probe, geo_velocity_violation, bulk_export, rapid_deletion).
+  - Risk Scoring: `severity` (low, medium, high, critical), `risk_score` (1-100 integer, with CheckConstraint `1 <= risk_score <= 100`).
+  - Target Entities: `target_user` (FK `settings.AUTH_USER_MODEL`, nullable), `document` (FK `Document`, nullable).
+  - Forensic Context: `anomaly_signals_json`, `description`, `mitigating_actions_json`.
+  - Triage Workbench: `status` (open, investigating, resolved, false_positive, dismissed), `action_taken` (logged_only, user_warned, session_terminated, account_locked, downloads_blocked, escalated_soc).
+  - Assignment: `assigned_to` (FK `settings.AUTH_USER_MODEL`, nullable), `triage_notes`, `resolved_at`, `resolved_by` (FK `settings.AUTH_USER_MODEL`, nullable).
+  - Helpers: `get_alert_type_badge`, `get_severity_badge`, `get_status_badge`.
+  - Indexes: composite indexes on `(tenant, -detected_at)`, `(tenant, severity, status)`, `(tenant, status, -detected_at)`, `(tenant, target_user, alert_type, detected_at)`.
+
+- **`ChainOfCustodyExports.py`** — `ChainOfCustodyExport` (`NUMBER_PREFIX = "DCOC"`):
+  - Defensible legal/regulatory evidence packages with cryptographic manifests.
+  - `title`, `regulatory_framework` (fda_21cfr11, soc2_type2, soc2, hipaa_security, iso_27001, dod_5015_2, gdpr_article30, legal_ediscovery).
+  - Scope: `scope` (single_document, folder_tree, date_range, regulatory_filing), `document` (FK `Document`, nullable), `folder` (FK `DocumentFolder`, nullable), `start_date`, `end_date`.
+  - Auditor Portal: `auditor_name`, `auditor_email`, `auditor_organization`, `purpose_of_review`.
+  - Security Tokens: `access_token` (auto 32-byte cryptographic token), `passcode_hash` (PBKDF2 via `set_passcode`), `expires_at`, `is_portal_active`.
+  - Verification & Seal: `package_hash` (64-char SHA-256 seal), `manifest_json`, `sealed_at`.
+  - Telemetry & Revocation: `access_count`, `last_accessed_at`, `revoked_at`, `revoked_by` (FK `settings.AUTH_USER_MODEL`, nullable), `revocation_reason`, `created_by` (FK `settings.AUTH_USER_MODEL`).
+  - Helpers: `generate_manifest()`, `seal_package()`, `set_passcode(raw)`, `check_passcode(raw)`, `is_expired`, `is_valid`, `revoke(user, reason)`.
+  - Indexes: composite indexes on `(tenant, -created_at)`, `(tenant, is_portal_active, expires_at)`, unique on `access_token`.
+
+
 
 
 ---
@@ -542,6 +588,31 @@ Registered under namespace `documents:`:
 - `/documents/records/disposition-review/`: `disposition_review_board` (3-column Kanban/board review: Due, Held, In-Approval)
 - `/documents/records/vital-records/`: `vital_records_list` (business continuity disaster recovery register)
 
+### 13.10 Audit Trail & Reporting Routes
+- `/documents/audit-trails/`: `audit_trail_list` (immutable ledger, search, filters, pagination)
+- `/documents/audit-trails/<int:pk>/`: `audit_trail_detail` (hash calculation & chronological navigation)
+- `/documents/audit-trails/export/`: `audit_trail_export_csv` (CSV export with formula injection escaping)
+- `/documents/audit-trails/verify-chain/`: `audit_trail_verify_chain` (POST-only, `@tenant_admin_required`, sequential SHA-256 chain verification)
+- `/documents/audit-reports/`: `audit_report_list` (preset & custom compliance reports)
+- `/documents/audit-reports/create/`: `audit_report_create`
+- `/documents/audit-reports/<int:pk>/`: `audit_report_detail` (interactive execution & KPI summary)
+- `/documents/audit-reports/<int:pk>/edit/`: `audit_report_edit` (custom reports only)
+- `/documents/audit-reports/<int:pk>/run/`: `audit_report_run` (POST-only execution & CSV/JSON export)
+- `/documents/audit-reports/<int:pk>/delete/`: `audit_report_delete` (POST-only, restricted to admin or creator)
+- `/documents/security-alerts/`: `security_alert_list` (UBA anomalies & risk score cards)
+- `/documents/security-alerts/<int:pk>/`: `security_alert_detail` (forensic telemetry & correlated user audit logs)
+- `/documents/security-alerts/<int:pk>/triage/`: `security_alert_triage` (POST-only, `@tenant_admin_required`)
+- `/documents/security-alerts/scan/`: `security_alert_scan` (POST-only, `@tenant_admin_required`, heuristic UBA scanner)
+- `/documents/custody-exports/`: `custody_export_list` (defensible evidence packages)
+- `/documents/custody-exports/create/`: `custody_export_create` (package creation & manifest sealing)
+- `/documents/custody-exports/<int:pk>/`: `custody_export_detail` (cryptographic SHA-256 digest verification)
+- `/documents/custody-exports/<int:pk>/certificate/`: `custody_export_certificate` (printable Certificate of Authenticity)
+- `/documents/custody-exports/<int:pk>/revoke/`: `custody_export_revoke` (POST-only, `@tenant_admin_required`)
+- `/documents/auditor-portal/<str:token>/`: `auditor_portal_view` (public guest portal, passcode challenge, rate-limiting)
+- `/documents/auditor-portal/<str:token>/verify/`: `auditor_portal_verify` (POST-only passcode challenge handler, 5-failure lockout)
+- `/documents/audit-dashboard/`: `audit_dashboard` (24h event streams, active alerts, cryptographic chain integrity KPI)
+- `/documents/lifecycle-dashboard/`: `document_lifecycle_dashboard` (velocity KPIs, stage bottlenecks, high-churn documents)
+
 ---
 
 ## Templates
@@ -598,6 +669,14 @@ Located in:
   - `destruction_certificate/`: `list.html`, `detail.html`, `form.html`
   - `disposition_review/`: `board.html` (3-column visual review board)
   - `vital_records/`: `list.html` (Vital records & disaster recovery register)
+- `templates/documents/audit_reporting/` (13.10 templates):
+  - `audit_dashboard.html`: Command center, 24h event velocity, active anomaly counters, cryptographic chain status
+  - `lifecycle_dashboard.html`: Document lifecycle velocity, approval turnaround hours, bottleneck stages, churn distribution
+  - `audit_trail/`: `list.html` (immutable event table, search & date filters, chain status badge), `detail.html` (event metadata & sequential hash verification), `form.html`
+  - `report_definition/`: `list.html` (system presets vs custom reports), `detail.html` (interactive execution workbench & KPI summary), `form.html`
+  - `security_alert/`: `list.html` (risk score pills & severity metrics), `detail.html` (forensic telemetry & correlated user audit stream), `form.html` (triage workbench)
+  - `chain_of_custody/`: `list.html` (active packages & regulatory filters), `detail.html` (package metadata & SHA-256 seal verification), `form.html`, `certificate.html` (printable Certificate of Authenticity), `auditor_portal.html` (guest portal with passcode challenge)
+
 
 
 ---
@@ -645,6 +724,10 @@ Supports `--flush` option to reset module data cleanly. Demo data seeds:
 34. Record Declarations (Active tax return declared record with SHA-256 snapshot, Cutoff vendor contract with disposition countdown, Vital corporate bylaws with 4hr retrieval SLA).
 35. Document Legal Holds (SEC Audit Inquiry hold on financial docs, Patent Dispute hold with custodian notification and acknowledgment).
 36. Destruction Certificates (Authorized cryptographic erasure certificate, Executed document-and-history destruction certificate).
+37. Audit Event Trails (View, download, checkout, approval, signature, custody export, and security alert events chained via SHA-256).
+38. Compliance Report Definitions (System presets for User Access, SOX 404, HIPAA Security, GDPR Art 30, and custom quarterly audits).
+39. Security Anomaly Alerts (UBA detection on mass downloads, off-hours access, permission probing with forensic signals).
+40. Chain of Custody Packages (FDA 21 CFR Part 11, SOC 2 Type II evidence packages with sealed manifests and active guest portals).
 
 ---
 
@@ -715,6 +798,14 @@ LIVE_LINKS["13.9"] = {
     "Vital Records Directory": "documents:vital_records_list",
     "Disaster Recovery SLA Register": "documents:vital_records_list",
 }
+LIVE_LINKS["13.10"] = {
+    "Comprehensive Audit Logging": "documents:audit_trail_list",
+    "Compliance Reporting & Dashboards": "documents:audit_dashboard",
+    "Activity Analytics & Insights": "documents:document_lifecycle_dashboard",
+    "Automated Compliance Monitoring": "documents:security_alert_list",
+    "Exportable Audit Trails & Legal Holds": "documents:custody_export_list",
+    "Report Generator": "documents:audit_report_list",
+}
 ```
 
 ---
@@ -757,3 +848,8 @@ LIVE_LINKS["13.9"] = {
 34. **Evidence Spoliation Defense**: Parent `document_delete` strictly prevents deleting any document that has active legal holds (`document.legal_holds.filter(is_active=True).exists()`) or locked record declarations (`document.record_declarations.filter(is_locked=True).exists()`), preventing accidental cascade spoliation.
 35. **Legal Hold Preservation Precedence**: Active legal holds take precedence over all retention clocks and disposition schedules. While an active hold exists, records cannot be cutoff, edited, deleted, or authorized/executed for destruction. Release of a legal hold strictly requires mandatory justification and administrator authorization (`@tenant_admin_required`).
 36. **N+1 Performance Subquery Optimization**: List views checking legal hold status (`record_declaration_list`, `vital_records_list`) annotate querysets using `has_active_hold=Exists(...)` subqueries. Model property `is_under_legal_hold` checks for the annotated attribute before falling back to individual database queries.
+37. **Immutable Append-Only Audit Ledger**: `DocumentAuditTrail` is strictly append-only. Updates and deletions are blocked at the model level via `ValidationError`.
+38. **Cryptographic SHA-256 Hash Chaining**: Every `DocumentAuditTrail` links to the previous entry's `chain_hash`. Saves are wrapped in `transaction.atomic()` with `select_for_update()` on the last record to prevent race condition forks under concurrent writes.
+39. **Defensible Evidence Package Manifests**: `ChainOfCustodyExport.seal_package()` pre-allocates the package number before building the JSON manifest and hashing it with SHA-256, ensuring the package number is sealed in the cryptographic digest.
+40. **Public Guest Auditor Portal Hardening**: Access to `/documents/auditor-portal/<token>/` is gated by a 32-byte cryptographic token. Passcode verification enforces a 5-failure lockout threshold per session, checks revocation and expiration, and logs failed attempts to `DocumentAuditTrail`.
+41. **Administrative Authorization on Compliance Mutations**: `security_alert_triage`, `security_alert_scan`, `custody_export_revoke`, and `audit_trail_verify_chain` strictly require tenant administrator privileges (`@tenant_admin_required`). `audit_report_delete` is restricted to tenant admins or the report creator.
