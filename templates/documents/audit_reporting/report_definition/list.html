@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Audit & Compliance Reports — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <span>Report Catalog</span>
+        </div>
+        <h1 class="page-title">Compliance & Forensic Audit Reports</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:audit_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="activity"></i>
+            <span>Audit Dashboard</span>
+        </a>
+        <a href="{% url 'documents:audit_report_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Custom Report</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Overview -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_reports }}</div>
+            <div class="stat-label">Total Report Queries</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ system_reports.count }}</div>
+            <div class="stat-label">System Compliance Presets</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="sliders"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ custom_reports.count }}</div>
+            <div class="stat-label">Custom Tenant Queries</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="download"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">CSV / JSON</div>
+            <div class="stat-label">Supported Export Formats</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label" for="id_q">Search Report Definitions</label>
+                <input type="text" name="q" id="id_q" value="{{ request.GET.q }}" placeholder="Search by name, description, or code..." class="form-input w-full">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_report_type">Report Type</label>
+                <select name="report_type" id="id_report_type" class="form-select w-full">
+                    <option value="">All Types</option>
+                    {% for val, label in report_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.report_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:audit_report_list' %}" class="btn btn-outline" title="Clear">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Section 1: Built-in Regulatory & Compliance Presets -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Pre-Configured Compliance Presets</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Standardized compliance queries aligned with ISO 27001, SOC 2, HIPAA, and FDA 21 CFR Part 11</p>
+        </div>
+        <span class="badge badge-info">{{ system_reports.count }} Presets</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Report Title</th>
+                    <th>Category</th>
+                    <th>Date Scope</th>
+                    <th>Last Execution</th>
+                    <th>Executions</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rpt in system_reports %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-800 flex items-center gap-2">
+                            <i data-lucide="shield" class="w-4 h-4 text-blue-600 shrink-0"></i>
+                            <a href="{% url 'documents:audit_report_detail' rpt.pk %}" class="hover:underline">
+                                {{ rpt.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-0.5">{{ rpt.description|truncatechars:65 }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ rpt.get_report_type_badge }}">
+                            {{ rpt.get_report_type_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-600 font-medium">
+                        {{ rpt.get_date_range_preset_display }}
+                    </td>
+                    <td class="text-xs text-slate-500">
+                        {{ rpt.last_run_at|date:"Y-m-d H:i"|default:"Never" }}
+                    </td>
+                    <td class="text-xs font-mono font-semibold text-slate-700">
+                        {{ rpt.total_runs }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:audit_report_detail' rpt.pk %}" class="btn btn-icon btn-outline" title="Run & View Report">
+                            <i data-lucide="play"></i>
+                        </a>
+                        <a href="{% url 'documents:audit_report_run' rpt.pk %}?format=csv" class="btn btn-icon btn-outline" title="Quick CSV Export">
+                            <i data-lucide="download"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-6 text-slate-400 text-sm">
+                        No system compliance presets match your filter.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Section 2: Custom Saved Reports -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Custom Tenant Audit Reports</h2>
+            <p class="text-xs text-slate-500 mt-0.5">User-created customized filter criteria and forensic investigation profiles</p>
+        </div>
+        <span class="badge badge-green">{{ custom_reports.count }} Custom</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Report Title</th>
+                    <th>Type</th>
+                    <th>Date Scope</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                    <th>Total Runs</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rpt in custom_reports %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-800">
+                            <a href="{% url 'documents:audit_report_detail' rpt.pk %}" class="hover:underline">
+                                {{ rpt.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono">{{ rpt.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ rpt.get_report_type_badge }}">
+                            {{ rpt.get_report_type_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ rpt.get_date_range_preset_display }}
+                    </td>
+                    <td>
+                        <span class="badge {{ rpt.get_status_badge }}">
+                            {{ rpt.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ rpt.created_by.get_full_name|default:rpt.created_by.email|default:"User" }}
+                    </td>
+                    <td class="text-xs font-mono font-semibold text-slate-700">
+                        {{ rpt.total_runs }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:audit_report_detail' rpt.pk %}" class="btn btn-icon btn-outline" title="Execute">
+                            <i data-lucide="play"></i>
+                        </a>
+                        <a href="{% url 'documents:audit_report_edit' rpt.pk %}" class="btn btn-icon btn-outline" title="Edit Parameters">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'documents:audit_report_delete' rpt.pk %}" class="inline" onsubmit="return confirm('Delete custom report definition?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state py-8">
+                            <div class="empty-icon">
+                                <i data-lucide="file-plus"></i>
+                            </div>
+                            <h3>No Custom Reports Created</h3>
+                            <p class="text-slate-500 text-sm">Save customized filter queries for recurrent auditor review.</p>
+                            <a href="{% url 'documents:audit_report_create' %}" class="btn btn-primary btn-sm mt-3">
+                                <i data-lucide="plus"></i>
+                                <span>Create Custom Report</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
