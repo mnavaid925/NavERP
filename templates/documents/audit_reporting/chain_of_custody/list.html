@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Regulatory Chain of Custody Packages — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <span>Chain of Custody</span>
+        </div>
+        <h1 class="page-title">Regulatory Evidence Packages & Auditor Passes</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:audit_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="activity"></i>
+            <span>Audit Dashboard</span>
+        </a>
+        <a href="{% url 'documents:custody_export_create' %}" class="btn btn-primary">
+            <i data-lucide="package-plus"></i>
+            <span>New Evidence Package</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stats Strip -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="archive"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ page_obj.paginator.count }}</div>
+            <div class="stat-label">Total Evidence Packages</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="key"></i>
+        </div>
+        <div>
+            <div class="stat-value">{{ active_passes_count }}</div>
+            <div class="stat-label">Active Auditor Passes</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">Defensible Evidence</div>
+            <div class="stat-label">Cryptographic Manifests</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="stamp"></i>
+        </div>
+        <div>
+            <div class="stat-value text-base font-semibold">Certificates</div>
+            <div class="stat-label">Printable Verification Seals</div>
+        </div>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800">Generated Evidence Packages</h2>
+        <span class="text-xs text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Package #</th>
+                    <th>Matter / Package Title</th>
+                    <th>Regulatory Framework</th>
+                    <th>Target Document / Scope</th>
+                    <th>Accredited Auditor</th>
+                    <th>Portal Status</th>
+                    <th>Expires</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pkg in exports %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-800">
+                        <a href="{% url 'documents:custody_export_detail' pkg.pk %}" class="hover:underline">
+                            {{ pkg.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-sm text-slate-800">
+                            <a href="{% url 'documents:custody_export_detail' pkg.pk %}" class="hover:underline">
+                                {{ pkg.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono" title="{{ pkg.package_hash }}">
+                            SHA-256: {{ pkg.package_hash|slice:":12" }}…
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ pkg.get_regulatory_framework_badge }}">
+                            {{ pkg.get_regulatory_framework_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if pkg.document %}
+                        <a href="{% url 'documents:document_detail' pkg.document.pk %}" class="text-blue-600 hover:underline text-sm font-medium">
+                            {{ pkg.document.title|truncatechars:30 }}
+                        </a>
+                        {% elif pkg.folder %}
+                        <span class="text-slate-600 text-sm font-medium">{{ pkg.folder.name }} (Folder)</span>
+                        {% else %}
+                        <span class="text-slate-500 italic text-sm">{{ pkg.get_scope_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium text-slate-800">{{ pkg.auditor_name }}</div>
+                        <div class="text-xs text-slate-400">{{ pkg.auditor_organization|default:pkg.auditor_email }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ pkg.get_status_badge }}">
+                            {{ pkg.status_key|title }}
+                        </span>
+                        {% if pkg.access_count > 0 %}
+                        <div class="text-xs text-slate-500 font-mono">{{ pkg.access_count }} visits</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ pkg.expires_at|date:"Y-m-d H:i" }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'documents:custody_export_detail' pkg.pk %}" class="btn btn-icon btn-outline" title="Inspect Package">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'documents:custody_export_certificate' pkg.pk %}" target="_blank" class="btn btn-icon btn-outline" title="Print Certificate">
+                            <i data-lucide="printer"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-8">
+                            <div class="empty-icon">
+                                <i data-lucide="package-search"></i>
+                            </div>
+                            <h3>No Evidence Packages Created</h3>
+                            <p class="text-slate-500 text-sm">Package document histories and cryptographic seals for external regulatory inspection.</p>
+                            <a href="{% url 'documents:custody_export_create' %}" class="btn btn-primary btn-sm mt-3">
+                                <i data-lucide="plus"></i>
+                                <span>Create Evidence Package</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-body border-t border-slate-100 flex items-center justify-between">
+        <div class="text-sm text-slate-500">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} packages
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="text-sm font-medium text-slate-700 px-3 py-1">
+                {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
