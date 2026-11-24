@@ -138,6 +138,13 @@ def record_declaration_create(request):
 @login_required
 def record_declaration_edit(request, pk):
     declaration = documents_object(request, RecordDeclaration, pk)
+    if declaration.is_locked or declaration.retention_schedule.retention_mode == "regulatory_worm":
+        messages.error(request, "Cannot edit an immutable record under WORM compliance lock.")
+        return redirect("documents:record_declaration_detail", pk=declaration.pk)
+    if declaration.is_under_legal_hold:
+        messages.error(request, "Cannot edit a record currently frozen under an active legal hold.")
+        return redirect("documents:record_declaration_detail", pk=declaration.pk)
+
     if request.method == "POST":
         form = RecordDeclarationForm(request.POST, instance=declaration, tenant=request.tenant)
         if form.is_valid():
