@@ -92,7 +92,7 @@
                         <dt>Version Locked</dt>
                         <dd>
                             {% if declaration.version %}
-                            <span class="font-medium text-slate-800">Version {{ declaration.version.version_number }}</span>
+                            <span class="font-medium text-slate-800">{{ declaration.version.version_label }} ({{ declaration.version.number }})</span>
                             {% else %}
                             <span class="text-slate-500">Logical Document Master</span>
                             {% endif %}
