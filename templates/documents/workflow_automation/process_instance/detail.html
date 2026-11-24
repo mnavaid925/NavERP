@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ instance.number }} — {{ instance.process_definition.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:process_instance_list' %}">Process Instances</a>
+            <span>/</span>
+            <span>{{ instance.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <h1 class="page-title">{{ instance.number }} — {{ instance.process_definition.name }}</h1>
+            <span class="badge {{ instance.status_badge }}">{{ instance.get_status_display }}</span>
+            <span class="badge {{ instance.sla_badge }}">{% if instance.is_sla_breached %}SLA Breached{% else %}SLA On Track{% endif %}</span>
+            <span class="badge {{ instance.conformance_badge }}">{% if instance.is_conformant %}Conformant{% else %}Rework / Detour{% endif %}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:process_analytics_dashboard' %}?process_definition={{ instance.process_definition.pk }}" class="btn btn-outline">
+            <i data-lucide="bar-chart-3"></i>
+            <span>Process Analytics</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Execution Telemetry</h2>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Instance Number</dt>
+                        <dd class="font-mono font-semibold">{{ instance.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Process Blueprint</dt>
+                        <dd>
+                            <a href="{% url 'documents:process_definition_detail' instance.process_definition.pk %}" class="text-blue-600 hover:underline">{{ instance.process_definition.name }}</a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' instance.document.pk %}" class="text-blue-600 hover:underline">{{ instance.document.number }} — {{ instance.document.title }}</a>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Current Node</dt>
+                        <dd class="font-semibold">{{ instance.current_node_label|default:instance.current_node_id|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Started / Due SLA</dt>
+                        <dd class="text-xs font-mono">{{ instance.started_at|date:"Y-m-d H:i" }}{% if instance.due_at %} · Due {{ instance.due_at|date:"Y-m-d H:i" }}{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Cycle Time</dt>
+                        <dd>{{ instance.duration_display }} (Rework: {{ instance.rework_count }})</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Initiated By</dt>
+                        <dd>{% if instance.initiated_by %}{{ instance.initiated_by.get_full_name|default:instance.initiated_by.username }}{% else %}System / Rule{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Current Assignee</dt>
+                        <dd>{% if instance.current_assignee %}{{ instance.current_assignee.get_full_name|default:instance.current_assignee.username }}{% else %}Unassigned{% endif %}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Spawned 13.3 Approval</dt>
+                        <dd>
+                            {% if instance.approval_workflow %}
+                            <a href="{% url 'documents:workflow_detail' instance.approval_workflow.pk %}" class="text-blue-600 hover:underline font-mono">{{ instance.approval_workflow.number }} ({{ instance.approval_workflow.get_status_display }})</a>
+                            {% else %}None{% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Triggered By Rule</dt>
+                        <dd>
+                            {% if instance.triggered_by_rule %}
+                            <a href="{% url 'documents:routing_rule_detail' instance.triggered_by_rule.pk %}" class="text-blue-600 hover:underline font-mono">{{ instance.triggered_by_rule.number }}</a>
+                            {% else %}Direct Launch{% endif %}
+                        </dd>
+                    </div>
+                </dl>
+                {% if instance.variant_signature %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <div class="text-xs font-semibold uppercase text-slate-500 mb-1">Process Mining Variant Signature</div>
+                    <div class="font-mono text-xs bg-slate-50 p-2 rounded border border-slate-200">{{ instance.variant_signature }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Step Execution Trace ({{ step_trace|length }} Steps)</h2>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Node</th>
+                            <th>Type / Lane</th>
+                            <th>Entered</th>
+                            <th>Duration</th>
+                            <th>Outcome</th>
+                            <th>Actor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for step in step_trace %}
+                        <tr>
+                            <td>
+                                <div class="font-medium text-slate-800">{{ step.label|default:step.node_id }}</div>
+                                <div class="text-xs text-slate-500 font-mono">{{ step.node_id }}</div>
+                            </td>
+                            <td class="text-xs text-slate-600">{{ step.node_type }}{% if step.lane %} · {{ step.lane }}{% endif %}</td>
+                            <td class="text-xs font-mono text-slate-500">{{ step.entered_at|truncatechars:19 }}</td>
+                            <td class="text-xs font-mono">{{ step.duration_minutes|default:0 }}m</td>
+                            <td>
+                                <span class="badge {% if step.outcome == 'completed' or step.outcome == 'approved' %}badge-green{% elif step.outcome == 'rework' %}badge-red{% elif step.outcome == 'pending' %}badge-amber{% else %}badge-info{% endif %}">
+                                    {{ step.outcome|default:"recorded" }}
+                                </span>
+                            </td>
+                            <td class="text-xs text-slate-600">{{ step.actor|default:"system" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center text-xs text-slate-500 py-4">No execution steps traced yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        {% if instance.status != 'completed' and instance.status != 'cancelled' %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Advance Workflow Step</h2>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'documents:process_instance_advance' instance.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label class="form-label" for="{{ advance_form.outcome.id_for_label }}">Transition Outcome</label>
+                        {{ advance_form.outcome }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ advance_form.notes.id_for_label }}">Notes</label>
+                        {{ advance_form.notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="fast-forward"></i>
+                        <span>Advance Step</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Actions</h2>
+            </div>
+            <div class="card-body space-y-2">
+                <a href="{% url 'documents:process_instance_list' %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Back to Instances</span>
+                </a>
+                {% if instance.status != 'completed' and instance.status != 'cancelled' %}
+                <a href="{% url 'documents:process_instance_edit' instance.pk %}" class="btn btn-outline w-full justify-start">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Instance</span>
+                </a>
+                <form method="post" action="{% url 'documents:process_instance_cancel' instance.pk %}" onsubmit="return confirm('Cancel process instance {{ instance.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline w-full justify-start">
+                        <i data-lucide="x-circle"></i>
+                        <span>Cancel Instance</span>
+                    </button>
+                </form>
+                {% endif %}
+                {% if instance.status == 'queued' or instance.status == 'cancelled' or instance.status == 'failed' %}
+                {% if user.is_superuser or user.is_tenant_admin %}
+                <form method="post" action="{% url 'documents:process_instance_delete' instance.pk %}" onsubmit="return confirm('Delete process instance {{ instance.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full justify-start">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Instance</span>
+                    </button>
+                </form>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
