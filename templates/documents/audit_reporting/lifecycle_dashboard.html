@@ -165,7 +165,7 @@
                     </td>
                     <td>
                         <span class="badge badge-amber font-mono text-xs">
-                            {{ doc.version_count }} versions
+                            {{ doc.total_versions|default:doc.version_count }} versions
                         </span>
                     </td>
                     <td class="text-xs text-slate-500">
