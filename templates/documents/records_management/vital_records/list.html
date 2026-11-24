@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Vital Records Register — Records Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:record_declaration_list' %}">Record Declarations</a>
+            <span>/</span>
+            <span>Vital Records Register</span>
+        </div>
+        <h1 class="page-title">Mission-Critical Vital Records Register</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:record_declaration_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Declared Records</span>
+        </a>
+        <a href="{% url 'documents:record_declaration_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Declare Record</span>
+        </a>
+    </div>
+</div>
+
+<!-- Info Banner -->
+<div class="card mb-6 border-amber-200 bg-amber-50">
+    <div class="card-body flex items-start gap-3">
+        <i data-lucide="shield-check" class="w-6 h-6 text-amber-700 mt-0.5 flex-shrink-0"></i>
+        <div>
+            <h2 class="font-semibold text-amber-900 text-sm">Vital Records Disaster Recovery Protection</h2>
+            <p class="text-xs text-amber-800 mt-0.5">
+                Vital records are essential for legal, financial, and operational resumption in the event of enterprise disaster. These records require routine review schedules and off-site replication validation.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="q">Search</label>
+                <input type="text" id="q" name="q" class="form-input" placeholder="Record #, document title..." value="{{ query }}">
+            </div>
+            <div>
+                <label class="form-label" for="department">Department</label>
+                <select id="department" name="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk|stringformat:'d' }}" {% if request.GET.department == dept.pk|stringformat:'d' %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'documents:vital_records_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Vital Records Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Record Number</th>
+                    <th>Document Title</th>
+                    <th>Retention Schedule</th>
+                    <th>Owning Department</th>
+                    <th>Review Frequency</th>
+                    <th>Cutoff Date</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in vital_records %}
+                <tr>
+                    <td>
+                        <a href="{% url 'documents:record_declaration_detail' record.pk %}" class="font-mono font-semibold text-primary hover:underline">
+                            {{ record.number }}
+                        </a>
+                        <span class="badge badge-amber text-xs ml-1">Vital</span>
+                    </td>
+                    <td>
+                        <a href="{% url 'documents:document_detail' record.document.pk %}" class="font-medium text-slate-900 hover:underline">
+                            {{ record.document.title }}
+                        </a>
+                        <div class="text-xs text-slate-500 font-mono">{{ record.document.document_number }}</div>
+                    </td>
+                    <td>
+                        <span class="text-sm text-slate-700">{{ record.retention_schedule.code }}</span>
+                    </td>
+                    <td>
+                        {% if record.retention_schedule.department %}
+                        <span class="text-sm text-slate-800">{{ record.retention_schedule.department.name }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Enterprise</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-sm font-medium text-slate-700">Every {{ record.vital_review_frequency_months }}m</span>
+                    </td>
+                    <td>
+                        {% if record.cutoff_date %}
+                        <span class="text-sm text-slate-700">{{ record.cutoff_date|date:"Y-m-d" }}</span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">Pre-Cutoff</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ record.status_badge_class }}">
+                            {{ record.get_record_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'documents:record_declaration_detail' record.pk %}" class="btn btn-icon" title="View Record">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i data-lucide="shield-alert"></i>
+                            </div>
+                            <div class="empty-state-title">No vital records designated</div>
+                            <div class="empty-state-description">Designate records as vital when declaring records to track disaster recovery criticality.</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} vital records
+        </div>
+        <div class="pagination-controls">
+            <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if query %}&q={{ query }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_previous %}disabled{% endif %}">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            <span class="pagination-current">
+                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </span>
+            <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}{% if query %}&q={{ query }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-icon {% if not page_obj.has_next %}disabled{% endif %}">
+                <i data-lucide="chevron-right"></i>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
