@@ -22,6 +22,10 @@ from apps.documents.models.MetadataIndexing.DocumentMetadataValues import Docume
 from apps.documents.models.MetadataIndexing.DocumentOcrJobs import DocumentOcrJob
 from apps.documents.models.MetadataIndexing.MetadataSchemas import MetadataSchema
 from apps.documents.models.MetadataIndexing.TaxonomyTerms import TaxonomyTerm
+from apps.documents.models.RecordsManagement.DestructionCertificates import DestructionCertificate
+from apps.documents.models.RecordsManagement.DocumentLegalHolds import DocumentLegalHold
+from apps.documents.models.RecordsManagement.RecordDeclarations import RecordDeclaration
+from apps.documents.models.RecordsManagement.RetentionSchedules import RetentionSchedule
 from apps.documents.models.SearchDiscovery.DocumentSavedSearches import DocumentSavedSearch
 from apps.documents.models.SearchDiscovery.DocumentSearchAlerts import DocumentSearchAlert
 from apps.documents.models.SearchDiscovery.DocumentSearchQueryLogs import DocumentSearchQueryLog
@@ -310,6 +314,39 @@ class DocumentActivityAdmin(admin.ModelAdmin):
     list_filter = ("action_type", "is_read", "notification_channel", "tenant")
     search_fields = ("number", "summary", "document__title")
     readonly_fields = ("number", "read_at", "created_at", "updated_at")
+
+
+@admin.register(RetentionSchedule)
+class RetentionScheduleAdmin(admin.ModelAdmin):
+    list_display = ("number", "code", "name", "compliance_framework", "retention_mode", "is_permanent", "is_active", "department", "tenant")
+    list_filter = ("compliance_framework", "retention_mode", "is_permanent", "is_active", "tenant")
+    search_fields = ("number", "code", "name", "legal_citation", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(RecordDeclaration)
+class RecordDeclarationAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "retention_schedule", "record_status", "is_vital_record", "is_locked", "cutoff_date", "disposition_due_date", "tenant")
+    list_filter = ("record_status", "is_vital_record", "is_locked", "declaration_mode", "tenant")
+    search_fields = ("number", "document__title", "document__document_number", "retention_schedule__code", "version_hash_snapshot")
+    readonly_fields = ("number", "declaration_date", "cutoff_triggered_at", "version_hash_snapshot", "created_at", "updated_at")
+
+
+@admin.register(DocumentLegalHold)
+class DocumentLegalHoldAdmin(admin.ModelAdmin):
+    list_display = ("number", "matter_name", "matter_number", "document", "hold_reason", "custodian", "is_active", "placed_at", "tenant")
+    list_filter = ("hold_reason", "is_active", "custodian_notified", "tenant")
+    search_fields = ("number", "matter_name", "matter_number", "document__title", "description")
+    readonly_fields = ("number", "placed_at", "released_at", "custodian_acknowledged_at", "created_at", "updated_at")
+
+
+@admin.register(DestructionCertificate)
+class DestructionCertificateAdmin(admin.ModelAdmin):
+    list_display = ("number", "document_title_snapshot", "disposition_type", "destruction_method", "status", "legal_hold_verified_clear", "authorized_by", "executed_by", "tenant")
+    list_filter = ("disposition_type", "destruction_method", "status", "legal_hold_verified_clear", "tenant")
+    search_fields = ("number", "document_title_snapshot", "document_number_snapshot", "schedule_name_snapshot", "content_verification_hash")
+    readonly_fields = ("number", "content_verification_hash", "hold_verification_date", "authorized_at", "executed_at", "created_at", "updated_at")
+
 
 
 
