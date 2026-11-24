@@ -222,14 +222,50 @@ def auditor_portal_view(request, token):
 @require_POST
 def auditor_portal_verify(request, token):
     """Verify submitted passcode for external auditor portal."""
-    export_pkg = get_object_or_404(ChainOfCustodyExport, access_token=token)
+    export_pkg = get_object_or_404(
+        ChainOfCustodyExport.objects.select_related("document", "tenant"),
+        access_token=token,
+    )
+
+    if not export_pkg.is_portal_active or export_pkg.is_expired:
+        messages.error(request, "This auditor portal pass is inactive or has expired.")
+        return redirect("documents:auditor_portal_view", token=token)
+
+    attempts_key = f"auditor_failed_attempts_{token}"
+    failed_attempts = request.session.get(attempts_key, 0)
+    if failed_attempts >= 5:
+        messages.error(request, "Too many failed passcode attempts. Access locked out.")
+        return redirect("documents:auditor_portal_view", token=token)
+
     form = AuditorPortalPasscodeForm(request.POST)
 
     if form.is_valid():
         entered_passcode = form.cleaned_data.get("passcode")
         if export_pkg.check_passcode(entered_passcode):
             request.session[f"auditor_auth_{token}"] = True
+            request.session.pop(attempts_key, None)
             return redirect("documents:auditor_portal_view", token=token)
+
+    # Failed attempt
+    failed_attempts += 1
+    request.session[attempts_key] = failed_attempts
+
+    # Log invalid passcode attempt to DocumentAuditTrail
+    DocumentAuditTrail.objects.create(
+        tenant=export_pkg.tenant,
+        document=export_pkg.document,
+        action_type="auditor_portal_accessed",
+        actor_email_snapshot=export_pkg.auditor_email,
+        is_success=False,
+        failure_reason="Invalid passcode attempt",
+        ip_address=request.META.get("REMOTE_ADDR"),
+        user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
+        details_json={
+            "export_number": export_pkg.number,
+            "auditor_name": export_pkg.auditor_name,
+            "failed_attempts": failed_attempts,
+        },
+    )
 
     messages.error(request, "Invalid auditor passcode. Access denied.")
     return redirect("documents:auditor_portal_view", token=token)
