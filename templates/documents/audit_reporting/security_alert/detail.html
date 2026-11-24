@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Security Incident {{ alert.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'documents:document_list' %}">Documents</a>
+            <span>/</span>
+            <a href="{% url 'documents:audit_dashboard' %}">Audit & Reporting</a>
+            <span>/</span>
+            <a href="{% url 'documents:security_alert_list' %}">Security Alerts</a>
+            <span>/</span>
+            <span>{{ alert.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ alert.title }}</h1>
+            <span class="badge {{ alert.get_severity_badge }} text-sm">
+                {{ alert.get_severity_display }}
+            </span>
+            <span class="badge {{ alert.get_status_badge }} text-sm">
+                {{ alert.get_status_display }}
+            </span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'documents:security_alert_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Feed</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Incident Evidence & Correlated Audit Logs -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Main Incident Card -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Incident Forensics & Trigger Evidence</h2>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-500 font-semibold uppercase">Risk Score</span>
+                    <span class="text-sm font-bold font-mono px-2 py-0.5 rounded {% if alert.risk_score >= 80 %}bg-red-100 text-red-800{% elif alert.risk_score >= 50 %}bg-amber-100 text-amber-800{% else %}bg-slate-100 text-slate-800{% endif %}">
+                        {{ alert.risk_score }} / 100
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid mb-4">
+                    <div class="detail-item">
+                        <dt>Alert Incident #</dt>
+                        <dd class="font-mono font-semibold">{{ alert.number }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Detection Timestamp</dt>
+                        <dd class="font-mono text-sm">{{ alert.detected_at|date:"Y-m-d H:i:s T" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Anomaly Category</dt>
+                        <dd>
+                            <span class="badge {{ alert.get_alert_type_badge }}">
+                                {{ alert.get_alert_type_display }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Grouped Event Count</dt>
+                        <dd class="font-semibold">{{ alert.event_count }} related action(s)</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Suspect Actor</dt>
+                        <dd>
+                            {% if alert.target_user %}
+                            <div class="font-medium text-slate-800">{{ alert.target_user.get_full_name|default:alert.target_user.email }}</div>
+                            <div class="text-xs text-slate-500">{{ alert.target_user.email }}</div>
+                            {% else %}
+                            <span class="text-slate-500 italic">Anonymous / System Internal</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Source IP Address</dt>
+                        <dd class="font-mono text-sm">{{ alert.source_ip|default:"Internal Network" }}</dd>
+                    </div>
+                    {% if alert.target_document %}
+                    <div class="detail-item sm:col-span-2">
+                        <dt>Target Document</dt>
+                        <dd>
+                            <a href="{% url 'documents:document_detail' alert.target_document.pk %}" class="text-blue-600 hover:underline font-medium">
+                                {{ alert.target_document.title }}
+                            </a>
+                            <span class="text-xs text-slate-400 font-mono ml-2">({{ alert.target_document.number }})</span>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    <div class="detail-item sm:col-span-2">
+                        <dt>Heuristic Description</dt>
+                        <dd class="text-slate-700 leading-relaxed bg-slate-50 p-3 rounded border border-slate-100">
+                            {{ alert.description }}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if alert.triage_notes %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 block mb-1">Investigator Triage Notes</span>
+                    <div class="text-xs text-slate-700 bg-amber-50 p-3 rounded border border-amber-200 whitespace-pre-line">
+                        {{ alert.triage_notes }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Correlated Audit Logs Table -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-800">Correlated Activity Timeline</h2>
+                    <p class="text-xs text-slate-500">Recent audit records logged by this suspect user account</p>
+                </div>
+                {% if target_user_stats %}
+                <span class="text-xs text-slate-600 font-medium">
+                    {{ target_user_stats.total_events }} total events &bull; {{ target_user_stats.download_count }} downloads &bull; {{ target_user_stats.denied_count }} blocks
+                </span>
+                {% endif %}
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Action</th>
+                            <th>Document</th>
+                            <th>Result</th>
+                            <th>IP</th>
+                            <th class="text-right">Audit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in correlated_audit_logs %}
+                        <tr>
+                            <td class="text-xs font-mono text-slate-600 whitespace-nowrap">
+                                {{ log.event_timestamp|date:"m-d H:i:s" }}
+                            </td>
+                            <td>
+                                <span class="badge {{ log.get_action_type_badge }} text-xs">
+                                    {{ log.get_action_type_display }}
+                                </span>
+                            </td>
+                            <td class="text-xs">
+                                {{ log.document_title_snapshot|default:"General"|truncatechars:30 }}
+                            </td>
+                            <td>
+                                <span class="badge {{ log.get_result_badge }} text-xs">
+                                    {% if log.is_success %}OK{% else %}Deny{% endif %}
+                                </span>
+                            </td>
+                            <td class="text-xs font-mono text-slate-600">
+                                {{ log.ip_address|default:"—" }}
+                            </td>
+                            <td class="table-actions text-right">
+                                <a href="{% url 'documents:audit_trail_detail' log.pk %}" class="btn btn-icon btn-outline" title="Inspect">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-xs text-slate-400">
+                                No correlated activity log records linked to this account.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Triage Workbench & Mitigation Panel -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Triage & Mitigation Workbench</h2>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'documents:security_alert_triage' alert.pk %}" class="space-y-4">
+                    {% csrf_token %}
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ triage_form.status.id_for_label }}">Incident Status *</label>
+                        {{ triage_form.status }}
+                        {% if triage_form.status.errors %}<div class="form-error">{{ triage_form.status.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ triage_form.severity.id_for_label }}">Severity Rating *</label>
+                        {{ triage_form.severity }}
+                        {% if triage_form.severity.errors %}<div class="form-error">{{ triage_form.severity.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ triage_form.action_taken.id_for_label }}">Mitigation Countermeasure *</label>
+                        {{ triage_form.action_taken }}
+                        {% if triage_form.action_taken.errors %}<div class="form-error">{{ triage_form.action_taken.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ triage_form.assigned_to.id_for_label }}">Assigned Investigator</label>
+                        {{ triage_form.assigned_to }}
+                        {% if triage_form.assigned_to.errors %}<div class="form-error">{{ triage_form.assigned_to.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ triage_form.triage_notes.id_for_label }}">Investigation Notes</label>
+                        {{ triage_form.triage_notes }}
+                        {% if triage_form.triage_notes.errors %}<div class="form-error">{{ triage_form.triage_notes.errors }}</div>{% endif %}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="check-shield"></i>
+                        <span>Apply Triage Update</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Resolution Snapshot -->
+        {% if alert.resolved_at %}
+        <div class="card bg-green-50 border-green-200">
+            <div class="card-body text-xs text-green-900 space-y-1">
+                <div class="font-semibold flex items-center gap-1.5">
+                    <i data-lucide="check-circle" class="w-4 h-4 text-green-600"></i>
+                    <span>Resolved & Mitigated</span>
+                </div>
+                <div>Resolved on: {{ alert.resolved_at|date:"Y-m-d H:i" }}</div>
+                <div>Resolved by: {{ alert.resolved_by.get_full_name|default:alert.resolved_by.email }}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
