@@ -80,6 +80,16 @@ from apps.documents.forms.VersionControl.DocumentVersions import (
     DocumentVersionForm,
     VersionCompareForm,
 )
+from apps.documents.forms.WorkflowAutomation import (
+    DocumentProcessDefinitionForm,
+    DocumentProcessInstanceForm,
+    DocumentRoutingRuleForm,
+    DocumentWebhookTriggerForm,
+    ProcessAdvanceForm,
+    ProcessDesignerForm,
+    RoutingRuleSimulatorForm,
+    WebhookTestPingForm,
+)
 
 __all__ = [
     "DocumentForm",
@@ -139,4 +149,12 @@ __all__ = [
     "DocumentSecurityAlertFilterForm",
     "ChainOfCustodyExportForm",
     "AuditorPortalPasscodeForm",
+    "DocumentProcessDefinitionForm",
+    "ProcessDesignerForm",
+    "DocumentRoutingRuleForm",
+    "RoutingRuleSimulatorForm",
+    "DocumentProcessInstanceForm",
+    "ProcessAdvanceForm",
+    "DocumentWebhookTriggerForm",
+    "WebhookTestPingForm",
 ]
