@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 
+from apps.documents.forms._common import reject_foreign
 from apps.documents.models.AuditReporting.DocumentSecurityAlerts import DocumentSecurityAlert
 
 User = get_user_model()
@@ -26,11 +27,19 @@ class DocumentSecurityAlertTriageForm(forms.ModelForm):
             "triage_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 4, "placeholder": "Record triage findings, mitigation justifications, and next steps..."}),
         }
 
-    def __init__(self, tenant=None, *args, **kwargs):
+    def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.tenant = tenant
         if tenant:
             self.fields["assigned_to"].queryset = User.objects.filter(tenant=tenant).order_by("first_name", "email")
+        else:
+            self.fields["assigned_to"].queryset = User.objects.none()
         self.fields["assigned_to"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["assigned_to"])
+        return cleaned_data
 
 
 class DocumentSecurityAlertFilterForm(forms.Form):
