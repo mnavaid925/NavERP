@@ -41287,104 +41287,104 @@ apps/quality/
 
 - [ ] Execute `python manage.py makemigrations documents` to generate `0018_...`
 - [ ] Execute `python manage.py migrate`
-- [ ] Execute `python manage.py seed_documents` twice to verify complete idempotence
-- [ ] Run `python manage.py check` to assert 0 system errors
-- [ ] Execute comprehensive smoke sweep `temp/smoke_13_9.py` checking all routes return HTTP 200/302, content checks for table headers and seeded records, cross-tenant IDOR returns 404
-- [ ] Verify sidebar navigation displays `13.9 Records Management & Compliance` as Live
+- [x] Execute `python manage.py seed_documents` twice to verify complete idempotence
+- [x] Run `python manage.py check` to assert 0 system errors
+- [x] Execute comprehensive smoke sweep `temp/smoke_13_9.py` checking all routes return HTTP 200/302, content checks for table headers and seeded records, cross-tenant IDOR returns 404
+- [x] Verify sidebar navigation displays `13.9 Records Management & Compliance` as Live
 
 ---
 
 ## Detailed Build Plan (Phases 3 to 7)
 
 ### Phase 3.1: Spec Contract
-- [ ] Read `NavERP.md`, `research-documents-13.9.md`, and sibling modules to author `.claude/tasks/contract-documents-13.9.md`.
-- [ ] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
-- [ ] Commit contract: `git add .claude/tasks/contract-documents-13.9.md; git commit -m "docs(documents): freeze 13.9 contract specification"`
+- [x] Read `NavERP.md`, `research-documents-13.9.md`, and sibling modules to author `.claude/tasks/contract-documents-13.9.md`.
+- [x] Freeze all model fields, CHOICES constants, form fields/exclusions, URL names, view signatures, context variables, and template partials.
+- [x] Commit contract: `git add .claude/tasks/contract-documents-13.9.md; git commit -m "docs(documents): freeze 13.9 contract specification"`
 
 ### Phase 3.2: Build Entity by Entity (Strictly Serial)
-- [ ] **Entity 1: RetentionSchedule** (`DRTN-`)
-  - [ ] `apps/documents/models/RecordsManagement/RetentionSchedules.py`
-  - [ ] `apps/documents/forms/RecordsManagement/RetentionSchedules.py`
-  - [ ] `apps/documents/views/RecordsManagement/RetentionSchedules.py` (`retention_schedule_list`, `retention_schedule_create`, `retention_schedule_detail`, `retention_schedule_edit`, `retention_schedule_delete`)
-  - [ ] `apps/documents/urls/RecordsManagement/RetentionSchedules.py`
-  - [ ] `templates/documents/records_management/retention_schedule/list.html`
-  - [ ] `templates/documents/records_management/retention_schedule/detail.html`
-  - [ ] `templates/documents/records_management/retention_schedule/form.html`
-- [ ] **Entity 2: RecordDeclaration** (`DRCD-`)
-  - [ ] `apps/documents/models/RecordsManagement/RecordDeclarations.py`
-  - [ ] `apps/documents/forms/RecordsManagement/RecordDeclarations.py`
-  - [ ] `apps/documents/views/RecordsManagement/RecordDeclarations.py` (`record_declaration_list`, `record_declaration_create`, `record_declaration_detail`, `record_declaration_edit`, `record_declaration_delete`, `record_declaration_trigger_cutoff`)
-  - [ ] `apps/documents/urls/RecordsManagement/RecordDeclarations.py`
-  - [ ] `templates/documents/records_management/record_declaration/list.html`
-  - [ ] `templates/documents/records_management/record_declaration/detail.html`
-  - [ ] `templates/documents/records_management/record_declaration/form.html`
-- [ ] **Entity 3: DocumentLegalHold** (`DHLD-`)
-  - [ ] `apps/documents/models/RecordsManagement/DocumentLegalHolds.py`
-  - [ ] `apps/documents/forms/RecordsManagement/DocumentLegalHolds.py`
-  - [ ] `apps/documents/views/RecordsManagement/DocumentLegalHolds.py` (`legal_hold_list`, `legal_hold_create`, `legal_hold_detail`, `legal_hold_edit`, `legal_hold_delete`, `legal_hold_release`, `legal_hold_acknowledge`)
-  - [ ] `apps/documents/urls/RecordsManagement/DocumentLegalHolds.py`
-  - [ ] `templates/documents/records_management/legal_hold/list.html`
-  - [ ] `templates/documents/records_management/legal_hold/detail.html`
-  - [ ] `templates/documents/records_management/legal_hold/form.html`
-- [ ] **Entity 4: DestructionCertificate** (`DDST-`)
-  - [ ] `apps/documents/models/RecordsManagement/DestructionCertificates.py`
-  - [ ] `apps/documents/forms/RecordsManagement/DestructionCertificates.py`
-  - [ ] `apps/documents/views/RecordsManagement/DestructionCertificates.py` (`destruction_certificate_list`, `destruction_certificate_create`, `destruction_certificate_detail`, `destruction_certificate_edit`, `destruction_certificate_delete`, `destruction_certificate_approve`, `destruction_certificate_execute`)
-  - [ ] `apps/documents/urls/RecordsManagement/DestructionCertificates.py`
-  - [ ] `templates/documents/records_management/destruction_certificate/list.html`
-  - [ ] `templates/documents/records_management/destruction_certificate/detail.html`
-  - [ ] `templates/documents/records_management/destruction_certificate/form.html`
-- [ ] **Dedicated Board & Register Views**
-  - [ ] `apps/documents/views/RecordsManagement/DispositionReview.py` & `VitalRecords.py`
-  - [ ] `apps/documents/urls/RecordsManagement/DispositionReview.py` & `VitalRecords.py`
-  - [ ] `templates/documents/records_management/disposition_review/board.html`
-  - [ ] `templates/documents/records_management/vital_records/list.html`
+- [x] **Entity 1: RetentionSchedule** (`DRTN-`)
+  - [x] `apps/documents/models/RecordsManagement/RetentionSchedules.py`
+  - [x] `apps/documents/forms/RecordsManagement/RetentionSchedules.py`
+  - [x] `apps/documents/views/RecordsManagement/RetentionSchedules.py` (`retention_schedule_list`, `retention_schedule_create`, `retention_schedule_detail`, `retention_schedule_edit`, `retention_schedule_delete`)
+  - [x] `apps/documents/urls/RecordsManagement/RetentionSchedules.py`
+  - [x] `templates/documents/records_management/retention_schedule/list.html`
+  - [x] `templates/documents/records_management/retention_schedule/detail.html`
+  - [x] `templates/documents/records_management/retention_schedule/form.html`
+- [x] **Entity 2: RecordDeclaration** (`DRCD-`)
+  - [x] `apps/documents/models/RecordsManagement/RecordDeclarations.py`
+  - [x] `apps/documents/forms/RecordsManagement/RecordDeclarations.py`
+  - [x] `apps/documents/views/RecordsManagement/RecordDeclarations.py` (`record_declaration_list`, `record_declaration_create`, `record_declaration_detail`, `record_declaration_edit`, `record_declaration_delete`, `record_declaration_trigger_cutoff`)
+  - [x] `apps/documents/urls/RecordsManagement/RecordDeclarations.py`
+  - [x] `templates/documents/records_management/record_declaration/list.html`
+  - [x] `templates/documents/records_management/record_declaration/detail.html`
+  - [x] `templates/documents/records_management/record_declaration/form.html`
+- [x] **Entity 3: DocumentLegalHold** (`DHLD-`)
+  - [x] `apps/documents/models/RecordsManagement/DocumentLegalHolds.py`
+  - [x] `apps/documents/forms/RecordsManagement/DocumentLegalHolds.py`
+  - [x] `apps/documents/views/RecordsManagement/DocumentLegalHolds.py` (`legal_hold_list`, `legal_hold_create`, `legal_hold_detail`, `legal_hold_edit`, `legal_hold_delete`, `legal_hold_release`, `legal_hold_acknowledge`)
+  - [x] `apps/documents/urls/RecordsManagement/DocumentLegalHolds.py`
+  - [x] `templates/documents/records_management/legal_hold/list.html`
+  - [x] `templates/documents/records_management/legal_hold/detail.html`
+  - [x] `templates/documents/records_management/legal_hold/form.html`
+- [x] **Entity 4: DestructionCertificate** (`DDST-`)
+  - [x] `apps/documents/models/RecordsManagement/DestructionCertificates.py`
+  - [x] `apps/documents/forms/RecordsManagement/DestructionCertificates.py`
+  - [x] `apps/documents/views/RecordsManagement/DestructionCertificates.py` (`destruction_certificate_list`, `destruction_certificate_create`, `destruction_certificate_detail`, `destruction_certificate_edit`, `destruction_certificate_delete`, `destruction_certificate_approve`, `destruction_certificate_execute`)
+  - [x] `apps/documents/urls/RecordsManagement/DestructionCertificates.py`
+  - [x] `templates/documents/records_management/destruction_certificate/list.html`
+  - [x] `templates/documents/records_management/destruction_certificate/detail.html`
+  - [x] `templates/documents/records_management/destruction_certificate/form.html`
+- [x] **Dedicated Board & Register Views**
+  - [x] `apps/documents/views/RecordsManagement/DispositionReview.py` & `VitalRecords.py`
+  - [x] `apps/documents/urls/RecordsManagement/DispositionReview.py` & `VitalRecords.py`
+  - [x] `templates/documents/records_management/disposition_review/board.html`
+  - [x] `templates/documents/records_management/vital_records/list.html`
 
 ### Phase 3.3: Integration & Administration
-- [ ] Create `apps/documents/{models,forms,views,urls}/RecordsManagement/__init__.py` re-export files
-- [ ] Update `apps/documents/models/__init__.py` re-exports and `__all__`
-- [ ] Update `apps/documents/forms/__init__.py` re-exports
-- [ ] Update `apps/documents/views/__init__.py` re-exports and `__all__`
-- [ ] Update `apps/documents/urls/__init__.py` registering `RecordsManagement` urls
-- [ ] Register `RetentionSchedule`, `RecordDeclaration`, `DocumentLegalHold`, `DestructionCertificate` in `apps/documents/admin.py`
-- [ ] Generate migration `0018_...`: `python manage.py makemigrations documents`
-- [ ] Apply migration: `python manage.py migrate`
-- [ ] Extend seeder in `apps/documents/management/commands/seed_documents.py` with records schedules, declarations, holds, and certificates
-- [ ] Run seeder idempotently: `python manage.py seed_documents` (run twice)
-- [ ] Wire `apps/core/navigation.py` `LIVE_LINKS["13.9"]`
-- [ ] Validate system integrity: `python manage.py check`
+- [x] Create `apps/documents/{models,forms,views,urls}/RecordsManagement/__init__.py` re-export files
+- [x] Update `apps/documents/models/__init__.py` re-exports and `__all__`
+- [x] Update `apps/documents/forms/__init__.py` re-exports
+- [x] Update `apps/documents/views/__init__.py` re-exports and `__all__`
+- [x] Update `apps/documents/urls/__init__.py` registering `RecordsManagement` urls
+- [x] Register `RetentionSchedule`, `RecordDeclaration`, `DocumentLegalHold`, `DestructionCertificate` in `apps/documents/admin.py`
+- [x] Generate migration `0018_...`: `python manage.py makemigrations documents`
+- [x] Apply migration: `python manage.py migrate`
+- [x] Extend seeder in `apps/documents/management/commands/seed_documents.py` with records schedules, declarations, holds, and certificates
+- [x] Run seeder idempotently: `python manage.py seed_documents` (run twice)
+- [x] Wire `apps/core/navigation.py` `LIVE_LINKS["13.9"]`
+- [x] Validate system integrity: `python manage.py check`
 
 ### Phase 3.4: Automated Smoke Sweep
-- [ ] Author `temp/smoke_13_9.py` checking authenticated endpoints as `admin_acme` / `password`
-- [ ] Verify 200/302 responses, HTML content assertions, badge classes, and cross-tenant IDOR 404
-- [ ] Remove `temp/smoke_13_9.py` after clean execution
+- [x] Author `temp/smoke_13_9.py` checking authenticated endpoints as `admin_acme` / `password`
+- [x] Verify 200/302 responses, HTML content assertions, badge classes, and cross-tenant IDOR 404
+- [x] Remove `temp/smoke_13_9.py` after clean execution
 
 ### Phase 4: Six Review Passes (Strictly Serial)
-- [ ] `code-reviewer` agent reviewing `BASE...HEAD` → findings in `.claude/tasks/review-documents-13.9.md`
-- [ ] `explorer` agent reviewing contract alignment and re-export integrity
-- [ ] `frontend-reviewer` agent reviewing Tailwind styles, semantic badges, and filter bars
-- [ ] `performance-reviewer` agent reviewing queries, N+1 query prevention, and composite indexes
-- [ ] `qa-smoke-tester` agent running live browser and status checks
-- [ ] `security-reviewer` agent verifying tenant isolation, legal hold bypass protection, and write permissions
-- [ ] Deduplicate, prioritize (Critical → Important → Minor), and assign IDs in `.claude/tasks/review-documents-13.9.md`
+- [x] `code-reviewer` agent reviewing `BASE...HEAD` → findings in `.claude/tasks/review-documents-13.9.md`
+- [x] `explorer` agent reviewing contract alignment and re-export integrity
+- [x] `frontend-reviewer` agent reviewing Tailwind styles, semantic badges, and filter bars
+- [x] `performance-reviewer` agent reviewing queries, N+1 query prevention, and composite indexes
+- [x] `qa-smoke-tester` agent running live browser and status checks
+- [x] `security-reviewer` agent verifying tenant isolation, legal hold bypass protection, and write permissions
+- [x] Deduplicate, prioritize (Critical → Important → Minor), and assign IDs in `.claude/tasks/review-documents-13.9.md`
 
 ### Phase 5: Code Fixer
-- [ ] Invoke `code-fixer` agent to resolve all findings from `review-documents-13.9.md` one by one
-- [ ] Commit each fix with single-file git commits
-- [ ] Verify `manage.py check` remains 100% clean
+- [x] Invoke `code-fixer` agent to resolve all findings from `review-documents-13.9.md` one by one
+- [x] Commit each fix with single-file git commits
+- [x] Verify `manage.py check` remains 100% clean
 
 ### Phase 6: Test Suite (Strictly Serial)
-- [ ] Write `apps/documents/tests/test_records_management_models.py` (model creation, WORM lock, hold check, hash digest)
-- [ ] Write `apps/documents/tests/test_records_management_forms.py` (form validations, tenant filtering, exclusion checks)
-- [ ] Write `apps/documents/tests/test_records_management_views.py` (CRUD routes, approval workflows, cutoff triggers)
-- [ ] Write `apps/documents/tests/test_records_management_security.py` (cross-tenant IDOR isolation, hold destruction blockage, permission checks)
-- [ ] Run full unfiltered test suite: `pytest apps/documents/tests/` to assert 100% green
+- [x] Write `apps/documents/tests/test_records_management_models.py` (model creation, WORM lock, hold check, hash digest)
+- [x] Write `apps/documents/tests/test_records_management_forms.py` (form validations, tenant filtering, exclusion checks)
+- [x] Write `apps/documents/tests/test_records_management_views.py` (CRUD routes, approval workflows, cutoff triggers)
+- [x] Write `apps/documents/tests/test_records_management_security.py` (cross-tenant IDOR isolation, hold destruction blockage, permission checks)
+- [x] Run full unfiltered test suite: `pytest apps/documents/tests/` to assert 100% green
 
 ### Phase 7: Skill, README & Close-out
-- [ ] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.9 models, routes, templates, and seed details
-- [ ] Update `README.md` marking 13.9 complete and recording test statistics
-- [ ] Record any gaps in `.agents/tasks/gaps-documents-13.9.md` and `.claude/tasks/gaps-documents-13.9.md`
-- [ ] Document final review notes and close out in `.claude/tasks/todo.md`
+- [x] Author/update `.claude/skills/documents/SKILL.md` documenting Module 13 and Sub-module 13.9 models, routes, templates, and seed details
+- [x] Update `README.md` marking 13.9 complete and recording test statistics
+- [x] Record any gaps in `.agents/tasks/gaps-documents-13.9.md` and `.claude/tasks/gaps-documents-13.9.md`
+- [x] Document final review notes and close out in `.claude/tasks/todo.md`
 
 ---
 
@@ -41401,7 +41401,24 @@ apps/quality/
 - **Machine Learning Auto-Classification Engine** — Automated ML classification of unstructured documents into file plan categories deferred; classification uses rule-based matching and folder defaults.
 
 ## Review notes — Sub-module 13.9 Close-out
-(to be filled in at the end of Sub-module 13.9 build)
+- **Sub-module**: 13.9 Records Management & Compliance (`apps/documents/`)
+- **Completion Date**: 2026-11-24
+- **Base SHA**: `36b7962ee269904d6d3affe02ef40ed5080fd945`
+- **Models Built (4)**:
+  - `RetentionSchedule` (`DRTN-`): Multi-framework (ISO 15489, DoD 5015.2, SEC 17a-4, IRS Rev Proc) retention file plans with regulatory WORM vs. modifiable modes, duration calculations, and cutoff triggers.
+  - `RecordDeclaration` (`DRCD-`): Official record declarations with SHA-256 version hash snapshotting, WORM immutability locks, disposition due date calculation with calendar monthrange preservation, cutoff triggers, and vital records category classification with retrieval SLAs.
+  - `DocumentLegalHold` (`DHLD-`): Statutory litigation holds with custodian assignment, email notification tracking, custodian acknowledgement, and justification-mandated release audit logging.
+  - `DestructionCertificate` (`DDST-`): Dual-control authorized destruction certificates with separate authorizer and executor roles, cryptographic erasure/DoD 5220.22-M/shredding methods, active legal hold verification gates, and parent document status archiving.
+- **Specialized Interfaces**:
+  - `DispositionReview`: 3-column Kanban/board disposition review (`board.html`) tracking due, held, and pending approval records with pre-computed counts.
+  - `VitalRecords`: Disaster recovery business continuity vital records register (`vital_records_list.html`).
+- **Review Passes (6/6)**:
+  - 18 total findings (`C1`–`C5`, `I1`–`I9`, `M1`–`M4`) identified across `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, and `security-reviewer`.
+  - All 18 findings resolved by `code-fixer` in strict ID order and verified (`[x] fixed`).
+- **Tests**: 148 dedicated unit, form, view, and security tests in `apps/documents/tests/` (100% green, 0 failures).
+- **Gaps**: None. Fully declared in `.claude/tasks/gaps-documents-13.9.md` and `.agents/tasks/gaps-documents-13.9.md`.
+- **Status**: Complete & Closed.
+
 
 
 
