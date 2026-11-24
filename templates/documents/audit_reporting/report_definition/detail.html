@@ -61,7 +61,7 @@
             {% endif %}
         </div>
         <div class="flex items-center gap-4 text-xs text-slate-500">
-            <div>Last run: <strong>{{ report_def.last_run_at|date:"Y-m-d H:i" }}</strong></div>
+            <div>Last run: <strong>{{ report_def.last_run_at|date:"Y-m-d H:i"|default:"Never" }}</strong></div>
             <div>Total executions: <strong>{{ report_def.total_runs }}</strong></div>
         </div>
     </div>
