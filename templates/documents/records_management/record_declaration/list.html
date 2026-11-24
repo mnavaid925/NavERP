@@ -105,7 +105,7 @@
                         <a href="{% url 'documents:document_detail' record.document.pk %}" class="font-medium text-slate-900 hover:underline">
                             {{ record.document.title }}
                         </a>
-                        <div class="text-xs text-slate-500 font-mono">{{ record.document.document_number }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ record.document.number }}</div>
                     </td>
                     <td>
                         <a href="{% url 'documents:retention_schedule_detail' record.retention_schedule.pk %}" class="text-slate-700 hover:underline font-medium">
