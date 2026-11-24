@@ -15,10 +15,10 @@
 
 | Category | Total | Open | Fixed | Skipped |
 |---|---|---|---|---|
-| **Critical** | 5 | 3 | 2 | 0 |
+| **Critical** | 5 | 2 | 3 | 0 |
 | **Important** | 9 | 9 | 0 | 0 |
 | **Minor** | 4 | 4 | 0 | 0 |
-| **Total** | 18 | 16 | 2 | 0 |
+| **Total** | 18 | 15 | 3 | 0 |
 
 ---
 
@@ -49,7 +49,7 @@
 - **Issue**: Standard authenticated users can unilaterally authorize or execute record destructions, lift litigation holds, or delete retention schedules and modifiable records.
 - **Fix**: Apply `@tenant_admin_required` decorator to these 5 views.
 
-### [ ] `C3`: N+1 Query Cascade via `RecordDeclaration.is_under_legal_hold` in List Rendering
+### [x] `C3`: N+1 Query Cascade via `RecordDeclaration.is_under_legal_hold` in List Rendering
 - **Found by**: `performance-reviewer`
 - **Location**:
   - `apps/documents/models/RecordsManagement/RecordDeclarations.py:101` (`is_under_legal_hold`)
