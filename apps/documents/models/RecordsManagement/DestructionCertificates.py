@@ -144,7 +144,7 @@ class DestructionCertificate(TenantNumbered):
     def save(self, *args, **kwargs):
         if self.record_declaration and not self.document_title_snapshot:
             self.document_title_snapshot = self.record_declaration.document.title
-            self.document_number_snapshot = self.record_declaration.document.document_number
+            self.document_number_snapshot = self.record_declaration.document.number
             self.schedule_name_snapshot = f"{self.record_declaration.retention_schedule.code} - {self.record_declaration.retention_schedule.name}"
             if not self.content_verification_hash:
                 self.content_verification_hash = self.record_declaration.version_hash_snapshot
