@@ -69,6 +69,16 @@ class ChainOfCustodyExportForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["document", "folder"])
+
+        scope = cleaned_data.get("scope")
+        document = cleaned_data.get("document")
+        folder = cleaned_data.get("folder")
+
+        if scope == "single_document" and not document:
+            self.add_error("document", "Please select a target document for single document scope.")
+        elif scope == "folder_tree" and not folder:
+            self.add_error("folder", "Please select a target folder for folder tree scope.")
+
         return cleaned_data
 
 
