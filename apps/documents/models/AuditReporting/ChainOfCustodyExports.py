@@ -223,8 +223,12 @@ class ChainOfCustodyExport(TenantNumbered):
 
     def generate_manifest(self):
         """Assemble manifest data, compute package SHA-256 seal, and store manifest."""
+        if not self.number and self.tenant_id and self.NUMBER_PREFIX:
+            from apps.core.utils import next_number
+            self.number = next_number(type(self), self.tenant, self.NUMBER_PREFIX)
+
         manifest = {
-            "package_number": self.number,
+            "package_number": self.number or "",
             "title": self.title,
             "regulatory_framework": self.regulatory_framework,
             "scope": self.scope,
@@ -261,6 +265,14 @@ class ChainOfCustodyExport(TenantNumbered):
     def save(self, *args, **kwargs):
         if not self.access_token:
             self.access_token = secrets.token_urlsafe(32)
+        if not self.pk:
+            if not self.number and self.tenant_id and self.NUMBER_PREFIX:
+                from apps.core.utils import next_number
+                self.number = next_number(type(self), self.tenant, self.NUMBER_PREFIX)
+            if not self.package_hash:
+                self.generate_manifest()
+            super().save(*args, **kwargs)
+            return
         if not self.package_hash:
             self.generate_manifest()
         super().save(*args, **kwargs)
