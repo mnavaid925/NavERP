@@ -81,9 +81,9 @@ def document_lifecycle_dashboard(request):
     # High churn documents (most versions)
     high_churn_docs = list(
         Document.objects.filter(tenant=tenant)
-        .annotate(version_count=Count("versions"))
-        .filter(version_count__gt=1)
-        .order_by("-version_count")[:10]
+        .annotate(total_versions=Count("versions"))
+        .filter(total_versions__gt=1)
+        .order_by("-total_versions")[:10]
     )
 
     # Approval bottlenecks
