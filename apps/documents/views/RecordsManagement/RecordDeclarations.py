@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.documents.forms.RecordsManagement.RecordDeclarations import RecordDeclarationForm
 from apps.documents.models.RecordsManagement.RecordDeclarations import RecordDeclaration
@@ -148,6 +149,7 @@ def record_declaration_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def record_declaration_delete(request, pk):
     declaration = documents_object(request, RecordDeclaration, pk)
