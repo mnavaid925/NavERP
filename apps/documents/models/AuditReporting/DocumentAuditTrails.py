@@ -2,7 +2,7 @@ import hashlib
 import json
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.documents.models._base import TenantNumbered
@@ -233,19 +233,22 @@ class DocumentAuditTrail(TenantNumbered):
 
         # Compute chain hash if missing
         if not self.chain_hash:
-            if not self.prev_hash and self.tenant_id:
-                last_entry = (
-                    DocumentAuditTrail.objects.filter(tenant=self.tenant)
-                    .exclude(pk=self.pk if self.pk else 0)
-                    .order_by("-id")
-                    .first()
-                )
-                self.prev_hash = (
-                    last_entry.chain_hash
-                    if last_entry and last_entry.chain_hash
-                    else "GENESIS_BLOCK_000000000000000000000000000000000000000000000000000000"
-                )
-            self.chain_hash = self.compute_chain_hash(self.prev_hash)
+            with transaction.atomic():
+                if not self.prev_hash and self.tenant_id:
+                    last_entry = (
+                        DocumentAuditTrail.objects.select_for_update()
+                        .filter(tenant=self.tenant)
+                        .exclude(pk=self.pk if self.pk else 0)
+                        .order_by("-id")
+                        .first()
+                    )
+                    self.prev_hash = (
+                        last_entry.chain_hash
+                        if last_entry and last_entry.chain_hash
+                        else "GENESIS_BLOCK_000000000000000000000000000000000000000000000000000000"
+                    )
+                self.chain_hash = self.compute_chain_hash(self.prev_hash)
+                return super().save(*args, **kwargs)
 
         super().save(*args, **kwargs)
 
